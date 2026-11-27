@@ -28,6 +28,9 @@ type Deps struct {
 	// call plus the roles of threads.Service and messageproto, which the
 	// snapshot reads messages and tool calls through.
 	Repo Repository
+	// TriggerReads reads the launch event that started a chat (the focus
+	// filter walks agent.start_run chains through it).
+	TriggerReads TriggerReads
 	// Senders titles the senders of the messages a snapshot assembles
 	// (store.ThreadExtStore satisfies it).
 	Senders Senders
@@ -104,6 +107,9 @@ func (d Deps) validateDeps() error {
 	}
 	if d.Repo == nil {
 		return fmt.Errorf("streaming: Deps.Repo is required")
+	}
+	if d.TriggerReads == nil {
+		return fmt.Errorf("streaming: Deps.TriggerReads is required")
 	}
 	if d.Senders == nil {
 		return fmt.Errorf("streaming: Deps.Senders is required")

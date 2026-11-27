@@ -102,6 +102,9 @@ type Deps struct {
 	// TriggerEvents is the ledger a launch dedupes against
 	// (store.TriggerEventExtStore).
 	TriggerEvents launch.TriggerEventStore
+	// TriggerReads reads the launch event of an existing chat, for the restarts
+	// that rebuild its WorkflowInput.
+	TriggerReads TriggerReads
 }
 
 // Temporal is the slice of the Temporal client the chat handlers use, and
@@ -144,6 +147,9 @@ func (d Deps) validateDeps() error {
 	}
 	if d.Repo == nil {
 		return fmt.Errorf("chat: Deps.Repo is required")
+	}
+	if d.TriggerReads == nil {
+		return fmt.Errorf("chat: Deps.TriggerReads is required")
 	}
 	if d.Chats == nil {
 		return fmt.Errorf("chat: Deps.Chats is required")
@@ -287,6 +293,19 @@ func (s *Service) chatViews() ChatViews {
 		return views
 	}
 	return s.deps.ChatViews
+}
+
+// fixtureTriggerReads fills TriggerReads for the tests (nil in every binary:
+// validateDeps refuses a nil one), as fixtureChatReads fills the chat reads.
+var fixtureTriggerReads func(Repository, TriggerReads) TriggerReads
+
+// triggerReads is Deps.TriggerReads; in this package's tests a fixture that
+// left it unnamed (the harness's mock) reads through its own repository.
+func (s *Service) triggerReads() TriggerReads {
+	if fixtureTriggerReads != nil {
+		return fixtureTriggerReads(s.deps.Repo, s.deps.TriggerReads)
+	}
+	return s.deps.TriggerReads
 }
 
 // New creates a new chat service instance with the supplied Deps.

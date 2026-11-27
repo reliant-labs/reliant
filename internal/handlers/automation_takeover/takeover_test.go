@@ -253,7 +253,7 @@ func setupTakeover(t *testing.T) *takeoverEnv {
 	e := &takeoverEnv{repo: repo, triggers: &fakeTriggers{repo: repo}, members: newMembers(),
 		now: time.Date(2026, 11, 12, 9, 0, 0, 0, time.UTC)}
 	e.svc = NewTestAutomationTakeover(t, WithAutomationTakeoverDeps(Deps{
-		Repo: repo, Offers: repo, Triggers: e.triggers, Now: func() time.Time { return e.now },
+		TriggerReads: repo, Offers: repo, Triggers: e.triggers, Now: func() time.Time { return e.now },
 	}))
 	return e
 }

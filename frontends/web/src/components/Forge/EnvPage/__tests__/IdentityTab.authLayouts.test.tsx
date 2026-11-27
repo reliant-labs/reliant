@@ -13,17 +13,20 @@
 
 import { describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
-import { QueryClientProvider } from "@tanstack/react-query";
 import { Code, ConnectError } from "@connectrpc/connect";
 
 import { createTestQueryClient } from "@/test/renderWithQuery";
-import { IdentityApiProvider, type IdentityApi } from "@/services/controlPlane/identity/IdentityApiContext";
+import { fakeCurrentOrgId, IdentityFakeScope, type IdentityFakes } from "@/test/identityTransport";
 import type { IdentityStatus, IdentityUsersPage } from "@/services/controlPlane/identity/api";
 import type { LiveEnv } from "@/services/forge/live";
 
 import { IdentityTab, type IdentityLayout } from "../IdentityTab";
 
 vi.mock("@/lib/toast-manager", () => ({ toast: { success: vi.fn(), warning: vi.fn(), error: vi.fn(), info: vi.fn() } }));
+vi.mock("@/services/controlPlane/orgs", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/services/controlPlane/orgs")>()),
+  currentOrgId: () => fakeCurrentOrgId(),
+}));
 
 const NOW = Date.now();
 
@@ -76,7 +79,7 @@ const USERS: Record<string, IdentityUsersPage> = {
   "env-staging": users("u-staging", "staging-person@acme.test"),
 };
 
-function fakeApi(overrides: Partial<IdentityApi> = {}): IdentityApi {
+function fakeApi(overrides: Partial<IdentityFakes> = {}): IdentityFakes {
   return {
     currentOrgId: vi.fn(async () => "org-a"),
     getStatus: vi.fn(async (_org: string, envId: string) => status(ISSUER[envId])),
@@ -107,18 +110,14 @@ function tab(layout: IdentityLayout, envId: string) {
   );
 }
 
-function renderLayout(api: IdentityApi, layout: IdentityLayout, envId = "env-prod") {
+function renderLayout(api: IdentityFakes, layout: IdentityLayout, envId = "env-prod") {
   const client = createTestQueryClient();
   const view = render(
-    <QueryClientProvider client={client}>
-      <IdentityApiProvider api={api}>{tab(layout, envId)}</IdentityApiProvider>
-    </QueryClientProvider>
+    <IdentityFakeScope fakes={api} client={client}>{tab(layout, envId)}</IdentityFakeScope>
   );
   const switchTo = (nextEnvId: string) =>
     view.rerender(
-      <QueryClientProvider client={client}>
-        <IdentityApiProvider api={api}>{tab(layout, nextEnvId)}</IdentityApiProvider>
-      </QueryClientProvider>
+      <IdentityFakeScope fakes={api} client={client}>{tab(layout, nextEnvId)}</IdentityFakeScope>
     );
   return { ...view, switchTo };
 }

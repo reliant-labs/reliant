@@ -18,14 +18,15 @@ import (
 )
 
 // forge:section MockService
-// forge:hash=9efa110369820e8d15c1f5446006eb0aa38388b79d3acdedc85ed594bc5d1ed3
+// forge:hash=68f114f26e3eb69d7fc080513011f83facf5463e2bdbf34a7ef3ebb625a43ef2
 
 // MockService is a test mock for the Service interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockService.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockService.<Method>Func not set" error.
 type MockService struct {
 	contractkit.Recorder
 	MachineConnectedFunc func(context.Context, string) int
@@ -70,18 +71,97 @@ func (m *MockService) Run(ctx context.Context, nc *nats.Conn) error {
 	return contractkit.MockNotSet("MockService", "Run")
 }
 
+// MockServiceMachineConnectedCall is one recorded call of MockService.MachineConnected, one
+// field per parameter.
+type MockServiceMachineConnectedCall struct {
+	Ctx    context.Context
+	UserID string
+}
+
+// MachineConnectedCalls returns every recorded MachineConnected call, oldest first, with
+// its arguments typed. It reads the same log as Calls("MachineConnected").
+func (m *MockService) MachineConnectedCalls() []MockServiceMachineConnectedCall {
+	var out []MockServiceMachineConnectedCall
+	for _, c := range m.Recorder.Calls("MachineConnected") {
+		var r MockServiceMachineConnectedCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceSweepCall is one recorded call of MockService.Sweep, one
+// field per parameter.
+type MockServiceSweepCall struct {
+	Ctx context.Context
+}
+
+// SweepCalls returns every recorded Sweep call, oldest first, with
+// its arguments typed. It reads the same log as Calls("Sweep").
+func (m *MockService) SweepCalls() []MockServiceSweepCall {
+	var out []MockServiceSweepCall
+	for _, c := range m.Recorder.Calls("Sweep") {
+		var r MockServiceSweepCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceContinueQueuedCall is one recorded call of MockService.ContinueQueued, one
+// field per parameter.
+type MockServiceContinueQueuedCall struct {
+	Ctx    context.Context
+	ChatID string
+}
+
+// ContinueQueuedCalls returns every recorded ContinueQueued call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ContinueQueued").
+func (m *MockService) ContinueQueuedCalls() []MockServiceContinueQueuedCall {
+	var out []MockServiceContinueQueuedCall
+	for _, c := range m.Recorder.Calls("ContinueQueued") {
+		var r MockServiceContinueQueuedCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ChatID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceRunCall is one recorded call of MockService.Run, one
+// field per parameter.
+type MockServiceRunCall struct {
+	Ctx context.Context
+	Nc  *nats.Conn
+}
+
+// RunCalls returns every recorded Run call, oldest first, with
+// its arguments typed. It reads the same log as Calls("Run").
+func (m *MockService) RunCalls() []MockServiceRunCall {
+	var out []MockServiceRunCall
+	for _, c := range m.Recorder.Calls("Run") {
+		var r MockServiceRunCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Nc, _ = c.Args[1].(*nats.Conn)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ Service = (*MockService)(nil)
 
 // forge:section MockStore
-// forge:hash=a6fc19d5b80572f88f10e48e10c18b64e29f5a712d315219a7c1f53f3be3ab40
+// forge:hash=e1145acf2b5137f995fc7161c11153ce25376dd3c5e20c128c733b9ff84142ab
 
 // MockStore is a test mock for the Store interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockStore.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockStore.<Method>Func not set" error.
 type MockStore struct {
 	contractkit.Recorder
 	ListChatsQueuedForMachineFunc  func(context.Context, string, int) ([]db.QueuedForMachineChat, error)
@@ -116,18 +196,83 @@ func (m *MockStore) ListChatsPausedForMachine(ctx context.Context, userID string
 	return nil, contractkit.MockNotSet("MockStore", "ListChatsPausedForMachine")
 }
 
+// MockStoreListChatsQueuedForMachineCall is one recorded call of MockStore.ListChatsQueuedForMachine, one
+// field per parameter.
+type MockStoreListChatsQueuedForMachineCall struct {
+	Ctx    context.Context
+	UserID string
+	Limit  int
+}
+
+// ListChatsQueuedForMachineCalls returns every recorded ListChatsQueuedForMachine call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListChatsQueuedForMachine").
+func (m *MockStore) ListChatsQueuedForMachineCalls() []MockStoreListChatsQueuedForMachineCall {
+	var out []MockStoreListChatsQueuedForMachineCall
+	for _, c := range m.Recorder.Calls("ListChatsQueuedForMachine") {
+		var r MockStoreListChatsQueuedForMachineCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.Limit, _ = c.Args[2].(int)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockStoreListChatsWaitingForMachineCall is one recorded call of MockStore.ListChatsWaitingForMachine, one
+// field per parameter.
+type MockStoreListChatsWaitingForMachineCall struct {
+	Ctx    context.Context
+	UserID string
+}
+
+// ListChatsWaitingForMachineCalls returns every recorded ListChatsWaitingForMachine call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListChatsWaitingForMachine").
+func (m *MockStore) ListChatsWaitingForMachineCalls() []MockStoreListChatsWaitingForMachineCall {
+	var out []MockStoreListChatsWaitingForMachineCall
+	for _, c := range m.Recorder.Calls("ListChatsWaitingForMachine") {
+		var r MockStoreListChatsWaitingForMachineCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockStoreListChatsPausedForMachineCall is one recorded call of MockStore.ListChatsPausedForMachine, one
+// field per parameter.
+type MockStoreListChatsPausedForMachineCall struct {
+	Ctx    context.Context
+	UserID string
+	Limit  int
+}
+
+// ListChatsPausedForMachineCalls returns every recorded ListChatsPausedForMachine call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListChatsPausedForMachine").
+func (m *MockStore) ListChatsPausedForMachineCalls() []MockStoreListChatsPausedForMachineCall {
+	var out []MockStoreListChatsPausedForMachineCall
+	for _, c := range m.Recorder.Calls("ListChatsPausedForMachine") {
+		var r MockStoreListChatsPausedForMachineCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.Limit, _ = c.Args[2].(int)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ Store = (*MockStore)(nil)
 
 // forge:section MockMachines
-// forge:hash=02f9f9d7a3c8cbc7b4b314c46075f57e3324f3ad37914f5cefcb1edeaf4d0c67
+// forge:hash=1029f6c6022d917ef4c85cb4f0ce661821a8942a1f583874346021df54a1cd3f
 
 // MockMachines is a test mock for the Machines interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockMachines.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockMachines.<Method>Func not set" error.
 type MockMachines struct {
 	contractkit.Recorder
 	IsDaemonOnlineFunc func(context.Context, string, *toolexec.DaemonSelector) (bool, error)
@@ -142,18 +287,41 @@ func (m *MockMachines) IsDaemonOnline(ctx context.Context, userID string, select
 	return false, contractkit.MockNotSet("MockMachines", "IsDaemonOnline")
 }
 
+// MockMachinesIsDaemonOnlineCall is one recorded call of MockMachines.IsDaemonOnline, one
+// field per parameter.
+type MockMachinesIsDaemonOnlineCall struct {
+	Ctx      context.Context
+	UserID   string
+	Selector *toolexec.DaemonSelector
+}
+
+// IsDaemonOnlineCalls returns every recorded IsDaemonOnline call, oldest first, with
+// its arguments typed. It reads the same log as Calls("IsDaemonOnline").
+func (m *MockMachines) IsDaemonOnlineCalls() []MockMachinesIsDaemonOnlineCall {
+	var out []MockMachinesIsDaemonOnlineCall
+	for _, c := range m.Recorder.Calls("IsDaemonOnline") {
+		var r MockMachinesIsDaemonOnlineCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.Selector, _ = c.Args[2].(*toolexec.DaemonSelector)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ Machines = (*MockMachines)(nil)
 
 // forge:section MockDeliverer
-// forge:hash=c2af8383a0b18b1cb1efd413cb1313bb64fe5faf97211c1ee0a8a46cd5da2c68
+// forge:hash=653334e3f7ed0c2e105558355bcfe3c7564e59cdb2b3f73d23572fb6e780b4d9
 
 // MockDeliverer is a test mock for the Deliverer interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockDeliverer.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockDeliverer.<Method>Func not set" error.
 type MockDeliverer struct {
 	contractkit.Recorder
 	ContinueQueuedFunc         func(context.Context, string) (bool, error)
@@ -178,18 +346,59 @@ func (m *MockDeliverer) ResumePausedForMachine(ctx context.Context, chatID strin
 	return false, contractkit.MockNotSet("MockDeliverer", "ResumePausedForMachine")
 }
 
+// MockDelivererContinueQueuedCall is one recorded call of MockDeliverer.ContinueQueued, one
+// field per parameter.
+type MockDelivererContinueQueuedCall struct {
+	Ctx    context.Context
+	ChatID string
+}
+
+// ContinueQueuedCalls returns every recorded ContinueQueued call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ContinueQueued").
+func (m *MockDeliverer) ContinueQueuedCalls() []MockDelivererContinueQueuedCall {
+	var out []MockDelivererContinueQueuedCall
+	for _, c := range m.Recorder.Calls("ContinueQueued") {
+		var r MockDelivererContinueQueuedCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ChatID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockDelivererResumePausedForMachineCall is one recorded call of MockDeliverer.ResumePausedForMachine, one
+// field per parameter.
+type MockDelivererResumePausedForMachineCall struct {
+	Ctx    context.Context
+	ChatID string
+}
+
+// ResumePausedForMachineCalls returns every recorded ResumePausedForMachine call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ResumePausedForMachine").
+func (m *MockDeliverer) ResumePausedForMachineCalls() []MockDelivererResumePausedForMachineCall {
+	var out []MockDelivererResumePausedForMachineCall
+	for _, c := range m.Recorder.Calls("ResumePausedForMachine") {
+		var r MockDelivererResumePausedForMachineCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ChatID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ Deliverer = (*MockDeliverer)(nil)
 
 // forge:section MockSignaler
-// forge:hash=da385f734903be31ebd28b80f944580197543a68df5ed6bc416d2d0f91e9ba08
+// forge:hash=e40dbe1cd3621fd2d600b9a6889680bf155b94080f7a5adcb0b87abe05f3bb9e
 
 // MockSignaler is a test mock for the Signaler interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockSignaler.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockSignaler.<Method>Func not set" error.
 type MockSignaler struct {
 	contractkit.Recorder
 	SignalWorkflowFunc func(context.Context, string, string, string, interface{}) error
@@ -202,6 +411,32 @@ func (m *MockSignaler) SignalWorkflow(ctx context.Context, workflowID string, ru
 		return m.SignalWorkflowFunc(ctx, workflowID, runID, signalName, arg)
 	}
 	return contractkit.MockNotSet("MockSignaler", "SignalWorkflow")
+}
+
+// MockSignalerSignalWorkflowCall is one recorded call of MockSignaler.SignalWorkflow, one
+// field per parameter.
+type MockSignalerSignalWorkflowCall struct {
+	Ctx        context.Context
+	WorkflowID string
+	RunID      string
+	SignalName string
+	Arg        interface{}
+}
+
+// SignalWorkflowCalls returns every recorded SignalWorkflow call, oldest first, with
+// its arguments typed. It reads the same log as Calls("SignalWorkflow").
+func (m *MockSignaler) SignalWorkflowCalls() []MockSignalerSignalWorkflowCall {
+	var out []MockSignalerSignalWorkflowCall
+	for _, c := range m.Recorder.Calls("SignalWorkflow") {
+		var r MockSignalerSignalWorkflowCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.WorkflowID, _ = c.Args[1].(string)
+		r.RunID, _ = c.Args[2].(string)
+		r.SignalName, _ = c.Args[3].(string)
+		r.Arg, _ = c.Args[4].(interface{})
+		out = append(out, r)
+	}
+	return out
 }
 
 // Compile-time check.

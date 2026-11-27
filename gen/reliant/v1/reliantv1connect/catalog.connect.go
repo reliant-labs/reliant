@@ -186,6 +186,7 @@ func NewCatalogServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			httpClient,
 			baseURL+CatalogServiceListInputOptionsProcedure,
 			connect.WithSchema(catalogServiceMethods.ByName("ListInputOptions")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 	}
@@ -370,6 +371,7 @@ func NewCatalogServiceHandler(svc CatalogServiceHandler, opts ...connect.Handler
 		CatalogServiceListInputOptionsProcedure,
 		svc.ListInputOptions,
 		connect.WithSchema(catalogServiceMethods.ByName("ListInputOptions")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	return "/reliant.v1.CatalogService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

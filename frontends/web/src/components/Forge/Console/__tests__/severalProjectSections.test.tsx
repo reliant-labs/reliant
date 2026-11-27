@@ -11,15 +11,24 @@ import { createMemoryHistory, createRootRoute, createRoute, createRouter, Outlet
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
+import type { ManagedStoreTarget } from "@/services/forge/secretStore";
+
 const { listSecrets } = vi.hoisted(() => ({
-  listSecrets: vi.fn(async (projectId: string | null) => ({
-    availability: "available",
-    secrets: [{ name: `${projectId}-secret` }],
+  listSecrets: vi.fn(async (environmentId: string | null) => ({
+    secrets: [{ name: `${environmentId}-secret` }],
+    protected: false,
   })),
 }));
 
 // Keep the real SecretsPage and SecretsMatrix, replacing only their I/O.
 vi.mock("../../EnvPage/EnvTabPanels", () => ({ SecretsTab: () => null }));
+
+// A console with a control plane: each live environment is a managed-store lookup.
+vi.mock("@/services/controlPlane/config", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/services/controlPlane/config")>()),
+  CONTROL_PLANE_API_URL: "https://cp.test",
+  hasControlPlane: true,
+}));
 
 vi.mock("../consoleHost", () => ({
   useConsoleReliantProject: (app: string, options: { select?: boolean; pinned?: string | null }) => {
@@ -29,11 +38,13 @@ vi.mock("../consoleHost", () => ({
   },
 }));
 
-vi.mock("@/hooks/forge-queries", () => ({
-  managedSecretsQueryOptions: (_transport: unknown, projectId: string | null, env: string) => ({
-    queryKey: ["section-secrets", projectId, env],
-    queryFn: () => listSecrets(projectId),
-  }),
+vi.mock("@/hooks/forge-queries", async (importOriginal) => ({
+  // The real managedSecretsOf reads each listing as the matrix does.
+  managedSecretsOf: (await importOriginal<typeof import("@/hooks/forge-queries")>()).managedSecretsOf,
+  managedSecretsQueryOptions: (env: string | null | undefined, target: ManagedStoreTarget | null) => {
+    const environmentId = target?.kind === "lookup" ? target.environmentId : null;
+    return { queryKey: ["section-secrets", environmentId, env], queryFn: () => listSecrets(environmentId) };
+  },
   useEnvironmentShapes: () => new Map(),
   useForgeRoster: (projectId: string | null, app: string) => ({
     isLoading: false,
@@ -117,11 +128,12 @@ describe("a console page across several projects", () => {
     renderAt("/forge/p/shop/secrets?env=all", SecretsPage);
     const shop = await screen.findByTestId("several-section-shop");
     const blog = screen.getByTestId("several-section-blog");
-    expect(await within(shop).findByText("pid-shop-secret")).toBeInTheDocument();
-    expect(await within(blog).findByText("pid-blog-secret")).toBeInTheDocument();
-    expect(within(shop).queryByText("pid-blog-secret")).not.toBeInTheDocument();
-    expect(within(blog).queryByText("pid-shop-secret")).not.toBeInTheDocument();
-    expect(listSecrets.mock.calls.map(([id]) => id).sort()).toEqual(["pid-blog", "pid-shop"]);
+    // Each section's managed store is its own live environment's (shop-prod, blog-prod).
+    expect(await within(shop).findByText("shop-prod-secret")).toBeInTheDocument();
+    expect(await within(blog).findByText("blog-prod-secret")).toBeInTheDocument();
+    expect(within(shop).queryByText("blog-prod-secret")).not.toBeInTheDocument();
+    expect(within(blog).queryByText("shop-prod-secret")).not.toBeInTheDocument();
+    expect(listSecrets.mock.calls.map(([id]) => id).sort()).toEqual(["blog-prod", "shop-prod"]);
     expect(within(shop).getByRole("link", { name: "prod" })).toHaveAttribute("href", "/forge/p/shop/secrets?env=prod");
     expect(within(blog).getByRole("link", { name: "prod" })).toHaveAttribute("href", "/forge/p/blog/secrets?env=prod");
   });

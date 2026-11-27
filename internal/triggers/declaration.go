@@ -631,8 +631,11 @@ func (c *CachedWorkflows) resolve(ctx context.Context, userID, workflow, project
 }
 
 func kindNoun(k core.TriggerKind) string {
-	if k == core.TriggerKindWorkflowEvent {
+	switch k {
+	case core.TriggerKindWorkflowEvent:
 		return "workflow-event"
+	case core.TriggerKindRecordDue:
+		return "record-due"
 	}
 	return string(k)
 }

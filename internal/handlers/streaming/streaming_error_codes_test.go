@@ -75,7 +75,7 @@ func TestStreams_RepositoryFailureCodes(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			_, client := streaming.NewTestStreamingServer(t,
-				streaming.WithStreamingDeps(streaming.Deps{Repo: tc.repo, ChatRows: tc.rows}),
+				streaming.WithStreamingDeps(streaming.Deps{TriggerReads: &streaming.MockTriggerReads{}, Repo: tc.repo, ChatRows: tc.rows}),
 				streaming.WithPrincipal(testkit.WithUserID("test-user")))
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()

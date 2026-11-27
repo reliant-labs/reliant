@@ -16,14 +16,15 @@ import (
 )
 
 // forge:section MockService
-// forge:hash=ef00eb82101e3ed3f0038741432ce59e1a7cdadac8bd4e611286237f9701515a
+// forge:hash=b28dc004d98594a21ab3b9fdecceaff515900021229499fb9585da78bdc8bf2c
 
 // MockService is a test mock for the Service interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockService.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockService.<Method>Func not set" error.
 type MockService struct {
 	contractkit.Recorder
 	ProbeFunc func(context.Context, string, Target, Options) *reliantv1.LocalModelEndpoint
@@ -36,6 +37,30 @@ func (m *MockService) Probe(ctx context.Context, id string, t Target, opt Option
 		return m.ProbeFunc(ctx, id, t, opt)
 	}
 	return nil
+}
+
+// MockServiceProbeCall is one recorded call of MockService.Probe, one
+// field per parameter.
+type MockServiceProbeCall struct {
+	Ctx context.Context
+	ID  string
+	T   Target
+	Opt Options
+}
+
+// ProbeCalls returns every recorded Probe call, oldest first, with
+// its arguments typed. It reads the same log as Calls("Probe").
+func (m *MockService) ProbeCalls() []MockServiceProbeCall {
+	var out []MockServiceProbeCall
+	for _, c := range m.Recorder.Calls("Probe") {
+		var r MockServiceProbeCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ID, _ = c.Args[1].(string)
+		r.T, _ = c.Args[2].(Target)
+		r.Opt, _ = c.Args[3].(Options)
+		out = append(out, r)
+	}
+	return out
 }
 
 // Compile-time check.
