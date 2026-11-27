@@ -730,16 +730,16 @@ const SURFACES: Surface[] = [
     ready: (page) => page.getByTestId('obs-overview-slowest').getByText('CheckoutService/Checkout').first(),
   },
   {
-    // Speed insights: the Real Experience Score, the vitals, the routes (U6 7/16).
+    // Site insights › Speed: the Real Experience Score, the vitals, the routes (U6 7/16).
     name: 'shell-speed-insights',
-    path: '/forge/p/shop/speed-insights',
+    path: '/forge/p/shop/site-insights',
     on: ['desktop'],
     ready: (page) => page.getByTestId('speed-insights-routes').getByText('/checkout').first(),
   },
   {
     // The same page on its mobile device and P90 toggles, read from the URL.
     name: 'shell-speed-insights-mobile',
-    path: '/forge/p/shop/speed-insights?device=mobile&pct=p90',
+    path: '/forge/p/shop/site-insights?device=mobile&pct=p90',
     on: ['desktop'],
     ready: (page) => page.getByTestId('speed-insights-routes').getByText('/checkout').first(),
   },

@@ -1005,6 +1005,22 @@ export const forgeConsoleAnalyticsSearchSchema = z.object({
   range: z.enum(RANGE_PRESETS).optional().catch(undefined),
 });
 
+/**
+ * Site insights (Forge/Analytics/SiteInsightsPage.tsx): the scope, the window,
+ * the site (`site`, one site's telemetry service.name; absent, every site),
+ * and the Speed view's choices (`device`, `pct`, `metric`), which its model
+ * reads back with a default for anything it does not know.
+ */
+export const forgeConsoleSiteInsightsSearchSchema = z.object({
+  env: envScopeParam,
+  range: z.enum(RANGE_PRESETS).optional().catch(undefined),
+  site: textParam,
+  device: textParam,
+  pct: textParam,
+  metric: textParam,
+  only: z.string().optional().catch(undefined),
+});
+
 export const forgeConsoleWorkloadSearchSchema = z.object({
   env: envScopeParam,
   tab: z.enum(WORKLOAD_TABS).optional().catch(undefined),

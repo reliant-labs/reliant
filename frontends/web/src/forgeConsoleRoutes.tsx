@@ -28,7 +28,9 @@
  *       /usage                              what the app's hosting costs this month
  *       /events                             Product analytics › Events & metrics
  *       /analytics, /analytics/$tab          Analytics: the built-in dashboards as tabs (U6c)
- *       /speed-insights                     web vitals per page (U6c)
+ *       /site-insights, /site-insights/$view
+ *                                           Site insights: speed (web vitals per page), seo, accessibility
+ *       /speed-insights                     → /site-insights (its old name), search kept
  *       /experiments, /experiments/$changeId  Forge Changes (remote config, rollouts, A/B tests)
  *       /security/vulnerabilities           Security: the findings of the scope's releases
  *       /security/vulnerabilities/$advisory one advisory across the project
@@ -61,7 +63,7 @@ import { usagePath } from './lib/paths'
 import { inOrgOfPath } from './lib/paths/org'
 import { memberOnly } from './lib/routeOrg'
 
-import { isAnalyticsTab, isAuthTab, isObsNavView, OBS_NAV_VIEWS, orgUsagePath } from './components/Forge/Console/paths'
+import { isAnalyticsTab, isAuthTab, isObsNavView, isSiteInsightsView, OBS_NAV_VIEWS, orgUsagePath, SITE_INSIGHTS_SEGMENT, SPEED_INSIGHTS_SEGMENT } from './components/Forge/Console/paths'
 import {
   forgeConsoleActivitySearchSchema,
   forgeConsoleAnalyticsSearchSchema,
@@ -83,6 +85,7 @@ import {
   forgeConsoleTestsRunsSearchSchema,
   forgeConsoleTestsSearchSchema,
   forgeConsoleServicesSearchSchema,
+  forgeConsoleSiteInsightsSearchSchema,
   forgeConsoleStorageSearchSchema,
   forgeConsoleUsersSearchSchema,
   forgeConsoleVulnerabilitiesSearchSchema,
@@ -141,8 +144,10 @@ export interface ForgeConsoleComponents {
   events: RouteComponent
   /** Analytics (U6c): the built-in Product analytics dashboards as tabs, plus Events & metrics. */
   analytics: RouteComponent
-  /** Speed insights (U6c): web vitals per page. */
-  speedInsights: RouteComponent
+  /** Site insights: speed (web vitals per page; it was Speed insights), SEO and accessibility. */
+  siteInsights?: RouteComponent
+  /** @deprecated Use siteInsights. Renders only on the legacy /speed-insights route. */
+  speedInsights?: RouteComponent
   /** Experiments: the project's Forge Changes, and one change. */
   experiments: RouteComponent
   experiment: RouteComponent
@@ -446,10 +451,33 @@ export function createForgeConsoleRoutes<TParent extends AnyRoute>(
     }),
     component: components.analytics,
   })
+  const siteInsightsRoute = createRoute({
+    getParentRoute: () => consoleRoute,
+    path: SITE_INSIGHTS_SEGMENT,
+    validateSearch: forgeConsoleSiteInsightsSearchSchema,
+    component: components.siteInsights,
+  })
+  // A view that is not one (a hand-edited URL) lands on the first, Speed.
+  const siteInsightsViewRoute = createRoute({
+    getParentRoute: () => consoleRoute,
+    path: `${SITE_INSIGHTS_SEGMENT}/$view`,
+    validateSearch: forgeConsoleSiteInsightsSearchSchema,
+    beforeLoad: memberOnly(({ params, location }) => {
+      if (isSiteInsightsView(params.view)) return
+      throw redirect({ href: `${location.pathname.replace(/\/[^/]*\/?$/, '')}${location.searchStr}`, replace: true })
+    }),
+    component: components.siteInsights,
+  })
+  // Legacy callers keep their Speed page on its original route and search
+  // contract. Only hosts supplying Site insights redirect old bookmarks to it.
   const speedInsightsRoute = createRoute({
     getParentRoute: () => consoleRoute,
-    path: 'speed-insights',
-    validateSearch: forgeConsoleServicesSearchSchema,
+    path: SPEED_INSIGHTS_SEGMENT,
+    validateSearch: components.speedInsights ? forgeConsoleServicesSearchSchema : forgeConsoleSiteInsightsSearchSchema,
+    beforeLoad: memberOnly(({ location }) => {
+      if (components.speedInsights || !components.siteInsights) return
+      throw redirect({ href: `${location.pathname.replace(/\/speed-insights\/?$/, `/${SITE_INSIGHTS_SEGMENT}`)}${location.searchStr}`, replace: true })
+    }),
     component: components.speedInsights,
   })
   // Forge Changes: remote config, gradual rollouts and A/B tests
@@ -588,6 +616,8 @@ export function createForgeConsoleRoutes<TParent extends AnyRoute>(
       eventsRoute,
       analyticsRoute,
       analyticsTabRoute,
+      siteInsightsRoute,
+      siteInsightsViewRoute,
       speedInsightsRoute,
       experimentsRoute,
       experimentRoute,

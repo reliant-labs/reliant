@@ -43,7 +43,7 @@ vi.mock("@/forgeConsolePages", async () => {
     const { readOnly, reason } = useObsReadOnly();
     return <main data-testid={`console-${name}`} data-read-only={readOnly} data-read-only-reason={reason} />;
   };
-  const names = ["overview", "workload", "releases", "release", "observabilityView", "dashboards", "dashboard", "environments", "environment", "secrets", "domains", "activity", "data", "storage", "speedInsights", "orgObservability", "landing", "legacyEnv", "legacyDomains", "legacyCommand"];
+  const names = ["overview", "workload", "releases", "release", "observabilityView", "dashboards", "dashboard", "environments", "environment", "secrets", "domains", "activity", "data", "storage", "siteInsights", "orgObservability", "landing", "legacyEnv", "legacyDomains", "legacyCommand"];
   return { forgeConsolePages: { layout: Outlet, console: Outlet, orgLayout: Outlet, ...Object.fromEntries(names.map((n) => [n, page(n)])) }, preloadForgeConsole: () => {} };
 });
 vi.mock("@/demoBundle/DemoConsoleProviders", () => ({ DemoConsoleProviders: ({ children }: { children: React.ReactNode }) => children }));
@@ -131,13 +131,21 @@ describe("the demo shell's routes", () => {
     ["/forge/p/shop/storage", "console-storage"],
     ["/forge/p/shop/observability/traces", "console-observabilityView"],
     ["/forge/p/shop/observability/dashboards", "console-dashboards"],
-    ["/forge/p/shop/speed-insights", "console-speedInsights"],
+    ["/forge/p/shop/site-insights", "console-siteInsights"],
+    ["/forge/p/shop/site-insights/seo", "console-siteInsights"],
   ])("mounts the console page at %s", async (path, testId) => {
     const router = renderDemoShell(path);
     const page = await screen.findByTestId(testId);
     expect(page).toHaveAttribute("data-read-only", "true");
     expect(page).toHaveAttribute("data-read-only-reason", "Read-only demo");
     expect(router.state.location.pathname).toBe(path);
+  });
+
+  it("sends the old Speed insights URL to Site insights, keeping its search", async () => {
+    const router = renderDemoShell("/forge/p/shop/speed-insights?device=mobile");
+    expect(await screen.findByTestId("console-siteInsights")).toBeInTheDocument();
+    await waitFor(() => expect(router.state.location.pathname).toBe("/forge/p/shop/site-insights"));
+    expect(router.state.location.search).toMatchObject({ device: "mobile" });
   });
 
   it.each([

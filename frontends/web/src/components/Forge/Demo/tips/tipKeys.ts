@@ -51,7 +51,7 @@ export const DEMO_TIP_KEYS = [
   "metrics",
   "rpc",
   "graph",
-  "speed-insights",
+  "site-insights",
   "workload",
 ] as const;
 
@@ -142,8 +142,8 @@ export function demoTipKey(pathname: string, search: Record<string, unknown>): D
       return "experiments";
     case "obs-overview":
       return "obs-overview";
-    case "speed-insights":
-      return "speed-insights";
+    case "site-insights":
+      return "site-insights";
     // The Product analytics hub's dashboards are Analytics' tabs, not one of the app's dashboards.
     case "dashboard":
       return PEOPLE_DASHBOARD_KEYS.includes(page.key) ? "analytics" : "dashboards";
