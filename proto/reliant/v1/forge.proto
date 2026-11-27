@@ -27,9 +27,8 @@ option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
 service ForgeService {
   // GetTopology returns the whole release/environment topology. Set verify to
   // reconcile each environment against its live cluster.
-  rpc GetTopology(GetForgeTopologyRequest) returns (GetForgeTopologyResponse) {
-    option idempotency_level = NO_SIDE_EFFECTS;
-  }
+  // forge:lint-disable-next-line forge-idempotency-read-undeclared: writes as it reads: rememberForgeProjectName stores the project's forge name (SetProjectForgeName) and refreshForgeApps runs in the background
+  rpc GetTopology(GetForgeTopologyRequest) returns (GetForgeTopologyResponse) {}
 
   // VerifyEnv reconciles one environment against its live cluster.
   rpc VerifyEnv(VerifyForgeEnvRequest) returns (VerifyForgeEnvResponse) {
@@ -40,14 +39,12 @@ service ForgeService {
 
   // ListSecrets returns declared/present/inert secrets for an environment.
   // The report carries NAMES and BOOLEANS only, never a secret value.
-  rpc ListSecrets(ListForgeSecretsRequest) returns (ListForgeSecretsResponse) {
-    option idempotency_level = NO_SIDE_EFFECTS;
-  }
+  // forge:lint-disable-next-line forge-idempotency-read-undeclared: calls out: it dispatches forge.secret_list to the user's machine, resolving secret presence from the provider's metadata; not pinned to a read-only argv in the forge handler test
+  rpc ListSecrets(ListForgeSecretsRequest) returns (ListForgeSecretsResponse) {}
 
   // GetEnvStatus returns runtime checks for an environment.
-  rpc GetEnvStatus(GetForgeEnvStatusRequest) returns (GetForgeEnvStatusResponse) {
-    option idempotency_level = NO_SIDE_EFFECTS;
-  }
+  // forge:lint-disable-next-line forge-idempotency-read-undeclared: calls out: it dispatches forge.env_status to run a forge CLI command on the user's machine, whose argv is not pinned read-only
+  rpc GetEnvStatus(GetForgeEnvStatusRequest) returns (GetForgeEnvStatusResponse) {}
 
   // GetEnvShape projects ONE environment's render into the declaration the
   // control plane records for it — `forge env shape <env> --json`.
@@ -64,9 +61,8 @@ service ForgeService {
   // records. That identity is what stops a Register from writing a
   // declaration that disagrees with the next build's, on an env whose kind is
   // immutable.
-  rpc GetEnvShape(GetForgeEnvShapeRequest) returns (GetForgeEnvShapeResponse) {
-    option idempotency_level = NO_SIDE_EFFECTS;
-  }
+  // forge:lint-disable-next-line forge-idempotency-read-undeclared: calls out: it dispatches forge.env_shape to run a forge CLI command on the user's machine, whose argv is not pinned read-only
+  rpc GetEnvShape(GetForgeEnvShapeRequest) returns (GetForgeEnvShapeResponse) {}
 
   // PlanPromote previews binding an environment to a release. READ-ONLY: it
   // runs `forge env promote <release> --to <env> --plan`, which computes the
