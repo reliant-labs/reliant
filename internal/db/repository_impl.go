@@ -40,6 +40,13 @@ func (r *Repo) GetLiveChatIDForWorktree(ctx context.Context, worktreeID string) 
 	return store.GetLiveChatIDForWorktree(ctx, r.ORM(), worktreeID)
 }
 
+// GetLiveBoundThreadRunForWorktree returns a sub-agent thread bound to this
+// worktree whose latest run is still live (pending, active or paused), or nil
+// (store.GetLiveBoundThreadRunForWorktree).
+func (r *Repo) GetLiveBoundThreadRunForWorktree(ctx context.Context, worktreeID string) (*core.BoundThreadRun, error) {
+	return store.GetLiveBoundThreadRunForWorktree(ctx, r.ORM(), worktreeID)
+}
+
 // ListWorktreeIDsWithRunningChat reports which of worktreeIDs have a run going
 // in them: a bound chat's run, or a bound thread's own (store.WorktreeRunActivities).
 func (r *Repo) ListWorktreeIDsWithRunningChat(ctx context.Context, worktreeIDs []string) (map[string]bool, error) {

@@ -616,6 +616,16 @@ func (w *worktreeTool) handleDelete(ctx context.Context, p *WorktreeParams, rc *
 	} else if busy != "" {
 		return fail("chat %s is working in '%s'; archive that chat or the worktree from the Reliant UI", busy, p.Name)
 	}
+	// A sub-agent spawned into the worktree binds its thread, not a chat, so
+	// the check above never sees it. While its run is live it is still
+	// working there: archiving under it stops every machine tool it calls
+	// (obs 0cea454a). Finished sub-agents do not block (owner, 2026-11-27).
+	if run, err := w.repo.GetLiveBoundThreadRunForWorktree(ctx, row.ID); err != nil {
+		return fail("look up sub-agents working in the worktree: %v", err)
+	} else if run != nil {
+		return fail("sub-agent %s is %s in '%s' (run %s). Stop it first with spawn_stop(agent_id=%q) and confirm with spawn_status(agent_id=%q, wait: true), or let it finish, then delete the worktree",
+			run.ThreadID, run.Status.Label(), p.Name, run.WorkflowID, run.ThreadID, run.ThreadID)
+	}
 
 	if err := w.repo.ArchiveWorktree(ctx, row.ID); err != nil {
 		return fail("archive: %v", err)

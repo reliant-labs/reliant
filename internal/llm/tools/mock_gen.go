@@ -7881,7 +7881,7 @@ func (m *MockrunScenarioStore) GetChatCalls() []MockrunScenarioStoreGetChatCall 
 var _ runScenarioStore = (*MockrunScenarioStore)(nil)
 
 // forge:section MockworktreeStore
-// forge:hash=87a705ca342c0f5b8654f50adc84e7a309253daf466a71adafde726d46bcc4d8
+// forge:hash=68cd5adeb65de7b1c09e1baa5593f3faaac040e0e9283e1d4392464b741ecc94
 
 // MockworktreeStore is a test mock for the worktreeStore interface.
 //
@@ -7892,18 +7892,19 @@ var _ runScenarioStore = (*MockrunScenarioStore)(nil)
 // canonical "MockworktreeStore.<Method>Func not set" error.
 type MockworktreeStore struct {
 	contractkit.Recorder
-	CreateWorktreeFunc           func(context.Context, *db.Worktree) error
-	UpdateWorktreeFunc           func(context.Context, *db.Worktree) error
-	ArchiveWorktreeFunc          func(context.Context, string) error
-	GetLiveWorktreeByNameFunc    func(context.Context, string, string) (*db.Worktree, error)
-	ListWorktreesByBranchFunc    func(context.Context, string, string) ([]*db.Worktree, error)
-	SettleCheckoutTeardownFunc   func(context.Context, string, string, string) (*db.CheckoutTeardown, error)
-	GetRepoByProjectAndPathFunc  func(context.Context, string, string) (*core.Repo, error)
-	CreateRepoFunc               func(context.Context, *core.Repo) error
-	ListReposByProjectFunc       func(context.Context, string) ([]*core.Repo, error)
-	UpdateProjectFunc            func(context.Context, *db.Project, string) error
-	GetLiveChatIDForWorktreeFunc func(context.Context, string) (string, error)
-	ListWorktreesFunc            func(context.Context, db.WorktreeFilters) ([]*db.Worktree, error)
+	CreateWorktreeFunc                   func(context.Context, *db.Worktree) error
+	UpdateWorktreeFunc                   func(context.Context, *db.Worktree) error
+	ArchiveWorktreeFunc                  func(context.Context, string) error
+	GetLiveWorktreeByNameFunc            func(context.Context, string, string) (*db.Worktree, error)
+	ListWorktreesByBranchFunc            func(context.Context, string, string) ([]*db.Worktree, error)
+	SettleCheckoutTeardownFunc           func(context.Context, string, string, string) (*db.CheckoutTeardown, error)
+	GetRepoByProjectAndPathFunc          func(context.Context, string, string) (*core.Repo, error)
+	CreateRepoFunc                       func(context.Context, *core.Repo) error
+	ListReposByProjectFunc               func(context.Context, string) ([]*core.Repo, error)
+	UpdateProjectFunc                    func(context.Context, *db.Project, string) error
+	GetLiveChatIDForWorktreeFunc         func(context.Context, string) (string, error)
+	GetLiveBoundThreadRunForWorktreeFunc func(context.Context, string) (*core.BoundThreadRun, error)
+	ListWorktreesFunc                    func(context.Context, db.WorktreeFilters) ([]*db.Worktree, error)
 }
 
 // CreateWorktree records the call and delegates to CreateWorktreeFunc when set.
@@ -8003,6 +8004,15 @@ func (m *MockworktreeStore) GetLiveChatIDForWorktree(ctx context.Context, worktr
 		return m.GetLiveChatIDForWorktreeFunc(ctx, worktreeID)
 	}
 	return "", contractkit.MockNotSet("MockworktreeStore", "GetLiveChatIDForWorktree")
+}
+
+// GetLiveBoundThreadRunForWorktree records the call and delegates to GetLiveBoundThreadRunForWorktreeFunc when set.
+func (m *MockworktreeStore) GetLiveBoundThreadRunForWorktree(ctx context.Context, worktreeID string) (*core.BoundThreadRun, error) {
+	m.Recorder.Record("GetLiveBoundThreadRunForWorktree", ctx, worktreeID)
+	if m.GetLiveBoundThreadRunForWorktreeFunc != nil {
+		return m.GetLiveBoundThreadRunForWorktreeFunc(ctx, worktreeID)
+	}
+	return nil, contractkit.MockNotSet("MockworktreeStore", "GetLiveBoundThreadRunForWorktree")
 }
 
 // ListWorktrees records the call and delegates to ListWorktreesFunc when set.
@@ -8239,6 +8249,26 @@ func (m *MockworktreeStore) GetLiveChatIDForWorktreeCalls() []MockworktreeStoreG
 	var out []MockworktreeStoreGetLiveChatIDForWorktreeCall
 	for _, c := range m.Recorder.Calls("GetLiveChatIDForWorktree") {
 		var r MockworktreeStoreGetLiveChatIDForWorktreeCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.WorktreeID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockworktreeStoreGetLiveBoundThreadRunForWorktreeCall is one recorded call of MockworktreeStore.GetLiveBoundThreadRunForWorktree, one
+// field per parameter.
+type MockworktreeStoreGetLiveBoundThreadRunForWorktreeCall struct {
+	Ctx        context.Context
+	WorktreeID string
+}
+
+// GetLiveBoundThreadRunForWorktreeCalls returns every recorded GetLiveBoundThreadRunForWorktree call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetLiveBoundThreadRunForWorktree").
+func (m *MockworktreeStore) GetLiveBoundThreadRunForWorktreeCalls() []MockworktreeStoreGetLiveBoundThreadRunForWorktreeCall {
+	var out []MockworktreeStoreGetLiveBoundThreadRunForWorktreeCall
+	for _, c := range m.Recorder.Calls("GetLiveBoundThreadRunForWorktree") {
+		var r MockworktreeStoreGetLiveBoundThreadRunForWorktreeCall
 		r.Ctx, _ = c.Args[0].(context.Context)
 		r.WorktreeID, _ = c.Args[1].(string)
 		out = append(out, r)

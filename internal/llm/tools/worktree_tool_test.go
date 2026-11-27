@@ -592,6 +592,79 @@ func TestWorktreeTool_Delete_Refusals(t *testing.T) {
 	})
 }
 
+// bindSubAgent spawns a sub-agent thread into wt, its runs created in order
+// (the last is its current run), as spawn(worktree=...) binds it.
+func (f *worktreeToolFixture) bindSubAgent(t *testing.T, wt *db.Worktree, runs ...db.WorkflowStatus) (threadID string, runIDs []string) {
+	t.Helper()
+	ctx := context.Background()
+	threadID = uuid.NewString()
+	parent := f.chatID
+	at := time.Now().Add(-time.Hour)
+	_, err := f.repo.CreateThread(ctx, &db.Thread{
+		ID: threadID, ChatID: f.chatID, ParentThreadID: &parent, WorktreeID: &wt.ID,
+		Origin: db.ThreadOriginSpawn, Status: db.ThreadStatusRunning, CreatedAt: at,
+	})
+	require.NoError(t, err)
+	for i, status := range runs {
+		id := uuid.NewString()
+		require.NoError(t, f.repo.CreateWorkflow(ctx, &db.Workflow{
+			ID: id, ChatID: f.chatID, WorkflowName: "builtin://agent",
+			Thread: threadID, Status: status, CreatedAt: at.Add(time.Duration(i) * time.Minute),
+		}))
+		runIDs = append(runIDs, id)
+	}
+	return threadID, runIDs
+}
+
+// Owner decision, 2026-11-27 (obs 0cea454a): delete refuses a worktree a
+// sub-agent thread is bound to while that thread's run is live (pending,
+// active or paused), naming the thread and run and how to proceed. A
+// sub-agent whose run finished does not block, and only its newest run
+// counts: an agent resumed as a new run leaves its old row behind as history.
+func TestWorktreeTool_Delete_RefusesWhileABoundSubAgentRuns(t *testing.T) {
+	f := newWorktreeToolFixture(t)
+	ctx := context.Background()
+
+	for name, status := range map[string]db.WorkflowStatus{
+		"active": db.Active(), "paused": db.Paused(), "pending": db.Pending(),
+	} {
+		t.Run("refused while "+name, func(t *testing.T) {
+			wt := f.register(t, "busy-"+name, 1)
+			thread, runs := f.bindSubAgent(t, wt, status)
+			resp := f.call(t, WorktreeParams{Action: "delete", Name: "busy-" + name})
+			require.True(t, resp.IsError, resp.Content)
+			assert.Contains(t, resp.Content, "sub-agent "+thread+" is "+status.Label())
+			assert.Contains(t, resp.Content, "run "+runs[0])
+			assert.Contains(t, resp.Content, fmt.Sprintf("spawn_stop(agent_id=%q)", thread))
+			got, err := f.repo.GetWorktree(ctx, wt.ID)
+			require.NoError(t, err)
+			assert.Nil(t, got.DeletedAt, "nothing is archived")
+			select {
+			case cand := <-f.settler.settled:
+				t.Fatalf("a refused delete must not settle anything: %s", cand.Worktree.ID)
+			default:
+			}
+		})
+	}
+
+	for name, runs := range map[string][]db.WorkflowStatus{
+		"completed":                  {db.Completed()},
+		"failed":                     {db.Failed()},
+		"cancelled":                  {db.Cancelled()},
+		"resumed run since finished": {db.Active(), db.Completed()},
+	} {
+		t.Run("allowed once "+name, func(t *testing.T) {
+			wt := f.register(t, "done-"+strings.ReplaceAll(name, " ", "-"), 1)
+			f.bindSubAgent(t, wt, runs...)
+			resp := f.call(t, WorktreeParams{Action: "delete", Name: wt.Name})
+			require.False(t, resp.IsError, resp.Content)
+			got, err := f.repo.GetWorktree(ctx, wt.ID)
+			require.NoError(t, err)
+			assert.NotNil(t, got.DeletedAt, "archived")
+		})
+	}
+}
+
 // The name becomes a directory prefix on the user's machine, so it may not
 // climb out of ~/.reliant/worktrees.
 func TestWorktreeTool_RefusesANameThatIsAPath(t *testing.T) {

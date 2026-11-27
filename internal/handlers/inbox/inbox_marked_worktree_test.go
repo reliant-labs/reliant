@@ -222,3 +222,7 @@ type autoArchive struct {
 func (a autoArchive) GetLiveChatIDForWorktree(ctx context.Context, id string) (string, error) {
 	return a.chats.GetLiveChatIDForWorktree(ctx, id)
 }
+
+func (a autoArchive) GetLiveBoundThreadRunForWorktree(ctx context.Context, id string) (*core.BoundThreadRun, error) {
+	return a.chats.GetLiveBoundThreadRunForWorktree(ctx, id)
+}

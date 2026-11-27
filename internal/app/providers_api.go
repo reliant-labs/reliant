@@ -1142,17 +1142,23 @@ var (
 )
 
 // worktreeSweepStore is what the sweep's auto-archive reads and writes: the
-// worktree queries and the one chat query that says whether a chat is bound.
-// Only the methods AutoArchiveStore names are called through it.
+// worktree queries and the two chat queries that say whether a chat, or a
+// sub-agent's live run, is bound. Only the methods AutoArchiveStore names are
+// called through it.
 type worktreeSweepStore struct {
 	store.WorktreeExtStore
 	chats interface {
 		GetLiveChatIDForWorktree(ctx context.Context, worktreeID string) (string, error)
+		GetLiveBoundThreadRunForWorktree(ctx context.Context, worktreeID string) (*core.BoundThreadRun, error)
 	}
 }
 
 func (s worktreeSweepStore) GetLiveChatIDForWorktree(ctx context.Context, worktreeID string) (string, error) {
 	return s.chats.GetLiveChatIDForWorktree(ctx, worktreeID)
+}
+
+func (s worktreeSweepStore) GetLiveBoundThreadRunForWorktree(ctx context.Context, worktreeID string) (*core.BoundThreadRun, error) {
+	return s.chats.GetLiveBoundThreadRunForWorktree(ctx, worktreeID)
 }
 
 // idleRetirementStore is what idle retirement reads (which worktrees a chat

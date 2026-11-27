@@ -163,6 +163,9 @@ func ParseAutoArchiveMode(v string) AutoArchiveMode {
 // store.WorktreeExtStore and store.ChatExtStore together satisfy it.
 type AutoArchiveStore interface {
 	GetLiveChatIDForWorktree(ctx context.Context, worktreeID string) (string, error)
+	// GetLiveBoundThreadRunForWorktree is a sub-agent thread bound to the
+	// worktree whose latest run is live, nil when none.
+	GetLiveBoundThreadRunForWorktree(ctx context.Context, worktreeID string) (*core.BoundThreadRun, error)
 	ArchiveWorktree(ctx context.Context, id string) error
 	// WorktreeRunActivities says, per worktree, whether a chat run is going
 	// in it and when anything last happened in it.
@@ -1351,6 +1354,19 @@ func (s *Sweeper) archiveFinished(ctx context.Context, userID string, wt *core.W
 	if chatID != "" {
 		s.blockedByChat.Add(1)
 		logging.DebugContext(ctx, "[WorktreeSweep] skipped auto-archive", "worktreeID", wt.ID, "reason", "bound to live chat", "chatID", chatID)
+		return
+	}
+	// A sub-agent spawned into the worktree binds its thread, not a chat:
+	// while its run is live it is still working there (owner, 2026-11-27).
+	run, err := a.store.GetLiveBoundThreadRunForWorktree(ctx, wt.ID)
+	if err != nil {
+		s.archiveErrors.Add(1)
+		logging.WarnContext(ctx, "[WorktreeSweep] could not check bound sub-agents", "worktreeID", wt.ID, "error", err)
+		return
+	}
+	if run != nil {
+		s.blockedByChat.Add(1)
+		logging.DebugContext(ctx, "[WorktreeSweep] skipped auto-archive", "worktreeID", wt.ID, "reason", "bound to live sub-agent run", "threadID", run.ThreadID, "workflowID", run.WorkflowID)
 		return
 	}
 	s.candidates.Add(1)

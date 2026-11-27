@@ -40,6 +40,10 @@ type Repository interface {
 	// GetLiveChatIDForWorktree is a non-archived chat bound to a Reliant
 	// workspace, "" when none: its checkout is never removed on approval.
 	GetLiveChatIDForWorktree(ctx context.Context, worktreeID string) (string, error)
+	// GetLiveBoundThreadRunForWorktree is a sub-agent thread bound to the
+	// workspace whose latest run is live (pending, active or paused), nil
+	// when none: its checkout is never removed on approval either.
+	GetLiveBoundThreadRunForWorktree(ctx context.Context, worktreeID string) (*core.BoundThreadRun, error)
 }
 
 // Sender sends one command to one of the user's daemons and returns its
