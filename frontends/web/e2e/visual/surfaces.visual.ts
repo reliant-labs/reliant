@@ -694,14 +694,14 @@ const SURFACES: Surface[] = [
     name: 'gtm-strategy',
     path: '/gtm/strategy',
     on: ['desktop', 'mobile'],
-    ready: (page) => page.getByText('Developer-led growth this half').first(),
+    ready: (page) => page.getByText('Subscriber-led growth this half').first(),
   },
   {
     // The org's strategy library: placeholder entries, and the pending prune request's banner.
     name: 'gtm-strategy-library',
     path: '/gtm/strategy?view=library',
     on: ['desktop', 'mobile'],
-    ready: (page) => page.getByText('Launch week (placeholder)').first(),
+    ready: (page) => page.getByText('Coffee tasting pop-up (placeholder)').first(),
   },
   {
     name: 'gtm-channels',
@@ -713,25 +713,25 @@ const SURFACES: Surface[] = [
     name: 'gtm-ideas',
     path: '/gtm/ideas',
     on: ['desktop', 'mobile'],
-    ready: (page) => page.getByText('Explain machine-free flows in one post').first(),
+    ready: (page) => page.getByText('Explain roast dates in one post').first(),
   },
   {
     name: 'gtm-campaigns',
     path: '/gtm/campaigns',
     on: ['desktop', 'mobile'],
-    ready: (page) => page.getByText('Sites launch').first(),
+    ready: (page) => page.getByText('Weekly Box launch').first(),
   },
   {
     name: 'gtm-calendar',
     path: '/gtm/calendar',
     on: ['desktop', 'mobile'],
-    ready: (page) => page.getByText('Show HN: deploy a static site with one command').first(),
+    ready: (page) => page.getByText('Show HN: the grind-size calculator we built for subscribers').first(),
   },
   {
     name: 'gtm-positioning',
     path: '/gtm/positioning',
     on: ['desktop', 'mobile'],
-    ready: (page) => page.getByText('Solo founders').first(),
+    ready: (page) => page.getByText('Home brewers').first(),
   },
   {
     name: 'shell-workflows',
