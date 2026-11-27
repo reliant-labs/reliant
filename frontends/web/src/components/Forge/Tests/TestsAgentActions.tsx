@@ -28,7 +28,7 @@ import { Bot, Sparkles } from "lucide-react";
 import Button from "@/components/forge-ui/button";
 import Tooltip from "@/components/forge-ui/tooltip";
 import { testsServiceQueries } from "@/hooks/controlplane/tests-service-hooks_gen";
-import { refuseWithoutControlPlane } from "@/hooks/test-queries";
+import { onControlPlane, refuseWithoutControlPlane } from "@/hooks/test-queries";
 import { useProject } from "@/hooks/project-queries";
 import { useOrgScope, whenOrgScopeReady } from "@/lib/orgScope";
 import { toast } from "@/lib/toast-manager";
@@ -107,7 +107,7 @@ export function useFixFlakyTest({ project, projectId, flake, defaultBranch }: { 
     const branch =
       defaultBranch ??
       (await client
-        .fetchQuery(testsServiceQueries.getTestSummary(summaryRequest({ orgId, project }), { staleTime: LIVE_MS }))
+        .fetchQuery(onControlPlane(testsServiceQueries.getTestSummary(summaryRequest({ orgId, project }), { staleTime: LIVE_MS })))
         .then((summary) => summary.branch || undefined)
         .catch(() => undefined));
     return flakyTestSubject(detail.flake ?? flake, detail, branch);
