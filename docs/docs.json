@@ -285,6 +285,7 @@
               "hosting/observability/forge-obs",
               "hosting/observability/dashboards-and-alerts",
               "hosting/observability/status-page",
+              "hosting/observability/runtime-context",
               "forge/observability/speed-insights",
               "forge/observability/product-analytics",
               "forge/observability/changes",
