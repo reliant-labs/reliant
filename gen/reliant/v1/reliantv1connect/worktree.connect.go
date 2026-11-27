@@ -137,8 +137,7 @@ type WorktreeServiceClient interface {
 	// forge:custom — places the workspace on a machine and creates its checkouts there after it returns
 	CreateWorktree(context.Context, *connect.Request[v1.CreateWorktreeRequest]) (*connect.Response[v1.CreateWorktreeResponse], error)
 	// forge:custom — authorizes through the project, and creates its main worktree when none exists
-	// Declared NO_SIDE_EFFECTS though it creates the project's main worktree when it has none (an idempotent repair): the repair is idempotent and
-	// no reliant client enables Connect's useHttpGet, so nothing caches or replays it.
+	// forge:lint-disable-next-line forge-idempotency-read-undeclared: writes as it reads: it creates the project's main worktree row when it has none
 	ListWorktrees(context.Context, *connect.Request[v1.ListWorktreesRequest]) (*connect.Response[v1.ListWorktreesResponse], error)
 	// ListArchivedWorktrees pages through the project's archived workspaces,
 	// most recently archived first. Archived workspaces are never part of
@@ -165,13 +164,17 @@ type WorktreeServiceClient interface {
 	PruneWorktrees(context.Context, *connect.Request[v1.PruneWorktreesRequest]) (*connect.Response[v1.PruneWorktreesResponse], error)
 	RecreateWorktree(context.Context, *connect.Request[v1.RecreateWorktreeRequest]) (*connect.Response[v1.RecreateWorktreeResponse], error)
 	// Git Read Operations
+	// forge:lint-disable-next-line forge-idempotency-read-undeclared: machine-waking read: it dispatches a daemon command that wakes the user's machine, so the demo rule (frontends/web/src/fixtures/shop/index.ts) keeps it off the read-only fixture transport
 	GetWorktreeChanges(context.Context, *connect.Request[v1.GetWorktreeChangesRequest]) (*connect.Response[v1.GetWorktreeChangesResponse], error)
+	// forge:lint-disable-next-line forge-idempotency-read-undeclared: machine-waking read: it dispatches a daemon command that wakes the user's machine, so the demo rule (frontends/web/src/fixtures/shop/index.ts) keeps it off the read-only fixture transport
 	GetWorktreeGitStatus(context.Context, *connect.Request[v1.GetWorktreeGitStatusRequest]) (*connect.Response[v1.GetWorktreeGitStatusResponse], error)
+	// forge:lint-disable-next-line forge-idempotency-read-undeclared: machine-waking read: it dispatches a daemon command that wakes the user's machine, so the demo rule (frontends/web/src/fixtures/shop/index.ts) keeps it off the read-only fixture transport
 	GetWorktreeCommits(context.Context, *connect.Request[v1.GetWorktreeCommitsRequest]) (*connect.Response[v1.GetWorktreeCommitsResponse], error)
 	// ListWorktreeRepoStatuses returns per-repo git status for every nested
 	// repo in the worktree's project. Drives the right-sidebar grouped view.
 	// Single-repo and zero-repo projects collapse to a single-element (or empty)
 	// response so callers don't need a special case.
+	// forge:lint-disable-next-line forge-idempotency-read-undeclared: machine-waking read: it dispatches a daemon command that wakes the user's machine, so the demo rule (frontends/web/src/fixtures/shop/index.ts) keeps it off the read-only fixture transport
 	ListWorktreeRepoStatuses(context.Context, *connect.Request[v1.ListWorktreeRepoStatusesRequest]) (*connect.Response[v1.ListWorktreeRepoStatusesResponse], error)
 	// Git Write Operations
 	StageFiles(context.Context, *connect.Request[v1.StageFilesRequest]) (*connect.Response[v1.StageFilesResponse], error)
@@ -180,6 +183,7 @@ type WorktreeServiceClient interface {
 	CommitWorktree(context.Context, *connect.Request[v1.CommitWorktreeRequest]) (*connect.Response[v1.CommitWorktreeResponse], error)
 	PushWorktree(context.Context, *connect.Request[v1.PushWorktreeRequest]) (*connect.Response[v1.PushWorktreeResponse], error)
 	PullWorktree(context.Context, *connect.Request[v1.PullWorktreeRequest]) (*connect.Response[v1.PullWorktreeResponse], error)
+	// forge:lint-disable-next-line forge-idempotency-read-undeclared: machine-waking read that also calls GitHub: it dispatches worktree.get_pr to the user's machine, so the demo rule (frontends/web/src/fixtures/shop/index.ts) keeps it off the read-only fixture transport
 	GetWorktreePR(context.Context, *connect.Request[v1.GetWorktreePRRequest]) (*connect.Response[v1.GetWorktreePRResponse], error)
 	CreateWorktreePR(context.Context, *connect.Request[v1.CreateWorktreePRRequest]) (*connect.Response[v1.CreateWorktreePRResponse], error)
 }
@@ -224,7 +228,6 @@ func NewWorktreeServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			httpClient,
 			baseURL+WorktreeServiceListWorktreesProcedure,
 			connect.WithSchema(worktreeServiceMethods.ByName("ListWorktrees")),
-			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		listArchivedWorktrees: connect.NewClient[v1.ListArchivedWorktreesRequest, v1.ListArchivedWorktreesResponse](
@@ -294,28 +297,24 @@ func NewWorktreeServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			httpClient,
 			baseURL+WorktreeServiceGetWorktreeChangesProcedure,
 			connect.WithSchema(worktreeServiceMethods.ByName("GetWorktreeChanges")),
-			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getWorktreeGitStatus: connect.NewClient[v1.GetWorktreeGitStatusRequest, v1.GetWorktreeGitStatusResponse](
 			httpClient,
 			baseURL+WorktreeServiceGetWorktreeGitStatusProcedure,
 			connect.WithSchema(worktreeServiceMethods.ByName("GetWorktreeGitStatus")),
-			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getWorktreeCommits: connect.NewClient[v1.GetWorktreeCommitsRequest, v1.GetWorktreeCommitsResponse](
 			httpClient,
 			baseURL+WorktreeServiceGetWorktreeCommitsProcedure,
 			connect.WithSchema(worktreeServiceMethods.ByName("GetWorktreeCommits")),
-			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		listWorktreeRepoStatuses: connect.NewClient[v1.ListWorktreeRepoStatusesRequest, v1.ListWorktreeRepoStatusesResponse](
 			httpClient,
 			baseURL+WorktreeServiceListWorktreeRepoStatusesProcedure,
 			connect.WithSchema(worktreeServiceMethods.ByName("ListWorktreeRepoStatuses")),
-			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		stageFiles: connect.NewClient[v1.StageFilesRequest, v1.StageFilesResponse](
@@ -358,7 +357,6 @@ func NewWorktreeServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			httpClient,
 			baseURL+WorktreeServiceGetWorktreePRProcedure,
 			connect.WithSchema(worktreeServiceMethods.ByName("GetWorktreePR")),
-			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		createWorktreePR: connect.NewClient[v1.CreateWorktreePRRequest, v1.CreateWorktreePRResponse](
@@ -555,8 +553,7 @@ type WorktreeServiceHandler interface {
 	// forge:custom — places the workspace on a machine and creates its checkouts there after it returns
 	CreateWorktree(context.Context, *connect.Request[v1.CreateWorktreeRequest]) (*connect.Response[v1.CreateWorktreeResponse], error)
 	// forge:custom — authorizes through the project, and creates its main worktree when none exists
-	// Declared NO_SIDE_EFFECTS though it creates the project's main worktree when it has none (an idempotent repair): the repair is idempotent and
-	// no reliant client enables Connect's useHttpGet, so nothing caches or replays it.
+	// forge:lint-disable-next-line forge-idempotency-read-undeclared: writes as it reads: it creates the project's main worktree row when it has none
 	ListWorktrees(context.Context, *connect.Request[v1.ListWorktreesRequest]) (*connect.Response[v1.ListWorktreesResponse], error)
 	// ListArchivedWorktrees pages through the project's archived workspaces,
 	// most recently archived first. Archived workspaces are never part of
@@ -583,13 +580,17 @@ type WorktreeServiceHandler interface {
 	PruneWorktrees(context.Context, *connect.Request[v1.PruneWorktreesRequest]) (*connect.Response[v1.PruneWorktreesResponse], error)
 	RecreateWorktree(context.Context, *connect.Request[v1.RecreateWorktreeRequest]) (*connect.Response[v1.RecreateWorktreeResponse], error)
 	// Git Read Operations
+	// forge:lint-disable-next-line forge-idempotency-read-undeclared: machine-waking read: it dispatches a daemon command that wakes the user's machine, so the demo rule (frontends/web/src/fixtures/shop/index.ts) keeps it off the read-only fixture transport
 	GetWorktreeChanges(context.Context, *connect.Request[v1.GetWorktreeChangesRequest]) (*connect.Response[v1.GetWorktreeChangesResponse], error)
+	// forge:lint-disable-next-line forge-idempotency-read-undeclared: machine-waking read: it dispatches a daemon command that wakes the user's machine, so the demo rule (frontends/web/src/fixtures/shop/index.ts) keeps it off the read-only fixture transport
 	GetWorktreeGitStatus(context.Context, *connect.Request[v1.GetWorktreeGitStatusRequest]) (*connect.Response[v1.GetWorktreeGitStatusResponse], error)
+	// forge:lint-disable-next-line forge-idempotency-read-undeclared: machine-waking read: it dispatches a daemon command that wakes the user's machine, so the demo rule (frontends/web/src/fixtures/shop/index.ts) keeps it off the read-only fixture transport
 	GetWorktreeCommits(context.Context, *connect.Request[v1.GetWorktreeCommitsRequest]) (*connect.Response[v1.GetWorktreeCommitsResponse], error)
 	// ListWorktreeRepoStatuses returns per-repo git status for every nested
 	// repo in the worktree's project. Drives the right-sidebar grouped view.
 	// Single-repo and zero-repo projects collapse to a single-element (or empty)
 	// response so callers don't need a special case.
+	// forge:lint-disable-next-line forge-idempotency-read-undeclared: machine-waking read: it dispatches a daemon command that wakes the user's machine, so the demo rule (frontends/web/src/fixtures/shop/index.ts) keeps it off the read-only fixture transport
 	ListWorktreeRepoStatuses(context.Context, *connect.Request[v1.ListWorktreeRepoStatusesRequest]) (*connect.Response[v1.ListWorktreeRepoStatusesResponse], error)
 	// Git Write Operations
 	StageFiles(context.Context, *connect.Request[v1.StageFilesRequest]) (*connect.Response[v1.StageFilesResponse], error)
@@ -598,6 +599,7 @@ type WorktreeServiceHandler interface {
 	CommitWorktree(context.Context, *connect.Request[v1.CommitWorktreeRequest]) (*connect.Response[v1.CommitWorktreeResponse], error)
 	PushWorktree(context.Context, *connect.Request[v1.PushWorktreeRequest]) (*connect.Response[v1.PushWorktreeResponse], error)
 	PullWorktree(context.Context, *connect.Request[v1.PullWorktreeRequest]) (*connect.Response[v1.PullWorktreeResponse], error)
+	// forge:lint-disable-next-line forge-idempotency-read-undeclared: machine-waking read that also calls GitHub: it dispatches worktree.get_pr to the user's machine, so the demo rule (frontends/web/src/fixtures/shop/index.ts) keeps it off the read-only fixture transport
 	GetWorktreePR(context.Context, *connect.Request[v1.GetWorktreePRRequest]) (*connect.Response[v1.GetWorktreePRResponse], error)
 	CreateWorktreePR(context.Context, *connect.Request[v1.CreateWorktreePRRequest]) (*connect.Response[v1.CreateWorktreePRResponse], error)
 }
@@ -638,7 +640,6 @@ func NewWorktreeServiceHandler(svc WorktreeServiceHandler, opts ...connect.Handl
 		WorktreeServiceListWorktreesProcedure,
 		svc.ListWorktrees,
 		connect.WithSchema(worktreeServiceMethods.ByName("ListWorktrees")),
-		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	worktreeServiceListArchivedWorktreesHandler := connect.NewUnaryHandler(
@@ -708,28 +709,24 @@ func NewWorktreeServiceHandler(svc WorktreeServiceHandler, opts ...connect.Handl
 		WorktreeServiceGetWorktreeChangesProcedure,
 		svc.GetWorktreeChanges,
 		connect.WithSchema(worktreeServiceMethods.ByName("GetWorktreeChanges")),
-		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	worktreeServiceGetWorktreeGitStatusHandler := connect.NewUnaryHandler(
 		WorktreeServiceGetWorktreeGitStatusProcedure,
 		svc.GetWorktreeGitStatus,
 		connect.WithSchema(worktreeServiceMethods.ByName("GetWorktreeGitStatus")),
-		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	worktreeServiceGetWorktreeCommitsHandler := connect.NewUnaryHandler(
 		WorktreeServiceGetWorktreeCommitsProcedure,
 		svc.GetWorktreeCommits,
 		connect.WithSchema(worktreeServiceMethods.ByName("GetWorktreeCommits")),
-		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	worktreeServiceListWorktreeRepoStatusesHandler := connect.NewUnaryHandler(
 		WorktreeServiceListWorktreeRepoStatusesProcedure,
 		svc.ListWorktreeRepoStatuses,
 		connect.WithSchema(worktreeServiceMethods.ByName("ListWorktreeRepoStatuses")),
-		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	worktreeServiceStageFilesHandler := connect.NewUnaryHandler(
@@ -772,7 +769,6 @@ func NewWorktreeServiceHandler(svc WorktreeServiceHandler, opts ...connect.Handl
 		WorktreeServiceGetWorktreePRProcedure,
 		svc.GetWorktreePR,
 		connect.WithSchema(worktreeServiceMethods.ByName("GetWorktreePR")),
-		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	worktreeServiceCreateWorktreePRHandler := connect.NewUnaryHandler(

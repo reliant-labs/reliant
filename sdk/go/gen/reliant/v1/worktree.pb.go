@@ -4945,7 +4945,7 @@ const file_reliant_v1_worktree_proto_rawDesc = "" +
 	"\x19WORKTREE_STATUS_ABANDONED\x10\x03\x12\x1b\n" +
 	"\x17WORKTREE_STATUS_MERGING\x10\x04\x12\x1c\n" +
 	"\x18WORKTREE_STATUS_CREATING\x10\x05\x12\x1a\n" +
-	"\x16WORKTREE_STATUS_FAILED\x10\x062\x97\x1e\n" +
+	"\x16WORKTREE_STATUS_FAILED\x10\x062\x85\x1e\n" +
 	"\x0fWorktreeService\x12t\n" +
 	"\x16ListWorktreeRecoveries\x12).reliant.v1.ListWorktreeRecoveriesRequest\x1a*.reliant.v1.ListWorktreeRecoveriesResponse\"\x03\x90\x02\x01\x12\xcd\x01\n" +
 	"\x17RestoreWorktreeRecovery\x12*.reliant.v1.RestoreWorktreeRecoveryRequest\x1a+.reliant.v1.RestoreWorktreeRecoveryResponse\"Y\xa2\xbb\x18U:S\n" +
@@ -4957,8 +4957,8 @@ const file_reliant_v1_worktree_proto_rawDesc = "" +
 	"\x0eCreateWorktree\x12!.reliant.v1.CreateWorktreeRequest\x1a\".reliant.v1.CreateWorktreeResponse\"n\xa2\xbb\x18j:h\n" +
 	"\x06create\x128\n" +
 	"\bworktree\x12\x14response.worktree.id\x1a\x16response.worktree.name*\n" +
-	"project_id*\x18response.worktree.branch\x12Y\n" +
-	"\rListWorktrees\x12 .reliant.v1.ListWorktreesRequest\x1a!.reliant.v1.ListWorktreesResponse\"\x03\x90\x02\x01\x12q\n" +
+	"project_id*\x18response.worktree.branch\x12V\n" +
+	"\rListWorktrees\x12 .reliant.v1.ListWorktreesRequest\x1a!.reliant.v1.ListWorktreesResponse\"\x00\x12q\n" +
 	"\x15ListArchivedWorktrees\x12(.reliant.v1.ListArchivedWorktreesRequest\x1a).reliant.v1.ListArchivedWorktreesResponse\"\x03\x90\x02\x01\x12S\n" +
 	"\vGetWorktree\x12\x1e.reliant.v1.GetWorktreeRequest\x1a\x1f.reliant.v1.GetWorktreeResponse\"\x03\x90\x02\x01\x12\x98\x01\n" +
 	"\x0eUpdateWorktree\x12!.reliant.v1.UpdateWorktreeRequest\x1a\".reliant.v1.UpdateWorktreeResponse\"?\xa2\xbb\x18;:9\n" +
@@ -4984,11 +4984,11 @@ const file_reliant_v1_worktree_proto_rawDesc = "" +
 	"project_id\x12\x99\x01\n" +
 	"\x10RecreateWorktree\x12#.reliant.v1.RecreateWorktreeRequest\x1a$.reliant.v1.RecreateWorktreeResponse\":\xa2\xbb\x186:4\n" +
 	"\brecreate\x12\x17\n" +
-	"\bworktree\x12\vworktree_id*\x0fresponse.branch\x12h\n" +
-	"\x12GetWorktreeChanges\x12%.reliant.v1.GetWorktreeChangesRequest\x1a&.reliant.v1.GetWorktreeChangesResponse\"\x03\x90\x02\x01\x12n\n" +
-	"\x14GetWorktreeGitStatus\x12'.reliant.v1.GetWorktreeGitStatusRequest\x1a(.reliant.v1.GetWorktreeGitStatusResponse\"\x03\x90\x02\x01\x12h\n" +
-	"\x12GetWorktreeCommits\x12%.reliant.v1.GetWorktreeCommitsRequest\x1a&.reliant.v1.GetWorktreeCommitsResponse\"\x03\x90\x02\x01\x12z\n" +
-	"\x18ListWorktreeRepoStatuses\x12+.reliant.v1.ListWorktreeRepoStatusesRequest\x1a,.reliant.v1.ListWorktreeRepoStatusesResponse\"\x03\x90\x02\x01\x12\xb0\x01\n" +
+	"\bworktree\x12\vworktree_id*\x0fresponse.branch\x12e\n" +
+	"\x12GetWorktreeChanges\x12%.reliant.v1.GetWorktreeChangesRequest\x1a&.reliant.v1.GetWorktreeChangesResponse\"\x00\x12k\n" +
+	"\x14GetWorktreeGitStatus\x12'.reliant.v1.GetWorktreeGitStatusRequest\x1a(.reliant.v1.GetWorktreeGitStatusResponse\"\x00\x12e\n" +
+	"\x12GetWorktreeCommits\x12%.reliant.v1.GetWorktreeCommitsRequest\x1a&.reliant.v1.GetWorktreeCommitsResponse\"\x00\x12w\n" +
+	"\x18ListWorktreeRepoStatuses\x12+.reliant.v1.ListWorktreeRepoStatusesRequest\x1a,.reliant.v1.ListWorktreeRepoStatusesResponse\"\x00\x12\xb0\x01\n" +
 	"\n" +
 	"StageFiles\x12\x1d.reliant.v1.StageFilesRequest\x1a\x1e.reliant.v1.StageFilesResponse\"c\xa2\xbb\x18_:]:[git index edit through the daemon: the commit that follows is the event, and git records it\x12\xb8\x01\n" +
 	"\fUnstageFiles\x12\x1f.reliant.v1.UnstageFilesRequest\x1a .reliant.v1.UnstageFilesResponse\"e\xa2\xbb\x18a:_:]git index edit through the daemon: undoes a stage, and the repository's history never sees it\x12\x86\x01\n" +
@@ -5003,8 +5003,8 @@ const file_reliant_v1_worktree_proto_rawDesc = "" +
 	"\bworktree\x12\vworktree_id*\arepo_id\x12\x81\x01\n" +
 	"\fPullWorktree\x12\x1f.reliant.v1.PullWorktreeRequest\x1a .reliant.v1.PullWorktreeResponse\".\xa2\xbb\x18*:(\n" +
 	"\x04pull\x12\x17\n" +
-	"\bworktree\x12\vworktree_id*\arepo_id\x12Y\n" +
-	"\rGetWorktreePR\x12 .reliant.v1.GetWorktreePRRequest\x1a!.reliant.v1.GetWorktreePRResponse\"\x03\x90\x02\x01\x12\xa3\x01\n" +
+	"\bworktree\x12\vworktree_id*\arepo_id\x12V\n" +
+	"\rGetWorktreePR\x12 .reliant.v1.GetWorktreePRRequest\x1a!.reliant.v1.GetWorktreePRResponse\"\x00\x12\xa3\x01\n" +
 	"\x10CreateWorktreePR\x12#.reliant.v1.CreateWorktreePRRequest\x1a$.reliant.v1.CreateWorktreePRResponse\"D\xa2\xbb\x18@:>\n" +
 	"\tcreate_pr\x12\x17\n" +
 	"\bworktree\x12\vworktree_id*\arepo_id*\x0fresponse.pr_urlB:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"

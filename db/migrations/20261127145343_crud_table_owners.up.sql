@@ -18,4 +18,4 @@
 -- ops and is a separate change.
 COMMENT ON TABLE attachments IS 'forge:unscoped: personal files, scoped to the caller in the handler (ownedBy: user_id) on every generated op';
 COMMENT ON TABLE plans IS 'forge:unscoped: scoped through the plan''s chat in the handler (writableChatOfThread: the caller must be able to write the chat) on every generated op';
-COMMENT ON TABLE tasks IS 'forge:unscoped: scoped through the task''s plan and its chat in the handler (writableChatOfPlan: the caller must be able to write the chat) on every generated op';
+COMMENT ON TABLE tasks IS 'forge:unscoped: scoped through the task''s plan and its chat in the handler on every generated op: get, create, update and delete need writableChatOfPlan (the caller can write the chat), and ListTasks requires plan_id and checks ReadChatAccess on that plan''s chat';

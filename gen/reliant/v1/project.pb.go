@@ -7289,14 +7289,14 @@ const file_reliant_v1_project_proto_rawDesc = "" +
 	"\x1cPROJECT_APP_LINK_UNSPECIFIED\x10\x00\x12\x1f\n" +
 	"\x1bPROJECT_APP_LINK_NOT_HOSTED\x10\x01\x12\x19\n" +
 	"\x15PROJECT_APP_LINK_NAME\x10\x02\x12\x1b\n" +
-	"\x17PROJECT_APP_LINK_SOURCE\x10\x032\xc3&\n" +
+	"\x17PROJECT_APP_LINK_SOURCE\x10\x032\xc0&\n" +
 	"\x0eProjectService\x12\x9b\x01\n" +
 	"\rCreateProject\x12 .reliant.v1.CreateProjectRequest\x1a!.reliant.v1.CreateProjectResponse\"E\xa2\xbb\x18A:?\n" +
 	"\x06create\x125\n" +
 	"\aproject\x12\x13response.project.id\x1a\x15response.project.name\x12V\n" +
-	"\fListProjects\x12\x1f.reliant.v1.ListProjectsRequest\x1a .reliant.v1.ListProjectsResponse\"\x03\x90\x02\x01\x12P\n" +
+	"\fListProjects\x12\x1f.reliant.v1.ListProjectsRequest\x1a .reliant.v1.ListProjectsResponse\"\x03\x90\x02\x01\x12M\n" +
 	"\n" +
-	"GetProject\x12\x1d.reliant.v1.GetProjectRequest\x1a\x1e.reliant.v1.GetProjectResponse\"\x03\x90\x02\x01\x12\x92\x01\n" +
+	"GetProject\x12\x1d.reliant.v1.GetProjectRequest\x1a\x1e.reliant.v1.GetProjectResponse\"\x00\x12\x92\x01\n" +
 	"\rUpdateProject\x12 .reliant.v1.UpdateProjectRequest\x1a!.reliant.v1.UpdateProjectResponse\"<\xa2\xbb\x188:6\n" +
 	"\x06update\x12,\n" +
 	"\aproject\x12\n" +

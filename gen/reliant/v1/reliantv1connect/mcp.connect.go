@@ -84,6 +84,7 @@ type MCPServiceClient interface {
 	// forge:lint-disable-next-line forge-idempotency-secret-response-marked-read: deliberately NOT NO_SIDE_EFFECTS (see above), so Connect never sends it as a GET; the stored env and headers are the caller's own, not a per-call value
 	GetServer(context.Context, *connect.Request[v1.GetServerRequest]) (*connect.Response[v1.GetServerResponse], error)
 	// GetServerTools returns the list of tools exposed by a specific MCP server
+	// forge:lint-disable-next-line forge-idempotency-read-undeclared: calls out: it asks the live MCP server, through the user's daemon, to list its tools
 	GetServerTools(context.Context, *connect.Request[v1.GetServerToolsRequest]) (*connect.Response[v1.GetServerToolsResponse], error)
 	// InstallServer installs a new MCP server
 	InstallServer(context.Context, *connect.Request[v1.InstallServerRequest]) (*connect.Response[v1.InstallServerResponse], error)
@@ -129,7 +130,6 @@ func NewMCPServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...
 			httpClient,
 			baseURL+MCPServiceGetServerToolsProcedure,
 			connect.WithSchema(mCPServiceMethods.ByName("GetServerTools")),
-			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		installServer: connect.NewClient[v1.InstallServerRequest, v1.InstallServerResponse](
@@ -261,6 +261,7 @@ type MCPServiceHandler interface {
 	// forge:lint-disable-next-line forge-idempotency-secret-response-marked-read: deliberately NOT NO_SIDE_EFFECTS (see above), so Connect never sends it as a GET; the stored env and headers are the caller's own, not a per-call value
 	GetServer(context.Context, *connect.Request[v1.GetServerRequest]) (*connect.Response[v1.GetServerResponse], error)
 	// GetServerTools returns the list of tools exposed by a specific MCP server
+	// forge:lint-disable-next-line forge-idempotency-read-undeclared: calls out: it asks the live MCP server, through the user's daemon, to list its tools
 	GetServerTools(context.Context, *connect.Request[v1.GetServerToolsRequest]) (*connect.Response[v1.GetServerToolsResponse], error)
 	// InstallServer installs a new MCP server
 	InstallServer(context.Context, *connect.Request[v1.InstallServerRequest]) (*connect.Response[v1.InstallServerResponse], error)
@@ -302,7 +303,6 @@ func NewMCPServiceHandler(svc MCPServiceHandler, opts ...connect.HandlerOption) 
 		MCPServiceGetServerToolsProcedure,
 		svc.GetServerTools,
 		connect.WithSchema(mCPServiceMethods.ByName("GetServerTools")),
-		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	mCPServiceInstallServerHandler := connect.NewUnaryHandler(

@@ -1118,17 +1118,17 @@ const file_reliant_v1_automation_takeover_proto_rawDesc = "" +
 	"\x19RevokeTriggerOfferRequest\x12\"\n" +
 	"\boffer_id\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\aofferId\"L\n" +
 	"\x1aRevokeTriggerOfferResponse\x12.\n" +
-	"\x05offer\x18\x01 \x01(\v2\x18.reliant.v1.TriggerOfferR\x05offer2\xaa\x05\n" +
-	"\x19AutomationTakeoverService\x12w\n" +
-	"\x17ListOrphanedAutomations\x12*.reliant.v1.ListOrphanedAutomationsRequest\x1a+.reliant.v1.ListOrphanedAutomationsResponse\"\x03\x90\x02\x01\x12\x8a\x01\n" +
+	"\x05offer\x18\x01 \x01(\v2\x18.reliant.v1.TriggerOfferR\x05offer2\xa4\x05\n" +
+	"\x19AutomationTakeoverService\x12t\n" +
+	"\x17ListOrphanedAutomations\x12*.reliant.v1.ListOrphanedAutomationsRequest\x1a+.reliant.v1.ListOrphanedAutomationsResponse\"\x00\x12\x8a\x01\n" +
 	"\fAdoptTrigger\x12\x1f.reliant.v1.AdoptTriggerRequest\x1a .reliant.v1.AdoptTriggerResponse\"7\xa2\xbb\x183:1\n" +
 	"\x05adopt\x12\x15\n" +
 	"\atrigger\x12\n" +
 	"trigger_id*\x11new_owner_user_id\x12\x8e\x01\n" +
 	"\x12AcceptTriggerOffer\x12%.reliant.v1.AcceptTriggerOfferRequest\x1a&.reliant.v1.AcceptTriggerOfferResponse\")\xa2\xbb\x18%:#\n" +
 	"\x06accept\x12\x19\n" +
-	"\rtrigger_offer\x12\boffer_id\x12e\n" +
-	"\x11ListTriggerOffers\x12$.reliant.v1.ListTriggerOffersRequest\x1a%.reliant.v1.ListTriggerOffersResponse\"\x03\x90\x02\x01\x12\x8e\x01\n" +
+	"\rtrigger_offer\x12\boffer_id\x12b\n" +
+	"\x11ListTriggerOffers\x12$.reliant.v1.ListTriggerOffersRequest\x1a%.reliant.v1.ListTriggerOffersResponse\"\x00\x12\x8e\x01\n" +
 	"\x12RevokeTriggerOffer\x12%.reliant.v1.RevokeTriggerOfferRequest\x1a&.reliant.v1.RevokeTriggerOfferResponse\")\xa2\xbb\x18%:#\n" +
 	"\x06revoke\x12\x19\n" +
 	"\rtrigger_offer\x12\boffer_idB:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"

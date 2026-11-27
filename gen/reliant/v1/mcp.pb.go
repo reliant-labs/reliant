@@ -1907,13 +1907,13 @@ const file_reliant_v1_mcp_proto_rawDesc = "" +
 	"\x19MCP_SERVER_STATUS_HEALTHY\x10\x01\x12\x1f\n" +
 	"\x1bMCP_SERVER_STATUS_UNHEALTHY\x10\x02\x12\"\n" +
 	"\x1eMCP_SERVER_STATUS_DISCONNECTED\x10\x03\x12\x1e\n" +
-	"\x1aMCP_SERVER_STATUS_DISABLED\x10\x042\xd3\n" +
+	"\x1aMCP_SERVER_STATUS_DISABLED\x10\x042\xd0\n" +
 	"\n" +
 	"\n" +
 	"MCPService\x12P\n" +
 	"\vListServers\x12\x1e.reliant.v1.ListServersRequest\x1a\x1f.reliant.v1.ListServersResponse\"\x00\x12J\n" +
-	"\tGetServer\x12\x1c.reliant.v1.GetServerRequest\x1a\x1d.reliant.v1.GetServerResponse\"\x00\x12\\\n" +
-	"\x0eGetServerTools\x12!.reliant.v1.GetServerToolsRequest\x1a\".reliant.v1.GetServerToolsResponse\"\x03\x90\x02\x01\x12\x9e\x01\n" +
+	"\tGetServer\x12\x1c.reliant.v1.GetServerRequest\x1a\x1d.reliant.v1.GetServerResponse\"\x00\x12Y\n" +
+	"\x0eGetServerTools\x12!.reliant.v1.GetServerToolsRequest\x1a\".reliant.v1.GetServerToolsResponse\"\x00\x12\x9e\x01\n" +
 	"\rInstallServer\x12 .reliant.v1.InstallServerRequest\x1a!.reliant.v1.InstallServerResponse\"H\xa2\xbb\x18D:B\n" +
 	"\ainstall\x12\x12\n" +
 	"\n" +

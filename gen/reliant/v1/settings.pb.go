@@ -5553,7 +5553,7 @@ const file_reliant_v1_settings_proto_rawDesc = "" +
 	"\x0fSkillSourceType\x12!\n" +
 	"\x1dSKILL_SOURCE_TYPE_UNSPECIFIED\x10\x00\x12\x1b\n" +
 	"\x17SKILL_SOURCE_TYPE_LOCAL\x10\x01\x12\x19\n" +
-	"\x15SKILL_SOURCE_TYPE_GIT\x10\x022\xd9)\n" +
+	"\x15SKILL_SOURCE_TYPE_GIT\x10\x022\xd6)\n" +
 	"\x0fSettingsService\x12\xb5\x01\n" +
 	"\rCreateSetting\x12 .reliant.v1.CreateSettingRequest\x1a!.reliant.v1.CreateSettingResponse\"_\xa2\xbb\x18[:Y:Wper-user preference: a key/value upsert into the caller's settings, not product history\x12V\n" +
 	"\fListSettings\x12\x1f.reliant.v1.ListSettingsRequest\x1a .reliant.v1.ListSettingsResponse\"\x03\x90\x02\x01\x12P\n" +
@@ -5595,8 +5595,8 @@ const file_reliant_v1_settings_proto_rawDesc = "" +
 	"\x1bGetInstalledSkillDefinition\x12..reliant.v1.GetInstalledSkillDefinitionRequest\x1a/.reliant.v1.GetInstalledSkillDefinitionResponse\"\x03\x90\x02\x01\x12\xcd\x01\n" +
 	"\x0fSetSkillEnabled\x12\".reliant.v1.SetSkillEnabledRequest\x1a#.reliant.v1.SetSkillEnabledResponse\"q\xa2\xbb\x18m:k:inever implemented: answers Unimplemented, so it changes nothing; declare its event when it is implemented\x12q\n" +
 	"\x15ListRecommendedSkills\x12(.reliant.v1.ListRecommendedSkillsRequest\x1a).reliant.v1.ListRecommendedSkillsResponse\"\x03\x90\x02\x01\x12\xd3\x01\n" +
-	"\x11DeleteGlobalSkill\x12$.reliant.v1.DeleteGlobalSkillRequest\x1a%.reliant.v1.DeleteGlobalSkillResponse\"q\xa2\xbb\x18m:k:inever implemented: answers Unimplemented, so it changes nothing; declare its event when it is implemented\x12_\n" +
-	"\x0fGetConfigHealth\x12\".reliant.v1.GetConfigHealthRequest\x1a#.reliant.v1.GetConfigHealthResponse\"\x03\x90\x02\x01B:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
+	"\x11DeleteGlobalSkill\x12$.reliant.v1.DeleteGlobalSkillRequest\x1a%.reliant.v1.DeleteGlobalSkillResponse\"q\xa2\xbb\x18m:k:inever implemented: answers Unimplemented, so it changes nothing; declare its event when it is implemented\x12\\\n" +
+	"\x0fGetConfigHealth\x12\".reliant.v1.GetConfigHealthRequest\x1a#.reliant.v1.GetConfigHealthResponse\"\x00B:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
 
 var (
 	file_reliant_v1_settings_proto_rawDescOnce sync.Once

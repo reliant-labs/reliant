@@ -82,16 +82,21 @@ const (
 // FileSystemServiceClient is a client for the reliant.v1.FileSystemService service.
 type FileSystemServiceClient interface {
 	// GetFileTree returns the file tree structure for a project
+	// forge:lint-disable-next-line forge-idempotency-read-undeclared: machine-waking read: it dispatches a daemon command that wakes the user's machine, so the demo rule (frontends/web/src/fixtures/shop/index.ts) keeps it off the read-only fixture transport
 	GetFileTree(context.Context, *connect.Request[v1.GetFileTreeRequest]) (*connect.Response[v1.GetFileTreeResponse], error)
 	// GetFileContent returns the content of a specific file
+	// forge:lint-disable-next-line forge-idempotency-read-undeclared: machine-waking read: it dispatches a daemon command that wakes the user's machine, so the demo rule (frontends/web/src/fixtures/shop/index.ts) keeps it off the read-only fixture transport
 	GetFileContent(context.Context, *connect.Request[v1.GetFileContentRequest]) (*connect.Response[v1.GetFileContentResponse], error)
 	// SaveFileContent saves content to a specific file
 	SaveFileContent(context.Context, *connect.Request[v1.SaveFileContentRequest]) (*connect.Response[v1.SaveFileContentResponse], error)
 	// GetFileMetadata returns metadata for a file or directory
+	// forge:lint-disable-next-line forge-idempotency-read-undeclared: machine-waking read: it dispatches a daemon command that wakes the user's machine, so the demo rule (frontends/web/src/fixtures/shop/index.ts) keeps it off the read-only fixture transport
 	GetFileMetadata(context.Context, *connect.Request[v1.GetFileMetadataRequest]) (*connect.Response[v1.GetFileMetadataResponse], error)
 	// GetFilePreviewInfo returns preview metadata for a file
+	// forge:lint-disable-next-line forge-idempotency-read-undeclared: machine-waking read: it dispatches a daemon command that wakes the user's machine, so the demo rule (frontends/web/src/fixtures/shop/index.ts) keeps it off the read-only fixture transport
 	GetFilePreviewInfo(context.Context, *connect.Request[v1.GetFilePreviewInfoRequest]) (*connect.Response[v1.GetFilePreviewInfoResponse], error)
 	// GetFilePreview returns the raw binary content of a previewable file (image, PDF, audio, video).
+	// forge:lint-disable-next-line forge-idempotency-read-undeclared: machine-waking read: it dispatches a daemon command that wakes the user's machine, so the demo rule (frontends/web/src/fixtures/shop/index.ts) keeps it off the read-only fixture transport
 	GetFilePreview(context.Context, *connect.Request[v1.GetFilePreviewRequest]) (*connect.Response[v1.GetFilePreviewResponse], error)
 	// CreateFileOrFolder creates a new file or folder
 	CreateFileOrFolder(context.Context, *connect.Request[v1.CreateFileOrFolderRequest]) (*connect.Response[v1.CreateFileOrFolderResponse], error)
@@ -100,12 +105,14 @@ type FileSystemServiceClient interface {
 	// CopyFile copies a file to a new location
 	CopyFile(context.Context, *connect.Request[v1.CopyFileRequest]) (*connect.Response[v1.CopyFileResponse], error)
 	// SearchFiles searches for text within files in the workspace
+	// forge:lint-disable-next-line forge-idempotency-read-undeclared: machine-waking read: it dispatches a daemon command that wakes the user's machine, so the demo rule (frontends/web/src/fixtures/shop/index.ts) keeps it off the read-only fixture transport
 	SearchFiles(context.Context, *connect.Request[v1.SearchFilesRequest]) (*connect.Response[v1.SearchFilesResponse], error)
 	// ReplaceInFiles replaces text in files across the workspace
 	ReplaceInFiles(context.Context, *connect.Request[v1.ReplaceInFilesRequest]) (*connect.Response[v1.ReplaceInFilesResponse], error)
 	// ListDirectory lists entries in an arbitrary filesystem directory.
 	// Used by the project picker in browser mode (no Electron). daemon_id
 	// names the machine to browse; unset browses the default machine.
+	// forge:lint-disable-next-line forge-idempotency-read-undeclared: machine-waking read: it dispatches a daemon command that wakes the user's machine, so the demo rule (frontends/web/src/fixtures/shop/index.ts) keeps it off the read-only fixture transport
 	ListDirectory(context.Context, *connect.Request[v1.ListDirectoryRequest]) (*connect.Response[v1.ListDirectoryResponse], error)
 	// CreateDirectory creates a new directory at an arbitrary absolute path.
 	// Used by the project picker in browser mode to make a "New folder" while
@@ -134,14 +141,12 @@ func NewFileSystemServiceClient(httpClient connect.HTTPClient, baseURL string, o
 			httpClient,
 			baseURL+FileSystemServiceGetFileTreeProcedure,
 			connect.WithSchema(fileSystemServiceMethods.ByName("GetFileTree")),
-			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getFileContent: connect.NewClient[v1.GetFileContentRequest, v1.GetFileContentResponse](
 			httpClient,
 			baseURL+FileSystemServiceGetFileContentProcedure,
 			connect.WithSchema(fileSystemServiceMethods.ByName("GetFileContent")),
-			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		saveFileContent: connect.NewClient[v1.SaveFileContentRequest, v1.SaveFileContentResponse](
@@ -154,21 +159,18 @@ func NewFileSystemServiceClient(httpClient connect.HTTPClient, baseURL string, o
 			httpClient,
 			baseURL+FileSystemServiceGetFileMetadataProcedure,
 			connect.WithSchema(fileSystemServiceMethods.ByName("GetFileMetadata")),
-			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getFilePreviewInfo: connect.NewClient[v1.GetFilePreviewInfoRequest, v1.GetFilePreviewInfoResponse](
 			httpClient,
 			baseURL+FileSystemServiceGetFilePreviewInfoProcedure,
 			connect.WithSchema(fileSystemServiceMethods.ByName("GetFilePreviewInfo")),
-			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getFilePreview: connect.NewClient[v1.GetFilePreviewRequest, v1.GetFilePreviewResponse](
 			httpClient,
 			baseURL+FileSystemServiceGetFilePreviewProcedure,
 			connect.WithSchema(fileSystemServiceMethods.ByName("GetFilePreview")),
-			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		createFileOrFolder: connect.NewClient[v1.CreateFileOrFolderRequest, v1.CreateFileOrFolderResponse](
@@ -193,7 +195,6 @@ func NewFileSystemServiceClient(httpClient connect.HTTPClient, baseURL string, o
 			httpClient,
 			baseURL+FileSystemServiceSearchFilesProcedure,
 			connect.WithSchema(fileSystemServiceMethods.ByName("SearchFiles")),
-			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		replaceInFiles: connect.NewClient[v1.ReplaceInFilesRequest, v1.ReplaceInFilesResponse](
@@ -206,7 +207,6 @@ func NewFileSystemServiceClient(httpClient connect.HTTPClient, baseURL string, o
 			httpClient,
 			baseURL+FileSystemServiceListDirectoryProcedure,
 			connect.WithSchema(fileSystemServiceMethods.ByName("ListDirectory")),
-			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		createDirectory: connect.NewClient[v1.CreateDirectoryRequest, v1.CreateDirectoryResponse](
@@ -316,16 +316,21 @@ func (c *fileSystemServiceClient) DownloadFile(ctx context.Context, req *connect
 // FileSystemServiceHandler is an implementation of the reliant.v1.FileSystemService service.
 type FileSystemServiceHandler interface {
 	// GetFileTree returns the file tree structure for a project
+	// forge:lint-disable-next-line forge-idempotency-read-undeclared: machine-waking read: it dispatches a daemon command that wakes the user's machine, so the demo rule (frontends/web/src/fixtures/shop/index.ts) keeps it off the read-only fixture transport
 	GetFileTree(context.Context, *connect.Request[v1.GetFileTreeRequest]) (*connect.Response[v1.GetFileTreeResponse], error)
 	// GetFileContent returns the content of a specific file
+	// forge:lint-disable-next-line forge-idempotency-read-undeclared: machine-waking read: it dispatches a daemon command that wakes the user's machine, so the demo rule (frontends/web/src/fixtures/shop/index.ts) keeps it off the read-only fixture transport
 	GetFileContent(context.Context, *connect.Request[v1.GetFileContentRequest]) (*connect.Response[v1.GetFileContentResponse], error)
 	// SaveFileContent saves content to a specific file
 	SaveFileContent(context.Context, *connect.Request[v1.SaveFileContentRequest]) (*connect.Response[v1.SaveFileContentResponse], error)
 	// GetFileMetadata returns metadata for a file or directory
+	// forge:lint-disable-next-line forge-idempotency-read-undeclared: machine-waking read: it dispatches a daemon command that wakes the user's machine, so the demo rule (frontends/web/src/fixtures/shop/index.ts) keeps it off the read-only fixture transport
 	GetFileMetadata(context.Context, *connect.Request[v1.GetFileMetadataRequest]) (*connect.Response[v1.GetFileMetadataResponse], error)
 	// GetFilePreviewInfo returns preview metadata for a file
+	// forge:lint-disable-next-line forge-idempotency-read-undeclared: machine-waking read: it dispatches a daemon command that wakes the user's machine, so the demo rule (frontends/web/src/fixtures/shop/index.ts) keeps it off the read-only fixture transport
 	GetFilePreviewInfo(context.Context, *connect.Request[v1.GetFilePreviewInfoRequest]) (*connect.Response[v1.GetFilePreviewInfoResponse], error)
 	// GetFilePreview returns the raw binary content of a previewable file (image, PDF, audio, video).
+	// forge:lint-disable-next-line forge-idempotency-read-undeclared: machine-waking read: it dispatches a daemon command that wakes the user's machine, so the demo rule (frontends/web/src/fixtures/shop/index.ts) keeps it off the read-only fixture transport
 	GetFilePreview(context.Context, *connect.Request[v1.GetFilePreviewRequest]) (*connect.Response[v1.GetFilePreviewResponse], error)
 	// CreateFileOrFolder creates a new file or folder
 	CreateFileOrFolder(context.Context, *connect.Request[v1.CreateFileOrFolderRequest]) (*connect.Response[v1.CreateFileOrFolderResponse], error)
@@ -334,12 +339,14 @@ type FileSystemServiceHandler interface {
 	// CopyFile copies a file to a new location
 	CopyFile(context.Context, *connect.Request[v1.CopyFileRequest]) (*connect.Response[v1.CopyFileResponse], error)
 	// SearchFiles searches for text within files in the workspace
+	// forge:lint-disable-next-line forge-idempotency-read-undeclared: machine-waking read: it dispatches a daemon command that wakes the user's machine, so the demo rule (frontends/web/src/fixtures/shop/index.ts) keeps it off the read-only fixture transport
 	SearchFiles(context.Context, *connect.Request[v1.SearchFilesRequest]) (*connect.Response[v1.SearchFilesResponse], error)
 	// ReplaceInFiles replaces text in files across the workspace
 	ReplaceInFiles(context.Context, *connect.Request[v1.ReplaceInFilesRequest]) (*connect.Response[v1.ReplaceInFilesResponse], error)
 	// ListDirectory lists entries in an arbitrary filesystem directory.
 	// Used by the project picker in browser mode (no Electron). daemon_id
 	// names the machine to browse; unset browses the default machine.
+	// forge:lint-disable-next-line forge-idempotency-read-undeclared: machine-waking read: it dispatches a daemon command that wakes the user's machine, so the demo rule (frontends/web/src/fixtures/shop/index.ts) keeps it off the read-only fixture transport
 	ListDirectory(context.Context, *connect.Request[v1.ListDirectoryRequest]) (*connect.Response[v1.ListDirectoryResponse], error)
 	// CreateDirectory creates a new directory at an arbitrary absolute path.
 	// Used by the project picker in browser mode to make a "New folder" while
@@ -364,14 +371,12 @@ func NewFileSystemServiceHandler(svc FileSystemServiceHandler, opts ...connect.H
 		FileSystemServiceGetFileTreeProcedure,
 		svc.GetFileTree,
 		connect.WithSchema(fileSystemServiceMethods.ByName("GetFileTree")),
-		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	fileSystemServiceGetFileContentHandler := connect.NewUnaryHandler(
 		FileSystemServiceGetFileContentProcedure,
 		svc.GetFileContent,
 		connect.WithSchema(fileSystemServiceMethods.ByName("GetFileContent")),
-		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	fileSystemServiceSaveFileContentHandler := connect.NewUnaryHandler(
@@ -384,21 +389,18 @@ func NewFileSystemServiceHandler(svc FileSystemServiceHandler, opts ...connect.H
 		FileSystemServiceGetFileMetadataProcedure,
 		svc.GetFileMetadata,
 		connect.WithSchema(fileSystemServiceMethods.ByName("GetFileMetadata")),
-		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	fileSystemServiceGetFilePreviewInfoHandler := connect.NewUnaryHandler(
 		FileSystemServiceGetFilePreviewInfoProcedure,
 		svc.GetFilePreviewInfo,
 		connect.WithSchema(fileSystemServiceMethods.ByName("GetFilePreviewInfo")),
-		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	fileSystemServiceGetFilePreviewHandler := connect.NewUnaryHandler(
 		FileSystemServiceGetFilePreviewProcedure,
 		svc.GetFilePreview,
 		connect.WithSchema(fileSystemServiceMethods.ByName("GetFilePreview")),
-		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	fileSystemServiceCreateFileOrFolderHandler := connect.NewUnaryHandler(
@@ -423,7 +425,6 @@ func NewFileSystemServiceHandler(svc FileSystemServiceHandler, opts ...connect.H
 		FileSystemServiceSearchFilesProcedure,
 		svc.SearchFiles,
 		connect.WithSchema(fileSystemServiceMethods.ByName("SearchFiles")),
-		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	fileSystemServiceReplaceInFilesHandler := connect.NewUnaryHandler(
@@ -436,7 +437,6 @@ func NewFileSystemServiceHandler(svc FileSystemServiceHandler, opts ...connect.H
 		FileSystemServiceListDirectoryProcedure,
 		svc.ListDirectory,
 		connect.WithSchema(fileSystemServiceMethods.ByName("ListDirectory")),
-		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	fileSystemServiceCreateDirectoryHandler := connect.NewUnaryHandler(

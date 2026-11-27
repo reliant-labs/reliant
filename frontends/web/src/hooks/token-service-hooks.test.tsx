@@ -153,7 +153,8 @@ describe("TokenService hooks", () => {
     );
 
     const { result } = renderHook(() => useGetGitToken(), { wrapper });
-    await result.current.mutateAsync({} as never).catch(() => {});
-    await waitFor(() => expect(["success", "error"]).toContain(result.current.status));
+    await result.current.mutateAsync({} as never);
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data).toBeDefined();
   });
 });

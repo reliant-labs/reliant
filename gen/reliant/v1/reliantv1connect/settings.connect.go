@@ -215,6 +215,7 @@ type SettingsServiceClient interface {
 	// DeleteGlobalSkill deletes a skill directory under ~/.reliant/skills.
 	DeleteGlobalSkill(context.Context, *connect.Request[v1.DeleteGlobalSkillRequest]) (*connect.Response[v1.DeleteGlobalSkillResponse], error)
 	// GetConfigHealth retrieves configuration errors and warnings
+	// forge:lint-disable-next-line forge-idempotency-read-undeclared: writes as it reads: it heals a legacy Reliant LLM key (drivers.HealReliantKey), a credential write
 	GetConfigHealth(context.Context, *connect.Request[v1.GetConfigHealthRequest]) (*connect.Response[v1.GetConfigHealthResponse], error)
 }
 
@@ -429,7 +430,6 @@ func NewSettingsServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			httpClient,
 			baseURL+SettingsServiceGetConfigHealthProcedure,
 			connect.WithSchema(settingsServiceMethods.ByName("GetConfigHealth")),
-			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 	}
@@ -713,6 +713,7 @@ type SettingsServiceHandler interface {
 	// DeleteGlobalSkill deletes a skill directory under ~/.reliant/skills.
 	DeleteGlobalSkill(context.Context, *connect.Request[v1.DeleteGlobalSkillRequest]) (*connect.Response[v1.DeleteGlobalSkillResponse], error)
 	// GetConfigHealth retrieves configuration errors and warnings
+	// forge:lint-disable-next-line forge-idempotency-read-undeclared: writes as it reads: it heals a legacy Reliant LLM key (drivers.HealReliantKey), a credential write
 	GetConfigHealth(context.Context, *connect.Request[v1.GetConfigHealthRequest]) (*connect.Response[v1.GetConfigHealthResponse], error)
 }
 
@@ -923,7 +924,6 @@ func NewSettingsServiceHandler(svc SettingsServiceHandler, opts ...connect.Handl
 		SettingsServiceGetConfigHealthProcedure,
 		svc.GetConfigHealth,
 		connect.WithSchema(settingsServiceMethods.ByName("GetConfigHealth")),
-		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	return "/reliant.v1.SettingsService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

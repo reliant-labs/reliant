@@ -299,9 +299,8 @@ service SettingsService {
   // ============================================
 
   // GetConfigHealth retrieves configuration errors and warnings
-  rpc GetConfigHealth(GetConfigHealthRequest) returns (GetConfigHealthResponse) {
-    option idempotency_level = NO_SIDE_EFFECTS;
-  }
+  // forge:lint-disable-next-line forge-idempotency-read-undeclared: writes as it reads: it heals a legacy Reliant LLM key (drivers.HealReliantKey), a credential write
+  rpc GetConfigHealth(GetConfigHealthRequest) returns (GetConfigHealthResponse) {}
 }
 
 // ConfigSeverity indicates the severity of a configuration error
