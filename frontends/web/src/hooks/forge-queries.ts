@@ -1586,8 +1586,8 @@ export function useInvalidateAfterEnvironmentDelete(environmentId: string | null
   }, [queryClient, environmentId]);
 }
 
-/** The environment id a generated DeployService key's request names ("" for none). */
+/** The environment id a generated DeployService key's protojson request names ("" for none). */
 function requestEnvironmentOf(queryKey: readonly unknown[]): string {
-  const request = queryKey.find((part): part is { environmentId?: unknown } => typeof part === "object" && part !== null);
-  return typeof request?.environmentId === "string" ? request.environmentId : "";
+  const request = queryKey.find((part): part is { environment_id?: unknown } => typeof part === "object" && part !== null);
+  return typeof request?.environment_id === "string" ? request.environment_id : "";
 }
