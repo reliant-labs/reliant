@@ -18,6 +18,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/orgs"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // triggerReads are the TriggerService rpcs that change nothing. Every other
@@ -128,7 +129,7 @@ func TestEveryTriggerMutationActsInItsOrg(t *testing.T) {
 
 	snapshot := func() string {
 		t.Helper()
-		stored, err := env.repo.ListTriggers(context.Background(), core.TriggerFilters{UserID: env.userID})
+		stored, err := store.ListTriggersForUser(context.Background(), env.repo.ORM(), core.TriggerFilters{UserID: env.userID})
 		require.NoError(t, err)
 		sort.Slice(stored, func(i, j int) bool { return stored[i].ID < stored[j].ID })
 		env.backend.mu.Lock()

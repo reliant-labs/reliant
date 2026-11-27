@@ -128,6 +128,20 @@ message PipelineConfig {
     env_var: "RELIANT_PIPELINE_ENABLED"
     description: "Run Reliant's PR and release pipeline on this server: its server actions (uses: reliant/...) and RPCs; off refuses them"
   }];
+
+  // The secret the worker's merge queue signs its caller assertion with
+  // when it asks control-plane for a Reliant Queue App token
+  // (GitCredentialInternalService.MintInstallationToken, app =
+  // GITHUB_APP_QUEUE). Only the worker reads it, and the deploy gives it only
+  // to the worker. Unset (or shorter than 32 bytes), the queue never asks
+  // for a Queue App token: it lands as the Reliant App instead and marks
+  // each batch unenforced.
+  string github_queue_app_caller_secret = 2 [(forge.v1.config) = {
+    env_var: "GITHUB_QUEUE_APP_CALLER_SECRET"
+    sensitive: true
+    optional: true
+    description: "Worker only: signs the merge queue's Queue App token requests to control-plane; unset lands as the Reliant App, unenforced"
+  }];
 }
 
 // OrgPolicyEnforcementConfig is the platform's switch per org-policy

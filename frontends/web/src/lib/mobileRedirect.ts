@@ -27,7 +27,6 @@
 
 import { defaultParseSearch, defaultStringifySearch } from "@tanstack/react-router";
 
-/** Below this width the desktop shell's sidebars and panels stop fitting. */
 import {
   encodedSegment,
   mobileAutomationPath,
@@ -44,12 +43,14 @@ import {
 import { orgFreePath, orgOfPath } from "./paths/org";
 import { orgSegment, type RouteOrgScope } from "./routeOrg";
 import { isSafeReturnTo } from "./returnTo";
+import { DESKTOP_OPT_OUT_KEY, hasCoarsePointer, PHONE_MAX_WIDTH, readDesktopOptOut } from "./phoneShape";
 
-export const MOBILE_MAX_WIDTH = 768;
+// What a phone is, and the desktop opt-out, live in lib/phoneShape (the root
+// font size reads them too); re-exported here for the redirect's callers.
+export { DESKTOP_OPT_OUT_PARAM, isPhoneViewport, readDesktopOptOut } from "./phoneShape";
 
-/** Query param and storage key for the "give me the desktop app" opt-out. */
-export const DESKTOP_OPT_OUT_PARAM = "desktop";
-const DESKTOP_OPT_OUT_KEY = "reliant-force-desktop";
+/** Below this width the desktop shell's sidebars and panels stop fitting. */
+export const MOBILE_MAX_WIDTH = PHONE_MAX_WIDTH;
 
 export interface MobileRedirectEnv {
   pathname: string;
@@ -286,21 +287,6 @@ export function mobileHandoffAllowed({
   );
 }
 
-/** Reads the opt-out from the URL, persisting it so it survives navigation. */
-export function readDesktopOptOut(search: string): boolean {
-  try {
-    if (new URLSearchParams(search).has(DESKTOP_OPT_OUT_PARAM)) {
-      localStorage.setItem(DESKTOP_OPT_OUT_KEY, "1");
-      return true;
-    }
-    return localStorage.getItem(DESKTOP_OPT_OUT_KEY) === "1";
-  } catch {
-    // Safari private browsing throws on localStorage. Honour the URL for this
-    // navigation and accept that it won't persist.
-    return new URLSearchParams(search).has(DESKTOP_OPT_OUT_PARAM);
-  }
-}
-
 /** Clears the opt-out so the browser returns to the mobile surface. */
 export function clearDesktopOptOut(): void {
   try {
@@ -308,18 +294,6 @@ export function clearDesktopOptOut(): void {
   } catch {
     // Nothing to clear if storage is unavailable.
   }
-}
-
-/**
- * Whether this device is phone-shaped — narrow AND touch, the same two
- * signals the redirect uses. For desktop-surface routes a phone can still be
- * on (the Apps console), to keep desktop-only overlays off them.
- */
-export function isPhoneViewport(): boolean {
-  if (typeof window === "undefined") return false;
-  const coarsePointer =
-    window.matchMedia?.("(pointer: coarse), (hover: none)").matches ?? false;
-  return window.innerWidth <= MOBILE_MAX_WIDTH && coarsePointer;
 }
 
 /**
@@ -340,16 +314,11 @@ export function shouldRedirectToMobileNow(location: {
 }): boolean {
   if (typeof window === "undefined") return false;
 
-  // `pointer: coarse` is the touch signal; `hover: none` catches devices that
-  // report a fine pointer (some styluses) but have no hover.
-  const coarsePointer =
-    window.matchMedia?.("(pointer: coarse), (hover: none)").matches ?? false;
-
   return shouldRedirectToMobile({
     pathname: location.pathname,
     search: location.search,
     width: window.innerWidth,
-    coarsePointer,
+    coarsePointer: hasCoarsePointer(),
     // Falls back to the live URL for the opt-out only: a `?desktop=1` arriving
     // via a full page load is present in both, and the persisted flag is the
     // authority on subsequent navigations.

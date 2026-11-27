@@ -31,7 +31,7 @@ export function MobilePrivacyPanel() {
         onChange={setAnalytics}
       />
 
-      <div className="space-y-2 bg-background p-4 text-xs text-muted-foreground">
+      <div className="space-y-2 bg-background p-4 text-meta text-muted-foreground">
         <p>
           <strong className="text-foreground">Chats are stored on {servers}</strong>, with what agents read and
           commands print. Your code stays on the machine it runs on; a Reliant cloud machine keeps the whole

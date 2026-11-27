@@ -85,6 +85,12 @@ func TestPipelineQueueTablesConstraints(t *testing.T) {
 		require.NoError(t, exec(`UPDATE queue_batches SET isolation_backend = 'runc' WHERE id = 'b-runc'`), "a runc batch may pass (shadow)")
 		refused(t, exec(`UPDATE queue_batches SET state = 'landed', landed_sha = 'main-sha' WHERE id = 'b-runc'`),
 			"queue_batches_runc_never_lands", "a batch gated outside an isolation boundary never lands")
+		refused(t, exec(`UPDATE queue_batches SET state = 'landed', landed_sha = 'main-sha', verdict_json = '{"unisolated_accepted": false}' WHERE id = 'b-runc'`),
+			"queue_batches_runc_never_lands", "an explicit false is no opt-in")
+		require.NoError(t, insertBatch("b-runc-ok", "normal", "passed", nil, nil))
+		require.NoError(t, exec(`UPDATE queue_batches SET isolation_backend = 'runc', verdict_json = '{"unisolated_accepted": true}' WHERE id = 'b-runc-ok'`))
+		require.NoError(t, exec(`UPDATE queue_batches SET state = 'landed', landed_sha = 'main-sha' WHERE id = 'b-runc-ok'`),
+			"a runc batch the repo opted in for lands, marked unisolated (owner, 2026-11-26 21:12Z)")
 		require.NoError(t, exec(`UPDATE queue_batches SET isolation_backend = 'sysbox', state = 'landed', landed_sha = 'main-sha' WHERE id = 'b-runc'`),
 			"the same batch on sysbox may land")
 

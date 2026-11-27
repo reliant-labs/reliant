@@ -47,3 +47,9 @@ type ProposalConnections interface {
 	Get(ctx context.Context, userID, id string) (*core.Connection, error)
 	GetOrg(ctx context.Context, userID, orgID, id string) (*core.Connection, error)
 }
+
+// CapabilityGrants writes the pipeline capability grants a capability-grant
+// card asks for, once its owner approves it. *grants.Service implements it.
+type CapabilityGrants interface {
+	GrantApproved(ctx context.Context, approverID string, card *core.Approval) ([]*core.PipelineCapabilityGrant, error)
+}

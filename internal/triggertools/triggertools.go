@@ -207,6 +207,8 @@ func describeSource(tr *reliantv1.Trigger) (string, string) {
 			outcomes = strings.Join(o, " or ")
 		}
 		return "workflow_event", fmt.Sprintf("a run of %s that %s", workflows, outcomes)
+	case *reliantv1.Trigger_RecordDue:
+		return "record_due", "a " + src.RecordDue.GetTable() + " record falling due"
 	default:
 		return "unknown", "unknown source"
 	}

@@ -42,7 +42,7 @@ export function MobileAIProvidersPanel() {
     <div className="min-h-0 flex-1 overflow-y-auto py-4">
       {/* A static fact rather than a live probe: `useOAuthAvailability` is
           never called just to decide whether to SHOW this text. */}
-      <div className="mx-4 mb-4 flex items-start gap-2 rounded-lg border border-warning/30 bg-warning/10 p-3 text-xs text-warning-ink">
+      <div className="mx-4 mb-4 flex items-start gap-2 rounded-lg border border-warning/30 bg-warning/10 p-3 text-meta text-warning-ink">
         <Info className="mt-0.5 h-4 w-4 shrink-0" />
         <div className="min-w-0 flex-1 space-y-2">
           <p>Claude, ChatGPT or Google? Run this on your computer, then sign in there.</p>
@@ -87,7 +87,7 @@ export function MobileAIProvidersPanel() {
       <div className="mt-4 px-4">
         <MobileCardGroup label="Default models">
           <div className="p-4">
-            <p className="mb-3 text-xs text-muted-foreground">
+            <p className="mb-3 text-meta text-muted-foreground">
               Which model each tier uses by default. For thinking level, temperature, and compaction overrides, use
               desktop.
             </p>

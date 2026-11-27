@@ -11,7 +11,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 
-import { createStorageFixtureApi } from "../__fixtures__/fixtureStorageApi";
+import { createStorageFixture } from "../__fixtures__/fixtureStorageService";
 import { callsOf, renderBrowser, searchOf, STAGING } from "./storageTestUtils";
 
 vi.mock("@tanstack/react-router", async (importOriginal) => ({
@@ -43,7 +43,7 @@ const listed = () => screen.findByTestId("storage-table");
 
 describe("the bucket", () => {
   it("opens the first readable bucket on a bare link, and shows an unreachable one disabled with its reason", async () => {
-    const view = renderBrowser(createStorageFixtureApi());
+    const view = renderBrowser(createStorageFixture());
     await waitFor(() => expect(view.search().bucket).toBe("exports"));
     expect(view.navigations[0]).toEqual({ search: { bucket: "exports" }, replace: true });
     const buckets = screen.getByTestId("storage-buckets");
@@ -53,7 +53,7 @@ describe("the bucket", () => {
   });
 
   it("opens a bucket this environment does not declare at the default bucket's root", async () => {
-    const api = createStorageFixtureApi();
+    const api = createStorageFixture();
     const view = renderBrowser(api, { bucket: "gone", prefix: "a/", object: "a/b" });
     await waitFor(() => expect(view.search()).toEqual({ bucket: "exports" }));
     await listed();
@@ -62,14 +62,14 @@ describe("the bucket", () => {
   });
 
   it("switches bucket from the selector, dropping the level", async () => {
-    const view = renderBrowser(createStorageFixtureApi(), { bucket: "exports", prefix: "daily/" });
+    const view = renderBrowser(createStorageFixture(), { bucket: "exports", prefix: "daily/" });
     await listed();
     fireEvent.click(screen.getByTestId("storage-bucket-uploads"));
     expect(view.search()).toEqual({ bucket: "uploads" });
   });
 
   it("says a chosen bucket cannot be browsed, and reads nothing", async () => {
-    const api = createStorageFixtureApi();
+    const api = createStorageFixture();
     renderBrowser(api, { bucket: "media" });
     expect(await screen.findByTestId("storage-unreachable")).toHaveTextContent("media can't be browsed from Reliant");
     expect(callsOf(api, "listObjects")).toHaveLength(0);
@@ -78,7 +78,7 @@ describe("the bucket", () => {
 
 describe("a level", () => {
   it("lists folders first, then the objects directly here, with size, time and etag", async () => {
-    renderBrowser(createStorageFixtureApi(), { bucket: "uploads" });
+    renderBrowser(createStorageFixture(), { bucket: "uploads" });
     await listed();
     expect(entries()).toEqual(["p:avatars/", "p:blobs/", "p:docs/", "p:odd names/", "p:reports/", "o:robots.txt"]);
     const robots = screen.getByTestId("storage-object");
@@ -88,7 +88,7 @@ describe("a level", () => {
   });
 
   it("lists one level only, and links each folder to its own", async () => {
-    const view = renderBrowser(createStorageFixtureApi(), { bucket: "uploads", prefix: "avatars/" });
+    const view = renderBrowser(createStorageFixture(), { bucket: "uploads", prefix: "avatars/" });
     await listed();
     expect(entries()).toEqual(["p:avatars/2026/", "o:avatars/legacy.jpg"]);
     const folder = within(screen.getByTestId("storage-folder")).getByRole("link");
@@ -99,7 +99,7 @@ describe("a level", () => {
   });
 
   it("names keys with odd characters as stored, and links them so they come back the same", async () => {
-    renderBrowser(createStorageFixtureApi(), { bucket: "uploads", prefix: "odd names/" });
+    renderBrowser(createStorageFixture(), { bucket: "uploads", prefix: "odd names/" });
     await listed();
     expect(entries()).toEqual(["p:odd names/a/", "o:odd names/  leading spaces.txt", "o:odd names/100% done #1?.txt", "o:odd names/ünïcødé ✓.md"]);
     const odd = screen.getAllByTestId("storage-object").find((row) => row.dataset.key === "odd names/100% done #1?.txt")!;
@@ -109,7 +109,7 @@ describe("a level", () => {
   });
 
   it("draws the breadcrumb from the prefix, an empty segment included, and links each crumb", async () => {
-    const view = renderBrowser(createStorageFixtureApi(), { bucket: "uploads", prefix: "odd names/a//" });
+    const view = renderBrowser(createStorageFixture(), { bucket: "uploads", prefix: "odd names/a//" });
     await listed();
     expect(entries()).toEqual(["o:odd names/a//b.txt"]);
     const crumbs = screen.getAllByTestId("storage-crumb");
@@ -122,7 +122,7 @@ describe("a level", () => {
   });
 
   it("narrows the level by a typed prefix, which the server lists", async () => {
-    const api = createStorageFixtureApi();
+    const api = createStorageFixture();
     const view = renderBrowser(api, { bucket: "uploads", prefix: "docs/" });
     await listed();
     fireEvent.change(screen.getByTestId("storage-narrow-input"), { target: { value: "b" } });
@@ -136,7 +136,7 @@ describe("a level", () => {
   });
 
   it("says what an empty narrowing means", async () => {
-    renderBrowser(createStorageFixtureApi(), { bucket: "uploads", prefix: "docs/zz" });
+    renderBrowser(createStorageFixture(), { bucket: "uploads", prefix: "docs/zz" });
     expect(await screen.findByTestId("storage-empty")).toHaveTextContent("Nothing in docs/ starts with “zz”");
   });
 });
@@ -147,7 +147,7 @@ describe("paging", () => {
   // host's load. A page of one object keeps the three renders cheap.
   it("pages forward by token and back through the pages it walked", async () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
-    const api = createStorageFixtureApi();
+    const api = createStorageFixture();
     const view = renderBrowser(api, { bucket: "uploads", prefix: "avatars/2026/" }, STAGING, { pageSize: 1 });
     await settle();
     expect(entries()).toEqual(["o:avatars/2026/ada.png"]);
@@ -182,7 +182,7 @@ describe("paging", () => {
   });
 
   it("opens a deep link to a later page with a way to the first", async () => {
-    const api = createStorageFixtureApi();
+    const api = createStorageFixture();
     const first = renderBrowser(api, { bucket: "exports", prefix: "daily/" });
     await listed();
     fireEvent.click(screen.getByTestId("storage-page-next"));
@@ -198,7 +198,7 @@ describe("paging", () => {
   });
 
   it("opens the first page, and says why, when a page link belongs to another bucket or level", async () => {
-    const view = renderBrowser(createStorageFixtureApi(), { bucket: "uploads", prefix: "docs/", token: "not-one-of-ours" });
+    const view = renderBrowser(createStorageFixture(), { bucket: "uploads", prefix: "docs/", token: "not-one-of-ours" });
     await waitFor(() => expect(view.search()).toEqual({ bucket: "uploads", prefix: "docs/" }));
     expect(view.navigations.at(-1)).toMatchObject({ replace: true });
     await listed();
@@ -208,7 +208,7 @@ describe("paging", () => {
 
 describe("open_bucket", () => {
   it("is sent on this tab's first listing of a bucket only, whatever the level", async () => {
-    const api = createStorageFixtureApi();
+    const api = createStorageFixture();
     const view = renderBrowser(api, { bucket: "uploads", prefix: "docs/" });
     await listed();
     view.go({ bucket: "uploads", prefix: "avatars/" });
@@ -223,7 +223,7 @@ describe("open_bucket", () => {
     view.unmount();
 
     // A reload in the same tab is not a second open.
-    const again = createStorageFixtureApi();
+    const again = createStorageFixture();
     renderBrowser(again, { bucket: "uploads" });
     await listed();
     expect(callsOf(again, "listObjects")[0]).toMatchObject({ openBucket: false });
@@ -232,7 +232,7 @@ describe("open_bucket", () => {
 
 describe("an object", () => {
   it("shows its metadata, and its JSON pretty-printed", async () => {
-    const api = createStorageFixtureApi();
+    const api = createStorageFixture();
     renderBrowser(api, { bucket: "uploads", prefix: "docs/", object: "docs/config.json" });
     const pane = await screen.findByTestId("storage-object-pane");
     const metadata = await within(pane).findByTestId("storage-metadata");
@@ -247,7 +247,7 @@ describe("an object", () => {
   });
 
   it("draws an image through the preview's URL in an <img>, never a frame", async () => {
-    renderBrowser(createStorageFixtureApi(), { bucket: "uploads", prefix: "avatars/2026/", object: "avatars/2026/ada.png" });
+    renderBrowser(createStorageFixture(), { bucket: "uploads", prefix: "avatars/2026/", object: "avatars/2026/ada.png" });
     const image = await screen.findByTestId("storage-preview-image");
     expect(image.tagName).toBe("IMG");
     expect(image).toHaveAttribute("src", expect.stringMatching(/^data:image\/png;base64,/));
@@ -256,7 +256,7 @@ describe("an object", () => {
   });
 
   it("offers a new image URL when the old one stops loading", async () => {
-    const api = createStorageFixtureApi();
+    const api = createStorageFixture();
     renderBrowser(api, { bucket: "uploads", object: "avatars/2026/ada.png" });
     fireEvent.error(await screen.findByTestId("storage-preview-image"));
     const failed = await screen.findByTestId("storage-preview-image-failed");
@@ -265,7 +265,7 @@ describe("an object", () => {
   });
 
   it("previews no SVG and no PDF, and asks for neither", async () => {
-    const api = createStorageFixtureApi();
+    const api = createStorageFixture();
     const view = renderBrowser(api, { bucket: "uploads", object: "avatars/2026/logo.svg" });
     expect(await screen.findByTestId("storage-preview-none")).toHaveTextContent("image/svg+xml");
     view.go({ bucket: "uploads", object: "reports/q1.pdf" });
@@ -275,26 +275,26 @@ describe("an object", () => {
   });
 
   it("says when a text preview was cut at 1 MiB", async () => {
-    renderBrowser(createStorageFixtureApi({ truncatedText: true }), { bucket: "uploads", object: "docs/server.log" });
+    renderBrowser(createStorageFixture({ truncatedText: true }), { bucket: "uploads", object: "docs/server.log" });
     expect(await screen.findByTestId("storage-preview-note")).toHaveTextContent("Cut at 1 MiB: the first 1 MiB of 3 MiB is shown.");
     expect(screen.getByTestId("storage-preview-text")).toHaveAttribute("data-pretty", "false");
   });
 
   it("shows JSON that does not parse as stored", async () => {
-    renderBrowser(createStorageFixtureApi(), { bucket: "uploads", object: "docs/broken.json" });
+    renderBrowser(createStorageFixture(), { bucket: "uploads", object: "docs/broken.json" });
     expect(await screen.findByTestId("storage-preview-note")).toHaveTextContent("Not valid JSON");
     expect(screen.getByTestId("storage-preview-text")).toHaveTextContent('{"feature": [1, 2,, }');
   });
 
   it("says an object is not there", async () => {
-    renderBrowser(createStorageFixtureApi(), { bucket: "uploads", object: "docs/deleted.txt" });
+    renderBrowser(createStorageFixture(), { bucket: "uploads", object: "docs/deleted.txt" });
     const error = await screen.findByTestId("storage-metadata-error");
     expect(error).toHaveAttribute("data-kind", "not-found");
     expect(error).toHaveTextContent("deleted.txt isn't there");
   });
 
   it("closes back to the level", async () => {
-    renderBrowser(createStorageFixtureApi(), { bucket: "uploads", prefix: "docs/", object: "docs/readme.txt" });
+    renderBrowser(createStorageFixture(), { bucket: "uploads", prefix: "docs/", object: "docs/readme.txt" });
     const close = await screen.findByTestId("storage-object-close");
     expect(searchOf(close.getAttribute("href"))).toEqual({ bucket: "uploads", prefix: "docs/" });
   });
@@ -302,7 +302,7 @@ describe("an object", () => {
 
 describe("Download", () => {
   it("mints a URL on each click and hands it to the browser, never ahead of the click and never on the page", async () => {
-    const api = createStorageFixtureApi();
+    const api = createStorageFixture();
     const view = renderBrowser(api, { bucket: "uploads", prefix: "docs/", object: "docs/readme.txt" });
     await screen.findByTestId("storage-metadata");
     await screen.findByTestId("storage-preview-text");

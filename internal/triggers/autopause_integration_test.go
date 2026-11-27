@@ -65,7 +65,7 @@ func newOrgFireFixture(t *testing.T, projectOrg, triggerOrg *string) *fireFixtur
 
 func (f *fireFixture) stored(t *testing.T) *core.Trigger {
 	t.Helper()
-	stored, err := f.repo.GetTrigger(context.Background(), f.trigger.ID)
+	stored, err := store.GetTrigger(context.Background(), f.repo.ORM(), f.trigger.ID)
 	require.NoError(t, err)
 	return stored
 }

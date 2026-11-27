@@ -9,10 +9,7 @@ import { UsageBillingPanel } from "../UsageBillingPanel";
 
 const mocks = vi.hoisted(() => ({ read: vi.fn(), checkout: vi.fn(), open: vi.fn(), active: { id: "org-a", role: "owner" } }));
 vi.mock("@/hooks/useOrgs", () => ({ useActiveOrg: () => ({ active: mocks.active }) }));
-// The agreement read and the checkout run on the generated BillingService
-// hooks; the hosting usage summary (a hand-written pendingBillingMethod read)
-// finds no method on the client, as on a server without it.
-vi.mock("@/services/controlPlane/client", () => ({ getControlPlaneClient: () => ({}) }));
+// Leave hosting usage unserved to exercise the older-server fallback.
 beforeEach(() => setTransport(mockTransport(billingHandlers({ getCurrentUserUsageBilling: (r) => mocks.read(r), createCurrentUserUsageBillingCheckout: (r) => mocks.checkout(r) }))));
 afterEach(() => setTransport(null));
 vi.mock("@/lib/stripeCheckout", () => ({ openCheckout: mocks.open, buildCheckoutReturnUrls: () => ({ successUrl: "https://app.test/settings/billing?tab=usage&checkout=success", cancelUrl: "https://app.test/settings/billing?tab=usage&checkout=cancelled" }) }));

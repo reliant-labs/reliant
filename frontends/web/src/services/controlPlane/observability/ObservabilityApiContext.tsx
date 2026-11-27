@@ -236,8 +236,47 @@ export type GeneratedObservabilityReads =
   | "getReleaseHealth"
   | "listFrontendReplay";
 
-/** What a view may call through the context: everything but the reads on generated hooks. */
-export type ObservabilityContextApi = Omit<ObservabilityApi, GeneratedObservabilityReads>;
+/**
+ * AlertingService: every read and write runs on its generated hooks
+ * (hooks/observability-queries.ts, hooks/controlplane/alerting-service-hooks_gen.ts),
+ * so the context hands none of it out. It stays on ObservabilityApi as the
+ * model-level contract the shop fixture pack and test fakes implement; its wire
+ * handlers (fixtures/shop/handlers/alerting.ts) serve them to the hooks.
+ */
+export type GeneratedAlertingCalls =
+  | "listAlerts"
+  | "listAlertHistory"
+  | "listSilences"
+  | "createSilence"
+  | "expireSilence"
+  | "listReceivers"
+  | "createReceiver"
+  | "updateReceiver"
+  | "deleteReceiver"
+  | "testReceiver"
+  | "listNotifications"
+  | "markNotificationsRead";
+
+/**
+ * IssuesService's calls, which the views make through its generated hooks
+ * (hooks/controlplane/issues-service-hooks_gen.ts) and imperative writes; like
+ * GeneratedObservabilityReads, on ObservabilityApi only as the model-level
+ * contract the shop pack's and the fakes' handlers (fixtures/shop/handlers/issues.ts) serve.
+ */
+export type GeneratedIssuesCalls =
+  | "listIssues"
+  | "getIssue"
+  | "listIssueEvents"
+  | "listIssueTimeline"
+  | "updateIssueStatus"
+  | "addIssueComment"
+  | "updateIssueComment"
+  | "deleteIssueComment"
+  | "assignIssue"
+  | "linkIssueChat";
+
+/** What a view may call through the context: everything but the calls on generated hooks. */
+export type ObservabilityContextApi = Omit<ObservabilityApi, GeneratedObservabilityReads | GeneratedAlertingCalls | GeneratedIssuesCalls>;
 
 /** The provided api, else the real client on the nearest TransportScope's transport, else on the app's. */
 export function useObservabilityApi(): ObservabilityContextApi {

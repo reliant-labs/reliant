@@ -457,7 +457,7 @@ func NewWorker(cfg *Config) (*Worker, *v2.ActivityRegistry, error) {
 	}
 	pauses := pauseNotices{admins: pauseAdmins}
 	if cfg.Database != nil {
-		pauses.store = newPauseStores(cfg.Database, cfg.Database.ORM())
+		pauses.store = newPauseStores(store.NewTriggerExtStore(cfg.Database.ORM()), cfg.Database.ORM())
 	}
 	w.RegisterActivityWithOptions(pauses.Notify, activity.RegisterOptions{
 		Name: NotifyOrgAutomationNoOrgAccountActivityName,
@@ -488,7 +488,7 @@ func NewWorker(cfg *Config) (*Worker, *v2.ActivityRegistry, error) {
 		Name: workflowevent.DispatchWorkflowName,
 	})
 	if cfg.TriggerLauncher != nil {
-		dispatcher := workflowevent.NewDispatcher(cfg.Database, cfg.TriggerLauncher, nil).WithWorkflows(declarations).WithAutoPause(triggerAutoPause(cfg))
+		dispatcher := workflowevent.NewDispatcher(cfg.Database, dispatchTriggerReads{store.NewTriggerExtStore(cfg.Database.ORM()), store.NewTriggerEventExtStore(cfg.Database.ORM())}, cfg.TriggerLauncher, nil).WithWorkflows(declarations).WithAutoPause(triggerAutoPause(cfg))
 		w.RegisterActivityWithOptions(
 			workflowevent.NewActivity(store.NewRunEventExtStore(cfg.Database.ORM()), dispatcher).Dispatch,
 			activity.RegisterOptions{Name: workflowevent.DispatchActivityName},
@@ -628,7 +628,7 @@ func triggerAutoPause(cfg *Config) *triggers.AutoPause {
 	pause := triggers.NewAutoPause(store.NewTriggerWritesExtStore(cfg.Database.ORM()), schedules)
 	if q := orgKeyNoticeQueueFor(cfg); q.starter != nil {
 		// A pause for want of an org account emails the org's admins.
-		pause = pause.WithNoOrgAccountPause(noOrgAccountPauseNotifier(newPauseStores(cfg.Database, cfg.Database.ORM()), q))
+		pause = pause.WithNoOrgAccountPause(noOrgAccountPauseNotifier(newPauseStores(store.NewTriggerExtStore(cfg.Database.ORM()), cfg.Database.ORM()), q))
 	}
 	return pause
 }

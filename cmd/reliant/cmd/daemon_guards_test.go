@@ -24,7 +24,7 @@ import (
 // guard policy it hands the daemon runtime.
 func guardsFor(t *testing.T, env map[string]string) daemonruntime.Guards {
 	t.Helper()
-	for _, k := range []string{"RELIANT_DISK_RECLAIM_AT", "RELIANT_DISK_REFUSE_AT", "RELIANT_HEAVY_COMMANDS", "RELIANT_HEAVY_SHARE", "RELIANT_COMMAND_THREADS", "RELIANT_BACKGROUND_IDLE_REAP"} {
+	for _, k := range []string{"RELIANT_DISK_RECLAIM_AT", "RELIANT_DISK_REFUSE_AT", "RELIANT_HEAVY_COMMANDS", "RELIANT_HEAVY_SHARE", "RELIANT_HEAVY_CPU_WEIGHT", "RELIANT_HEAVY_MEMORY_HIGH", "RELIANT_COMMAND_THREADS", "RELIANT_BACKGROUND_IDLE_REAP"} {
 		t.Setenv(k, "")
 	}
 	for k, v := range env {
@@ -52,6 +52,22 @@ func TestDaemonGuards_DefaultHeavyCommandsAreTheGatesDefault(t *testing.T) {
 func TestDaemonGuards_HeavyShare(t *testing.T) {
 	g := guardsFor(t, map[string]string{"RELIANT_HEAVY_SHARE": "6"})
 	assert.Equal(t, 6, g.HeavyShare)
+}
+
+// heavy_cpu_weight and heavy_memory_high reach the gate: unset derives both,
+// "off" bounds no memory, and a size that does not parse keeps the default
+// rather than stopping the daemon.
+func TestDaemonGuards_HeavyCPUWeightAndMemoryHigh(t *testing.T) {
+	g := guardsFor(t, nil)
+	assert.Zero(t, g.HeavyCPUWeight, "an unset weight is heavyjob.DefaultCPUWeight")
+	assert.Zero(t, g.HeavyMemoryHigh, "an unset memory bound is derived from the slot pool")
+
+	g = guardsFor(t, map[string]string{"RELIANT_HEAVY_CPU_WEIGHT": "100", "RELIANT_HEAVY_MEMORY_HIGH": "16GiB"})
+	assert.Equal(t, 100, g.HeavyCPUWeight)
+	assert.Equal(t, int64(16<<30), g.HeavyMemoryHigh)
+
+	assert.Equal(t, int64(heavyjob.MemoryHighOff), guardsFor(t, map[string]string{"RELIANT_HEAVY_MEMORY_HIGH": "off"}).HeavyMemoryHigh)
+	assert.Zero(t, guardsFor(t, map[string]string{"RELIANT_HEAVY_MEMORY_HIGH": "lots"}).HeavyMemoryHigh)
 }
 
 // The env var a command at its thread limit is told to raise is the one

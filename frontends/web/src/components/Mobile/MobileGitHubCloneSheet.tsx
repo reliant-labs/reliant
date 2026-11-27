@@ -105,7 +105,7 @@ export function MobileGitHubCloneSheet({
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
       >
         <div className="flex items-center justify-between border-b border-border px-4 py-3">
-          <span className="truncate text-sm font-semibold text-foreground">
+          <span className="truncate text-ui font-semibold text-foreground">
             Clone {repo.fullName}
           </span>
           <button
@@ -122,19 +122,19 @@ export function MobileGitHubCloneSheet({
         <div className="min-h-0 flex-1 overflow-y-auto p-4">
           {state === "success" ? (
             <div className="space-y-3 text-center">
-              <p className="text-sm font-medium text-foreground">Cloned successfully</p>
-              <p className="break-all text-xs text-muted-foreground">{clonedPath}</p>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-ui font-medium text-foreground">Cloned successfully</p>
+              <p className="break-all text-meta text-muted-foreground">{clonedPath}</p>
+              <p className="text-meta text-muted-foreground">
                 on {selectedDaemon ? machineDisplayName(selectedDaemon) : "the machine"}
               </p>
             </div>
           ) : state === "cloning" ? (
             <div className="flex flex-col items-center gap-3 py-6 text-center">
               <Loader2 className="h-6 w-6 animate-spin text-primary-ink" />
-              <p className="text-sm font-medium text-foreground">Cloning…</p>
+              <p className="text-ui font-medium text-foreground">Cloning…</p>
               <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-left">
                 <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
-                <p className="text-xs text-amber-900 dark:text-amber-200">
+                <p className="text-meta text-amber-900 dark:text-amber-200">
                   This can take up to a couple of minutes for a large repo. Keep this
                   app in the foreground — backgrounding it can cancel the clone before
                   it finishes.
@@ -145,21 +145,21 @@ export function MobileGitHubCloneSheet({
             <div className="space-y-4">
               {state === "error" && (
                 <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3">
-                  <p className="text-sm text-destructive-ink">{error}</p>
+                  <p className="text-ui text-destructive-ink">{error}</p>
                 </div>
               )}
 
               <div>
-                <p className="mb-2 text-xs font-semibold text-muted-foreground">
+                <p className="mb-2 text-meta font-semibold text-muted-foreground">
                   Clone onto
                 </p>
                 {daemonsLoading ? (
-                  <div className="flex items-center gap-2 py-3 text-sm text-muted-foreground">
+                  <div className="flex items-center gap-2 py-3 text-ui text-muted-foreground">
                     <Loader2 className="h-4 w-4 animate-spin" />
                     Loading machines…
                   </div>
                 ) : activeDaemons.length === 0 ? (
-                  <p className="rounded-lg border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
+                  <p className="rounded-lg border border-border bg-muted/30 p-3 text-meta text-muted-foreground">
                     No active machines available. Start or resume a machine on
                     desktop, then come back here.
                   </p>
@@ -178,7 +178,7 @@ export function MobileGitHubCloneSheet({
                           )}
                         >
                           <Server className="h-4 w-4 shrink-0 text-muted-foreground" />
-                          <span className="min-w-0 flex-1 truncate text-sm text-foreground">
+                          <span className="min-w-0 flex-1 truncate text-ui text-foreground">
                             {machineDisplayName(daemon)}
                           </span>
                           <span
@@ -195,7 +195,7 @@ export function MobileGitHubCloneSheet({
               </div>
 
               <div>
-                <label className="mb-1 block text-xs font-semibold text-muted-foreground">
+                <label className="mb-1 block text-meta font-semibold text-muted-foreground">
                   Branch
                 </label>
                 <input
@@ -203,11 +203,11 @@ export function MobileGitHubCloneSheet({
                   value={branch}
                   onChange={(e) => setBranch(e.target.value)}
                   placeholder={repo.defaultBranch || "main"}
-                  className="w-full min-h-[44px] rounded-lg border border-border bg-background px-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                  className="w-full min-h-[44px] rounded-lg border border-border bg-background px-3 text-ui text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                 />
               </div>
 
-              <p className="break-all text-xs text-muted-foreground">
+              <p className="break-all text-meta text-muted-foreground">
                 Will clone to <code className="text-foreground">{path}</code>
               </p>
 

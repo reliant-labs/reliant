@@ -64,8 +64,11 @@ const (
 	goBuildPrefix = "go-build"
 	goLinkPrefix  = "go-link-"
 	// commandGoTmpBasePrefix and commandGoTmpPrefix name the daemon's
-	// per-command GOTMPDIR roots, <temp dir>/reliant-gotmp-<uid>/gotmp-<pid>-<n>
-	// (proctree.GoTmpBasePrefix, proctree.GoTmpPrefix; a test holds them equal).
+	// per-command GOTMPDIR roots, <temp dir>/reliant-gotmp-<uid>/gotmp-<pid>-<n>,
+	// or gotmp-<pid>-c<n> for one whose command has a cgroup, which proctree
+	// frees when it retires that cgroup; this pass judges both by the same
+	// /proc proof (proctree.GoTmpBasePrefix, proctree.GoTmpPrefix; a test holds
+	// them equal).
 	commandGoTmpBasePrefix = "reliant-gotmp-"
 	commandGoTmpPrefix     = "gotmp-"
 

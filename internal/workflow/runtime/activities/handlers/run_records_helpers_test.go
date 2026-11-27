@@ -14,6 +14,7 @@ import (
 func workflowStatusDeps(repo WorkflowStatusStore) WorkflowStatusDeps {
 	d := WorkflowStatusDeps{Repo: repo}
 	if o, ok := repo.(interface{ ORM() *orm.Client }); ok && o.ORM() != nil {
+		d.Triggers = NewTriggerReads(o.ORM())
 		d.Runs = NewRunRecords(o.ORM())
 		d.Workflows = NewWorkflowRuns(o.ORM())
 		d.Attention = NewAttentionRecorder(o.ORM())
