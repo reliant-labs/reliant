@@ -17,11 +17,10 @@
  *                        first column that is a time makes one series per
  *                        (numeric column, group of the text columns); anything
  *                        else is table rows; one row of figures is the panel's
- *                        numbers. The fleet: five managed sandboxes (workspace
- *                        pods `ws-<id>` on two GKE nodes) and two self-hosted
- *                        machines, `cicd` (a current daemon) and `ovh-build-1`
- *                        (a daemon from before MachineStats: identity, disk and
- *                        processes, no load or memory)
+ *                        numbers. The fleet: five sandboxes (workspace pods
+ *                        `ws-<id>` on two GKE nodes). The platform's self-hosted
+ *                        machines are control-plane's Platform machines
+ *                        dashboard, not this one
  *
  * Ported from the visual harness's own fixtures (e2e/visual, before it served
  * this pack). Every time is relative to the pack clock.
@@ -111,7 +110,6 @@ export const chartHoverHandlers = (): MockHandlers =>
 const SANDBOXES = JSON.parse(spec) as { title: string; description: string; panels: { id: string; sql?: string; unit?: string }[] };
 const PODS = ["ws-2aab1465", "ws-e164d47d", "ws-1e76f570", "ws-929888f7", "ws-b1b21231"];
 const NODES = ["gke-prod-daemon-v2-pool-a-7c1f", "gke-prod-daemon-v2-pool-a-9d42"];
-const MACHINES = ["cicd", "ovh-build-1"];
 
 /** A deterministic wave in [lo, hi], one cycle about every `period` points, shifted by `phase`. */
 const wave = (i: number, lo: number, hi: number, phase = 0, period = 24) =>
@@ -159,7 +157,7 @@ function sandboxesAnswer(id: string, w: Buckets): { columns: string[]; rows?: Re
   const daily = (cols: string[], f: (d: number, c: number) => number) => ({ columns: cols, series: cols.map((c, k) => series(c, {}, w.days, (d) => f(d, k))), daily: true });
   switch (id) {
     case "fleet-now":
-      return { columns: ["sandboxes", "managed_awake", "self_hosted_reporting", "users_with_a_managed_sandbox", "managed_cpu_cores_in_use", "managed_memory_gib_in_use"], rows: [row({}, [7, 5, 2, 4, 6.42, 22.8])] };
+      return { columns: ["sandboxes", "users_with_a_sandbox", "cpu_cores_in_use", "memory_gib_in_use"], rows: [row({}, [5, 4, 6.42, 22.8])] };
     case "health-now":
       return { columns: ["sandboxes_sampled", "over_1_5_load_per_cpu", "worst_load_per_cpu", "min_disk_free", "heavy_waiting", "forge_installs"], rows: [row({}, [5, 1, 1.82, 0.124, 2, 3])] };
     case "awake-over-time":
@@ -224,30 +222,6 @@ function sandboxesAnswer(id: string, w: Buckets): { columns: string[]; rows?: Re
           ]),
         ),
       };
-    case "platform-machines-latest": {
-      // ClickHouse's DateTime text, seconds before the pack clock.
-      const seen = (ago: number) => new Date(demoNow() - ago).toISOString().slice(0, 19).replace("T", " ");
-      return {
-        columns: ["minutes_silent", "cpus", "load5", "load5_per_cpu", "mem_available_pct", "processes", "process_limit", "fullest_used_pct"],
-        rows: [
-          row({ machine: "cicd", last_seen: seen(19_000), fullest_volume: "/home", fullest_paths: "/home/workspace/.cache/go-build" }, [0, 32, 11.4, 0.36, 61.2, 1840, 65536, 71.5]),
-          // A daemon from before MachineStats: no load or memory keys.
-          row({ machine: "ovh-build-1", last_seen: seen(63_000), fullest_volume: "/", fullest_paths: "/var/lib/docker" }, [1, 16, null, null, null, 912, 32768, 48.3]),
-        ],
-      };
-    }
-    case "platform-disk-used":
-      return {
-        columns: ["used"],
-        series: ([["cicd · /", 0.42], ["cicd · /home", 0.66], ["ovh-build-1 · /", 0.45]] as const).map(([volume, base], v) =>
-          series("used", { volume }, T, (i) => Math.round((base + wave(i, 0, 0.06, v * 9)) * 1000) / 1000),
-        ),
-      };
-    case "platform-load5-per-cpu":
-      // Only cicd's daemon reports load.
-      return { columns: ["load5_per_cpu"], series: perMachine("machine", "load5_per_cpu", MACHINES.slice(0, 1), (i) => wave(i, 0.08, 0.72, 5)) };
-    case "platform-mem-available":
-      return { columns: ["mem_available"], series: perMachine("machine", "mem_available", MACHINES.slice(0, 1), (i) => wave(i, 0.38, 0.81, 2)) };
     default:
       return undefined;
   }

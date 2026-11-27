@@ -23,7 +23,9 @@ import (
 // core.ErrPipelineVersionConflict.
 
 const pipelineRepoColumns = `id, org_id, project_id, provider, account_key, repository_id, repository,
-	base_branch, mode, config_sha, config_json, config_error, config_error_sha, queue_state, queue_paused_by_decision_id,
+	base_branch, mode, config_sha, config_json, config_error, config_error_sha,
+	config_pending_sha, config_pending_at, config_pending_sender_id, config_pending_sender_login,
+	config_pending_attempts, config_pending_retry_at, queue_state, queue_paused_by_decision_id,
 	created_by_user_id, created_at, updated_at, version`
 
 // GetPipelineRepo returns the enrolled repository with id, or nil when there

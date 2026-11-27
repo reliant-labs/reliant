@@ -120,7 +120,7 @@ func testUserRoutes(t *testing.T, opts MountOptions) *UserRoutes {
 		PullRequestRecord: &pull_request_record.Service{},
 		ChatTrace:         &chat_trace.Service{},
 		Pipeline:          &pipeline.Service{},
-		Gtm:               &gtm.Service{},
+		SvcGtm:            &gtm.Service{},
 		Logger:            slog.Default(),
 		Options:           opts,
 	})

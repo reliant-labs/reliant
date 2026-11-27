@@ -15,7 +15,7 @@ func (f *fixture) enqueue(p *testPR, params map[string]any) map[string]any {
 	if params == nil {
 		params = map[string]any{"record_id": p.recordID}
 	}
-	h := mergequeue.EnqueueHandler{Store: f.db, Workdirs: fixedWorkdir{f.wd}}
+	h := mergequeue.EnqueueHandler{Store: f.db, Refs: f.wd, Builder: f.wd, Authorizer: f.auth}
 	res, err := h.Handle(f.ctx, &serveraction.Request{
 		Name: mergequeue.EnqueueAction, Params: params,
 		Principal: serveraction.Principal{UserID: testUser, OrgID: testOrg, ProjectID: testProject},

@@ -704,7 +704,7 @@ export function ComputeStep({
 
         {!loading && !HAS_CLOUD_DAEMONS && (
           <p className="px-1 text-xs leading-relaxed text-muted-foreground">
-            Hosted machines aren&apos;t available here. Use your own computer —
+            Sandboxes aren&apos;t available here. Use your own computer —
             it&apos;s free.
           </p>
         )}
