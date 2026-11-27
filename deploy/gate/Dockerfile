@@ -103,10 +103,10 @@ FROM golang:1.27.4-bookworm AS gotools
 RUN GOBIN=/out GOFLAGS=-trimpath go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0
 
 FROM golang:1.27.4-bookworm AS forgebuild
-# PLACEHOLDER: set FORGE_VERSION to a released forge version (or commit) that
-# has `forge cache prog`. Every go command in the gate runs through it
-# (GOCACHEPROG, below), so a forge without it fails every Go build.
-ARG FORGE_VERSION=main
+# FORGE_VERSION must be a forge with `forge cache prog` (forge#3076 and later).
+# Every go command in the gate runs through it (GOCACHEPROG, below), so a
+# forge without it fails every Go build.
+ARG FORGE_VERSION=v1.13.1-0.20261127154748-0b29fb6eba25
 RUN GOBIN=/out GOFLAGS=-trimpath go install "github.com/reliant-labs/forge/cmd/forge@${FORGE_VERSION}"
 
 FROM node:24-bookworm-slim AS node
