@@ -116,6 +116,12 @@ var serverSafeTools = map[string]struct{}{
 	ToolProposeConnection: {},
 	// Forge Changes live in the control plane, reached as the user.
 	ToolListChanges: {}, ToolGetChange: {}, ToolManageChange: {}, ToolChangeResults: {},
+	// GTM is database reads and writes through internal/gtm; analytics is a
+	// control-plane query and an email goes out through the Gmail API.
+	ToolListGtmIdeas: {}, ToolSaveGtmIdea: {}, ToolListGtmStrategies: {}, ToolSaveGtmStrategy: {},
+	ToolListGtmStrategyLibrary: {}, ToolListGtmCampaigns: {}, ToolSaveGtmCampaign: {}, ToolListGtmCalendar: {},
+	ToolSaveGtmItem: {}, ToolListGtmChannels: {}, ToolSaveGtmChannel: {}, ToolGetGtmPositioning: {},
+	ToolCheckGtmClaims: {}, ToolReadProductAnalytics: {}, ToolAttachGtmAsset: {}, ToolSendGtmEmail: {},
 }
 
 // noMachineOnlyTools are tools that exist only for a run with no machine, and

@@ -17,8 +17,8 @@ import (
 )
 
 // A feature-gated tool is listed only to a member of some org entitled to its
-// feature. No real tool is gated yet, so websearch is gated for the test
-// (tools.GateToolForTest swaps process-wide state: not parallel).
+// feature: the shipped gated tools (GTM's), and websearch, gated for the
+// test (tools.GateToolForTest swaps process-wide state: not parallel).
 func TestListTools_FeatureGatedToolsAreListedOnlyToEntitledCallers(t *testing.T) {
 	tools.GateToolForTest(t, tools.ToolWebSearch, featuregate.GTM)
 
@@ -58,7 +58,10 @@ func TestListTools_FeatureGatedToolsAreListedOnlyToEntitledCallers(t *testing.T)
 			names := listed(t, gate)
 			assert.False(t, names[tools.ToolWebSearch])
 			assert.True(t, names[tools.ToolFetch])
-			assert.Len(t, names, len(tools.GetToolRegistry())-1)
+			for name := range tools.FeatureGatedTools() {
+				assert.False(t, names[name], "gated tool %q is listed", name)
+			}
+			assert.Len(t, names, len(tools.GetToolRegistry())-len(tools.FeatureGatedTools()))
 		})
 	}
 }

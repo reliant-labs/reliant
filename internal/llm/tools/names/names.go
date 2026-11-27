@@ -151,6 +151,28 @@ const (
 	ToolManageChange = "manage_change"
 	// An experiment run's results (a ClickHouse read per call).
 	ToolChangeResults = "change_results"
+
+	// GTM (internal/gtm): an org's ideas, strategies, campaigns, calendar
+	// items, channels, positioning and claims, as an agent. Feature-gated:
+	// to a caller not entitled to GTM they do not exist, but a workflow
+	// still validates by their exact names.
+	ToolListGtmIdeas           = "list_gtm_ideas"
+	ToolSaveGtmIdea            = "save_gtm_idea"
+	ToolListGtmStrategies      = "list_gtm_strategies"
+	ToolSaveGtmStrategy        = "save_gtm_strategy"
+	ToolListGtmStrategyLibrary = "list_gtm_strategy_library"
+	ToolListGtmCampaigns       = "list_gtm_campaigns"
+	ToolSaveGtmCampaign        = "save_gtm_campaign"
+	ToolListGtmCalendar        = "list_gtm_calendar"
+	ToolSaveGtmItem            = "save_gtm_item"
+	ToolListGtmChannels        = "list_gtm_channels"
+	ToolSaveGtmChannel         = "save_gtm_channel"
+	ToolGetGtmPositioning      = "get_gtm_positioning"
+	ToolCheckGtmClaims         = "check_gtm_claims"
+	ToolReadProductAnalytics   = "read_product_analytics"
+	ToolAttachGtmAsset         = "attach_gtm_asset"
+	// Sends an APPROVED GTM email item, behind the owner's approval card.
+	ToolSendGtmEmail = "send_gtm_email"
 )
 
 // AllToolNames returns all known tool names for validation.
@@ -160,6 +182,11 @@ var AllToolNames = []string{
 	ToolWaitForMachine, ToolListMachines, ToolManageMachine, ToolManageMachinePool,
 	ToolProposeConnection,
 	ToolListChanges, ToolGetChange, ToolManageChange, ToolChangeResults,
+	// GTM (feature-gated)
+	ToolListGtmIdeas, ToolSaveGtmIdea, ToolListGtmStrategies, ToolSaveGtmStrategy, ToolListGtmStrategyLibrary,
+	ToolListGtmCampaigns, ToolSaveGtmCampaign, ToolListGtmCalendar, ToolSaveGtmItem,
+	ToolListGtmChannels, ToolSaveGtmChannel, ToolGetGtmPositioning, ToolCheckGtmClaims,
+	ToolReadProductAnalytics, ToolAttachGtmAsset, ToolSendGtmEmail,
 	ToolProveTest,
 	ToolFetch, ToolWebSearch,
 	ToolCreatePlan, ToolUpdatePlan, ToolGetPlan,

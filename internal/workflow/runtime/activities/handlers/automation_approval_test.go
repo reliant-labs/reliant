@@ -37,5 +37,5 @@ func TestAutomationApprovalRefusalNamesTheGtmEmailSend(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Empty(t, out.Hash)
-	require.Equal(t, "GTM email send could not be validated for approval: this tool does not support activation approval. Nothing changed.", out.Refusal)
+	require.Equal(t, "GTM email send could not be validated for approval: the calling chat could not be resolved. Nothing changed.", out.Refusal)
 }

@@ -30,6 +30,14 @@ var generatedToolParams = map[string]ToolParams{
 		},
 		Unbindable: map[string]string{},
 	},
+	"attach_gtm_asset": {
+		Bindable: map[string]struct{}{
+			"attachment_id": {},
+			"campaign_id":   {},
+			"item_id":       {},
+		},
+		Unbindable: map[string]string{},
+	},
 	"cel_eval": {
 		Bindable: map[string]struct{}{
 			"activation_params": {},
@@ -51,6 +59,13 @@ var generatedToolParams = map[string]ToolParams{
 		Bindable: map[string]struct{}{
 			"change_id": {},
 			"run_id":    {},
+		},
+		Unbindable: map[string]string{},
+	},
+	"check_gtm_claims": {
+		Bindable: map[string]struct{}{
+			"item_id": {},
+			"text":    {},
 		},
 		Unbindable: map[string]string{},
 	},
@@ -291,6 +306,10 @@ var generatedToolParams = map[string]ToolParams{
 		Bindable: map[string]struct{}{
 			"change_id": {},
 		},
+		Unbindable: map[string]string{},
+	},
+	"get_gtm_positioning": {
+		Bindable:   map[string]struct{}{},
 		Unbindable: map[string]string{},
 	},
 	"get_integration_schema": {
@@ -762,6 +781,73 @@ var generatedToolParams = map[string]ToolParams{
 		},
 		Unbindable: map[string]string{},
 	},
+	"list_gtm_calendar": {
+		Bindable: map[string]struct{}{
+			"campaign_id": {},
+			"channel_id":  {},
+			"format":      {},
+			"from":        {},
+			"id":          {},
+			"page_size":   {},
+			"page_token":  {},
+			"status":      {},
+			"to":          {},
+		},
+		Unbindable: map[string]string{},
+	},
+	"list_gtm_campaigns": {
+		Bindable: map[string]struct{}{
+			"id":          {},
+			"page_size":   {},
+			"page_token":  {},
+			"status":      {},
+			"strategy_id": {},
+		},
+		Unbindable: map[string]string{},
+	},
+	"list_gtm_channels": {
+		Bindable: map[string]struct{}{
+			"id":     {},
+			"mode":   {},
+			"status": {},
+		},
+		Unbindable: map[string]string{},
+	},
+	"list_gtm_ideas": {
+		Bindable: map[string]struct{}{
+			"campaign_id": {},
+			"id":          {},
+			"kind":        {},
+			"page_size":   {},
+			"page_token":  {},
+			"status":      {},
+		},
+		Unbindable: map[string]string{},
+	},
+	"list_gtm_strategies": {
+		Bindable: map[string]struct{}{
+			"id":         {},
+			"page_size":  {},
+			"page_token": {},
+			"status":     {},
+		},
+		Unbindable: map[string]string{},
+	},
+	"list_gtm_strategy_library": {
+		Bindable: map[string]struct{}{
+			"category":   {},
+			"cost":       {},
+			"depth":      {},
+			"difficulty": {},
+			"fit":        {},
+			"key":        {},
+			"page_size":  {},
+			"page_token": {},
+			"query":      {},
+			"stage":      {},
+		},
+		Unbindable: map[string]string{},
+	},
 	"list_machines": {
 		Bindable:   map[string]struct{}{},
 		Unbindable: map[string]string{},
@@ -952,6 +1038,18 @@ var generatedToolParams = map[string]ToolParams{
 		},
 		Unbindable: map[string]string{},
 	},
+	"read_product_analytics": {
+		Bindable: map[string]struct{}{
+			"days":     {},
+			"events":   {},
+			"from":     {},
+			"limit":    {},
+			"property": {},
+			"template": {},
+			"to":       {},
+		},
+		Unbindable: map[string]string{},
+	},
 	"remove_dependency": {
 		Bindable: map[string]struct{}{
 			"from_task": {},
@@ -994,12 +1092,93 @@ var generatedToolParams = map[string]ToolParams{
 			"save_to":       "every save would target the same file, so each call destroys the last one's output",
 		},
 	},
+	"save_gtm_campaign": {
+		Bindable: map[string]struct{}{
+			"clear_period_end":    {},
+			"clear_period_start":  {},
+			"expected_revision":   {},
+			"goal":                {},
+			"id":                  {},
+			"name":                {},
+			"period_end":          {},
+			"period_start":        {},
+			"planned_channel_ids": {},
+			"planned_formats":     {},
+			"strategy_id":         {},
+		},
+		Unbindable: map[string]string{},
+	},
+	"save_gtm_channel": {
+		Bindable: map[string]struct{}{
+			"channel_types":          {},
+			"expected_revision":      {},
+			"id":                     {},
+			"key":                    {},
+			"manual_instructions_md": {},
+			"name":                   {},
+			"status":                 {},
+		},
+		Unbindable: map[string]string{},
+	},
+	"save_gtm_idea": {
+		Bindable: map[string]struct{}{
+			"body_md":           {},
+			"campaign_id":       {},
+			"evidence":          {},
+			"expected_revision": {},
+			"id":                {},
+			"kind":              {},
+			"title":             {},
+		},
+		Unbindable: map[string]string{},
+	},
+	"save_gtm_item": {
+		Bindable: map[string]struct{}{
+			"body_md":            {},
+			"campaign_id":        {},
+			"channel_id":         {},
+			"clear_scheduled_at": {},
+			"email_subject":      {},
+			"email_to":           {},
+			"expected_revision":  {},
+			"format":             {},
+			"id":                 {},
+			"idea_id":            {},
+			"scheduled_at":       {},
+			"status":             {},
+			"title":              {},
+		},
+		Unbindable: map[string]string{},
+	},
+	"save_gtm_strategy": {
+		Bindable: map[string]struct{}{
+			"campaign_name":         {},
+			"category":              {},
+			"create_first_campaign": {},
+			"expected_revision":     {},
+			"from_library_key":      {},
+			"goal_md":               {},
+			"id":                    {},
+			"name":                  {},
+			"period_end":            {},
+			"period_start":          {},
+			"target_metric":         {},
+		},
+		Unbindable: map[string]string{},
+	},
 	"search_integrations": {
 		Bindable: map[string]struct{}{
 			"connected_only": {},
 			"kind":           {},
 			"limit":          {},
 			"query":          {},
+		},
+		Unbindable: map[string]string{},
+	},
+	"send_gtm_email": {
+		Bindable: map[string]struct{}{
+			"expected_revision": {},
+			"item_id":           {},
 		},
 		Unbindable: map[string]string{},
 	},
@@ -1438,4 +1617,21 @@ var generatedKnownTags = []string{
 
 // generatedFeatureGated maps each feature-gated tool to its feature,
 // projected from the registry's feature-gated map (tools.FeatureGate).
-var generatedFeatureGated = map[string]string{}
+var generatedFeatureGated = map[string]string{
+	"attach_gtm_asset":          "gtm",
+	"check_gtm_claims":          "gtm",
+	"get_gtm_positioning":       "gtm",
+	"list_gtm_calendar":         "gtm",
+	"list_gtm_campaigns":        "gtm",
+	"list_gtm_channels":         "gtm",
+	"list_gtm_ideas":            "gtm",
+	"list_gtm_strategies":       "gtm",
+	"list_gtm_strategy_library": "gtm",
+	"read_product_analytics":    "gtm",
+	"save_gtm_campaign":         "gtm",
+	"save_gtm_channel":          "gtm",
+	"save_gtm_idea":             "gtm",
+	"save_gtm_item":             "gtm",
+	"save_gtm_strategy":         "gtm",
+	"send_gtm_email":            "gtm",
+}
