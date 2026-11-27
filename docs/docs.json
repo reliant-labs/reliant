@@ -108,6 +108,8 @@
                   "integrations/connectors",
                   "integrations/github",
                   "integrations/gmail",
+                  "integrations/google-calendar",
+                  "integrations/google-sheets",
                   "integrations/slack",
                   "integrations/http",
                   "integrations/twilio"
@@ -286,7 +288,7 @@
               "hosting/observability/dashboards-and-alerts",
               "hosting/observability/status-page",
               "hosting/observability/runtime-context",
-              "forge/observability/speed-insights",
+              "forge/observability/site-insights",
               "forge/observability/product-analytics",
               "forge/observability/changes",
               "hosting/observability/session-timelines",
@@ -603,6 +605,10 @@
     }
   },
   "redirects": [
+    {
+      "source": "/forge/observability/speed-insights",
+      "destination": "/forge/observability/site-insights"
+    },
     {
       "source": "/features/remote-daemons",
       "destination": "/machines/overview"

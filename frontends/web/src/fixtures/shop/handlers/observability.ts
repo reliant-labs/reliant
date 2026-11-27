@@ -243,7 +243,7 @@ function wireSpan(s: Span) {
 export function observabilityHandlers(fixtures: ObservabilityApi = createShopApi(), { clock = demoNow }: { clock?: PackClock } = {}) {
   return {
     ...observabilityServiceHandlers(fixtures, clock),
-    ...alertingHandlers(fixtures),
+    ...alertingHandlers(fixtures, { clock }),
     ...deliveryHandlers(fixtures),
     ...issuesHandlers(fixtures, { clock }),
     ...userHandlers(fixtures),

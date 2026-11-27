@@ -608,8 +608,13 @@ run_step() {
       [ -n "${pkgs// /}" ] || { echo "test-go: shard $RG_GO_SHARD is empty; lower the shard count"; return 1; }
       echo "test-go${RG_GO_SHARD:+ shard $RG_GO_SHARD}: $(wc -w <<<"$pkgs") package pattern(s)"
       pinned_forge_bin || { echo "test-go: could not build the pinned forge (go.mod's github.com/reliant-labs/forge/cmd/forge)"; return 1; }
+      # -vet=off (GO_TEST_VET, Taskfile.yml): the vet step's `vet.sh ./...`
+      # vets every root-module package these test, test files included, and a
+      # record needs every step. A hotfix gate has no vet step, but its merge
+      # step's vet phase covers every package with a changed .go file. Not
+      # integration or e2e: their build tags select files ./... never vets.
       # shellcheck disable=SC2086 # one word per package
-      task test -- $pkgs ;;
+      GO_TEST_VET=${GO_TEST_VET--vet=off} task test -- $pkgs ;;
     test-web) task test:web ;;
     test-electron) task test:electron ;;
     integration) task test:integration ;;

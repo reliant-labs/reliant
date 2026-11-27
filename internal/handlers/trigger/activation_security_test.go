@@ -60,7 +60,7 @@ func TestAgentActivationChildMutationInvalidatesApproval(t *testing.T) {
 	require.NotEqual(t, before.Hash, after.Hash)
 	_, err = e.svc.ManageActivation(e.ctx, e.userID, tools.ToolCreateTriggerActivation, p, before.Hash)
 	require.ErrorContains(t, err, "changed after approval")
-	rows, err := e.repo.ListTriggers(e.ctx, core.TriggerFilters{UserID: e.userID})
+	rows, err := store.ListTriggersForUser(e.ctx, e.repo.ORM(), core.TriggerFilters{UserID: e.userID})
 	require.NoError(t, err)
 	require.Empty(t, rows)
 }

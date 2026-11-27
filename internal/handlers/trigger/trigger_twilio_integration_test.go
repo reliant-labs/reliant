@@ -235,7 +235,7 @@ func TestTwilioMessagesLaunchRunsEndToEnd(t *testing.T) {
 // run's nodes see (the chat's launch event, as LoadChatTrigger rebuilds it).
 func assertRunSees(t *testing.T, repo *db.Repo, chatID, condition string) {
 	t.Helper()
-	info := launch.LoadChatTrigger(context.Background(), repo, chatID)
+	info := launch.LoadChatTrigger(context.Background(), store.NewTriggerEventExtStore(repo.ORM()), chatID)
 	require.NotNil(t, info)
 	f, err := triggers.CompileFilter(condition)
 	require.NoError(t, err)

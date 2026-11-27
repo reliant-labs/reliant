@@ -11,6 +11,7 @@ import (
 	"github.com/reliant-labs/forge/pkg/orm"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/pipeline/grants"
 	"github.com/reliant-labs/reliant/internal/pipeline/prpolicy"
 	"github.com/reliant-labs/reliant/internal/serveraction"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
@@ -141,6 +142,10 @@ func (s *Service) Verdict(ctx context.Context, req *serveraction.Request) (*serv
 		paths = append(paths, path)
 	}
 	slices.Sort(paths)
+	required := requiredDecisions(p.cfg, head, paths)
+	if detail.FilesUnknown {
+		required = requiredDecisionsAnyPath(p.cfg, head)
+	}
 	counted := dec.Findings
 	if counted == nil {
 		counted = []prpolicy.Finding{}
@@ -151,13 +156,22 @@ func (s *Service) Verdict(ctx context.Context, req *serveraction.Request) (*serv
 		round = v.Round + 1
 	}
 
+	if verdict == core.PRHeadVerdictPass {
+		if err := s.authorizeApprove(ctx, p); err != nil {
+			return nil, err
+		}
+	}
+
 	var written *core.PRHeadVerdictRecord
 	err = s.deps.Store.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
 		v, err := s.deps.Store.InsertPRHeadVerdict(ctx, core.PRHeadVerdictRecord{
 			OrgID: p.repo.OrgID, ProjectID: p.repo.ProjectID, RecordID: p.rec.ID, HeadSHA: head, Round: round,
 			Verdict: verdict, Rule: core.PRVerdictRuleModel, RiskTier: risk, FindingsJSON: findings,
-			RequiredDecisions: requiredDecisions(p.cfg, head, paths),
+			RequiredDecisions: required,
 			RunID:             inv.RunID, NodeID: from, ReviewerPrincipal: principal,
+			// The activation and machine the verdict came from, so the
+			// land check can ask whether that activation still holds land.
+			TriggerID: req.Principal.TriggerID, DaemonID: req.Principal.DaemonID,
 		})
 		if err != nil {
 			return err
@@ -186,6 +200,36 @@ func (s *Service) Verdict(ctx context.Context, req *serveraction.Request) (*serv
 		return nil, casError(err)
 	}
 	return s.verdictResult(ctx, p, written)
+}
+
+// authorizeApprove holds a pass to the owner's grant: the run's activation
+// must hold the approve capability on a pool the run's machine is a member
+// of (internal/pipeline/grants). In mode on a run without it is refused and
+// nothing is written. In shadow mode, which writes nothing to GitHub, the
+// refusal is only logged and the verdict is recorded, so a repository can
+// be watched in shadow before its owner grants anything.
+func (s *Service) authorizeApprove(ctx context.Context, p *prCall) error {
+	pr, inv := p.req.Principal, p.req.Invocation
+	run := grants.Run{RunID: inv.RunID, ChatID: inv.ChatID, TriggerID: pr.TriggerID, DaemonID: pr.DaemonID, UserID: pr.UserID, RepoID: p.repo.ID}
+	var err error
+	if s.deps.Grants == nil {
+		err = &grants.NotAuthorizedError{Capability: grants.Approve, Reason: grants.ReasonNoGrant, Detail: "this server checks no capability grants"}
+	} else {
+		err = s.deps.Grants.Authorize(ctx, run, grants.Approve)
+	}
+	switch {
+	case err == nil:
+		return nil
+	case !errors.Is(err, grants.ErrNotAuthorized):
+		return err
+	case p.shadow():
+		s.log.WarnContext(ctx, "shadow: a pass verdict would be refused without the approve grant; recorded",
+			"record_id", p.rec.ID, "repo_id", p.repo.ID, "run_id", inv.RunID, "trigger_id", pr.TriggerID,
+			"daemon_id", pr.DaemonID, "reason", string(grants.ReasonOf(err)))
+		return nil
+	}
+	return serveraction.Errorf(serveraction.CodePermissionDenied,
+		"%s's pass is not recorded: %v. Ask the owner for it with reliant/pipeline.request_grant@1", prName(p), err)
 }
 
 // verdictResult is what the head needs after verdict v: pr.next's answer,

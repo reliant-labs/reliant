@@ -4,11 +4,12 @@ package mergequeue
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/mergequeue/buildjob"
 	"github.com/reliant-labs/reliant/internal/mergequeue/ghport"
-	"github.com/reliant-labs/reliant/internal/mergequeue/gitport"
 	"github.com/reliant-labs/reliant/internal/pipeline/config"
 )
 
@@ -42,19 +43,62 @@ type Store interface {
 	InsertMainHealth(ctx context.Context, h core.MainHealthRecord) (*core.MainHealthRecord, error)
 }
 
-// Workdir is where the queue builds one repository's candidates: a git
-// directory it owns, the remote it fetches from and pushes to (credentials in
-// the git environment, never the URL), and the GitHub client it reads with.
-type Workdir struct {
-	Git    gitport.Port
-	Remote string
-	GitHub ghport.Client
+// Builder runs the queue's code operations. The queue holds no repository
+// bytes (owner, 2026-11-27): building a batch's candidate and listing a
+// head's changed paths are jobs on a daemon of the repository's gate pool,
+// which reports back only ids, paths and verdicts (buildjob). An error means
+// the job reached no answer; a retry with the same request is safe.
+type Builder interface {
+	Build(ctx context.Context, repo *core.PipelineRepo, req buildjob.BuildRequest) (buildjob.BuildResult, error)
+	ChangedPaths(ctx context.Context, repo *core.PipelineRepo, req buildjob.PathsRequest) (buildjob.PathsResult, error)
 }
 
-// Workdirs opens a repository's [Workdir]. A worker keeps one per repository
-// it leads; the scheduler asks for it at the start of every tick.
-type Workdirs interface {
-	Open(ctx context.Context, repo *core.PipelineRepo) (Workdir, error)
+// Refs reads a branch's tip commit through the GitHub API: metadata, never
+// repository contents.
+type Refs interface {
+	BranchTip(ctx context.Context, repo *core.PipelineRepo, branch string) (string, error)
+}
+
+// ClientRefs is [Refs] over a per-repository GitHub client.
+type ClientRefs struct {
+	Clients interface {
+		Client(ctx context.Context, repo *core.PipelineRepo) (ghport.Client, error)
+	}
+}
+
+// BranchTip implements Refs.
+func (c ClientRefs) BranchTip(ctx context.Context, repo *core.PipelineRepo, branch string) (string, error) {
+	gh, err := ghport.ParseRepo(repo.Repository)
+	if err != nil {
+		return "", err
+	}
+	client, err := c.Clients.Client(ctx, repo)
+	if err != nil {
+		return "", err
+	}
+	ref, err := client.GetRef(ctx, gh, ghport.BranchRef(branch))
+	if err != nil {
+		return "", err
+	}
+	return ref.SHA, nil
+}
+
+// NoBuilder is the [Builder] of a server with no gate pool daemon to run
+// code operations on: every job is refused, so nothing is built and an
+// entry needing its changed paths is not admitted.
+type NoBuilder struct{}
+
+// ErrNoBuilder is every [NoBuilder] job.
+var ErrNoBuilder = errors.New("mergequeue: no gate pool daemon runs this repository's code operations")
+
+// Build implements Builder.
+func (NoBuilder) Build(context.Context, *core.PipelineRepo, buildjob.BuildRequest) (buildjob.BuildResult, error) {
+	return buildjob.BuildResult{}, ErrNoBuilder
+}
+
+// ChangedPaths implements Builder.
+func (NoBuilder) ChangedPaths(context.Context, *core.PipelineRepo, buildjob.PathsRequest) (buildjob.PathsResult, error) {
+	return buildjob.PathsResult{}, ErrNoBuilder
 }
 
 // Configs resolves a repository's pipeline.yaml, as read from its base
@@ -103,6 +147,9 @@ type GateRequest struct {
 	// AvoidMachines are members that already left this batch unproven: a
 	// retry asks for another one.
 	AvoidMachines []string
+	// PreferMachine is the member that built the candidate, to try first:
+	// its git cache already holds it. "" prefers none.
+	PreferMachine string
 }
 
 // GateResult is a gate's verdict: the queue's half of the MVP contract's

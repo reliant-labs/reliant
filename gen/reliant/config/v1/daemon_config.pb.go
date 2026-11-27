@@ -233,8 +233,30 @@ type DaemonConfig struct {
 	// mounted read-only into each gate for its sbom_scan stage. Empty: no
 	// database, so a scan is unscanned and the gate unproven.
 	GateVulnDbDir string `protobuf:"bytes,34,opt,name=gate_vuln_db_dir,json=gateVulnDbDir,proto3" json:"gate_vuln_db_dir,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	// The cpu.weight a command run under a heavy slot is lowered to while it
+	// runs, against the kernel's 100 for every other command the daemon runs,
+	// so the agents' shells and dev servers win the CPU they contend for with
+	// a build (internal/heavyjob; Linux, where the daemon's command cgroups
+	// have the cpu controller). 0 (unset) is 25; 100 or more lowers nothing.
+	HeavyCpuWeight int32 `protobuf:"varint,35,opt,name=heavy_cpu_weight,json=heavyCpuWeight,proto3" json:"heavy_cpu_weight,omitempty"`
+	// The memory.high a command run under a heavy slot is bounded by while it
+	// runs: past it the kernel reclaims and slows the command, and never
+	// OOM-kills it (internal/heavyjob; Linux, where the daemon's command
+	// cgroups have the memory controller). Unset derives it from the slot
+	// pool: 1.5x one slot's part of the machine's memory, at least 12 GiB.
+	// "off" sets none; otherwise a size, in bytes or with a binary suffix
+	// (16G, 16GiB, 512M).
+	HeavyMemoryHigh string `protobuf:"bytes,36,opt,name=heavy_memory_high,json=heavyMemoryHigh,proto3" json:"heavy_memory_high,omitempty"`
+	// The machine's trusted Go build cache (a plain GOCACHE directory that
+	// only main's seeding writes), bind-mounted read-only into each gate at
+	// /gate/trusted-go-build, where the gate image's GOCACHEPROG reads it
+	// before the gate's own cache. Unset is /var/cache/workspace/go-build-trusted,
+	// mounted when it exists; "off" mounts nothing. A directory that is not a
+	// real, absolute directory, or is group- or world-writable, is not mounted
+	// (the gate logs why and runs on its own cache).
+	GateTrustedGoCache string `protobuf:"bytes,37,opt,name=gate_trusted_go_cache,json=gateTrustedGoCache,proto3" json:"gate_trusted_go_cache,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *DaemonConfig) Reset() {
@@ -491,6 +513,27 @@ func (x *DaemonConfig) GetGateVulnDbDir() string {
 	return ""
 }
 
+func (x *DaemonConfig) GetHeavyCpuWeight() int32 {
+	if x != nil {
+		return x.HeavyCpuWeight
+	}
+	return 0
+}
+
+func (x *DaemonConfig) GetHeavyMemoryHigh() string {
+	if x != nil {
+		return x.HeavyMemoryHigh
+	}
+	return ""
+}
+
+func (x *DaemonConfig) GetGateTrustedGoCache() string {
+	if x != nil {
+		return x.GateTrustedGoCache
+	}
+	return ""
+}
+
 // DaemonStatusConfig is `reliant daemon status`'s config.
 type DaemonStatusConfig struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -683,7 +726,7 @@ const file_reliant_config_v1_daemon_config_proto_rawDesc = "" +
 	"\aaccount\x18\x02 \x01(\tB|\x82\xce\x18x\n" +
 	"\x18RELIANT_INSTANCE_ACCOUNT\x12\aaccount*SAccount (user id) this daemon runs as; selects among several accounts on one serverR\aaccount\x12\xa6\x01\n" +
 	"\tworkspace\x18\x03 \x01(\tB\x87\x01\x82\xce\x18\x82\x01\n" +
-	"\x1aRELIANT_INSTANCE_WORKSPACE\x12\tworkspace*YWorkspace this daemon serves (defaults to the git worktree root of the current directory)R\tworkspace\"\x9e*\n" +
+	"\x1aRELIANT_INSTANCE_WORKSPACE\x12\tworkspace*YWorkspace this daemon serves (defaults to the git worktree root of the current directory)R\tworkspace\"\xbc/\n" +
 	"\fDaemonConfig\x12C\n" +
 	"\binstance\x18\x01 \x01(\v2'.reliant.config.v1.DaemonInstanceConfigR\binstance\x12\x9a\x01\n" +
 	"\vgateway_url\x18\x02 \x01(\tBy\x82\xce\x18u\n" +
@@ -757,7 +800,13 @@ const file_reliant_config_v1_daemon_config_proto_rawDesc = "" +
 	"gate_image\x18! \x01(\tBe\x82\xce\x18a\n" +
 	"\x19RELIANT_DAEMON_GATE_IMAGE*DImage merge-queue gates run in on this machine (empty: refuse gates)R\tgateImage\x12\xaf\x01\n" +
 	"\x10gate_vuln_db_dir\x18\" \x01(\tB\x85\x01\x82\xce\x18\x80\x01\n" +
-	"\x1fRELIANT_DAEMON_GATE_VULN_DB_DIR*]Grype database directory mounted read-only into merge-queue gates (empty: scans are unproven)R\rgateVulnDbDir:\x1c\xca\xc1\x18\x18\n" +
+	"\x1fRELIANT_DAEMON_GATE_VULN_DB_DIR*]Grype database directory mounted read-only into merge-queue gates (empty: scans are unproven)R\rgateVulnDbDir\x12\xc8\x01\n" +
+	"\x10heavy_cpu_weight\x18# \x01(\x05B\x9d\x01\xbaH\a\x1a\x05\x18\x90N(\x00\x82\xce\x18\x8e\x01\n" +
+	"\x18RELIANT_HEAVY_CPU_WEIGHT*rcpu.weight of a heavy-slot command while it runs, against 100 for other commands (0: 25; 100 or more: not lowered)R\x0eheavyCpuWeight\x12\xd9\x01\n" +
+	"\x11heavy_memory_high\x18$ \x01(\tB\xac\x01\x82\xce\x18\xa7\x01\n" +
+	"\x19RELIANT_HEAVY_MEMORY_HIGH*\x89\x01memory.high of a heavy-slot command while it runs: off, or a size such as 16G (unset: 1.5x one slot's part of the memory, at least 12GiB)R\x0fheavyMemoryHigh\x12\xf4\x01\n" +
+	"\x15gate_trusted_go_cache\x18% \x01(\tB\xc0\x01\x82\xce\x18\xbb\x01\n" +
+	"$RELIANT_DAEMON_GATE_TRUSTED_GO_CACHE*\x92\x01Trusted Go build cache mounted read-only into merge-queue gates: off, or a directory (unset: /var/cache/workspace/go-build-trusted when it exists)R\x12gateTrustedGoCache:\x1c\xca\xc1\x18\x18\n" +
 	"\areliant\x12\x06daemon\x12\x05start\"x\n" +
 	"\x12DaemonStatusConfig\x12C\n" +
 	"\binstance\x18\x01 \x01(\v2'.reliant.config.v1.DaemonInstanceConfigR\binstance:\x1d\xca\xc1\x18\x19\n" +

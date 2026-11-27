@@ -58,7 +58,7 @@ type memRoutes struct {
 	calls    int
 }
 
-func (r *memRoutes) ListTriggers(_ context.Context, f core.TriggerFilters) ([]*core.Trigger, error) {
+func (r *memRoutes) ListTriggersForUser(_ context.Context, f core.TriggerFilters) ([]*core.Trigger, error) {
 	r.calls++
 	if r.err != nil {
 		return nil, r.err
@@ -183,7 +183,7 @@ func TestRelay_RealStore_UnheardRunEventStartsNoDispatch(t *testing.T) {
 	require.NoError(t, err)
 
 	starter := &recordingStarter{}
-	relay := NewRelay(store.NewRunEventExtStore(f.repo.ORM()), starter, "test-queue").WithRoutes(f.repo)
+	relay := NewRelay(store.NewRunEventExtStore(f.repo.ORM()), starter, "test-queue").WithRoutes(store.NewTriggerExtStore(f.repo.ORM()))
 	handed, err := relay.RelayOnce(ctx)
 	require.NoError(t, err)
 	assert.Equal(t, 2, handed)

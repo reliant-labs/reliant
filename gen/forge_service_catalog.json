@@ -548,6 +548,7 @@
         "OrgResolver",
         "PauseService",
         "PayloadStore",
+        "PipelineConfigRefresh",
         "Privacy",
         "ProcessRuntime",
         "ProcessSettings",
@@ -16419,6 +16420,16 @@
             {
               "name": "has_children",
               "kind": "bool"
+            },
+            {
+              "name": "symlink_target",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "symlink_status",
+              "kind": "enum",
+              "type_name": "reliant.v1.FileNodeSymlinkStatus"
             }
           ],
           "reliant.v1.FilePreviewInfo": [
@@ -16895,6 +16906,13 @@
           "reliant.v1.SearchResult": "reliant/v1/filesystem.proto"
         },
         "Enums": {
+          "reliant.v1.FileNodeSymlinkStatus": [
+            "FILE_NODE_SYMLINK_STATUS_UNSPECIFIED",
+            "FILE_NODE_SYMLINK_STATUS_RESOLVED",
+            "FILE_NODE_SYMLINK_STATUS_BROKEN",
+            "FILE_NODE_SYMLINK_STATUS_LOOP",
+            "FILE_NODE_SYMLINK_STATUS_DENIED"
+          ],
           "reliant.v1.FileNodeType": [
             "FILE_NODE_TYPE_UNSPECIFIED",
             "FILE_NODE_TYPE_FILE",
@@ -16911,6 +16929,13 @@
           ]
         },
         "EnumNumbers": {
+          "reliant.v1.FileNodeSymlinkStatus": [
+            0,
+            1,
+            2,
+            3,
+            4
+          ],
           "reliant.v1.FileNodeType": [
             0,
             1,
@@ -16927,6 +16952,10 @@
           ]
         },
         "EnumGoRefs": {
+          "reliant.v1.FileNodeSymlinkStatus": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "FileNodeSymlinkStatus"
+          },
           "reliant.v1.FileNodeType": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
             "GoName": "FileNodeType"
@@ -24556,6 +24585,16 @@
           "auth_required": true
         },
         {
+          "id": "reliant.v1.PipelineService/ListCapabilityGrants",
+          "name": "ListCapabilityGrants",
+          "input": "reliant.v1.ListCapabilityGrantsRequest",
+          "output": "reliant.v1.ListCapabilityGrantsResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "NO_SIDE_EFFECTS",
+          "auth_required": true
+        },
+        {
           "id": "reliant.v1.PipelineService/ListQueue",
           "name": "ListQueue",
           "input": "reliant.v1.ListQueueRequest",
@@ -24563,6 +24602,16 @@
           "client_streaming": false,
           "server_streaming": false,
           "idempotency": "NO_SIDE_EFFECTS",
+          "auth_required": true
+        },
+        {
+          "id": "reliant.v1.PipelineService/RevokeCapabilityGrant",
+          "name": "RevokeCapabilityGrant",
+          "input": "reliant.v1.RevokeCapabilityGrantRequest",
+          "output": "reliant.v1.RevokeCapabilityGrantResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "IDEMPOTENT",
           "auth_required": true
         },
         {
@@ -24659,6 +24708,45 @@
             "Activity": {
               "Mutating": false
             }
+          },
+          {
+            "Name": "ListCapabilityGrants",
+            "InputType": "ListCapabilityGrantsRequest",
+            "OutputType": "ListCapabilityGrantsResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
+            "InputTypeFQ": "reliant.v1.ListCapabilityGrantsRequest",
+            "OutputTypeFQ": "reliant.v1.ListCapabilityGrantsResponse",
+            "InputProtoFile": "reliant/v1/pipeline.proto",
+            "OutputProtoFile": "reliant/v1/pipeline.proto",
+            "Activity": {
+              "Mutating": false
+            }
+          },
+          {
+            "Name": "RevokeCapabilityGrant",
+            "InputType": "RevokeCapabilityGrantRequest",
+            "OutputType": "RevokeCapabilityGrantResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "Idempotency": "IDEMPOTENT",
+            "InputTypeFQ": "reliant.v1.RevokeCapabilityGrantRequest",
+            "OutputTypeFQ": "reliant.v1.RevokeCapabilityGrantResponse",
+            "InputProtoFile": "reliant/v1/pipeline.proto",
+            "OutputProtoFile": "reliant/v1/pipeline.proto",
+            "Activity": {
+              "Mutating": true,
+              "Declared": true,
+              "Verb": "revoke",
+              "TargetKind": "pipeline_capability_grant",
+              "Writer": "INTERCEPTOR"
+            }
           }
         ],
         "ProtoFile": "reliant/v1/pipeline.proto",
@@ -24727,6 +24815,26 @@
               "MessageType": "reliant.v1.PipelineMainHealth"
             }
           ],
+          "ListCapabilityGrantsRequest": [
+            {
+              "Name": "trigger_id",
+              "ProtoType": "string",
+              "IsOptional": true
+            },
+            {
+              "Name": "include_revoked",
+              "ProtoType": "bool",
+              "IsOptional": true
+            }
+          ],
+          "ListCapabilityGrantsResponse": [
+            {
+              "Name": "grants",
+              "ProtoType": "[]message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.PipelineCapabilityGrant"
+            }
+          ],
           "ListQueueRequest": [
             {
               "Name": "repo_id",
@@ -24746,6 +24854,21 @@
               "ProtoType": "message",
               "IsOptional": false,
               "MessageType": "reliant.v1.PipelineQueueBatch"
+            }
+          ],
+          "RevokeCapabilityGrantRequest": [
+            {
+              "Name": "grant_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            }
+          ],
+          "RevokeCapabilityGrantResponse": [
+            {
+              "Name": "grant",
+              "ProtoType": "message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.PipelineCapabilityGrant"
             }
           ],
           "SetPipelineModeRequest": [
@@ -24837,6 +24960,26 @@
               "type_name": "reliant.v1.PipelineMainHealth"
             }
           ],
+          "reliant.v1.ListCapabilityGrantsRequest": [
+            {
+              "name": "trigger_id",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "include_revoked",
+              "kind": "bool",
+              "optional": true
+            }
+          ],
+          "reliant.v1.ListCapabilityGrantsResponse": [
+            {
+              "name": "grants",
+              "kind": "message",
+              "type_name": "reliant.v1.PipelineCapabilityGrant",
+              "repeated": true
+            }
+          ],
           "reliant.v1.ListQueueRequest": [
             {
               "name": "repo_id",
@@ -24857,6 +25000,50 @@
               "name": "current_batch",
               "kind": "message",
               "type_name": "reliant.v1.PipelineQueueBatch"
+            }
+          ],
+          "reliant.v1.PipelineCapabilityGrant": [
+            {
+              "name": "id",
+              "kind": "string"
+            },
+            {
+              "name": "trigger_id",
+              "kind": "string"
+            },
+            {
+              "name": "machine_pool_id",
+              "kind": "string"
+            },
+            {
+              "name": "repo_id",
+              "kind": "string"
+            },
+            {
+              "name": "capability",
+              "kind": "string"
+            },
+            {
+              "name": "granted_by_user_id",
+              "kind": "string"
+            },
+            {
+              "name": "approval_id",
+              "kind": "string"
+            },
+            {
+              "name": "granted_at",
+              "kind": "message",
+              "type_name": "google.protobuf.Timestamp"
+            },
+            {
+              "name": "revoked_at",
+              "kind": "message",
+              "type_name": "google.protobuf.Timestamp"
+            },
+            {
+              "name": "revoked_by_user_id",
+              "kind": "string"
             }
           ],
           "reliant.v1.PipelineMainHealth": [
@@ -25043,6 +25230,22 @@
               "kind": "int32"
             }
           ],
+          "reliant.v1.RevokeCapabilityGrantRequest": [
+            {
+              "name": "grant_id",
+              "kind": "string",
+              "validate": {
+                "required": true
+              }
+            }
+          ],
+          "reliant.v1.RevokeCapabilityGrantResponse": [
+            {
+              "name": "grant",
+              "kind": "message",
+              "type_name": "reliant.v1.PipelineCapabilityGrant"
+            }
+          ],
           "reliant.v1.SetPipelineModeRequest": [
             {
               "name": "repo_id",
@@ -25073,13 +25276,18 @@
           "reliant.v1.EnrolRepositoryResponse": "reliant/v1/pipeline.proto",
           "reliant.v1.GetPipelineStateRequest": "reliant/v1/pipeline.proto",
           "reliant.v1.GetPipelineStateResponse": "reliant/v1/pipeline.proto",
+          "reliant.v1.ListCapabilityGrantsRequest": "reliant/v1/pipeline.proto",
+          "reliant.v1.ListCapabilityGrantsResponse": "reliant/v1/pipeline.proto",
           "reliant.v1.ListQueueRequest": "reliant/v1/pipeline.proto",
           "reliant.v1.ListQueueResponse": "reliant/v1/pipeline.proto",
+          "reliant.v1.PipelineCapabilityGrant": "reliant/v1/pipeline.proto",
           "reliant.v1.PipelineMainHealth": "reliant/v1/pipeline.proto",
           "reliant.v1.PipelineQueueBatch": "reliant/v1/pipeline.proto",
           "reliant.v1.PipelineQueueEntry": "reliant/v1/pipeline.proto",
           "reliant.v1.PipelineRepository": "reliant/v1/pipeline.proto",
           "reliant.v1.PipelineStateCount": "reliant/v1/pipeline.proto",
+          "reliant.v1.RevokeCapabilityGrantRequest": "reliant/v1/pipeline.proto",
+          "reliant.v1.RevokeCapabilityGrantResponse": "reliant/v1/pipeline.proto",
           "reliant.v1.SetPipelineModeRequest": "reliant/v1/pipeline.proto",
           "reliant.v1.SetPipelineModeResponse": "reliant/v1/pipeline.proto"
         }
@@ -57854,6 +58062,18 @@
       "implementation_candidates": []
     },
     {
+      "id": "PipelineConfigRefresh",
+      "name": "PipelineConfigRefresh",
+      "kind": "provider",
+      "type": "*github.com/reliant-labs/reliant/internal/app.PipelineConfigRefresh",
+      "source": {
+        "path": "internal/app/providers_mergequeue.go",
+        "symbol": "NewPipelineConfigRefresh"
+      },
+      "methods": [],
+      "implementation_candidates": []
+    },
+    {
       "id": "Plan",
       "name": "Plan",
       "kind": "component",
@@ -59157,6 +59377,15 @@
     },
     {
       "consumer": "Approval",
+      "field": "Grants",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/approval.CapabilityGrants",
+      "methods": [],
+      "candidates": [],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "Approval",
       "field": "Repo",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/approval.Repository",
       "methods": [],
@@ -59220,12 +59449,10 @@
     },
     {
       "consumer": "AutomationTakeover",
-      "field": "Repo",
-      "interface": "github.com/reliant-labs/reliant/internal/handlers/automation_takeover.Repository",
+      "field": "TriggerReads",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/automation_takeover.TriggerReads",
       "methods": [],
-      "candidates": [
-        "Database"
-      ],
+      "candidates": [],
       "providers": [
         "Database"
       ],
@@ -59575,6 +59802,17 @@
       "consumer": "Chat",
       "field": "TriggerEvents",
       "interface": "github.com/reliant-labs/reliant/internal/launch.TriggerEventStore",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Chat",
+      "field": "TriggerReads",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/chat.TriggerReads",
       "methods": [],
       "candidates": [],
       "providers": [
@@ -60925,6 +61163,15 @@
     },
     {
       "consumer": "Pipeline",
+      "field": "Grants",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/pipeline.Grants",
+      "methods": [],
+      "candidates": [],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "Pipeline",
       "field": "Store",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/pipeline.Store",
       "methods": [],
@@ -62170,6 +62417,17 @@
       "consumer": "Streaming",
       "field": "SpawnCalls",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/streaming.SpawnCalls",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Streaming",
+      "field": "TriggerReads",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/streaming.TriggerReads",
       "methods": [],
       "candidates": [],
       "providers": [
@@ -63675,6 +63933,14 @@
     },
     {
       "code": "binding_unresolved",
+      "component": "Approval.Grants",
+      "source": {
+        "path": "internal/handlers/approval/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
       "component": "ChatTrace.Spans",
       "source": {
         "path": "internal/handlers/chat_trace/service.go",
@@ -63775,6 +64041,14 @@
       "source": {
         "path": "internal/app/providers.go",
         "symbol": "NewPauseService"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "Pipeline.Grants",
+      "source": {
+        "path": "internal/handlers/pipeline/service.go",
+        "symbol": "New"
       }
     },
     {

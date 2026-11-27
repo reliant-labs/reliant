@@ -13,7 +13,7 @@ import { IntegrationLogo, IntegrationLogoTile, hasBrandLogo, integrationLogoKey 
 const logo = (container: HTMLElement) => container.querySelector("[data-integration-logo]");
 
 describe("IntegrationLogo", () => {
-  it.each(["github", "slack", "gmail", "twilio"])("draws the %s brand mark", (icon) => {
+  it.each(["github", "slack", "gmail", "google_calendar", "google_sheets", "twilio"])("draws the %s brand mark", (icon) => {
     const { container } = render(<IntegrationLogo icon={icon} />);
     expect(logo(container)).toHaveAttribute("data-integration-logo", icon);
     expect(logo(container)?.tagName.toLowerCase()).toBe("svg");

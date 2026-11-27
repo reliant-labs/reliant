@@ -73,6 +73,7 @@ type MachineResumeWakeOutput struct {
 // is doing, exactly as before.
 type MachineResumeWakeActivity struct {
 	repo         MachineResumeWakeStore
+	launches     LaunchEvents
 	rows         WorkspaceRows
 	toolExecutor toolexec.ToolExecutor
 	// pollInterval is how often a slice re-checks the machine; zero means
@@ -84,8 +85,8 @@ type MachineResumeWakeActivity struct {
 }
 
 // NewMachineResumeWakeActivity creates a MachineResumeWakeActivity.
-func NewMachineResumeWakeActivity(repo MachineResumeWakeStore, rows WorkspaceRows, toolExecutor toolexec.ToolExecutor) *MachineResumeWakeActivity {
-	return &MachineResumeWakeActivity{repo: repo, rows: rows, toolExecutor: toolExecutor}
+func NewMachineResumeWakeActivity(repo MachineResumeWakeStore, launches LaunchEvents, rows WorkspaceRows, toolExecutor toolexec.ToolExecutor) *MachineResumeWakeActivity {
+	return &MachineResumeWakeActivity{repo: repo, launches: launches, rows: rows, toolExecutor: toolExecutor}
 }
 
 func (a *MachineResumeWakeActivity) Name() string { return "MachineResumeWake" }
@@ -142,7 +143,7 @@ func (a *MachineResumeWakeActivity) Execute(ctx context.Context, input MachineRe
 	if waker, ok := router.(toolexec.RunWaker); ok {
 		// Only used if the control plane predates the run-resume door and the
 		// wake falls back to a token: an unattended run's is its trigger's.
-		if ev, evErr := a.repo.GetTriggerEventByChatID(ctx, input.ChatID); evErr == nil && ev != nil && ev.Kind.Unattended() {
+		if ev, evErr := a.launches.GetTriggerEventByChatID(ctx, input.ChatID); evErr == nil && ev != nil && ev.Kind.Unattended() {
 			ctx = automationcred.Allow(ctx)
 		}
 		res, wakeErr := waker.WakeForRun(ctx, userID, selector)

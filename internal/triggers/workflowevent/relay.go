@@ -108,7 +108,7 @@ type WorkflowStarter interface {
 // RouteStore lists an owner's triggers, for the relay to tell which run events
 // reach none of them. *db.Repo satisfies it.
 type RouteStore interface {
-	ListTriggers(ctx context.Context, f core.TriggerFilters) ([]*core.Trigger, error)
+	ListTriggersForUser(ctx context.Context, f core.TriggerFilters) ([]*core.Trigger, error)
 }
 
 // Relay moves outbox rows into dispatch workflows. Several relays (one per
@@ -222,7 +222,7 @@ func (r *Relay) reaching(ctx context.Context, rows []*core.RunEvent) map[string]
 		candidates, ok := listed[ev.UserID]
 		if !ok {
 			var err error
-			candidates, err = r.routes.ListTriggers(ctx, core.TriggerFilters{UserID: ev.UserID})
+			candidates, err = r.routes.ListTriggersForUser(ctx, core.TriggerFilters{UserID: ev.UserID})
 			if err != nil {
 				logging.WarnContext(ctx, "[workflowevent] could not list a run event owner's triggers; dispatching it",
 					"run_event_id", ev.ID, "error", err)

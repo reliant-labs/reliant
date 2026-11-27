@@ -86,7 +86,7 @@ func TestMachinePreflightActivity(t *testing.T) {
 			var payloads []string
 			inner := router.answer
 			router.answer = func(p []byte) ([]byte, error) { payloads = append(payloads, string(p)); return inner(p) }
-			act := NewMachinePreflightActivity(repo, workspaceRowsOf(repo), router)
+			act := NewMachinePreflightActivity(repo, NewTriggerReads(repo.ORM()), workspaceRowsOf(repo), router)
 
 			got, err := act.Execute(ctx, MachinePreflightInput{ChatID: chatID, WorkflowID: "wf", NodePath: "fix",
 				Spec: machinepreflight.Spec{Tools: []string{"task"}}.WithDefaults()})
@@ -105,7 +105,7 @@ func TestMachinePreflightActivity(t *testing.T) {
 	}
 
 	t.Run("no router has no machine to check", func(t *testing.T) {
-		got, err := NewMachinePreflightActivity(repo, workspaceRowsOf(repo), nil).Execute(ctx, MachinePreflightInput{ChatID: chatID})
+		got, err := NewMachinePreflightActivity(repo, NewTriggerReads(repo.ORM()), workspaceRowsOf(repo), nil).Execute(ctx, MachinePreflightInput{ChatID: chatID})
 		require.NoError(t, err)
 		assert.False(t, got.Failed)
 	})

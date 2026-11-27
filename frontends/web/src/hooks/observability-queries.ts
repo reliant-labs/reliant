@@ -89,6 +89,8 @@ import {
 } from "@/services/controlPlane/observability/issuesApi";
 import { metricCatalogRequest, metricExemplarsRequest, metricRequest, toMetricCatalog, toMetricDetail, toMetricExemplars } from "@/services/controlPlane/observability/metricsApi";
 import { obsCall } from "@/services/controlPlane/observability/obsInterceptors";
+import { alertHistoryOf, alertsOf, listAlertHistoryRequest, listAlertsRequest, listNotificationsRequest, listSilencesRequest, notificationsOf, receiversOf, silencesOf } from "@/services/controlPlane/observability/alertingApi";
+import { alertingServiceKeys, useListAlertHistory, useListAlerts, useListNotifications, useListReceivers, useListSilences } from "@/hooks/controlplane/alerting-service-hooks_gen";
 import { useObservabilityApi, type ObservabilityContextApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
 import { useGetObservabilityUsage } from "@/hooks/controlplane/observability-billing-service-hooks_gen";
 import { useObsQuota } from "@/services/controlPlane/observability/ObsQuotaContext";
@@ -126,7 +128,7 @@ import type {
 } from "@/services/controlPlane/observability/types";
 import { panelRunsQuery } from "@/services/controlPlane/observability/panelKinds";
 import { rangeMs, readRange, resolveWindow, type RangePreset, type RangeRead } from "@/services/controlPlane/observability/window";
-import { keepPreviousInOrg, useRouteOrgIdOverride } from "@/lib/orgScope";
+import { keepPreviousInOrg, keyNamesOrg, useRouteOrgIdOverride } from "@/lib/orgScope";
 
 // Presentation never changes QueryPanel's computation: two dashboard tiles
 // with different ids/titles/layout but the same query share one in-flight read.
@@ -749,22 +751,16 @@ export function useWorkload(scope: ObsScope | null, range: RangePreset, workload
 // alert reads, so an env page passes its own and the project area filters the
 // org's list to the environments it has selected. Firing alerts and the
 // notification count poll; receivers and silences change only by hand.
-
-export const alertKeys = {
-  all: (orgId: string | null) => ["observability", "alerting", orgId ?? ""] as const,
-  alerts: (orgId: string | null, envId: string) => [...alertKeys.all(orgId), "alerts", envId] as const,
-  history: (orgId: string | null, envId: string, range: RangePreset) => [...alertKeys.all(orgId), "history", envId, range] as const,
-  silences: (orgId: string | null, includeExpired: boolean) => [...alertKeys.all(orgId), "silences", includeExpired] as const,
-  receivers: (orgId: string | null) => [...alertKeys.all(orgId), "receivers"] as const,
-  notifications: (orgId: string | null) => [...alertKeys.all(orgId), "notifications"] as const,
-};
+//
+// Every read and write runs on AlertingService's generated hooks
+// (hooks/controlplane/alerting-service-hooks_gen.ts), on its QueryClient's
+// transport (a TransportScope's: the forge tour's sample app, a preview; else
+// the app's). Each is keyed by its request, which names the org.
 
 /** Pending and firing alerts. One env id narrows server-side; undefined is every env of the org. */
 export function useAlerts(orgId: string | null, envId?: string) {
-  const api = useObservabilityApi();
-  return useQuery({
-    queryKey: alertKeys.alerts(orgId, envId ?? ""),
-    queryFn: () => api.listAlerts(orgId as string, envId),
+  return useListAlerts(listAlertsRequest(orgId ?? "", envId), {
+    select: alertsOf,
     enabled: !!orgId,
     staleTime: 15_000,
     refetchInterval: 30_000,
@@ -772,11 +768,10 @@ export function useAlerts(orgId: string | null, envId?: string) {
   });
 }
 
+/** The history of the last `range`, as of whenever the server answers: the request (and key) stays the same as the window moves. */
 export function useAlertHistory(orgId: string | null, range: RangePreset, envId?: string) {
-  const api = useObservabilityApi();
-  return useQuery({
-    queryKey: alertKeys.history(orgId, envId ?? "", range),
-    queryFn: () => api.listAlertHistory(orgId as string, { envId, sinceMs: resolveWindow(range).startMs, limit: 500 }),
+  return useListAlertHistory(listAlertHistoryRequest(orgId ?? "", { envId, lookbackMs: rangeMs(range), limit: 500 }), {
+    select: alertHistoryOf,
     enabled: !!orgId,
     staleTime: 30_000,
     retry: alertingRetry,
@@ -784,10 +779,8 @@ export function useAlertHistory(orgId: string | null, range: RangePreset, envId?
 }
 
 export function useSilences(orgId: string | null, includeExpired: boolean) {
-  const api = useObservabilityApi();
-  return useQuery({
-    queryKey: alertKeys.silences(orgId, includeExpired),
-    queryFn: () => api.listSilences(orgId as string, includeExpired),
+  return useListSilences(listSilencesRequest(orgId ?? "", includeExpired), {
+    select: silencesOf,
     enabled: !!orgId,
     staleTime: 30_000,
     retry: alertingRetry,
@@ -795,14 +788,15 @@ export function useSilences(orgId: string | null, includeExpired: boolean) {
 }
 
 export function useReceivers(orgId: string | null) {
-  const api = useObservabilityApi();
-  return useQuery({
-    queryKey: alertKeys.receivers(orgId),
-    queryFn: () => api.listReceivers(orgId as string),
-    enabled: !!orgId,
-    staleTime: 60_000,
-    retry: alertingRetry,
-  });
+  return useListReceivers(
+    { orgId: orgId ?? "" },
+    {
+      select: receiversOf,
+      enabled: !!orgId,
+      staleTime: 60_000,
+      retry: alertingRetry,
+    }
+  );
 }
 
 /**
@@ -811,10 +805,8 @@ export function useReceivers(orgId: string | null) {
  * groups and repeats on its own schedule, so faster would show nothing new.
  */
 export function useNotifications(orgId: string | null) {
-  const api = useObservabilityApi();
-  return useQuery({
-    queryKey: alertKeys.notifications(orgId),
-    queryFn: () => api.listNotifications(orgId as string, { limit: 50 }),
+  return useListNotifications(listNotificationsRequest(orgId ?? "", { limit: 50 }), {
+    select: notificationsOf,
     enabled: !!orgId,
     staleTime: 30_000,
     // Stop polling an org whose alerting answered "not configured" or "denied".
@@ -823,17 +815,20 @@ export function useNotifications(orgId: string | null) {
   });
 }
 
+/** Re-reads everything alerting shows for the org: every AlertingService read whose request names it. Another org's are left alone. */
+export function invalidateOrgAlerting(client: QueryClient, orgId: string | null): Promise<void> {
+  return client.invalidateQueries({ queryKey: alertingServiceKeys.all, predicate: (query) => keyNamesOrg(query.queryKey, orgId ?? "") });
+}
+
 /**
- * Every alerting write: it runs, then re-reads everything alerting shows for
- * the org (a silence changes what fires; a receiver changes what routes).
+ * What every alerting write's generated mutation takes: no refresh of the
+ * generated entity scope, and instead everything alerting shows for the org
+ * re-read once the write settles, failed or not (a silence changes what
+ * fires; a receiver changes what routes).
  */
-export function useAlertingMutation<TArgs, TResult>(orgId: string | null, run: (api: ObservabilityContextApi, orgId: string, args: TArgs) => Promise<TResult>) {
-  const api = useObservabilityApi();
+export function useAlertingWriteOptions(orgId: string | null) {
   const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (args: TArgs) => run(api, orgId as string, args),
-    onSettled: () => queryClient.invalidateQueries({ queryKey: alertKeys.all(orgId) }),
-  });
+  return { invalidate: false as const, onSettled: () => invalidateOrgAlerting(queryClient, orgId) };
 }
 
 // ── Delivery (DeliveryInsightsService) ───────────────────────────────────────

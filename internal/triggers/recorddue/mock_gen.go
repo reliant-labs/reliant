@@ -18,14 +18,15 @@ import (
 )
 
 // forge:section MockService
-// forge:hash=01367ceadf81d3ced9c4206d0a13998e97e9475d12945ce99c9ee53eda18a18e
+// forge:hash=d8fafb33bfc976abe0361b310762e50423375a2022fc9f8651d596c0fcefc61a
 
 // MockService is a test mock for the Service interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockService.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockService.<Method>Func not set" error.
 type MockService struct {
 	contractkit.Recorder
 	RunFunc  func(context.Context) error
@@ -50,18 +51,55 @@ func (m *MockService) Scan(ctx context.Context) (int, error) {
 	return 0, contractkit.MockNotSet("MockService", "Scan")
 }
 
+// MockServiceRunCall is one recorded call of MockService.Run, one
+// field per parameter.
+type MockServiceRunCall struct {
+	Ctx context.Context
+}
+
+// RunCalls returns every recorded Run call, oldest first, with
+// its arguments typed. It reads the same log as Calls("Run").
+func (m *MockService) RunCalls() []MockServiceRunCall {
+	var out []MockServiceRunCall
+	for _, c := range m.Recorder.Calls("Run") {
+		var r MockServiceRunCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceScanCall is one recorded call of MockService.Scan, one
+// field per parameter.
+type MockServiceScanCall struct {
+	Ctx context.Context
+}
+
+// ScanCalls returns every recorded Scan call, oldest first, with
+// its arguments typed. It reads the same log as Calls("Scan").
+func (m *MockService) ScanCalls() []MockServiceScanCall {
+	var out []MockServiceScanCall
+	for _, c := range m.Recorder.Calls("Scan") {
+		var r MockServiceScanCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ Service = (*MockService)(nil)
 
 // forge:section MockStore
-// forge:hash=3af0db067b6c58578b6822e01a210c11d38afea667e9d338f9d62235eadff0d1
+// forge:hash=73121baeb98a5e3cb85de72c1c86e4db73debcc4688d14048b3d6bed2680e2b6
 
 // MockStore is a test mock for the Store interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockStore.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockStore.<Method>Func not set" error.
 type MockStore struct {
 	contractkit.Recorder
 	WithDuePRPipelinesAfterFunc   func(context.Context, time.Time, int, *core.PRPipeline, func([]core.DuePRPipeline) error) (*core.PRPipeline, error)
@@ -96,18 +134,87 @@ func (m *MockStore) GetTriggerEventByDedupe(ctx context.Context, kind core.Trigg
 	return nil, contractkit.MockNotSet("MockStore", "GetTriggerEventByDedupe")
 }
 
+// MockStoreWithDuePRPipelinesAfterCall is one recorded call of MockStore.WithDuePRPipelinesAfter, one
+// field per parameter.
+type MockStoreWithDuePRPipelinesAfterCall struct {
+	Ctx   context.Context
+	Now   time.Time
+	Limit int
+	After *core.PRPipeline
+	Fn    func([]core.DuePRPipeline) error
+}
+
+// WithDuePRPipelinesAfterCalls returns every recorded WithDuePRPipelinesAfter call, oldest first, with
+// its arguments typed. It reads the same log as Calls("WithDuePRPipelinesAfter").
+func (m *MockStore) WithDuePRPipelinesAfterCalls() []MockStoreWithDuePRPipelinesAfterCall {
+	var out []MockStoreWithDuePRPipelinesAfterCall
+	for _, c := range m.Recorder.Calls("WithDuePRPipelinesAfter") {
+		var r MockStoreWithDuePRPipelinesAfterCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Now, _ = c.Args[1].(time.Time)
+		r.Limit, _ = c.Args[2].(int)
+		r.After, _ = c.Args[3].(*core.PRPipeline)
+		r.Fn, _ = c.Args[4].(func([]core.DuePRPipeline) error)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockStoreListEnabledTriggersOfKindCall is one recorded call of MockStore.ListEnabledTriggersOfKind, one
+// field per parameter.
+type MockStoreListEnabledTriggersOfKindCall struct {
+	Ctx  context.Context
+	Kind core.TriggerKind
+}
+
+// ListEnabledTriggersOfKindCalls returns every recorded ListEnabledTriggersOfKind call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListEnabledTriggersOfKind").
+func (m *MockStore) ListEnabledTriggersOfKindCalls() []MockStoreListEnabledTriggersOfKindCall {
+	var out []MockStoreListEnabledTriggersOfKindCall
+	for _, c := range m.Recorder.Calls("ListEnabledTriggersOfKind") {
+		var r MockStoreListEnabledTriggersOfKindCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Kind, _ = c.Args[1].(core.TriggerKind)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockStoreGetTriggerEventByDedupeCall is one recorded call of MockStore.GetTriggerEventByDedupe, one
+// field per parameter.
+type MockStoreGetTriggerEventByDedupeCall struct {
+	Ctx       context.Context
+	Kind      core.TriggerEventKind
+	DedupeKey string
+}
+
+// GetTriggerEventByDedupeCalls returns every recorded GetTriggerEventByDedupe call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetTriggerEventByDedupe").
+func (m *MockStore) GetTriggerEventByDedupeCalls() []MockStoreGetTriggerEventByDedupeCall {
+	var out []MockStoreGetTriggerEventByDedupeCall
+	for _, c := range m.Recorder.Calls("GetTriggerEventByDedupe") {
+		var r MockStoreGetTriggerEventByDedupeCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Kind, _ = c.Args[1].(core.TriggerEventKind)
+		r.DedupeKey, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ Store = (*MockStore)(nil)
 
 // forge:section MockIntake
-// forge:hash=3f29e21d3dcff2a59cdd106c3f5208e86b7558f6da78320cb2ea99426c715b33
+// forge:hash=fd381b8000ddd134ae52a5347a738760230a6e5ca7cdce10be72f74b48cf87bf
 
 // MockIntake is a test mock for the Intake interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockIntake.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockIntake.<Method>Func not set" error.
 type MockIntake struct {
 	contractkit.Recorder
 	AcceptFunc func(context.Context, *core.Trigger, triggers.InboundEvent, triggers.AcceptOptions) (*triggers.AcceptResult, error)
@@ -120,6 +227,30 @@ func (m *MockIntake) Accept(ctx context.Context, trigger *core.Trigger, ev trigg
 		return m.AcceptFunc(ctx, trigger, ev, opts)
 	}
 	return nil, contractkit.MockNotSet("MockIntake", "Accept")
+}
+
+// MockIntakeAcceptCall is one recorded call of MockIntake.Accept, one
+// field per parameter.
+type MockIntakeAcceptCall struct {
+	Ctx     context.Context
+	Trigger *core.Trigger
+	Ev      triggers.InboundEvent
+	Opts    triggers.AcceptOptions
+}
+
+// AcceptCalls returns every recorded Accept call, oldest first, with
+// its arguments typed. It reads the same log as Calls("Accept").
+func (m *MockIntake) AcceptCalls() []MockIntakeAcceptCall {
+	var out []MockIntakeAcceptCall
+	for _, c := range m.Recorder.Calls("Accept") {
+		var r MockIntakeAcceptCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Trigger, _ = c.Args[1].(*core.Trigger)
+		r.Ev, _ = c.Args[2].(triggers.InboundEvent)
+		r.Opts, _ = c.Args[3].(triggers.AcceptOptions)
+		out = append(out, r)
+	}
+	return out
 }
 
 // Compile-time check.

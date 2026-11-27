@@ -237,6 +237,9 @@ export const ORG_SCOPED_QUERY_ROOTS: readonly string[] = [
   // Every LLMGatewayService read: the org's managed keys, spend and the
   // models its plan permits.
   "controlplane.v1.LLMGatewayService",
+  // Every AlertingService read on its generated keys: alerts, their history,
+  // silences, receivers and notifications, each scoped by its request's org.
+  "controlplane.v1.AlertingService",
   "cp",
   // Every DaemonService read on its generated keys: a machine's detail,
   // preview template and port-access rules.

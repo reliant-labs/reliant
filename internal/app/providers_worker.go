@@ -46,7 +46,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/integrations/connauth"
 	"github.com/reliant-labs/reliant/internal/integrations/credwire"
 	"github.com/reliant-labs/reliant/internal/integrations/ghaccess"
-	"github.com/reliant-labs/reliant/internal/integrations/ghcontents"
 	"github.com/reliant-labs/reliant/internal/integrations/httpaction"
 	"github.com/reliant-labs/reliant/internal/integrations/webhook"
 	"github.com/reliant-labs/reliant/internal/integrations/writeledger"
@@ -395,6 +394,7 @@ func NewWorkerChat(d WorkerChatDeps) (*WorkerChat, error) {
 		Logger:           d.Logger,
 		Config:           d.Config,
 		Repo:             d.DB,
+		TriggerReads:     store.NewTriggerEventExtStore(d.DB.ORM()),
 		Chats:            chataccess.NewFromORM(d.DB.ORM()),
 		ChatRows:         store.NewChatExtStore(d.DB.ORM()),
 		ChatViews:        store.NewChatsWithActivityExtStore(d.DB.ORM()),
@@ -545,7 +545,7 @@ func NewWorkerTrigger(d WorkerTriggerDeps) (*WorkerTrigger, error) {
 		Intake: triggers.NewIntake(triggers.NewStores(repo), temporalClient, v2workflow.SharedTaskQueue).
 			WithWorkflows(triggers.LaunchWorkflows{Repo: repo}).
 			WithPoolCatalogs(machinepool.Catalogs{R: store.NewMachinePoolExtStore(repo.ORM())}).
-			WithEnrichers(triggers.NewOriginEnricher(newWriteLedger(repo), repo, d.Integrations.GitHubAppSlug)),
+			WithEnrichers(triggers.NewOriginEnricher(newWriteLedger(repo), store.NewTriggerEventExtStore(repo.ORM()), d.Integrations.GitHubAppSlug)),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("trigger service: %w", err)
@@ -975,27 +975,44 @@ func WorkerServerActions(pipeline *configv1.PipelineConfig) serveraction.Config 
 }
 
 // workerServerActionHandlers binds the pipeline's server actions this
-// worker implements: the pr.* actions (internal/pipeline/practions), over
+// worker implements: the pr.* actions (internal/pipeline/practions), with
+// pr.verdict's approve check and reliant/pipeline.request_grant@1 over the
+// capability grants (internal/pipeline/grants), over
 // the worker's database, GitHub through the integration catalog with the
-// run's credentials (writes recorded in the write ledger, as an action
-// node's are), and the Inbox as async questions.
+// run's credentials (metadata only; writes recorded in the write ledger, as
+// an action node's are), a PR's changed files from a daemon of its gate pool
+// (pipelineFiles), and the Inbox as async questions.
 func workerServerActionHandlers(d TemporalWorkerDeps, creds httpaction.CredentialSource) (map[string]serveraction.Handler, error) {
 	var runner writeledger.Runner = httpaction.NewRunner(netguard.New())
 	if d.WriteLedger != nil {
 		runner = d.WriteLedger.Wrap(runner)
 	}
+	capabilityGrants, err := pipelineGrants(d.DB)
+	if err != nil {
+		return nil, err
+	}
+	files, err := pipelineFiles(d.DB, d.Router)
+	if err != nil {
+		return nil, err
+	}
 	actions, err := practions.New(practions.Deps{
 		Store:  d.DB,
 		GitHub: &practions.CatalogGitHub{Catalog: catalog.MustBuiltin(), Runner: runner, Credentials: creds},
+		Files:  files,
 		Inbox: practions.QuestionInbox{
 			Writer: questions.NewFromRepo(d.DB), Reader: store.NewQuestionExtStore(d.DB.ORM()), Refetch: d.DB.UpdateWriter(),
 		},
+		Grants: capabilityGrants,
 		Logger: slog.Default(),
 	})
 	if err != nil {
 		return nil, err
 	}
-	return actions.Handlers(), nil
+	handlers := actions.Handlers()
+	for name, h := range capabilityGrants.Handlers() {
+		handlers[name] = h
+	}
+	return handlers, nil
 }
 
 // NewTemporalWorker is the Temporal worker on the shared task queue
@@ -1083,7 +1100,7 @@ type WorkflowEventRelayDeps struct {
 //forge:root-only worker
 func NewWorkflowEventRelay(d WorkflowEventRelayDeps) (*workflowevent.Relay, error) {
 	return workflowevent.NewRelay(store.NewRunEventExtStore(d.DB.ORM()), d.Temporal.Client, v2workflow.SharedTaskQueue).
-		WithRoutes(d.DB), nil
+		WithRoutes(store.NewTriggerExtStore(d.DB.ORM())), nil
 }
 
 type TriggerDeliveryRelayDeps struct {
@@ -1117,7 +1134,7 @@ func NewTriggerDeliveryRelay(d TriggerDeliveryRelayDeps) (*TriggerDeliveryRelay,
 	intake := triggers.NewIntake(triggers.NewStores(repo), d.Temporal.Client, v2workflow.SharedTaskQueue).
 		WithWorkflows(triggers.LaunchWorkflows{Repo: repo}).
 		WithPoolCatalogs(machinepool.Catalogs{R: store.NewMachinePoolExtStore(repo.ORM())}).
-		WithEnrichers(triggers.NewOriginEnricher(newWriteLedger(repo), repo, d.Integrations.GitHubAppSlug))
+		WithEnrichers(triggers.NewOriginEnricher(newWriteLedger(repo), store.NewTriggerEventExtStore(repo.ORM()), d.Integrations.GitHubAppSlug))
 	var membership authz.Membership
 	if d.Membership != nil {
 		membership = d.Membership
@@ -1125,14 +1142,10 @@ func NewTriggerDeliveryRelay(d TriggerDeliveryRelayDeps) (*TriggerDeliveryRelay,
 	relay := webhook.NewRelay(webhook.NewStores(repo), intake, d.ConnectionVault, triggers.NewAutoPause(store.NewTriggerWritesExtStore(repo.ORM()), nil))
 	records := prrecords.Deps{Store: store.NewPrRecordExtStore(repo.ORM()), Scope: prrecords.NewScope(d.Integrations.PRRecordRepositories)}
 	if d.Pipeline.GetEnabled() {
+		// A base-branch push only leaves pipeline.yaml pending here: the
+		// worker's PipelineConfigRefresh reads it on a gate pool daemon,
+		// which webhook delivery never waits on.
 		records.Pipeline = repo
-		tokens, err := gitTokens(d.ControlPlane)
-		if err != nil {
-			return nil, err
-		}
-		if tokens != nil {
-			records.Contents = ghcontents.NewInstrumented(ghcontents.Deps{Tokens: tokens})
-		}
 	}
 	if !records.Scope.Empty() || records.Pipeline != nil {
 		relay.WithDeliveryConsumer(webhook.PRRecordConsumer(prrecords.NewInstrumented(records)))
