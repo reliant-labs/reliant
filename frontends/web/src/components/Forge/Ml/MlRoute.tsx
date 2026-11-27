@@ -9,6 +9,13 @@
  * after a revocation — the route renders the one access page (MlAccessPage),
  * never an error. The server decides; this only predicts it.
  *
+ * A refused read latches the access page for ITS org only, until the
+ * entitlement changes: a re-read that says disabled (the cache agrees now,
+ * so a later grant opens the pages), a new grant, or a request for access
+ * the server answers "already enabled". A re-read that still says enabled
+ * under the same grant keeps the latch, so a server whose entitlement and
+ * ML reads disagree shows the access page instead of re-reading in a loop.
+ *
  * A control plane that has no GetMyOrgEntitlements yet (Unimplemented) has
  * no ML either: the access page, whose request then falls back to email.
  *
@@ -16,7 +23,7 @@
  * included, so the six pages render with no branch on the shell here.
  */
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams, useSearch } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { Cpu, RefreshCw } from "lucide-react";
@@ -25,6 +32,7 @@ import Button from "@/components/forge-ui/button";
 import Card from "@/components/forge-ui/card";
 import { mlKeys, useMlEntitlement, useMlOrg } from "@/hooks/ml-queries";
 import { mlErrorKind } from "@/services/controlPlane/ml/errors";
+import type { OrgEntitlement } from "@/services/controlPlane/ml/types";
 import { obsErrorMessage } from "@/services/controlPlane/observability/errors";
 
 import { isMlView, ML_VIEWS, type MlView } from "../Console/paths";
@@ -63,12 +71,34 @@ export function MlGatedView({ view, app, onApp }: MlGatedViewProps) {
   const orgId = org.orgId;
   const entitlement = useMlEntitlement(orgId);
   const qc = useQueryClient();
-  // An ML read refused for lack of the entitlement since the gate read it.
-  const [refused, setRefused] = useState(false);
+  const ml = entitlement.data ?? null;
+  // An ML read refused for lack of the entitlement since the gate read it:
+  // the org it was refused for, and the grant the gate believed in then.
+  const [refusal, setRefusal] = useState<MlRefusal | null>(null);
+  const grantedAtMs = ml?.grantedAtMs ?? null;
   const reportNotEntitled = useCallback(() => {
-    setRefused(true);
-    if (orgId) void qc.invalidateQueries({ queryKey: mlKeys.entitlements(orgId) });
-  }, [orgId, qc]);
+    if (!orgId) return;
+    setRefusal((prev) => (prev?.orgId === orgId ? prev : { orgId, grantedAtMs }));
+    void qc.invalidateQueries({ queryKey: mlKeys.entitlements(orgId) });
+  }, [orgId, grantedAtMs, qc]);
+  const recover = useCallback(
+    (id: string) => {
+      setRefusal(null);
+      // A refused read's cached answer would refuse again the moment its page reopens.
+      void qc.resetQueries({ queryKey: mlKeys.all(id), predicate: (q) => q.queryKey[2] !== "entitlements" });
+    },
+    [qc],
+  );
+  useEffect(() => {
+    if (!refusal) return;
+    // Another org: the latch was never about it (its reads were dropped with the switch).
+    if (refusal.orgId !== orgId) setRefusal(null);
+    else if (ml && refusalSettled(refusal, ml)) recover(refusal.orgId);
+  }, [refusal, orgId, ml, recover]);
+  const refused = refusal !== null && refusal.orgId === orgId;
+  const onAlreadyEnabled = useCallback(() => {
+    if (orgId) recover(orgId);
+  }, [orgId, recover]);
   const gate = useMemo<MlGate | null>(() => (orgId ? { orgId, reportNotEntitled } : null), [orgId, reportNotEntitled]);
 
   if (org.isLoading || (orgId && entitlement.isLoading)) {
@@ -104,15 +134,26 @@ export function MlGatedView({ view, app, onApp }: MlGatedViewProps) {
       </StateFrame>
     );
   }
-  const ml = entitlement.data ?? null;
   if (refused || !ml?.enabled) {
-    return <MlAccessPage orgId={orgId} entitlement={ml} view={view} source={refused ? "refused" : "entitlement"} />;
+    // Keyed by org: a request made for one org never shows, or disables the button, for another.
+    return <MlAccessPage key={orgId} orgId={orgId} entitlement={ml} view={view} source={refused ? "refused" : "entitlement"} onAlreadyEnabled={onAlreadyEnabled} />;
   }
   return (
     <MlGateContext.Provider value={gate}>
       <MlPage view={view} app={app} onApp={onApp} />
     </MlGateContext.Provider>
   );
+}
+
+interface MlRefusal {
+  orgId: string;
+  /** The grant the entitlement reported when the read was refused. */
+  grantedAtMs: number | null;
+}
+
+/** The entitlement has changed since the refusal: disabled now (the cache agrees), or granted anew. */
+function refusalSettled(refusal: MlRefusal, ml: OrgEntitlement): boolean {
+  return !ml.enabled || ml.grantedAtMs !== refusal.grantedAtMs;
 }
 
 function MlPage({ view, app, onApp }: MlGatedViewProps) {

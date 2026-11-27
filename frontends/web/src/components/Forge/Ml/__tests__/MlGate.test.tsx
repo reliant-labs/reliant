@@ -9,20 +9,27 @@
  *   - a failed request offers the support email;
  *   - an entitled org whose ML read answers FEATURE_NOT_ENTITLED (a
  *     revocation since) gets the access page, not an error;
+ *   - that refusal is the org's alone, and lifts when the entitlement
+ *     changes (granted again) or a request answers "already enabled";
+ *   - a request made for one org never shows on another org's access page;
  *   - an entitled org on a control plane without the data gets the calm
  *     empty state, never invented rows.
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
+import { mlKeys } from "@/hooks/ml-queries";
 import { MlApiProvider, type MlApi } from "@/services/controlPlane/ml/MlApiContext";
 import type { MlOutcome, OrgEntitlement } from "@/services/controlPlane/ml/types";
 
 const tracked = vi.hoisted(() => [] as { name: string; props?: Record<string, unknown> }[]);
 vi.mock("@/lib/analytics", () => ({ trackEvent: (name: string, props?: Record<string, unknown>) => tracked.push({ name, props }) }));
 vi.mock("@/services/controlPlane/orgs", () => ({ currentOrgId: async () => "org-1" }));
+// The org route's org, when a test switches orgs (undefined: the tab's org, org-1).
+const routeOrg = vi.hoisted(() => ({ current: undefined as string | undefined }));
+vi.mock("@/lib/orgScope", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/orgScope")>()), useRouteOrgIdOverride: () => routeOrg.current }));
 vi.mock("../../Observability/charts/UPlotChart", () => ({ UPlotChart: ({ label }: { label: string }) => <figure data-testid="chart" aria-label={label} /> }));
 
 import { MlGatedView } from "../MlRoute";
@@ -47,17 +54,28 @@ function api(over: Partial<MlApi> & { entitlement?: OrgEntitlement } = {}): MlAp
 
 function renderGate(mlApi: MlApi, view: Parameters<typeof MlGatedView>[0]["view"] = "machines") {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
-  render(
+  const ui = () => (
     <QueryClientProvider client={client}>
       <MlApiProvider api={mlApi}>
         <MlGatedView view={view} app="" onApp={() => {}} />
       </MlApiProvider>
-    </QueryClientProvider>,
+    </QueryClientProvider>
   );
+  const r = render(ui());
+  /** Re-render on another org, as the org route does on a switch. */
+  const switchOrg = (orgId: string) => {
+    routeOrg.current = orgId;
+    r.rerender(ui());
+  };
+  return { client, switchOrg };
 }
+
+const ENABLED: OrgEntitlement = { feature: "ml", enabled: true, requestedAtMs: null, grantedAtMs: 1 };
+const DISABLED: OrgEntitlement = { feature: "ml", enabled: false, requestedAtMs: null, grantedAtMs: null };
 
 beforeEach(() => {
   tracked.length = 0;
+  routeOrg.current = undefined;
 });
 afterEach(() => vi.clearAllMocks());
 
@@ -100,6 +118,86 @@ describe("the ML gate", () => {
     renderGate(api({ entitlement: { feature: "ml", enabled: true, requestedAtMs: null, grantedAtMs: 1 }, getMachines: async () => ({ kind: "not-entitled" }) }));
     expect(await screen.findByTestId("ml-access-page")).toBeInTheDocument();
     await waitFor(() => expect(tracked.at(-1)?.props?.source).toBe("refused"));
+  });
+
+  it("opens the pages again when a revoked org is granted ML again", async () => {
+    const server = { entitlement: ENABLED, refuse: false };
+    const mlApi = api({
+      getMyOrgEntitlements: vi.fn(async () => [server.entitlement]),
+      getStack: vi.fn(async () => (server.refuse ? { kind: "not-entitled" as const } : NO_DATA)),
+    });
+    const { client } = renderGate(mlApi, "stack");
+    expect(await screen.findByTestId("ml-no-data")).toBeInTheDocument();
+
+    // Revoked: the next ML read refuses, and the entitlement re-read agrees.
+    server.entitlement = DISABLED;
+    server.refuse = true;
+    await act(() => client.invalidateQueries({ queryKey: mlKeys.stack("org-1") }));
+    expect(await screen.findByTestId("ml-access-page")).toBeInTheDocument();
+    await waitFor(() => expect(mlApi.getMyOrgEntitlements).toHaveBeenCalledTimes(2));
+
+    // Granted again: the next entitlement read opens the pages, which read afresh.
+    server.entitlement = { ...ENABLED, grantedAtMs: 2 };
+    server.refuse = false;
+    await act(() => client.invalidateQueries({ queryKey: mlKeys.entitlements("org-1") }));
+    expect(await screen.findByTestId("ml-no-data")).toBeInTheDocument();
+    expect(screen.queryByTestId("ml-access-page")).toBeNull();
+  });
+
+  it("keeps a refusal to its org: switching to an entitled org opens its pages", async () => {
+    routeOrg.current = "org-a";
+    // org-a's entitlement says enabled, but its ML reads refuse: the latch holds for org-a.
+    const mlApi = api({
+      getMyOrgEntitlements: vi.fn(async () => [ENABLED]),
+      getStack: vi.fn(async ({ orgId }: { orgId: string }) => (orgId === "org-a" ? { kind: "not-entitled" as const } : NO_DATA)),
+    });
+    const { switchOrg } = renderGate(mlApi, "stack");
+    expect(await screen.findByTestId("ml-access-page")).toBeInTheDocument();
+    await waitFor(() => expect(mlApi.getMyOrgEntitlements).toHaveBeenCalledTimes(2));
+    expect(screen.getByTestId("ml-access-page")).toBeInTheDocument();
+
+    switchOrg("org-b");
+    expect(await screen.findByTestId("ml-no-data")).toBeInTheDocument();
+    expect(screen.queryByTestId("ml-access-page")).toBeNull();
+  });
+
+  it("opens the pages when a request answers already enabled", async () => {
+    const server = { refuse: true };
+    const mlApi = api({
+      entitlement: ENABLED,
+      getStack: vi.fn(async () => (server.refuse ? { kind: "not-entitled" as const } : NO_DATA)),
+      requestOrgEntitlement: vi.fn(async () => ({ entitlement: ENABLED, alreadyRequested: false, alreadyEnabled: true })),
+    });
+    renderGate(mlApi, "stack");
+    expect(await screen.findByTestId("ml-access-page")).toBeInTheDocument();
+    await waitFor(() => expect(mlApi.getMyOrgEntitlements).toHaveBeenCalledTimes(2));
+
+    server.refuse = false;
+    fireEvent.click(screen.getByTestId("ml-access-request"));
+    expect(await screen.findByTestId("ml-no-data")).toBeInTheDocument();
+    expect(screen.queryByTestId("ml-access-page")).toBeNull();
+  });
+
+  it("keeps a request made for one org off another org's access page", async () => {
+    routeOrg.current = "org-b";
+    const mlApi = api({
+      requestOrgEntitlement: vi.fn(async () => ({ entitlement: { ...DISABLED, requestedAtMs: Date.UTC(2026, 10, 25) }, alreadyRequested: false, alreadyEnabled: false })),
+    });
+    const { switchOrg } = renderGate(mlApi);
+    expect(await screen.findByTestId("ml-access-page")).toHaveAttribute("data-requested", "false");
+
+    switchOrg("org-a");
+    await waitFor(() => expect(mlApi.getMyOrgEntitlements).toHaveBeenCalledWith("org-a", expect.anything()));
+    fireEvent.click(await screen.findByTestId("ml-access-request"));
+    expect(await screen.findByTestId("ml-access-requested")).toBeInTheDocument();
+    expect(mlApi.requestOrgEntitlement).toHaveBeenCalledWith("org-a", "ml", undefined);
+
+    // Back to org-b, whose entitlement is cached: it never asked.
+    switchOrg("org-b");
+    expect(await screen.findByTestId("ml-access-page")).toHaveAttribute("data-requested", "false");
+    expect(screen.queryByTestId("ml-access-requested")).toBeNull();
+    expect(screen.getByTestId("ml-access-request")).toBeEnabled();
+    expect(screen.getByTestId("ml-access-request")).toHaveTextContent("Request access");
   });
 
   it("shows the empty state, not rows, when the data does not exist yet", async () => {
