@@ -138,10 +138,15 @@ func TestTriggerCapacityReleasedUnboundLaunchIsNotRedriven(t *testing.T) {
 	}
 }
 
-// listedIDs is one redrive listing's ids.
+// capacityT0 is when the redrive tests' events arrived: a fixed instant, so
+// no assertion depends on the wall clock the test runs at.
+var capacityT0 = time.Date(2026, 1, 15, 12, 0, 0, 0, time.UTC)
+
+// listedIDs is one redrive listing's ids, of the events that arrived before
+// capacityT0 + 1 minute.
 func listedIDs(t *testing.T, ctx context.Context, env *storetest.Env) map[string]bool {
 	t.Helper()
-	rows, err := store.ListStalePendingTriggerEvents(ctx, env.ORM, time.Now(), 10)
+	rows, err := store.ListStalePendingTriggerEvents(ctx, env.ORM, capacityT0.Add(time.Minute), 10)
 	require.NoError(t, err)
 	ids := map[string]bool{}
 	for _, row := range rows {
@@ -149,6 +154,23 @@ func listedIDs(t *testing.T, ctx context.Context, env *storetest.Env) map[string
 	}
 	return ids
 }
+
+// freeSlot runs set (an UPDATE's SET list) on the row id, with $2 bound to the
+// instant just after head's last redrive: a slot freed after the redriver last
+// looked, which is the order the redriver compares, with no clock in the test.
+func freeSlot(t *testing.T, ctx context.Context, env *storetest.Env, id, head, set string) {
+	t.Helper()
+	var redriven time.Time
+	require.NoError(t, env.SQL.QueryRowContext(ctx, `SELECT capacity_redriven_at FROM trigger_events WHERE id=$1`, head).Scan(&redriven),
+		"the head has been redriven")
+	_, err := env.SQL.ExecContext(ctx, `UPDATE trigger_events SET `+set+` WHERE id=$1`, id, redriven.Add(time.Microsecond))
+	require.NoError(t, err)
+}
+
+const (
+	parkSlot    = `capacity_parked_at=$2`
+	releaseSlot = `capacity_released=true,capacity_released_at=$2,capacity_release_reason='confirmed_closed_or_superseded'`
+)
 
 // A waiting head is redriven when it becomes the head, and after that only when
 // its scope frees a slot (a release or a park) or the safety interval passes: a
@@ -159,8 +181,8 @@ func TestTriggerCapacityHeadIsRedrivenWhenItsScopeFreesASlot(t *testing.T) {
 	ctx := context.Background()
 	scope := capacityScope()
 	running, waiting := capacityEvent("cap-running"), capacityEvent("cap-waiting")
-	running.CreatedAt = time.Now().Add(-time.Hour)
-	waiting.CreatedAt = running.CreatedAt
+	running.CreatedAt = capacityT0
+	waiting.CreatedAt = capacityT0
 	require.NoError(t, store.EnqueueTriggerCapacity(ctx, env.ORM, running, scope))
 	require.NoError(t, store.EnqueueTriggerCapacity(ctx, env.ORM, waiting, scope))
 	claimed, err := claimCapacity(ctx, env, running.ID, scope, 1)
@@ -176,8 +198,7 @@ func TestTriggerCapacityHeadIsRedrivenWhenItsScopeFreesASlot(t *testing.T) {
 	require.False(t, listedIDs(t, ctx, env)[waiting.ID], "a full scope that freed nothing is not redriven again")
 
 	// The running run parks on a provider: its slot is free.
-	_, err = env.SQL.ExecContext(ctx, `UPDATE trigger_events SET capacity_parked_at=now() WHERE id=$1`, running.ID)
-	require.NoError(t, err)
+	freeSlot(t, ctx, env, running.ID, waiting.ID, parkSlot)
 	require.True(t, listedIDs(t, ctx, env)[waiting.ID], "a park frees a slot: the head is redriven")
 	require.False(t, listedIDs(t, ctx, env)[waiting.ID])
 
@@ -185,45 +206,90 @@ func TestTriggerCapacityHeadIsRedrivenWhenItsScopeFreesASlot(t *testing.T) {
 	_, err = env.SQL.ExecContext(ctx, `UPDATE trigger_events SET capacity_parked_at=NULL WHERE id=$1`, running.ID)
 	require.NoError(t, err)
 	require.False(t, listedIDs(t, ctx, env)[waiting.ID], "taking a slot back frees nothing")
-	_, err = env.SQL.ExecContext(ctx, `UPDATE trigger_events SET capacity_released=true,capacity_released_at=now(),capacity_release_reason='confirmed_closed_or_superseded' WHERE id=$1`, running.ID)
-	require.NoError(t, err)
+	freeSlot(t, ctx, env, running.ID, waiting.ID, releaseSlot)
 	require.True(t, listedIDs(t, ctx, env)[waiting.ID], "a release frees a slot: the head is redriven")
 	require.False(t, listedIDs(t, ctx, env)[waiting.ID])
 
-	// The safety net: a head not redriven for the interval is due whatever its scope did.
-	_, err = env.SQL.ExecContext(ctx, `UPDATE trigger_events SET capacity_redriven_at=now()-make_interval(secs => $2) WHERE id=$1`,
-		waiting.ID, store.CapacityHeadRedriveInterval.Seconds()+1)
+	// The safety net: a head not redriven for the interval is due whatever its
+	// scope did. The release is moved well before both redrive times below, so
+	// only the interval can make the head due.
+	_, err = env.SQL.ExecContext(ctx, `UPDATE trigger_events SET capacity_released_at=now()-make_interval(secs => $2) WHERE id=$1`,
+		running.ID, 2*store.CapacityHeadRedriveInterval.Seconds())
 	require.NoError(t, err)
+	redrivenAgo := func(secs float64) {
+		t.Helper()
+		_, err := env.SQL.ExecContext(ctx, `UPDATE trigger_events SET capacity_redriven_at=now()-make_interval(secs => $2) WHERE id=$1`, waiting.ID, secs)
+		require.NoError(t, err)
+	}
+	redrivenAgo(store.CapacityHeadRedriveInterval.Seconds() - 60)
+	require.False(t, listedIDs(t, ctx, env)[waiting.ID], "inside the interval a quiet scope's head waits")
+	redrivenAgo(store.CapacityHeadRedriveInterval.Seconds() + 1)
 	require.True(t, listedIDs(t, ctx, env)[waiting.ID], "the safety interval redrives a head however quiet its scope")
 }
 
 // Another scope's release is not this scope's: it redrives only its own head.
+// The other scopes each differ from it in one key alone (the user, the project
+// or the workflow), so dropping any key from the freed-slot correlation
+// redrives one of their heads.
 func TestTriggerCapacityAReleaseRedrivesOnlyItsOwnScope(t *testing.T) {
 	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
-	mine, other := capacityScope(), capacityScope()
-	other.WorkflowRef = "project://other"
-	running, waiting, otherWaiting := capacityEvent("own-running"), capacityEvent("own-waiting"), capacityEvent("other-waiting")
-	for _, ev := range []*core.TriggerEvent{running, waiting, otherWaiting} {
-		ev.CreatedAt = time.Now().Add(-time.Hour)
+	mine := capacityScope()
+	otherUser, otherProject, otherWorkflow := mine, mine, mine
+	otherUser.UserID = "another-user"
+	otherProject.ProjectID = "another-project"
+	otherWorkflow.WorkflowRef = "project://other"
+	others := map[string]store.TriggerCapacityScope{"other-user": otherUser, "other-project": otherProject, "other-workflow": otherWorkflow}
+	running, waiting := capacityEvent("own-running"), capacityEvent("own-waiting")
+	for _, ev := range []*core.TriggerEvent{running, waiting} {
+		ev.CreatedAt = capacityT0
+		require.NoError(t, store.EnqueueTriggerCapacity(ctx, env.ORM, ev, mine))
 	}
-	require.NoError(t, store.EnqueueTriggerCapacity(ctx, env.ORM, running, mine))
-	require.NoError(t, store.EnqueueTriggerCapacity(ctx, env.ORM, waiting, mine))
-	require.NoError(t, store.EnqueueTriggerCapacity(ctx, env.ORM, otherWaiting, other))
+	for name, scope := range others {
+		ev := capacityEvent(name + "-waiting")
+		ev.UserID, ev.CreatedAt = scope.UserID, capacityT0
+		require.NoError(t, store.EnqueueTriggerCapacity(ctx, env.ORM, ev, scope))
+	}
 	claimed, err := claimCapacity(ctx, env, running.ID, mine, 1)
 	require.NoError(t, err)
 	require.True(t, claimed)
 
 	first := listedIDs(t, ctx, env)
 	require.True(t, first[waiting.ID])
-	require.True(t, first[otherWaiting.ID])
+	for name := range others {
+		require.True(t, first[name+"-waiting"], "%s: a new head is redriven", name)
+	}
 
-	_, err = env.SQL.ExecContext(ctx, `UPDATE trigger_events SET capacity_released=true,capacity_released_at=now(),capacity_release_reason='confirmed_closed_or_superseded' WHERE id=$1`, running.ID)
-	require.NoError(t, err)
+	freeSlot(t, ctx, env, running.ID, waiting.ID, releaseSlot)
 	second := listedIDs(t, ctx, env)
 	require.True(t, second[waiting.ID], "its scope released a slot")
-	require.False(t, second[otherWaiting.ID], "the other scope freed nothing")
+	for name := range others {
+		require.False(t, second[name+"-waiting"], "%s: that scope freed nothing", name)
+	}
+}
+
+// The index the redriver's "did this scope free a slot after T" probe reads
+// exists in the migrated schema exactly as that probe needs it: the scope's
+// three keys then the freed instant, only capacity rows that freed a slot, and
+// valid and ready (a failed CREATE INDEX CONCURRENTLY leaves an invalid one).
+func TestTriggerCapacityFreedIndex(t *testing.T) {
+	t.Parallel()
+	env := storetest.New(t)
+	var (
+		def          string
+		valid, ready bool
+	)
+	require.NoError(t, env.SQL.QueryRowContext(context.Background(), `
+		SELECT pg_get_indexdef(i.indexrelid), i.indisvalid, i.indisready
+		  FROM pg_index i JOIN pg_class c ON c.oid = i.indexrelid
+		 WHERE c.relname = 'trigger_events_capacity_freed'`).Scan(&def, &valid, &ready),
+		"trigger_events_capacity_freed is in the migrated schema")
+	require.Equal(t, "CREATE INDEX trigger_events_capacity_freed ON public.trigger_events USING btree "+
+		"(user_id, capacity_project_id, capacity_workflow_ref, GREATEST(capacity_released_at, capacity_parked_at)) "+
+		"WHERE ((capacity_order IS NOT NULL) AND ((capacity_released_at IS NOT NULL) OR (capacity_parked_at IS NOT NULL)))", def)
+	require.True(t, valid, "the index is valid")
+	require.True(t, ready, "the index is ready")
 }
 
 func TestTriggerCapacityOperatorReleaseRequiresRootFence(t *testing.T) {
