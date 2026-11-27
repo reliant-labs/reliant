@@ -27,7 +27,7 @@ const NAMES_WINDOW_MS = 366 * 86_400_000;
 export function usePromoterNames(project: string): ReadonlyMap<string, string> {
   const org = useObservabilityOrg();
   const scope = useMemo(() => (org.orgId ? { orgId: org.orgId, projectId: project, envIds: [] } : null), [org.orgId, project]);
-  const ledger = useReleases(scope, "names:366d", () => ({ startMs: Date.now() - NAMES_WINDOW_MS, endMs: Date.now() }), { limit: 2000 });
+  const ledger = useReleases(scope, NAMES_WINDOW_MS, { limit: 2000 });
   return useMemo(() => {
     const names = new Map<string, string>();
     for (const promotion of ledger.data?.promotions ?? []) {

@@ -11,8 +11,15 @@
  * org-wide ones), optionally environments.
  */
 
+import type { MessageInitShape } from "@bufbuild/protobuf";
 import type { Transport } from "@connectrpc/connect";
-import { ActivityActorKind, ActivityService, type ActivityEvent as WireEvent } from "@/gen/controlplane/services/activity/v1/activity_pb";
+import {
+  ActivityActorKind,
+  ActivityService,
+  type ActivityEvent as WireEvent,
+  type ListActivityRequestSchema,
+  type ListActivityResponse,
+} from "@/gen/controlplane/services/activity/v1/activity_pb";
 
 import { getControlPlaneClient } from "../client";
 import { msOf } from "./api";
@@ -72,15 +79,24 @@ export function mapActivityEvent(e: WireEvent): ActivityEvent {
   };
 }
 
-/** One page of the scope's activity, newest first. */
-export async function listActivity(req: ListActivityRequest, transport?: Transport): Promise<ActivityList> {
-  const res = await getControlPlaneClient(ActivityService, transport).listActivity({
+/** ListActivity for one page of the scope's activity. No time range: the feed is the newest first, a page at a time. */
+export function activityRequest(req: ListActivityRequest): MessageInitShape<typeof ListActivityRequestSchema> {
+  return {
     scope: { orgId: req.orgId, projectId: req.projectId || undefined, envIds: req.envIds },
     targetKind: req.targetKind || undefined,
     targetId: req.targetId || undefined,
     verb: req.verb || undefined,
     pageSize: req.pageSize ?? 0,
     pageToken: req.pageToken ?? "",
-  });
+  };
+}
+
+/** A page of ListActivity or ListMembershipActivity (one response type) in the console's model. */
+export function toActivityList(res: ListActivityResponse): ActivityList {
   return { events: res.events.map(mapActivityEvent), nextPageToken: res.nextPageToken };
+}
+
+/** One page of the scope's activity, newest first. */
+export async function listActivity(req: ListActivityRequest, transport?: Transport): Promise<ActivityList> {
+  return toActivityList(await getControlPlaneClient(ActivityService, transport).listActivity(activityRequest(req)));
 }

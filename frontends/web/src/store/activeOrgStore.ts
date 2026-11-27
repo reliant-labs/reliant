@@ -250,7 +250,11 @@ export const ORG_SCOPED_QUERY_ROOTS: readonly string[] = [
   "controlplane.v1.IssuesService",
   // The machine → org map (services/controlPlane/machineOrgs.ts).
   "controlPlane",
-  "orgs-members",
+  // Every ActivityService read on its generated keys: the activity feed and
+  // the membership audit trail, each scoped by its request's org.
+  "controlplane.v1.ActivityService",
+  // DeliveryInsightsService's reads: the release ledger and DORA.
+  "controlplane.v1.DeliveryInsightsService",
   // The org's policy document, the caller's usage against it, its denials.
   "controlplane.v1.OrgPolicyService",
   "org-policy",

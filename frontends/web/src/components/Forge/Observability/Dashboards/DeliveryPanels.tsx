@@ -31,7 +31,7 @@ import Tag from "@/components/forge-ui/tag";
 import { useCurrentReleaseHealths, useDoraMetrics, useReleases } from "@/hooks/observability-queries";
 import { DEFAULT_HEALTH_WINDOW, HEALTH_WINDOW_MS, type DeliveryScope, type DoraMetrics, type Promotion, type ReleaseHealth, type ReleaseVerdict, type ServiceWindowStats } from "@/services/controlPlane/observability/deliveryTypes";
 import { obsErrorMessage } from "@/services/controlPlane/observability/errors";
-import { resolveWindow, type RangePreset } from "@/services/controlPlane/observability/window";
+import { rangeMs, resolveWindow, type RangePreset } from "@/services/controlPlane/observability/window";
 import { cn } from "@/lib/utils";
 
 import { chartColor } from "../charts/chartPalette";
@@ -259,7 +259,7 @@ function Figure({ label, before, after, worse = false }: { label: string; before
 
 function PromotionsPanel({ context, limit }: { context: DeliveryPanelContext; limit?: number }) {
   const max = limit && limit > 0 ? limit : 50;
-  const releases = useReleases(context.scope, `range:${context.range}`, () => resolveWindow(context.range), { limit: max });
+  const releases = useReleases(context.scope, rangeMs(context.range), { limit: max });
   if (releases.isLoading) return <Loading label="Loading promotions" />;
   if (releases.error || !releases.data) {
     return (

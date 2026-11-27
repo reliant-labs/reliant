@@ -272,7 +272,7 @@ export function DashboardView({ project, dashRef, env: consoleEnv, environments:
   // A platform dashboard belongs to no environment: the environment the top
   // bar names (hidden for it) must not lend it that environment's alert bands
   // or its last release to compare with. Previous-period comparison stays.
-  const promotions = useReleases(delivery, "days:30", () => ({ startMs: Date.now() - 30 * 86_400_000, endMs: Date.now() }), { enabled: !!spec && !!envId && !platform && !orgRosterBlocked && !orgView });
+  const promotions = useReleases(delivery, 30 * 86_400_000, { enabled: !!spec && !!envId && !platform && !orgRosterBlocked && !orgView });
   // Both wait for the document: until it loads, a platform dashboard is not yet known to be one.
   const history = useAlertHistory(orgView || !spec || platform || orgRosterBlocked ? null : orgId, range, envId ?? undefined);
   const scopeEnvIds = useMemo(

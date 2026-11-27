@@ -4,11 +4,13 @@
  * A model-level ObservabilityApi fake for a component or hook test, served the
  * way the app reads it: through ObservabilityApiProvider for the reads that
  * still go through the context, AND on the wire for ObservabilityService's
- * reads on generated hooks (useServiceOverview, useWorkloads, useTrace, …),
- * which call their QueryClient's transport and never the context.
+ * reads on generated hooks (useServiceOverview, useWorkloads, useTrace, …)
+ * and DeliveryInsightsService's and ActivityService's (useReleases,
+ * useDoraMetrics, useActivity), which call their QueryClient's transport and
+ * never the context.
  *
  * The wire half is the shop fixture pack's handlers (fixtures/shop/handlers/
- * observability.ts) over the fake: each decodes the request into the model,
+ * observability.ts, delivery.ts, activity.ts) over the fake: each decodes the request into the model,
  * asks the fake, and encodes its answer, so the hook's real request builder
  * and `select` mapper run. A relative window resolves against one fixed
  * instant per scope: the clock when the scope is made (a test that fakes
@@ -27,6 +29,7 @@ import { useMemo, type ReactNode } from "react";
 import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 import type { Transport } from "@connectrpc/connect";
 
+import { activityHandlers } from "@/fixtures/shop/handlers/activity";
 import { observabilityHandlers } from "@/fixtures/shop/handlers/observability";
 import type { PackClock } from "@/fixtures/shop/handlers/wire";
 import { transport as appTransport } from "@/lib/connect";
@@ -38,7 +41,8 @@ import { ObservabilityApiProvider, type ObservabilityApi } from "@/services/cont
  * The fake on the wire: every procedure the observability handlers serve
  * (ObservabilityService's, and the other observability services' the shop
  * pack answers: alerting, delivery, issues, rum, dashboards, user, billing)
- * goes to them, over the fake; a relative window resolves against `clock`.
+ * and ActivityService's ListActivity (handlers/activity.ts) go to them, over
+ * the fake; a relative window resolves against `clock`.
  * A procedure they do not serve (a project list, a deploy read) goes to the
  * app's transport, as it would outside this scope, so a test's
  * setTransport(...) answers it.
@@ -46,7 +50,8 @@ import { ObservabilityApiProvider, type ObservabilityApi } from "@/services/cont
 export function observabilityFixtureTransport(api: () => ObservabilityApi, clock: PackClock): Transport {
   const pick = (method: { parent: { typeName: string }; name: string }): Transport => {
     // Typed per rpc; the mock transport hands each the decoded request message of its own rpc.
-    const handlers = observabilityHandlers(api(), { clock }) as unknown as MockHandlers;
+    // ActivityService's is the fake's feed (handlers/activity.ts): the shop pack's own is the console scenario's.
+    const handlers = { ...(observabilityHandlers(api(), { clock }) as unknown as MockHandlers), ...activityHandlers(api()) };
     return `${method.parent.typeName}/${method.name}` in handlers ? mockTransport(handlers) : appTransport;
   };
   return {

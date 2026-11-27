@@ -30,7 +30,6 @@
 import { timestampDate, type Timestamp } from "@bufbuild/protobuf/wkt";
 import type { QueryKey } from "@tanstack/react-query";
 
-import { ActivityService } from "@/gen/controlplane/services/activity/v1/activity_pb";
 import {
   OrganizationService,
   type ListInvitationsResponse,
@@ -39,12 +38,12 @@ import {
   type OrgInvitation as WireInvitation,
   type OrgMember as WireMember,
 } from "@/gen/controlplane/services/organization/v1/organization_pb";
+import { activityServiceKeys } from "@/hooks/controlplane/activity-service-hooks_gen";
 import { organizationServiceKeys } from "@/hooks/controlplane/organization-service-hooks_gen";
 import { errorReason, hasErrorReason } from "@/lib/errorReasons";
 
 import { getControlPlaneClient } from "./client";
 import { hasControlPlane } from "./config";
-import { mapActivityEvent, type ActivityList } from "./observability/activityApi";
 import type { MyOrg } from "./orgs";
 
 /** Whether this deployment has orgs to be a member of (a control plane); without one there is no one to invite. */
@@ -60,23 +59,17 @@ export type OrgRole = "owner" | "admin" | "member";
 export const ORG_ROLES: readonly OrgRole[] = ["member", "admin", "owner"];
 
 /**
- * Query keys of the membership audit trail. The root is in activeOrgStore's
- * ORG_SCOPED_QUERY_ROOTS, so an org switch drops every one of them.
- */
-export const memberKeys = {
-  all: ["orgs-members"] as const,
-  activity: (orgId: string) => ["orgs-members", orgId, "activity"] as const,
-};
-
-/**
- * The roster and invitation reads, on OrganizationService's generated keys
- * (each request names its org). An org switch drops them (ActiveOrgBinding)
- * by these prefixes, not the service root: the person's own org list lives
- * under that root too, and survives a switch.
+ * The roster, invitation and membership-audit reads, on OrganizationService's
+ * and ActivityService's generated keys (each request names its org). An org
+ * switch drops them (ActiveOrgBinding) by these prefixes, not the service
+ * root: the person's own org list lives under OrganizationService's root
+ * too, and survives a switch.
  */
 export const ORG_MEMBER_READS: readonly QueryKey[] = [
   organizationServiceKeys.listMembers.all,
   organizationServiceKeys.listInvitations.all,
+  activityServiceKeys.listMembershipActivity.all,
+  activityServiceKeys.listMembershipActivityInfinite.all,
 ];
 
 export interface OrgMember {
@@ -276,12 +269,6 @@ export async function updateMemberRole(orgId: string, userId: string, role: OrgR
   return { member: res.member ? mapMember(res.member) : null, scopes: [...res.scopes] };
 }
 
-/** ListMembershipActivity: who created, invited, joined, left, was removed or changed role. Admin/owner. */
-export async function listMembershipActivity(orgId: string, pageToken = ""): Promise<ActivityList> {
-  requireOrg(orgId);
-  const res = await getControlPlaneClient(ActivityService).listMembershipActivity({ orgId, pageToken, pageSize: 50 });
-  return { events: res.events.map(mapActivityEvent), nextPageToken: res.nextPageToken };
-}
 
 /**
  * Display names by the id this app keys a person's records by: a chat's

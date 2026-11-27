@@ -40,11 +40,12 @@ import {
   DeployVerdict,
   DomainSource,
 } from "@/gen/controlplane/controlplane/v1/deploy_pb";
-import { ActivityActorKind, ActivityEventSchema, ActivityService } from "@/gen/controlplane/services/activity/v1/activity_pb";
+import { ActivityService, type ActivityEventSchema } from "@/gen/controlplane/services/activity/v1/activity_pb";
 import { DeployChangeKind, DeployCommitComparisonState, DeployObjectComparisonState, DeployService } from "@/gen/controlplane/services/deploy/v1/deploy_pb";
 import { DomainService } from "@/gen/controlplane/services/domain/v1/domain_pb";
 import { SecretAuthorKind, SecretStoreService } from "@/gen/controlplane/services/secret_store/v1/secret_store_pb";
 
+import { wireActivityEvent } from "./activity";
 import { completed } from "./defaults";
 import { shopActivity } from "../model/activity";
 import { DEMO_ENVS, DEMO_PROJECT, DEMO_SCOPE, demoEnvId, inProject, type DemoEnvId, type PackScope } from "./scope";
@@ -424,18 +425,7 @@ function domain(d: (typeof DEMO_DOMAINS)[number]) {
 
 /** The activity feed on the wire: the same events the observability views read (model/activity.ts). */
 function activity(app: string): MessageInitShape<typeof ActivityEventSchema>[] {
-  const kinds = { user: ActivityActorKind.USER, machine: ActivityActorKind.MACHINE, system: ActivityActorKind.SYSTEM, unknown: ActivityActorKind.UNSPECIFIED } as const;
-  return shopActivity(demoNow(), app).map((e) => ({
-    id: e.id,
-    at: timestampFromMs(e.atMs),
-    actor: { ...e.actor, kind: kinds[e.actor.kind] },
-    verb: e.verb,
-    target: e.target,
-    env: e.env ?? undefined,
-    via: e.via,
-    detail: e.detail,
-    project: e.project,
-  }));
+  return shopActivity(demoNow(), app).map(wireActivityEvent);
 }
 
 // ── Deploys ─────────────────────────────────────────────────────────────────

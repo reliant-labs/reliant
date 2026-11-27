@@ -17,7 +17,7 @@ import { useMemo } from "react";
 import { useReleases } from "@/hooks/observability-queries";
 import type { Promotion } from "@/services/controlPlane/observability/deliveryTypes";
 import type { ObsScope } from "@/services/controlPlane/observability/types";
-import { resolveWindow, type RangePreset } from "@/services/controlPlane/observability/window";
+import { rangeMs, type RangePreset } from "@/services/controlPlane/observability/window";
 
 import type { ChartMarker } from "./charts/UPlotChart";
 import { deliveryScopeOf, shortCommit } from "./deliveryScope";
@@ -70,7 +70,7 @@ export function useReleaseMarkers(
   enabled: boolean
 ): ReleaseMarkers {
   const delivery = useMemo(() => (scope ? deliveryScopeOf(scope, environments) : null), [scope, environments]);
-  const query = useReleases(delivery, `range:${range}`, () => resolveWindow(range), { enabled: enabled && !!delivery });
+  const query = useReleases(delivery, rangeMs(range), { enabled: enabled && !!delivery });
   const refetch = () => void query.refetch();
   return useMemo<ReleaseMarkers>(() => {
     if (!enabled || !scope) return { ...NONE, status: "off", refetch };

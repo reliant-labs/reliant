@@ -237,6 +237,15 @@ export type GeneratedObservabilityReads =
   | "listFrontendReplay";
 
 /**
+ * DeliveryInsightsService (the release ledger, DORA) and ActivityService (the
+ * activity feed) run on their generated hooks too (hooks/observability-queries.ts
+ * useReleases/useDoraMetrics/useActivity). They stay on ObservabilityApi as the
+ * model-level contract; fixtures/shop/handlers/delivery.ts and activity.ts
+ * serve them to the hooks.
+ */
+export type GeneratedDeliveryActivityReads = "listReleases" | "getDoraMetrics" | "listActivity";
+
+/**
  * IssuesService's calls, which the views make through its generated hooks
  * (hooks/controlplane/issues-service-hooks_gen.ts) and imperative writes; like
  * GeneratedObservabilityReads, on ObservabilityApi only as the model-level
@@ -255,7 +264,7 @@ export type GeneratedIssuesCalls =
   | "linkIssueChat";
 
 /** What a view may call through the context: everything but the calls on generated hooks. */
-export type ObservabilityContextApi = Omit<ObservabilityApi, GeneratedObservabilityReads | GeneratedIssuesCalls>;
+export type ObservabilityContextApi = Omit<ObservabilityApi, GeneratedObservabilityReads | GeneratedDeliveryActivityReads | GeneratedIssuesCalls>;
 
 /** The provided api, else the real client on the nearest TransportScope's transport, else on the app's. */
 export function useObservabilityApi(): ObservabilityContextApi {

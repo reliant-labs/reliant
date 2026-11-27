@@ -12,9 +12,16 @@
 
 import type { Transport } from "@connectrpc/connect";
 import { create, type MessageInitShape } from "@bufbuild/protobuf";
-import { DurationSchema, TimestampSchema, type Duration, type Timestamp } from "@bufbuild/protobuf/wkt";
+import { DurationSchema, type Duration } from "@bufbuild/protobuf/wkt";
 
-import { DeliveryInsightsService, type ReleaseMarker as WirePromotion } from "@/gen/controlplane/services/delivery_insights/v1/delivery_insights_pb";
+import {
+  DeliveryInsightsService,
+  type GetDoraMetricsRequestSchema,
+  type GetDoraMetricsResponse,
+  type ListReleasesRequestSchema,
+  type ListReleasesResponse,
+  type ReleaseMarker as WirePromotion,
+} from "@/gen/controlplane/services/delivery_insights/v1/delivery_insights_pb";
 import {
   ObservabilityService,
   ReleaseFindingCode as WireFindingCode,
@@ -27,7 +34,7 @@ import {
 
 import { getControlPlaneClient } from "../client";
 import { obsCall } from "./obsInterceptors";
-import { msOf, relativeWindow, wireTimeRange } from "./api";
+import { msOf, relativeWindow, wireTimeRange, type ObsWindow } from "./api";
 import {
   RELEASES_LIMIT,
   type DeliveryScope,
@@ -48,24 +55,23 @@ function client(transport?: Transport) {
   return getControlPlaneClient(DeliveryInsightsService, transport);
 }
 
-function timestamp(ms: number): Timestamp {
-  const seconds = Math.floor(ms / 1000);
-  return create(TimestampSchema, { seconds: BigInt(seconds), nanos: Math.round((ms - seconds * 1000) * 1e6) });
-}
-
 /** A Duration as milliseconds; an unset one (no value to report) as null. */
 export function durationMs(d: Duration | undefined): number | null {
   if (!d) return null;
   return Number(d.seconds) * 1000 + d.nanos / 1e6;
 }
 
-/** The DeliveryScope on the wire. Only the shared fields: services and filters are reserved there. */
-export function wireDeliveryScope(s: DeliveryScope, window: TimeWindow | undefined) {
+/**
+ * The DeliveryScope on the wire. Only the shared fields: services and filters
+ * are reserved there. The window is absolute, or relative to the server's
+ * clock (DeliveryTimeRange.relative, control-plane#3500).
+ */
+export function wireDeliveryScope(s: DeliveryScope, window: ObsWindow | undefined) {
   return {
     orgId: s.orgId,
     projectId: s.projectId || undefined,
     envIds: s.envIds,
-    timeRange: window ? { start: timestamp(window.startMs), end: timestamp(window.endMs) } : undefined,
+    timeRange: window ? wireTimeRange(window) : undefined,
   };
 }
 
@@ -86,12 +92,19 @@ function mapPromotion(p: WirePromotion): Promotion {
 }
 
 /** Promotions in `window` (required by the server), oldest first; the newest `limit` when there are more. */
-export async function listReleases(req: DeliveryScope & { window: TimeWindow; limit?: number }, transport?: Transport): Promise<PromotionList> {
-  const res = await client(transport).listReleases({
+export function releasesRequest(req: DeliveryScope & { window: ObsWindow; limit?: number }): MessageInitShape<typeof ListReleasesRequestSchema> {
+  return {
     scope: wireDeliveryScope(req, req.window),
     limit: Math.min(req.limit ?? RELEASES_LIMIT.default, RELEASES_LIMIT.max),
-  });
+  };
+}
+
+export function toPromotionList(res: ListReleasesResponse): PromotionList {
   return { promotions: res.releases.map(mapPromotion), truncated: res.truncated };
+}
+
+export async function listReleases(req: DeliveryScope & { window: TimeWindow; limit?: number }, transport?: Transport): Promise<PromotionList> {
+  return toPromotionList(await client(transport).listReleases(releasesRequest(req)));
 }
 
 /**
@@ -99,11 +112,18 @@ export async function listReleases(req: DeliveryScope & { window: TimeWindow; li
  * with a deployment counted as failed when rolled back within
  * `failureWindowHours` (0: the server's 24).
  */
-export async function getDoraMetrics(req: DeliveryScope & { window?: TimeWindow; failureWindowHours?: number }, transport?: Transport): Promise<DoraMetrics> {
-  const res = await client(transport).getDoraMetrics({
+export function doraMetricsRequest(req: DeliveryScope & { window?: ObsWindow; failureWindowHours?: number }): MessageInitShape<typeof GetDoraMetricsRequestSchema> {
+  return {
     scope: wireDeliveryScope(req, req.window),
     failureWindowHours: req.failureWindowHours ?? 0,
-  });
+  };
+}
+
+export async function getDoraMetrics(req: DeliveryScope & { window?: TimeWindow; failureWindowHours?: number }, transport?: Transport): Promise<DoraMetrics> {
+  return toDoraMetrics(await client(transport).getDoraMetrics(doraMetricsRequest(req)));
+}
+
+export function toDoraMetrics(res: GetDoraMetricsResponse): DoraMetrics {
   const df = res.deploymentFrequency;
   const lt = res.leadTime;
   const cfr = res.changeFailureRate;
