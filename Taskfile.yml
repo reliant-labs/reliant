@@ -361,7 +361,7 @@ tasks:
     desc: "Go SDK module tests (sdk/go), the full tier: no -short, no workspace"
     dir: sdk/go
     cmds:
-      - env GOWORK=off go test {{.GOTESTRACE}} -count=1 -timeout 10m {{if .CLI_ARGS}}{{.CLI_ARGS}}{{else}}./...{{end}}
+      - env GOWORK=off go test {{.GOTESTRACE}} -timeout 10m {{if .CLI_ARGS}}{{.CLI_ARGS}}{{else}}./...{{end}}
 
   test:
     # Everything after `--` REPLACES the default `./...`, so it takes both
@@ -384,9 +384,9 @@ tasks:
     # coverage under .forge/tests/runs/), the web tests as lane `frontend`
     # (scripts/test-capture.sh); `forge test report` summarises them. The
     # verdict is the tests' own; FORGE_TESTS=off records nothing.
-    desc: Run Go unit tests (-race -count=1) and the web and electron tests (excludes integration + e2e)
+    desc: Run Go unit tests (-race, cached) and the web and electron tests (excludes integration + e2e)
     cmds:
-      - '{{.SLOT}} ./scripts/test-capture.sh go unit {{.GOTESTRACE}} -count=1 -timeout 300s {{if .CLI_ARGS}}{{.CLI_ARGS}}{{else}}./...{{end}}'
+      - '{{.SLOT}} ./scripts/test-capture.sh go unit {{.GOTESTRACE}} -timeout 300s {{if .CLI_ARGS}}{{.CLI_ARGS}}{{else}}./...{{end}}'
       - task: test:sdk:full
         if: '[ -z "{{.CLI_ARGS}}" ]'
       - task: test:web
@@ -404,7 +404,7 @@ tasks:
         pkgs="{{.CLI_ARGS}}"
         [ -n "$pkgs" ] || pkgs=$(./scripts/integration-packages.sh | tr '\n' ' ')
         if [ -z "$pkgs" ]; then echo "test:integration: no integration-tagged test files; nothing to run"; exit 0; fi
-        {{.SLOT}} ./scripts/test-capture.sh go integration {{.GOTESTRACE}} -tags=integration -count=1 -timeout=10m $pkgs
+        {{.SLOT}} ./scripts/test-capture.sh go integration {{.GOTESTRACE}} -tags=integration -timeout=10m $pkgs
 
   test:e2e:
     # e2e/stories: real Postgres (pgtest's, as every DB-backed test) + an
@@ -606,6 +606,20 @@ tasks:
     desc: "Is HEAD (or `-- <rev>`) release-ready? exit 0 green | 1 red | 3 no record"
     cmds:
       - ./scripts/release-gate.sh check {{.CLI_ARGS}}
+
+  gate:
+    # The Reliant merge queue's gate (.reliant/pipeline.yaml's test stage):
+    # today's main push suite as one command, on HEAD. The release gate's four
+    # parts (each in a private checkout), Playwright and the electron package
+    # smoke, migration order and the repo checks, concurrently, in one table.
+    # scripts/gate.sh says what each lane runs and what it leaves out. Never
+    # recorded or published. Exit 0 pass | 1 fail | 2 unproven (a lane could
+    # not run, or failed only on the host); task itself turns any failure into
+    # 201, so `task --exit-code gate` keeps them. 40-70 minutes: run it in the
+    # background. GATE_LANES=go,web narrows it; GATE_BASE names the base.
+    desc: "The merge queue's gate: the main push suite on HEAD (release gate parts, Playwright, electron package, repo checks); exit 0 pass | 1 fail | 2 unproven"
+    cmds:
+      - ./scripts/gate.sh
 
   # ── What CI adds to the two gates ─────────────────────────────────────
   # .github/workflows/ci.yml is a thin wrapper: a pull request runs

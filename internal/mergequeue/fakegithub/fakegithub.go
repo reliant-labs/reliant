@@ -19,12 +19,13 @@ type GitHub struct {
 	t    testing.TB
 	root string
 
-	mu          sync.Mutex
-	repos       map[string]*Repo
-	faults      []*Fault
-	calls       []Call
-	hooks       []*hook
-	nextCheckID int64
+	mu            sync.Mutex
+	repos         map[string]*Repo
+	faults        []*Fault
+	calls         []Call
+	hooks         []*hook
+	nextCheckID   int64
+	nextCommentID int64
 }
 
 var _ ghport.Client = (*GitHub)(nil)
@@ -61,6 +62,7 @@ type pullRequest struct {
 	merged    bool
 	mergeSHA  string
 	mergeHead string
+	comments  []ghport.IssueComment
 }
 
 // NewRepo creates an empty bare repository named full ("owner/name").
@@ -666,6 +668,91 @@ func (g *GitHub) commit(id ghport.Repo, sha string) (ghport.Commit, error) {
 		}
 	}
 	return out, nil
+}
+
+// CreateCommit implements [ghport.Client]: a commit object, authored as
+// GitHub would for the token's App.
+func (g *GitHub) CreateCommit(ctx context.Context, id ghport.Repo, in ghport.NewCommit) (ghport.Commit, error) {
+	after, err := g.begin(ctx, Call{Method: MethodCreateCommit, Repo: id, SHA: in.TreeSHA})
+	if err != nil {
+		return ghport.Commit{}, err
+	}
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	r, err := g.repo(id)
+	if err != nil {
+		return ghport.Commit{}, err
+	}
+	if res := rawGit(r.dir, seedIdentity, "", nil, "cat-file", "-t", in.TreeSHA); res.err != nil || strings.TrimSpace(res.stdout) != "tree" {
+		return ghport.Commit{}, &ghport.ValidationError{Field: "tree", Reason: "no tree " + in.TreeSHA}
+	}
+	for _, p := range in.Parents {
+		if !r.isCommit(p) {
+			return ghport.Commit{}, &ghport.ValidationError{Field: "parents", Reason: "no commit " + p}
+		}
+	}
+	msg := strings.TrimRight(in.Message, "\n") + "\n"
+	sha, err := r.writeCommit(githubIdentity, in.TreeSHA, in.Parents, msg)
+	if err != nil {
+		return ghport.Commit{}, err
+	}
+	out, err := g.commit(id, sha)
+	return finish(out, err, after)
+}
+
+// CreateIssueComment implements [ghport.Client].
+func (g *GitHub) CreateIssueComment(ctx context.Context, id ghport.Repo, number int, body string) (ghport.IssueComment, error) {
+	after, err := g.begin(ctx, Call{Method: MethodCreateComment, Repo: id, Number: number})
+	if err != nil {
+		return ghport.IssueComment{}, err
+	}
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	p, err := g.pr(id, number)
+	if err != nil {
+		return ghport.IssueComment{}, err
+	}
+	if strings.TrimSpace(body) == "" {
+		return ghport.IssueComment{}, &ghport.ValidationError{Field: "body", Reason: "required"}
+	}
+	g.nextCommentID++
+	c := ghport.IssueComment{ID: g.nextCommentID, Body: body}
+	p.comments = append(p.comments, c)
+	return finish(c, nil, after)
+}
+
+// ListIssueComments implements [ghport.Client]: oldest first.
+func (g *GitHub) ListIssueComments(ctx context.Context, id ghport.Repo, number int) ([]ghport.IssueComment, error) {
+	after, err := g.begin(ctx, Call{Method: MethodListComments, Repo: id, Number: number})
+	if err != nil {
+		return nil, err
+	}
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	p, err := g.pr(id, number)
+	if err != nil {
+		return nil, err
+	}
+	return finish(append([]ghport.IssueComment(nil), p.comments...), nil, after)
+}
+
+func (g *GitHub) pr(id ghport.Repo, number int) (*pullRequest, error) {
+	r, err := g.repo(id)
+	if err != nil {
+		return nil, err
+	}
+	p, ok := r.prs[number]
+	if !ok {
+		return nil, &ghport.NotFoundError{What: fmt.Sprintf("pull request #%d", number)}
+	}
+	return p, nil
+}
+
+// Comments returns a PR's conversation comments, oldest first.
+func (r *Repo) Comments(n int) []ghport.IssueComment {
+	r.g.mu.Lock()
+	defer r.g.mu.Unlock()
+	return append([]ghport.IssueComment(nil), r.mustPR(n).comments...)
 }
 
 // isCommit reports whether sha names a commit (a full or abbreviated sha;

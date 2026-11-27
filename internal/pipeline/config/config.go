@@ -95,6 +95,11 @@ type Gate struct {
 	// per line (see [ParseInfraPatterns]). It is read from the same base
 	// commit as this file.
 	InfraPatternsFile string `yaml:"infra_patterns_file"`
+	// AllowUnisolated lets a batch land on a gate that ran outside an
+	// isolation boundary (plain runc), until isolated gate machines exist
+	// (owner, 2026-11-26). Default false: such a gate is unproven and never
+	// lands. A batch that lands this way is marked unisolated.
+	AllowUnisolated *bool `yaml:"allow_unisolated"`
 }
 
 // Stages is `gate.stages` (owner decision D13): one optional entry per

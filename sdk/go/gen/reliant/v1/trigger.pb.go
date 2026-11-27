@@ -127,21 +127,26 @@ const (
 	// its dedupe key. Like AGENT_START_RUN it lists under Runs and stays out of
 	// the sidebar until adopted.
 	TriggerEventKind_TRIGGER_EVENT_KIND_CLI_RUN TriggerEventKind = 9
+	// RECORD_DUE is a record whose next action fell due (a RecordDueSource
+	// trigger). Its dedupe key is "<trigger id>:<record id>@<due at>", so a
+	// record fires once per due time however often it is scanned.
+	TriggerEventKind_TRIGGER_EVENT_KIND_RECORD_DUE TriggerEventKind = 10
 )
 
 // Enum value maps for TriggerEventKind.
 var (
 	TriggerEventKind_name = map[int32]string{
-		0: "TRIGGER_EVENT_KIND_UNSPECIFIED",
-		1: "TRIGGER_EVENT_KIND_CHAT_START",
-		2: "TRIGGER_EVENT_KIND_SCHEDULE",
-		3: "TRIGGER_EVENT_KIND_AGENT_START_RUN",
-		4: "TRIGGER_EVENT_KIND_BUILDER_TEST",
-		5: "TRIGGER_EVENT_KIND_WEBHOOK",
-		6: "TRIGGER_EVENT_KIND_INTEGRATION",
-		7: "TRIGGER_EVENT_KIND_WORKFLOW_EVENT",
-		8: "TRIGGER_EVENT_KIND_MANUAL_RUN",
-		9: "TRIGGER_EVENT_KIND_CLI_RUN",
+		0:  "TRIGGER_EVENT_KIND_UNSPECIFIED",
+		1:  "TRIGGER_EVENT_KIND_CHAT_START",
+		2:  "TRIGGER_EVENT_KIND_SCHEDULE",
+		3:  "TRIGGER_EVENT_KIND_AGENT_START_RUN",
+		4:  "TRIGGER_EVENT_KIND_BUILDER_TEST",
+		5:  "TRIGGER_EVENT_KIND_WEBHOOK",
+		6:  "TRIGGER_EVENT_KIND_INTEGRATION",
+		7:  "TRIGGER_EVENT_KIND_WORKFLOW_EVENT",
+		8:  "TRIGGER_EVENT_KIND_MANUAL_RUN",
+		9:  "TRIGGER_EVENT_KIND_CLI_RUN",
+		10: "TRIGGER_EVENT_KIND_RECORD_DUE",
 	}
 	TriggerEventKind_value = map[string]int32{
 		"TRIGGER_EVENT_KIND_UNSPECIFIED":     0,
@@ -154,6 +159,7 @@ var (
 		"TRIGGER_EVENT_KIND_WORKFLOW_EVENT":  7,
 		"TRIGGER_EVENT_KIND_MANUAL_RUN":      8,
 		"TRIGGER_EVENT_KIND_CLI_RUN":         9,
+		"TRIGGER_EVENT_KIND_RECORD_DUE":      10,
 	}
 )
 
@@ -1190,6 +1196,60 @@ func (x *IntegrationSource) GetMatchInput() map[string]string {
 	return nil
 }
 
+// RecordDueSource is the trigger.source arm for a trigger that fires when a
+// record of a registered table falls due: its next action's due time
+// (pr_pipeline.next_action_at) has passed. The server scans for due records
+// and fires one event per due record and due time, and none while nothing is
+// due. The run sees the record as trigger.record (id, repository, number,
+// head_sha, next_action, due_at) and the event as trigger.payload. Declared
+// in a workflow's `triggers:` block only; activated like any declared
+// trigger, it fires for records of the activation's project.
+type RecordDueSource struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The registered table whose due records fire it: "pr_pipeline" (a PR's
+	// place in the PR pipeline) is the only one.
+	Table         string `protobuf:"bytes,1,opt,name=table,proto3" json:"table,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RecordDueSource) Reset() {
+	*x = RecordDueSource{}
+	mi := &file_reliant_v1_trigger_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RecordDueSource) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RecordDueSource) ProtoMessage() {}
+
+func (x *RecordDueSource) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_trigger_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RecordDueSource.ProtoReflect.Descriptor instead.
+func (*RecordDueSource) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_trigger_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *RecordDueSource) GetTable() string {
+	if x != nil {
+		return x.Table
+	}
+	return ""
+}
+
 // WorkflowEventSource is the trigger.source arm for a trigger that fires when
 // a run of one of the owner's workflows reaches an outcome. A trigger never
 // fires on a run it launched itself (or one of that run's descendants).
@@ -1208,7 +1268,7 @@ type WorkflowEventSource struct {
 
 func (x *WorkflowEventSource) Reset() {
 	*x = WorkflowEventSource{}
-	mi := &file_reliant_v1_trigger_proto_msgTypes[7]
+	mi := &file_reliant_v1_trigger_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1220,7 +1280,7 @@ func (x *WorkflowEventSource) String() string {
 func (*WorkflowEventSource) ProtoMessage() {}
 
 func (x *WorkflowEventSource) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_trigger_proto_msgTypes[7]
+	mi := &file_reliant_v1_trigger_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1233,7 +1293,7 @@ func (x *WorkflowEventSource) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WorkflowEventSource.ProtoReflect.Descriptor instead.
 func (*WorkflowEventSource) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_trigger_proto_rawDescGZIP(), []int{7}
+	return file_reliant_v1_trigger_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *WorkflowEventSource) GetWorkflows() []string {
@@ -1309,6 +1369,7 @@ type WorkflowTrigger struct {
 	//	*WorkflowTrigger_Webhook
 	//	*WorkflowTrigger_Integration
 	//	*WorkflowTrigger_WorkflowEvent
+	//	*WorkflowTrigger_RecordDue
 	Source        isWorkflowTrigger_Source `protobuf_oneof:"source"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1316,7 +1377,7 @@ type WorkflowTrigger struct {
 
 func (x *WorkflowTrigger) Reset() {
 	*x = WorkflowTrigger{}
-	mi := &file_reliant_v1_trigger_proto_msgTypes[8]
+	mi := &file_reliant_v1_trigger_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1328,7 +1389,7 @@ func (x *WorkflowTrigger) String() string {
 func (*WorkflowTrigger) ProtoMessage() {}
 
 func (x *WorkflowTrigger) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_trigger_proto_msgTypes[8]
+	mi := &file_reliant_v1_trigger_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1341,7 +1402,7 @@ func (x *WorkflowTrigger) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WorkflowTrigger.ProtoReflect.Descriptor instead.
 func (*WorkflowTrigger) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_trigger_proto_rawDescGZIP(), []int{8}
+	return file_reliant_v1_trigger_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *WorkflowTrigger) GetName() string {
@@ -1443,6 +1504,15 @@ func (x *WorkflowTrigger) GetWorkflowEvent() *WorkflowEventSource {
 	return nil
 }
 
+func (x *WorkflowTrigger) GetRecordDue() *RecordDueSource {
+	if x != nil {
+		if x, ok := x.Source.(*WorkflowTrigger_RecordDue); ok {
+			return x.RecordDue
+		}
+	}
+	return nil
+}
+
 type isWorkflowTrigger_Source interface {
 	isWorkflowTrigger_Source()
 }
@@ -1463,6 +1533,10 @@ type WorkflowTrigger_WorkflowEvent struct {
 	WorkflowEvent *WorkflowEventSource `protobuf:"bytes,23,opt,name=workflow_event,json=workflowEvent,proto3,oneof"`
 }
 
+type WorkflowTrigger_RecordDue struct {
+	RecordDue *RecordDueSource `protobuf:"bytes,24,opt,name=record_due,json=recordDue,proto3,oneof"`
+}
+
 func (*WorkflowTrigger_Schedule) isWorkflowTrigger_Source() {}
 
 func (*WorkflowTrigger_Webhook) isWorkflowTrigger_Source() {}
@@ -1470,6 +1544,8 @@ func (*WorkflowTrigger_Webhook) isWorkflowTrigger_Source() {}
 func (*WorkflowTrigger_Integration) isWorkflowTrigger_Source() {}
 
 func (*WorkflowTrigger_WorkflowEvent) isWorkflowTrigger_Source() {}
+
+func (*WorkflowTrigger_RecordDue) isWorkflowTrigger_Source() {}
 
 // Trigger is a stored trigger definition.
 type Trigger struct {
@@ -1553,6 +1629,7 @@ type Trigger struct {
 	//	*Trigger_Webhook
 	//	*Trigger_Integration
 	//	*Trigger_WorkflowEvent
+	//	*Trigger_RecordDue
 	Source isTrigger_Source `protobuf_oneof:"source"`
 	// The connection an integration trigger listens through: one of the
 	// owner's connections for IntegrationSource.integration. Unset for other
@@ -1618,7 +1695,7 @@ type Trigger struct {
 
 func (x *Trigger) Reset() {
 	*x = Trigger{}
-	mi := &file_reliant_v1_trigger_proto_msgTypes[9]
+	mi := &file_reliant_v1_trigger_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1630,7 +1707,7 @@ func (x *Trigger) String() string {
 func (*Trigger) ProtoMessage() {}
 
 func (x *Trigger) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_trigger_proto_msgTypes[9]
+	mi := &file_reliant_v1_trigger_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1643,7 +1720,7 @@ func (x *Trigger) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Trigger.ProtoReflect.Descriptor instead.
 func (*Trigger) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_trigger_proto_rawDescGZIP(), []int{9}
+	return file_reliant_v1_trigger_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *Trigger) GetId() string {
@@ -1857,6 +1934,15 @@ func (x *Trigger) GetWorkflowEvent() *WorkflowEventSource {
 	return nil
 }
 
+func (x *Trigger) GetRecordDue() *RecordDueSource {
+	if x != nil {
+		if x, ok := x.Source.(*Trigger_RecordDue); ok {
+			return x.RecordDue
+		}
+	}
+	return nil
+}
+
 func (x *Trigger) GetConnectionId() string {
 	if x != nil && x.ConnectionId != nil {
 		return *x.ConnectionId
@@ -1940,6 +2026,12 @@ type Trigger_WorkflowEvent struct {
 	WorkflowEvent *WorkflowEventSource `protobuf:"bytes,23,opt,name=workflow_event,json=workflowEvent,proto3,oneof"`
 }
 
+type Trigger_RecordDue struct {
+	// An activation of a declared record_due trigger (display, like the
+	// other arms of an activation).
+	RecordDue *RecordDueSource `protobuf:"bytes,38,opt,name=record_due,json=recordDue,proto3,oneof"`
+}
+
 func (*Trigger_Schedule) isTrigger_Source() {}
 
 func (*Trigger_Webhook) isTrigger_Source() {}
@@ -1947,6 +2039,8 @@ func (*Trigger_Webhook) isTrigger_Source() {}
 func (*Trigger_Integration) isTrigger_Source() {}
 
 func (*Trigger_WorkflowEvent) isTrigger_Source() {}
+
+func (*Trigger_RecordDue) isTrigger_Source() {}
 
 // TriggerDefinitionSource is where an activation's workflow definition is
 // read from when it fires: which kind of workflow, which file on which
@@ -1978,7 +2072,7 @@ type TriggerDefinitionSource struct {
 
 func (x *TriggerDefinitionSource) Reset() {
 	*x = TriggerDefinitionSource{}
-	mi := &file_reliant_v1_trigger_proto_msgTypes[10]
+	mi := &file_reliant_v1_trigger_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1990,7 +2084,7 @@ func (x *TriggerDefinitionSource) String() string {
 func (*TriggerDefinitionSource) ProtoMessage() {}
 
 func (x *TriggerDefinitionSource) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_trigger_proto_msgTypes[10]
+	mi := &file_reliant_v1_trigger_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2003,7 +2097,7 @@ func (x *TriggerDefinitionSource) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TriggerDefinitionSource.ProtoReflect.Descriptor instead.
 func (*TriggerDefinitionSource) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_trigger_proto_rawDescGZIP(), []int{10}
+	return file_reliant_v1_trigger_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *TriggerDefinitionSource) GetKind() string {
@@ -2076,7 +2170,7 @@ type TriggerChange struct {
 
 func (x *TriggerChange) Reset() {
 	*x = TriggerChange{}
-	mi := &file_reliant_v1_trigger_proto_msgTypes[11]
+	mi := &file_reliant_v1_trigger_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2088,7 +2182,7 @@ func (x *TriggerChange) String() string {
 func (*TriggerChange) ProtoMessage() {}
 
 func (x *TriggerChange) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_trigger_proto_msgTypes[11]
+	mi := &file_reliant_v1_trigger_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2101,7 +2195,7 @@ func (x *TriggerChange) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TriggerChange.ProtoReflect.Descriptor instead.
 func (*TriggerChange) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_trigger_proto_rawDescGZIP(), []int{11}
+	return file_reliant_v1_trigger_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *TriggerChange) GetId() string {
@@ -2237,7 +2331,7 @@ type TriggerEvent struct {
 
 func (x *TriggerEvent) Reset() {
 	*x = TriggerEvent{}
-	mi := &file_reliant_v1_trigger_proto_msgTypes[12]
+	mi := &file_reliant_v1_trigger_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2249,7 +2343,7 @@ func (x *TriggerEvent) String() string {
 func (*TriggerEvent) ProtoMessage() {}
 
 func (x *TriggerEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_trigger_proto_msgTypes[12]
+	mi := &file_reliant_v1_trigger_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2262,7 +2356,7 @@ func (x *TriggerEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TriggerEvent.ProtoReflect.Descriptor instead.
 func (*TriggerEvent) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_trigger_proto_rawDescGZIP(), []int{12}
+	return file_reliant_v1_trigger_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *TriggerEvent) GetId() string {
@@ -2395,7 +2489,7 @@ type TriggerEventDefinition struct {
 
 func (x *TriggerEventDefinition) Reset() {
 	*x = TriggerEventDefinition{}
-	mi := &file_reliant_v1_trigger_proto_msgTypes[13]
+	mi := &file_reliant_v1_trigger_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2407,7 +2501,7 @@ func (x *TriggerEventDefinition) String() string {
 func (*TriggerEventDefinition) ProtoMessage() {}
 
 func (x *TriggerEventDefinition) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_trigger_proto_msgTypes[13]
+	mi := &file_reliant_v1_trigger_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2420,7 +2514,7 @@ func (x *TriggerEventDefinition) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TriggerEventDefinition.ProtoReflect.Descriptor instead.
 func (*TriggerEventDefinition) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_trigger_proto_rawDescGZIP(), []int{13}
+	return file_reliant_v1_trigger_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *TriggerEventDefinition) GetWorkflow() string {
@@ -2535,7 +2629,7 @@ type TriggerSender struct {
 
 func (x *TriggerSender) Reset() {
 	*x = TriggerSender{}
-	mi := &file_reliant_v1_trigger_proto_msgTypes[14]
+	mi := &file_reliant_v1_trigger_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2547,7 +2641,7 @@ func (x *TriggerSender) String() string {
 func (*TriggerSender) ProtoMessage() {}
 
 func (x *TriggerSender) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_trigger_proto_msgTypes[14]
+	mi := &file_reliant_v1_trigger_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2560,7 +2654,7 @@ func (x *TriggerSender) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TriggerSender.ProtoReflect.Descriptor instead.
 func (*TriggerSender) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_trigger_proto_rawDescGZIP(), []int{14}
+	return file_reliant_v1_trigger_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *TriggerSender) GetKind() string {
@@ -2663,6 +2757,7 @@ type TriggerDefinition struct {
 	//	*TriggerDefinition_Webhook
 	//	*TriggerDefinition_Integration
 	//	*TriggerDefinition_WorkflowEvent
+	//	*TriggerDefinition_RecordDue
 	//	*TriggerDefinition_WorkflowTrigger
 	Source isTriggerDefinition_Source `protobuf_oneof:"source"`
 	// Who the integration writes of this trigger's runs speak as. UNSPECIFIED
@@ -2683,7 +2778,7 @@ type TriggerDefinition struct {
 
 func (x *TriggerDefinition) Reset() {
 	*x = TriggerDefinition{}
-	mi := &file_reliant_v1_trigger_proto_msgTypes[15]
+	mi := &file_reliant_v1_trigger_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2695,7 +2790,7 @@ func (x *TriggerDefinition) String() string {
 func (*TriggerDefinition) ProtoMessage() {}
 
 func (x *TriggerDefinition) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_trigger_proto_msgTypes[15]
+	mi := &file_reliant_v1_trigger_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2708,7 +2803,7 @@ func (x *TriggerDefinition) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TriggerDefinition.ProtoReflect.Descriptor instead.
 func (*TriggerDefinition) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_trigger_proto_rawDescGZIP(), []int{15}
+	return file_reliant_v1_trigger_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *TriggerDefinition) GetName() string {
@@ -2859,6 +2954,15 @@ func (x *TriggerDefinition) GetWorkflowEvent() *WorkflowEventSource {
 	return nil
 }
 
+func (x *TriggerDefinition) GetRecordDue() *RecordDueSource {
+	if x != nil {
+		if x, ok := x.Source.(*TriggerDefinition_RecordDue); ok {
+			return x.RecordDue
+		}
+	}
+	return nil
+}
+
 func (x *TriggerDefinition) GetWorkflowTrigger() string {
 	if x != nil {
 		if x, ok := x.Source.(*TriggerDefinition_WorkflowTrigger); ok {
@@ -2902,6 +3006,14 @@ type TriggerDefinition_WorkflowEvent struct {
 	WorkflowEvent *WorkflowEventSource `protobuf:"bytes,23,opt,name=workflow_event,json=workflowEvent,proto3,oneof"`
 }
 
+type TriggerDefinition_RecordDue struct {
+	// Accepted on the wire so Trigger and TriggerDefinition declare the same
+	// arms (a client sends a stored arm back as it read it), but refused on
+	// create and update: a record_due trigger is declared in a workflow's
+	// `triggers:` block and activated through workflow_trigger.
+	RecordDue *RecordDueSource `protobuf:"bytes,28,opt,name=record_due,json=recordDue,proto3,oneof"`
+}
+
 type TriggerDefinition_WorkflowTrigger struct {
 	// Activate the named trigger the workflow declares (WorkflowTrigger.name)
 	// instead of writing a source inline. The declaration supplies the
@@ -2920,6 +3032,8 @@ func (*TriggerDefinition_Integration) isTriggerDefinition_Source() {}
 
 func (*TriggerDefinition_WorkflowEvent) isTriggerDefinition_Source() {}
 
+func (*TriggerDefinition_RecordDue) isTriggerDefinition_Source() {}
+
 func (*TriggerDefinition_WorkflowTrigger) isTriggerDefinition_Source() {}
 
 // WebhookCredential is a webhook trigger's token, returned exactly once.
@@ -2936,7 +3050,7 @@ type WebhookCredential struct {
 
 func (x *WebhookCredential) Reset() {
 	*x = WebhookCredential{}
-	mi := &file_reliant_v1_trigger_proto_msgTypes[16]
+	mi := &file_reliant_v1_trigger_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2948,7 +3062,7 @@ func (x *WebhookCredential) String() string {
 func (*WebhookCredential) ProtoMessage() {}
 
 func (x *WebhookCredential) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_trigger_proto_msgTypes[16]
+	mi := &file_reliant_v1_trigger_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2961,7 +3075,7 @@ func (x *WebhookCredential) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WebhookCredential.ProtoReflect.Descriptor instead.
 func (*WebhookCredential) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_trigger_proto_rawDescGZIP(), []int{16}
+	return file_reliant_v1_trigger_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *WebhookCredential) GetToken() string {
@@ -2996,7 +3110,7 @@ type CreateTriggerRequest struct {
 
 func (x *CreateTriggerRequest) Reset() {
 	*x = CreateTriggerRequest{}
-	mi := &file_reliant_v1_trigger_proto_msgTypes[17]
+	mi := &file_reliant_v1_trigger_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3008,7 +3122,7 @@ func (x *CreateTriggerRequest) String() string {
 func (*CreateTriggerRequest) ProtoMessage() {}
 
 func (x *CreateTriggerRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_trigger_proto_msgTypes[17]
+	mi := &file_reliant_v1_trigger_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3021,7 +3135,7 @@ func (x *CreateTriggerRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateTriggerRequest.ProtoReflect.Descriptor instead.
 func (*CreateTriggerRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_trigger_proto_rawDescGZIP(), []int{17}
+	return file_reliant_v1_trigger_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *CreateTriggerRequest) GetTrigger() *TriggerDefinition {
@@ -3054,7 +3168,7 @@ type CreateTriggerResponse struct {
 
 func (x *CreateTriggerResponse) Reset() {
 	*x = CreateTriggerResponse{}
-	mi := &file_reliant_v1_trigger_proto_msgTypes[18]
+	mi := &file_reliant_v1_trigger_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3066,7 +3180,7 @@ func (x *CreateTriggerResponse) String() string {
 func (*CreateTriggerResponse) ProtoMessage() {}
 
 func (x *CreateTriggerResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_trigger_proto_msgTypes[18]
+	mi := &file_reliant_v1_trigger_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3079,7 +3193,7 @@ func (x *CreateTriggerResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateTriggerResponse.ProtoReflect.Descriptor instead.
 func (*CreateTriggerResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_trigger_proto_rawDescGZIP(), []int{18}
+	return file_reliant_v1_trigger_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *CreateTriggerResponse) GetTrigger() *Trigger {
@@ -3125,7 +3239,7 @@ type TriggerFundingWarning struct {
 
 func (x *TriggerFundingWarning) Reset() {
 	*x = TriggerFundingWarning{}
-	mi := &file_reliant_v1_trigger_proto_msgTypes[19]
+	mi := &file_reliant_v1_trigger_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3137,7 +3251,7 @@ func (x *TriggerFundingWarning) String() string {
 func (*TriggerFundingWarning) ProtoMessage() {}
 
 func (x *TriggerFundingWarning) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_trigger_proto_msgTypes[19]
+	mi := &file_reliant_v1_trigger_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3150,7 +3264,7 @@ func (x *TriggerFundingWarning) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TriggerFundingWarning.ProtoReflect.Descriptor instead.
 func (*TriggerFundingWarning) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_trigger_proto_rawDescGZIP(), []int{19}
+	return file_reliant_v1_trigger_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *TriggerFundingWarning) GetOrgId() string {
@@ -3185,7 +3299,7 @@ type RotateWebhookTokenRequest struct {
 
 func (x *RotateWebhookTokenRequest) Reset() {
 	*x = RotateWebhookTokenRequest{}
-	mi := &file_reliant_v1_trigger_proto_msgTypes[20]
+	mi := &file_reliant_v1_trigger_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3197,7 +3311,7 @@ func (x *RotateWebhookTokenRequest) String() string {
 func (*RotateWebhookTokenRequest) ProtoMessage() {}
 
 func (x *RotateWebhookTokenRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_trigger_proto_msgTypes[20]
+	mi := &file_reliant_v1_trigger_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3210,7 +3324,7 @@ func (x *RotateWebhookTokenRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RotateWebhookTokenRequest.ProtoReflect.Descriptor instead.
 func (*RotateWebhookTokenRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_trigger_proto_rawDescGZIP(), []int{20}
+	return file_reliant_v1_trigger_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *RotateWebhookTokenRequest) GetId() string {
@@ -3234,7 +3348,7 @@ type RotateWebhookTokenResponse struct {
 
 func (x *RotateWebhookTokenResponse) Reset() {
 	*x = RotateWebhookTokenResponse{}
-	mi := &file_reliant_v1_trigger_proto_msgTypes[21]
+	mi := &file_reliant_v1_trigger_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3246,7 +3360,7 @@ func (x *RotateWebhookTokenResponse) String() string {
 func (*RotateWebhookTokenResponse) ProtoMessage() {}
 
 func (x *RotateWebhookTokenResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_trigger_proto_msgTypes[21]
+	mi := &file_reliant_v1_trigger_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3259,7 +3373,7 @@ func (x *RotateWebhookTokenResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RotateWebhookTokenResponse.ProtoReflect.Descriptor instead.
 func (*RotateWebhookTokenResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_trigger_proto_rawDescGZIP(), []int{21}
+	return file_reliant_v1_trigger_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *RotateWebhookTokenResponse) GetTrigger() *Trigger {
@@ -3287,7 +3401,7 @@ type GetTriggerRequest struct {
 
 func (x *GetTriggerRequest) Reset() {
 	*x = GetTriggerRequest{}
-	mi := &file_reliant_v1_trigger_proto_msgTypes[22]
+	mi := &file_reliant_v1_trigger_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3299,7 +3413,7 @@ func (x *GetTriggerRequest) String() string {
 func (*GetTriggerRequest) ProtoMessage() {}
 
 func (x *GetTriggerRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_trigger_proto_msgTypes[22]
+	mi := &file_reliant_v1_trigger_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3312,7 +3426,7 @@ func (x *GetTriggerRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetTriggerRequest.ProtoReflect.Descriptor instead.
 func (*GetTriggerRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_trigger_proto_rawDescGZIP(), []int{22}
+	return file_reliant_v1_trigger_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *GetTriggerRequest) GetId() string {
@@ -3333,7 +3447,7 @@ type GetTriggerResponse struct {
 
 func (x *GetTriggerResponse) Reset() {
 	*x = GetTriggerResponse{}
-	mi := &file_reliant_v1_trigger_proto_msgTypes[23]
+	mi := &file_reliant_v1_trigger_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3345,7 +3459,7 @@ func (x *GetTriggerResponse) String() string {
 func (*GetTriggerResponse) ProtoMessage() {}
 
 func (x *GetTriggerResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_trigger_proto_msgTypes[23]
+	mi := &file_reliant_v1_trigger_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3358,7 +3472,7 @@ func (x *GetTriggerResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetTriggerResponse.ProtoReflect.Descriptor instead.
 func (*GetTriggerResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_trigger_proto_rawDescGZIP(), []int{23}
+	return file_reliant_v1_trigger_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *GetTriggerResponse) GetTrigger() *Trigger {
@@ -3385,7 +3499,7 @@ type ListTriggersRequest struct {
 
 func (x *ListTriggersRequest) Reset() {
 	*x = ListTriggersRequest{}
-	mi := &file_reliant_v1_trigger_proto_msgTypes[24]
+	mi := &file_reliant_v1_trigger_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3397,7 +3511,7 @@ func (x *ListTriggersRequest) String() string {
 func (*ListTriggersRequest) ProtoMessage() {}
 
 func (x *ListTriggersRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_trigger_proto_msgTypes[24]
+	mi := &file_reliant_v1_trigger_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3410,7 +3524,7 @@ func (x *ListTriggersRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListTriggersRequest.ProtoReflect.Descriptor instead.
 func (*ListTriggersRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_trigger_proto_rawDescGZIP(), []int{24}
+	return file_reliant_v1_trigger_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *ListTriggersRequest) GetProjectId() string {
@@ -3438,7 +3552,7 @@ type ListTriggersResponse struct {
 
 func (x *ListTriggersResponse) Reset() {
 	*x = ListTriggersResponse{}
-	mi := &file_reliant_v1_trigger_proto_msgTypes[25]
+	mi := &file_reliant_v1_trigger_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3450,7 +3564,7 @@ func (x *ListTriggersResponse) String() string {
 func (*ListTriggersResponse) ProtoMessage() {}
 
 func (x *ListTriggersResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_trigger_proto_msgTypes[25]
+	mi := &file_reliant_v1_trigger_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3463,7 +3577,7 @@ func (x *ListTriggersResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListTriggersResponse.ProtoReflect.Descriptor instead.
 func (*ListTriggersResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_trigger_proto_rawDescGZIP(), []int{25}
+	return file_reliant_v1_trigger_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *ListTriggersResponse) GetTriggers() []*Trigger {
@@ -3487,7 +3601,7 @@ type UpdateTriggerRequest struct {
 
 func (x *UpdateTriggerRequest) Reset() {
 	*x = UpdateTriggerRequest{}
-	mi := &file_reliant_v1_trigger_proto_msgTypes[26]
+	mi := &file_reliant_v1_trigger_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3499,7 +3613,7 @@ func (x *UpdateTriggerRequest) String() string {
 func (*UpdateTriggerRequest) ProtoMessage() {}
 
 func (x *UpdateTriggerRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_trigger_proto_msgTypes[26]
+	mi := &file_reliant_v1_trigger_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3512,7 +3626,7 @@ func (x *UpdateTriggerRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateTriggerRequest.ProtoReflect.Descriptor instead.
 func (*UpdateTriggerRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_trigger_proto_rawDescGZIP(), []int{26}
+	return file_reliant_v1_trigger_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *UpdateTriggerRequest) GetId() string {
@@ -3543,7 +3657,7 @@ type UpdateTriggerResponse struct {
 
 func (x *UpdateTriggerResponse) Reset() {
 	*x = UpdateTriggerResponse{}
-	mi := &file_reliant_v1_trigger_proto_msgTypes[27]
+	mi := &file_reliant_v1_trigger_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3555,7 +3669,7 @@ func (x *UpdateTriggerResponse) String() string {
 func (*UpdateTriggerResponse) ProtoMessage() {}
 
 func (x *UpdateTriggerResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_trigger_proto_msgTypes[27]
+	mi := &file_reliant_v1_trigger_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3568,7 +3682,7 @@ func (x *UpdateTriggerResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateTriggerResponse.ProtoReflect.Descriptor instead.
 func (*UpdateTriggerResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_trigger_proto_rawDescGZIP(), []int{27}
+	return file_reliant_v1_trigger_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *UpdateTriggerResponse) GetTrigger() *Trigger {
@@ -3596,7 +3710,7 @@ type DeleteTriggerRequest struct {
 
 func (x *DeleteTriggerRequest) Reset() {
 	*x = DeleteTriggerRequest{}
-	mi := &file_reliant_v1_trigger_proto_msgTypes[28]
+	mi := &file_reliant_v1_trigger_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3608,7 +3722,7 @@ func (x *DeleteTriggerRequest) String() string {
 func (*DeleteTriggerRequest) ProtoMessage() {}
 
 func (x *DeleteTriggerRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_trigger_proto_msgTypes[28]
+	mi := &file_reliant_v1_trigger_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3621,7 +3735,7 @@ func (x *DeleteTriggerRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteTriggerRequest.ProtoReflect.Descriptor instead.
 func (*DeleteTriggerRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_trigger_proto_rawDescGZIP(), []int{28}
+	return file_reliant_v1_trigger_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *DeleteTriggerRequest) GetId() string {
@@ -3640,7 +3754,7 @@ type DeleteTriggerResponse struct {
 
 func (x *DeleteTriggerResponse) Reset() {
 	*x = DeleteTriggerResponse{}
-	mi := &file_reliant_v1_trigger_proto_msgTypes[29]
+	mi := &file_reliant_v1_trigger_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3652,7 +3766,7 @@ func (x *DeleteTriggerResponse) String() string {
 func (*DeleteTriggerResponse) ProtoMessage() {}
 
 func (x *DeleteTriggerResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_trigger_proto_msgTypes[29]
+	mi := &file_reliant_v1_trigger_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3665,7 +3779,7 @@ func (x *DeleteTriggerResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteTriggerResponse.ProtoReflect.Descriptor instead.
 func (*DeleteTriggerResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_trigger_proto_rawDescGZIP(), []int{29}
+	return file_reliant_v1_trigger_proto_rawDescGZIP(), []int{30}
 }
 
 // SetTriggerEnabledRequest is the request for SetTriggerEnabled.
@@ -3681,7 +3795,7 @@ type SetTriggerEnabledRequest struct {
 
 func (x *SetTriggerEnabledRequest) Reset() {
 	*x = SetTriggerEnabledRequest{}
-	mi := &file_reliant_v1_trigger_proto_msgTypes[30]
+	mi := &file_reliant_v1_trigger_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3693,7 +3807,7 @@ func (x *SetTriggerEnabledRequest) String() string {
 func (*SetTriggerEnabledRequest) ProtoMessage() {}
 
 func (x *SetTriggerEnabledRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_trigger_proto_msgTypes[30]
+	mi := &file_reliant_v1_trigger_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3706,7 +3820,7 @@ func (x *SetTriggerEnabledRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetTriggerEnabledRequest.ProtoReflect.Descriptor instead.
 func (*SetTriggerEnabledRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_trigger_proto_rawDescGZIP(), []int{30}
+	return file_reliant_v1_trigger_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *SetTriggerEnabledRequest) GetId() string {
@@ -3737,7 +3851,7 @@ type SetTriggerEnabledResponse struct {
 
 func (x *SetTriggerEnabledResponse) Reset() {
 	*x = SetTriggerEnabledResponse{}
-	mi := &file_reliant_v1_trigger_proto_msgTypes[31]
+	mi := &file_reliant_v1_trigger_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3749,7 +3863,7 @@ func (x *SetTriggerEnabledResponse) String() string {
 func (*SetTriggerEnabledResponse) ProtoMessage() {}
 
 func (x *SetTriggerEnabledResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_trigger_proto_msgTypes[31]
+	mi := &file_reliant_v1_trigger_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3762,7 +3876,7 @@ func (x *SetTriggerEnabledResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetTriggerEnabledResponse.ProtoReflect.Descriptor instead.
 func (*SetTriggerEnabledResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_trigger_proto_rawDescGZIP(), []int{31}
+	return file_reliant_v1_trigger_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *SetTriggerEnabledResponse) GetTrigger() *Trigger {
@@ -3840,7 +3954,7 @@ type EnableWorkflowRequest struct {
 
 func (x *EnableWorkflowRequest) Reset() {
 	*x = EnableWorkflowRequest{}
-	mi := &file_reliant_v1_trigger_proto_msgTypes[32]
+	mi := &file_reliant_v1_trigger_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3852,7 +3966,7 @@ func (x *EnableWorkflowRequest) String() string {
 func (*EnableWorkflowRequest) ProtoMessage() {}
 
 func (x *EnableWorkflowRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_trigger_proto_msgTypes[32]
+	mi := &file_reliant_v1_trigger_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3865,7 +3979,7 @@ func (x *EnableWorkflowRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EnableWorkflowRequest.ProtoReflect.Descriptor instead.
 func (*EnableWorkflowRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_trigger_proto_rawDescGZIP(), []int{32}
+	return file_reliant_v1_trigger_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *EnableWorkflowRequest) GetWorkflow() string {
@@ -4011,7 +4125,7 @@ type WorkflowTriggerOverride struct {
 
 func (x *WorkflowTriggerOverride) Reset() {
 	*x = WorkflowTriggerOverride{}
-	mi := &file_reliant_v1_trigger_proto_msgTypes[33]
+	mi := &file_reliant_v1_trigger_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4023,7 +4137,7 @@ func (x *WorkflowTriggerOverride) String() string {
 func (*WorkflowTriggerOverride) ProtoMessage() {}
 
 func (x *WorkflowTriggerOverride) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_trigger_proto_msgTypes[33]
+	mi := &file_reliant_v1_trigger_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4036,7 +4150,7 @@ func (x *WorkflowTriggerOverride) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WorkflowTriggerOverride.ProtoReflect.Descriptor instead.
 func (*WorkflowTriggerOverride) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_trigger_proto_rawDescGZIP(), []int{33}
+	return file_reliant_v1_trigger_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *WorkflowTriggerOverride) GetTrigger() string {
@@ -4131,7 +4245,7 @@ type WorkflowTriggerResult struct {
 
 func (x *WorkflowTriggerResult) Reset() {
 	*x = WorkflowTriggerResult{}
-	mi := &file_reliant_v1_trigger_proto_msgTypes[34]
+	mi := &file_reliant_v1_trigger_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4143,7 +4257,7 @@ func (x *WorkflowTriggerResult) String() string {
 func (*WorkflowTriggerResult) ProtoMessage() {}
 
 func (x *WorkflowTriggerResult) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_trigger_proto_msgTypes[34]
+	mi := &file_reliant_v1_trigger_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4156,7 +4270,7 @@ func (x *WorkflowTriggerResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WorkflowTriggerResult.ProtoReflect.Descriptor instead.
 func (*WorkflowTriggerResult) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_trigger_proto_rawDescGZIP(), []int{34}
+	return file_reliant_v1_trigger_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *WorkflowTriggerResult) GetTrigger() string {
@@ -4221,7 +4335,7 @@ type EnableWorkflowResponse struct {
 
 func (x *EnableWorkflowResponse) Reset() {
 	*x = EnableWorkflowResponse{}
-	mi := &file_reliant_v1_trigger_proto_msgTypes[35]
+	mi := &file_reliant_v1_trigger_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4233,7 +4347,7 @@ func (x *EnableWorkflowResponse) String() string {
 func (*EnableWorkflowResponse) ProtoMessage() {}
 
 func (x *EnableWorkflowResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_trigger_proto_msgTypes[35]
+	mi := &file_reliant_v1_trigger_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4246,7 +4360,7 @@ func (x *EnableWorkflowResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EnableWorkflowResponse.ProtoReflect.Descriptor instead.
 func (*EnableWorkflowResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_trigger_proto_rawDescGZIP(), []int{35}
+	return file_reliant_v1_trigger_proto_rawDescGZIP(), []int{36}
 }
 
 func (x *EnableWorkflowResponse) GetEnabled() bool {
@@ -4277,7 +4391,7 @@ type DisableWorkflowRequest struct {
 
 func (x *DisableWorkflowRequest) Reset() {
 	*x = DisableWorkflowRequest{}
-	mi := &file_reliant_v1_trigger_proto_msgTypes[36]
+	mi := &file_reliant_v1_trigger_proto_msgTypes[37]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4289,7 +4403,7 @@ func (x *DisableWorkflowRequest) String() string {
 func (*DisableWorkflowRequest) ProtoMessage() {}
 
 func (x *DisableWorkflowRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_trigger_proto_msgTypes[36]
+	mi := &file_reliant_v1_trigger_proto_msgTypes[37]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4302,7 +4416,7 @@ func (x *DisableWorkflowRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DisableWorkflowRequest.ProtoReflect.Descriptor instead.
 func (*DisableWorkflowRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_trigger_proto_rawDescGZIP(), []int{36}
+	return file_reliant_v1_trigger_proto_rawDescGZIP(), []int{37}
 }
 
 func (x *DisableWorkflowRequest) GetWorkflow() string {
@@ -4332,7 +4446,7 @@ type DisableWorkflowResponse struct {
 
 func (x *DisableWorkflowResponse) Reset() {
 	*x = DisableWorkflowResponse{}
-	mi := &file_reliant_v1_trigger_proto_msgTypes[37]
+	mi := &file_reliant_v1_trigger_proto_msgTypes[38]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4344,7 +4458,7 @@ func (x *DisableWorkflowResponse) String() string {
 func (*DisableWorkflowResponse) ProtoMessage() {}
 
 func (x *DisableWorkflowResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_trigger_proto_msgTypes[37]
+	mi := &file_reliant_v1_trigger_proto_msgTypes[38]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4357,7 +4471,7 @@ func (x *DisableWorkflowResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DisableWorkflowResponse.ProtoReflect.Descriptor instead.
 func (*DisableWorkflowResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_trigger_proto_rawDescGZIP(), []int{37}
+	return file_reliant_v1_trigger_proto_rawDescGZIP(), []int{38}
 }
 
 func (x *DisableWorkflowResponse) GetPaused() []*Trigger {
@@ -4386,7 +4500,7 @@ type TriggerFailure struct {
 
 func (x *TriggerFailure) Reset() {
 	*x = TriggerFailure{}
-	mi := &file_reliant_v1_trigger_proto_msgTypes[38]
+	mi := &file_reliant_v1_trigger_proto_msgTypes[39]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4398,7 +4512,7 @@ func (x *TriggerFailure) String() string {
 func (*TriggerFailure) ProtoMessage() {}
 
 func (x *TriggerFailure) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_trigger_proto_msgTypes[38]
+	mi := &file_reliant_v1_trigger_proto_msgTypes[39]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4411,7 +4525,7 @@ func (x *TriggerFailure) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TriggerFailure.ProtoReflect.Descriptor instead.
 func (*TriggerFailure) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_trigger_proto_rawDescGZIP(), []int{38}
+	return file_reliant_v1_trigger_proto_rawDescGZIP(), []int{39}
 }
 
 func (x *TriggerFailure) GetTriggerId() string {
@@ -4446,7 +4560,7 @@ type FireTriggerRequest struct {
 
 func (x *FireTriggerRequest) Reset() {
 	*x = FireTriggerRequest{}
-	mi := &file_reliant_v1_trigger_proto_msgTypes[39]
+	mi := &file_reliant_v1_trigger_proto_msgTypes[40]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4458,7 +4572,7 @@ func (x *FireTriggerRequest) String() string {
 func (*FireTriggerRequest) ProtoMessage() {}
 
 func (x *FireTriggerRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_trigger_proto_msgTypes[39]
+	mi := &file_reliant_v1_trigger_proto_msgTypes[40]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4471,7 +4585,7 @@ func (x *FireTriggerRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FireTriggerRequest.ProtoReflect.Descriptor instead.
 func (*FireTriggerRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_trigger_proto_rawDescGZIP(), []int{39}
+	return file_reliant_v1_trigger_proto_rawDescGZIP(), []int{40}
 }
 
 func (x *FireTriggerRequest) GetId() string {
@@ -4493,7 +4607,7 @@ type FireTriggerResponse struct {
 
 func (x *FireTriggerResponse) Reset() {
 	*x = FireTriggerResponse{}
-	mi := &file_reliant_v1_trigger_proto_msgTypes[40]
+	mi := &file_reliant_v1_trigger_proto_msgTypes[41]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4505,7 +4619,7 @@ func (x *FireTriggerResponse) String() string {
 func (*FireTriggerResponse) ProtoMessage() {}
 
 func (x *FireTriggerResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_trigger_proto_msgTypes[40]
+	mi := &file_reliant_v1_trigger_proto_msgTypes[41]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4518,7 +4632,7 @@ func (x *FireTriggerResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FireTriggerResponse.ProtoReflect.Descriptor instead.
 func (*FireTriggerResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_trigger_proto_rawDescGZIP(), []int{40}
+	return file_reliant_v1_trigger_proto_rawDescGZIP(), []int{41}
 }
 
 func (x *FireTriggerResponse) GetFireWorkflowId() string {
@@ -4547,7 +4661,7 @@ type ListTriggerEventsRequest struct {
 
 func (x *ListTriggerEventsRequest) Reset() {
 	*x = ListTriggerEventsRequest{}
-	mi := &file_reliant_v1_trigger_proto_msgTypes[41]
+	mi := &file_reliant_v1_trigger_proto_msgTypes[42]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4559,7 +4673,7 @@ func (x *ListTriggerEventsRequest) String() string {
 func (*ListTriggerEventsRequest) ProtoMessage() {}
 
 func (x *ListTriggerEventsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_trigger_proto_msgTypes[41]
+	mi := &file_reliant_v1_trigger_proto_msgTypes[42]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4572,7 +4686,7 @@ func (x *ListTriggerEventsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListTriggerEventsRequest.ProtoReflect.Descriptor instead.
 func (*ListTriggerEventsRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_trigger_proto_rawDescGZIP(), []int{41}
+	return file_reliant_v1_trigger_proto_rawDescGZIP(), []int{42}
 }
 
 func (x *ListTriggerEventsRequest) GetTriggerId() string {
@@ -4616,7 +4730,7 @@ type ListTriggerEventsResponse struct {
 
 func (x *ListTriggerEventsResponse) Reset() {
 	*x = ListTriggerEventsResponse{}
-	mi := &file_reliant_v1_trigger_proto_msgTypes[42]
+	mi := &file_reliant_v1_trigger_proto_msgTypes[43]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4628,7 +4742,7 @@ func (x *ListTriggerEventsResponse) String() string {
 func (*ListTriggerEventsResponse) ProtoMessage() {}
 
 func (x *ListTriggerEventsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_trigger_proto_msgTypes[42]
+	mi := &file_reliant_v1_trigger_proto_msgTypes[43]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4641,7 +4755,7 @@ func (x *ListTriggerEventsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListTriggerEventsResponse.ProtoReflect.Descriptor instead.
 func (*ListTriggerEventsResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_trigger_proto_rawDescGZIP(), []int{42}
+	return file_reliant_v1_trigger_proto_rawDescGZIP(), []int{43}
 }
 
 func (x *ListTriggerEventsResponse) GetEvents() []*TriggerEvent {
@@ -4667,7 +4781,7 @@ type GetLaunchEventRequest struct {
 
 func (x *GetLaunchEventRequest) Reset() {
 	*x = GetLaunchEventRequest{}
-	mi := &file_reliant_v1_trigger_proto_msgTypes[43]
+	mi := &file_reliant_v1_trigger_proto_msgTypes[44]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4679,7 +4793,7 @@ func (x *GetLaunchEventRequest) String() string {
 func (*GetLaunchEventRequest) ProtoMessage() {}
 
 func (x *GetLaunchEventRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_trigger_proto_msgTypes[43]
+	mi := &file_reliant_v1_trigger_proto_msgTypes[44]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4692,7 +4806,7 @@ func (x *GetLaunchEventRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetLaunchEventRequest.ProtoReflect.Descriptor instead.
 func (*GetLaunchEventRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_trigger_proto_rawDescGZIP(), []int{43}
+	return file_reliant_v1_trigger_proto_rawDescGZIP(), []int{44}
 }
 
 func (x *GetLaunchEventRequest) GetChatId() string {
@@ -4712,7 +4826,7 @@ type GetLaunchEventResponse struct {
 
 func (x *GetLaunchEventResponse) Reset() {
 	*x = GetLaunchEventResponse{}
-	mi := &file_reliant_v1_trigger_proto_msgTypes[44]
+	mi := &file_reliant_v1_trigger_proto_msgTypes[45]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4724,7 +4838,7 @@ func (x *GetLaunchEventResponse) String() string {
 func (*GetLaunchEventResponse) ProtoMessage() {}
 
 func (x *GetLaunchEventResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_trigger_proto_msgTypes[44]
+	mi := &file_reliant_v1_trigger_proto_msgTypes[45]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4737,7 +4851,7 @@ func (x *GetLaunchEventResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetLaunchEventResponse.ProtoReflect.Descriptor instead.
 func (*GetLaunchEventResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_trigger_proto_rawDescGZIP(), []int{44}
+	return file_reliant_v1_trigger_proto_rawDescGZIP(), []int{45}
 }
 
 func (x *GetLaunchEventResponse) GetEvent() *TriggerEvent {
@@ -4762,7 +4876,7 @@ type ResolveTriggerSendersRequest struct {
 
 func (x *ResolveTriggerSendersRequest) Reset() {
 	*x = ResolveTriggerSendersRequest{}
-	mi := &file_reliant_v1_trigger_proto_msgTypes[45]
+	mi := &file_reliant_v1_trigger_proto_msgTypes[46]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4774,7 +4888,7 @@ func (x *ResolveTriggerSendersRequest) String() string {
 func (*ResolveTriggerSendersRequest) ProtoMessage() {}
 
 func (x *ResolveTriggerSendersRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_trigger_proto_msgTypes[45]
+	mi := &file_reliant_v1_trigger_proto_msgTypes[46]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4787,7 +4901,7 @@ func (x *ResolveTriggerSendersRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResolveTriggerSendersRequest.ProtoReflect.Descriptor instead.
 func (*ResolveTriggerSendersRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_trigger_proto_rawDescGZIP(), []int{45}
+	return file_reliant_v1_trigger_proto_rawDescGZIP(), []int{46}
 }
 
 func (x *ResolveTriggerSendersRequest) GetIntegration() string {
@@ -4827,7 +4941,7 @@ type ResolvedTriggerSender struct {
 
 func (x *ResolvedTriggerSender) Reset() {
 	*x = ResolvedTriggerSender{}
-	mi := &file_reliant_v1_trigger_proto_msgTypes[46]
+	mi := &file_reliant_v1_trigger_proto_msgTypes[47]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4839,7 +4953,7 @@ func (x *ResolvedTriggerSender) String() string {
 func (*ResolvedTriggerSender) ProtoMessage() {}
 
 func (x *ResolvedTriggerSender) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_trigger_proto_msgTypes[46]
+	mi := &file_reliant_v1_trigger_proto_msgTypes[47]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4852,7 +4966,7 @@ func (x *ResolvedTriggerSender) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResolvedTriggerSender.ProtoReflect.Descriptor instead.
 func (*ResolvedTriggerSender) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_trigger_proto_rawDescGZIP(), []int{46}
+	return file_reliant_v1_trigger_proto_rawDescGZIP(), []int{47}
 }
 
 func (x *ResolvedTriggerSender) GetQuery() string {
@@ -4888,7 +5002,7 @@ type ResolveTriggerSendersResponse struct {
 
 func (x *ResolveTriggerSendersResponse) Reset() {
 	*x = ResolveTriggerSendersResponse{}
-	mi := &file_reliant_v1_trigger_proto_msgTypes[47]
+	mi := &file_reliant_v1_trigger_proto_msgTypes[48]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4900,7 +5014,7 @@ func (x *ResolveTriggerSendersResponse) String() string {
 func (*ResolveTriggerSendersResponse) ProtoMessage() {}
 
 func (x *ResolveTriggerSendersResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_trigger_proto_msgTypes[47]
+	mi := &file_reliant_v1_trigger_proto_msgTypes[48]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4913,7 +5027,7 @@ func (x *ResolveTriggerSendersResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResolveTriggerSendersResponse.ProtoReflect.Descriptor instead.
 func (*ResolveTriggerSendersResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_trigger_proto_rawDescGZIP(), []int{47}
+	return file_reliant_v1_trigger_proto_rawDescGZIP(), []int{48}
 }
 
 func (x *ResolveTriggerSendersResponse) GetSenders() []*ResolvedTriggerSender {
@@ -4938,7 +5052,7 @@ type ListReplayEventsRequest struct {
 
 func (x *ListReplayEventsRequest) Reset() {
 	*x = ListReplayEventsRequest{}
-	mi := &file_reliant_v1_trigger_proto_msgTypes[48]
+	mi := &file_reliant_v1_trigger_proto_msgTypes[49]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4950,7 +5064,7 @@ func (x *ListReplayEventsRequest) String() string {
 func (*ListReplayEventsRequest) ProtoMessage() {}
 
 func (x *ListReplayEventsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_trigger_proto_msgTypes[48]
+	mi := &file_reliant_v1_trigger_proto_msgTypes[49]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4963,7 +5077,7 @@ func (x *ListReplayEventsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListReplayEventsRequest.ProtoReflect.Descriptor instead.
 func (*ListReplayEventsRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_trigger_proto_rawDescGZIP(), []int{48}
+	return file_reliant_v1_trigger_proto_rawDescGZIP(), []int{49}
 }
 
 func (x *ListReplayEventsRequest) GetProjectId() string {
@@ -4999,7 +5113,7 @@ type ReplayCandidate struct {
 
 func (x *ReplayCandidate) Reset() {
 	*x = ReplayCandidate{}
-	mi := &file_reliant_v1_trigger_proto_msgTypes[49]
+	mi := &file_reliant_v1_trigger_proto_msgTypes[50]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5011,7 +5125,7 @@ func (x *ReplayCandidate) String() string {
 func (*ReplayCandidate) ProtoMessage() {}
 
 func (x *ReplayCandidate) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_trigger_proto_msgTypes[49]
+	mi := &file_reliant_v1_trigger_proto_msgTypes[50]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5024,7 +5138,7 @@ func (x *ReplayCandidate) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReplayCandidate.ProtoReflect.Descriptor instead.
 func (*ReplayCandidate) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_trigger_proto_rawDescGZIP(), []int{49}
+	return file_reliant_v1_trigger_proto_rawDescGZIP(), []int{50}
 }
 
 func (x *ReplayCandidate) GetEvent() *TriggerEvent {
@@ -5050,7 +5164,7 @@ type ListReplayEventsResponse struct {
 
 func (x *ListReplayEventsResponse) Reset() {
 	*x = ListReplayEventsResponse{}
-	mi := &file_reliant_v1_trigger_proto_msgTypes[50]
+	mi := &file_reliant_v1_trigger_proto_msgTypes[51]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5062,7 +5176,7 @@ func (x *ListReplayEventsResponse) String() string {
 func (*ListReplayEventsResponse) ProtoMessage() {}
 
 func (x *ListReplayEventsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_trigger_proto_msgTypes[50]
+	mi := &file_reliant_v1_trigger_proto_msgTypes[51]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5075,7 +5189,7 @@ func (x *ListReplayEventsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListReplayEventsResponse.ProtoReflect.Descriptor instead.
 func (*ListReplayEventsResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_trigger_proto_rawDescGZIP(), []int{50}
+	return file_reliant_v1_trigger_proto_rawDescGZIP(), []int{51}
 }
 
 func (x *ListReplayEventsResponse) GetEvents() []*ReplayCandidate {
@@ -5104,7 +5218,7 @@ type PreviewReplayRequest struct {
 
 func (x *PreviewReplayRequest) Reset() {
 	*x = PreviewReplayRequest{}
-	mi := &file_reliant_v1_trigger_proto_msgTypes[51]
+	mi := &file_reliant_v1_trigger_proto_msgTypes[52]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5116,7 +5230,7 @@ func (x *PreviewReplayRequest) String() string {
 func (*PreviewReplayRequest) ProtoMessage() {}
 
 func (x *PreviewReplayRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_trigger_proto_msgTypes[51]
+	mi := &file_reliant_v1_trigger_proto_msgTypes[52]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5129,7 +5243,7 @@ func (x *PreviewReplayRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PreviewReplayRequest.ProtoReflect.Descriptor instead.
 func (*PreviewReplayRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_trigger_proto_rawDescGZIP(), []int{51}
+	return file_reliant_v1_trigger_proto_rawDescGZIP(), []int{52}
 }
 
 func (x *PreviewReplayRequest) GetProjectId() string {
@@ -5180,7 +5294,7 @@ type PreviewReplayResponse struct {
 
 func (x *PreviewReplayResponse) Reset() {
 	*x = PreviewReplayResponse{}
-	mi := &file_reliant_v1_trigger_proto_msgTypes[52]
+	mi := &file_reliant_v1_trigger_proto_msgTypes[53]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5192,7 +5306,7 @@ func (x *PreviewReplayResponse) String() string {
 func (*PreviewReplayResponse) ProtoMessage() {}
 
 func (x *PreviewReplayResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_trigger_proto_msgTypes[52]
+	mi := &file_reliant_v1_trigger_proto_msgTypes[53]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5205,7 +5319,7 @@ func (x *PreviewReplayResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PreviewReplayResponse.ProtoReflect.Descriptor instead.
 func (*PreviewReplayResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_trigger_proto_rawDescGZIP(), []int{52}
+	return file_reliant_v1_trigger_proto_rawDescGZIP(), []int{53}
 }
 
 func (x *PreviewReplayResponse) GetInputs() map[string]*structpb.Value {
@@ -5240,7 +5354,7 @@ type DraftAutomationRequest struct {
 
 func (x *DraftAutomationRequest) Reset() {
 	*x = DraftAutomationRequest{}
-	mi := &file_reliant_v1_trigger_proto_msgTypes[53]
+	mi := &file_reliant_v1_trigger_proto_msgTypes[54]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5252,7 +5366,7 @@ func (x *DraftAutomationRequest) String() string {
 func (*DraftAutomationRequest) ProtoMessage() {}
 
 func (x *DraftAutomationRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_trigger_proto_msgTypes[53]
+	mi := &file_reliant_v1_trigger_proto_msgTypes[54]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5265,7 +5379,7 @@ func (x *DraftAutomationRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DraftAutomationRequest.ProtoReflect.Descriptor instead.
 func (*DraftAutomationRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_trigger_proto_rawDescGZIP(), []int{53}
+	return file_reliant_v1_trigger_proto_rawDescGZIP(), []int{54}
 }
 
 func (x *DraftAutomationRequest) GetDescription() string {
@@ -5305,7 +5419,7 @@ type DraftAutomationResponse struct {
 
 func (x *DraftAutomationResponse) Reset() {
 	*x = DraftAutomationResponse{}
-	mi := &file_reliant_v1_trigger_proto_msgTypes[54]
+	mi := &file_reliant_v1_trigger_proto_msgTypes[55]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5317,7 +5431,7 @@ func (x *DraftAutomationResponse) String() string {
 func (*DraftAutomationResponse) ProtoMessage() {}
 
 func (x *DraftAutomationResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_trigger_proto_msgTypes[54]
+	mi := &file_reliant_v1_trigger_proto_msgTypes[55]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5330,7 +5444,7 @@ func (x *DraftAutomationResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DraftAutomationResponse.ProtoReflect.Descriptor instead.
 func (*DraftAutomationResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_trigger_proto_rawDescGZIP(), []int{54}
+	return file_reliant_v1_trigger_proto_rawDescGZIP(), []int{55}
 }
 
 func (x *DraftAutomationResponse) GetDraft() *AutomationDraft {
@@ -5362,7 +5476,7 @@ type AutomationDraft struct {
 
 func (x *AutomationDraft) Reset() {
 	*x = AutomationDraft{}
-	mi := &file_reliant_v1_trigger_proto_msgTypes[55]
+	mi := &file_reliant_v1_trigger_proto_msgTypes[56]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5374,7 +5488,7 @@ func (x *AutomationDraft) String() string {
 func (*AutomationDraft) ProtoMessage() {}
 
 func (x *AutomationDraft) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_trigger_proto_msgTypes[55]
+	mi := &file_reliant_v1_trigger_proto_msgTypes[56]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5387,7 +5501,7 @@ func (x *AutomationDraft) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AutomationDraft.ProtoReflect.Descriptor instead.
 func (*AutomationDraft) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_trigger_proto_rawDescGZIP(), []int{55}
+	return file_reliant_v1_trigger_proto_rawDescGZIP(), []int{56}
 }
 
 func (x *AutomationDraft) GetDefinition() *TriggerDefinition {
@@ -5463,10 +5577,12 @@ const file_reliant_v1_trigger_proto_rawDesc = "" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\x1a=\n" +
 	"\x0fMatchInputEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"O\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"'\n" +
+	"\x0fRecordDueSource\x12\x14\n" +
+	"\x05table\x18\x01 \x01(\tR\x05table\"O\n" +
 	"\x13WorkflowEventSource\x12\x1c\n" +
 	"\tworkflows\x18\x01 \x03(\tR\tworkflows\x12\x1a\n" +
-	"\boutcomes\x18\x02 \x03(\tR\boutcomes\"\xe4\x04\n" +
+	"\boutcomes\x18\x02 \x03(\tR\boutcomes\"\xa2\x05\n" +
 	"\x0fWorkflowTrigger\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12\x16\n" +
@@ -5480,11 +5596,13 @@ const file_reliant_v1_trigger_proto_rawDesc = "" +
 	"\bschedule\x18\x14 \x01(\v2\x1a.reliant.v1.ScheduleSourceH\x00R\bschedule\x125\n" +
 	"\awebhook\x18\x15 \x01(\v2\x19.reliant.v1.WebhookSourceH\x00R\awebhook\x12A\n" +
 	"\vintegration\x18\x16 \x01(\v2\x1d.reliant.v1.IntegrationSourceH\x00R\vintegration\x12H\n" +
-	"\x0eworkflow_event\x18\x17 \x01(\v2\x1f.reliant.v1.WorkflowEventSourceH\x00R\rworkflowEvent\x1a9\n" +
+	"\x0eworkflow_event\x18\x17 \x01(\v2\x1f.reliant.v1.WorkflowEventSourceH\x00R\rworkflowEvent\x12<\n" +
+	"\n" +
+	"record_due\x18\x18 \x01(\v2\x1b.reliant.v1.RecordDueSourceH\x00R\trecordDue\x1a9\n" +
 	"\vInputsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01B\b\n" +
-	"\x06source\"\xd9\x0e\n" +
+	"\x06source\"\x97\x0f\n" +
 	"\aTrigger\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x1d\n" +
@@ -5522,7 +5640,9 @@ const file_reliant_v1_trigger_proto_rawDesc = "" +
 	"\bschedule\x18\x14 \x01(\v2\x1a.reliant.v1.ScheduleSourceH\x00R\bschedule\x125\n" +
 	"\awebhook\x18\x15 \x01(\v2\x19.reliant.v1.WebhookSourceH\x00R\awebhook\x12A\n" +
 	"\vintegration\x18\x16 \x01(\v2\x1d.reliant.v1.IntegrationSourceH\x00R\vintegration\x12H\n" +
-	"\x0eworkflow_event\x18\x17 \x01(\v2\x1f.reliant.v1.WorkflowEventSourceH\x00R\rworkflowEvent\x12(\n" +
+	"\x0eworkflow_event\x18\x17 \x01(\v2\x1f.reliant.v1.WorkflowEventSourceH\x00R\rworkflowEvent\x12<\n" +
+	"\n" +
+	"record_due\x18& \x01(\v2\x1b.reliant.v1.RecordDueSourceH\x00R\trecordDue\x12(\n" +
 	"\rconnection_id\x18\x18 \x01(\tH\x04R\fconnectionId\x88\x01\x01\x12$\n" +
 	"\vwebhook_url\x18\x19 \x01(\tH\x05R\n" +
 	"webhookUrl\x88\x01\x01\x12.\n" +
@@ -5617,7 +5737,8 @@ const file_reliant_v1_trigger_proto_rawDesc = "" +
 	"\x04kind\x18\x01 \x01(\tR\x04kind\x12\x0e\n" +
 	"\x02id\x18\x02 \x01(\tR\x02id\x12!\n" +
 	"\fdisplay_name\x18\x03 \x01(\tR\vdisplayName\x12\x1a\n" +
-	"\bverified\x18\x04 \x01(\bR\bverified\"\xf0\t\n" +
+	"\bverified\x18\x04 \x01(\bR\bverified\"\xae\n" +
+	"\n" +
 	"\x11TriggerDefinition\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1d\n" +
 	"\n" +
@@ -5641,7 +5762,9 @@ const file_reliant_v1_trigger_proto_rawDesc = "" +
 	"\bschedule\x18\x14 \x01(\v2\x1a.reliant.v1.ScheduleSourceH\x00R\bschedule\x125\n" +
 	"\awebhook\x18\x15 \x01(\v2\x19.reliant.v1.WebhookSourceH\x00R\awebhook\x12A\n" +
 	"\vintegration\x18\x16 \x01(\v2\x1d.reliant.v1.IntegrationSourceH\x00R\vintegration\x12H\n" +
-	"\x0eworkflow_event\x18\x17 \x01(\v2\x1f.reliant.v1.WorkflowEventSourceH\x00R\rworkflowEvent\x12+\n" +
+	"\x0eworkflow_event\x18\x17 \x01(\v2\x1f.reliant.v1.WorkflowEventSourceH\x00R\rworkflowEvent\x12<\n" +
+	"\n" +
+	"record_due\x18\x1c \x01(\v2\x1b.reliant.v1.RecordDueSourceH\x00R\trecordDue\x12+\n" +
 	"\x10workflow_trigger\x18\x18 \x01(\tH\x00R\x0fworkflowTrigger\x12C\n" +
 	"\x0facting_identity\x18\x19 \x01(\x0e2\x1a.reliant.v1.ActingIdentityR\x0eactingIdentity\x12L\n" +
 	"\x12unattended_funding\x18\x1b \x01(\x0e2\x1d.reliant.v1.UnattendedFundingR\x11unattendedFunding\x1a:\n" +
@@ -5863,7 +5986,7 @@ const file_reliant_v1_trigger_proto_rawDesc = "" +
 	"\x15TRIGGER_KIND_SCHEDULE\x10\x01\x12\x18\n" +
 	"\x14TRIGGER_KIND_WEBHOOK\x10\x02\x12\x1c\n" +
 	"\x18TRIGGER_KIND_INTEGRATION\x10\x03\x12\x1f\n" +
-	"\x1bTRIGGER_KIND_WORKFLOW_EVENT\x10\x04*\xf5\x02\n" +
+	"\x1bTRIGGER_KIND_WORKFLOW_EVENT\x10\x04*\x98\x03\n" +
 	"\x10TriggerEventKind\x12\"\n" +
 	"\x1eTRIGGER_EVENT_KIND_UNSPECIFIED\x10\x00\x12!\n" +
 	"\x1dTRIGGER_EVENT_KIND_CHAT_START\x10\x01\x12\x1f\n" +
@@ -5874,7 +5997,9 @@ const file_reliant_v1_trigger_proto_rawDesc = "" +
 	"\x1eTRIGGER_EVENT_KIND_INTEGRATION\x10\x06\x12%\n" +
 	"!TRIGGER_EVENT_KIND_WORKFLOW_EVENT\x10\a\x12!\n" +
 	"\x1dTRIGGER_EVENT_KIND_MANUAL_RUN\x10\b\x12\x1e\n" +
-	"\x1aTRIGGER_EVENT_KIND_CLI_RUN\x10\t*\xc8\x01\n" +
+	"\x1aTRIGGER_EVENT_KIND_CLI_RUN\x10\t\x12!\n" +
+	"\x1dTRIGGER_EVENT_KIND_RECORD_DUE\x10\n" +
+	"*\xc8\x01\n" +
 	"\x13TriggerEventOutcome\x12%\n" +
 	"!TRIGGER_EVENT_OUTCOME_UNSPECIFIED\x10\x00\x12\"\n" +
 	"\x1eTRIGGER_EVENT_OUTCOME_LAUNCHED\x10\x01\x12!\n" +
@@ -5956,7 +6081,7 @@ func file_reliant_v1_trigger_proto_rawDescGZIP() []byte {
 }
 
 var file_reliant_v1_trigger_proto_enumTypes = make([]protoimpl.EnumInfo, 8)
-var file_reliant_v1_trigger_proto_msgTypes = make([]protoimpl.MessageInfo, 68)
+var file_reliant_v1_trigger_proto_msgTypes = make([]protoimpl.MessageInfo, 69)
 var file_reliant_v1_trigger_proto_goTypes = []any{
 	(TriggerKind)(0),                      // 0: reliant.v1.TriggerKind
 	(TriggerEventKind)(0),                 // 1: reliant.v1.TriggerEventKind
@@ -5973,197 +6098,201 @@ var file_reliant_v1_trigger_proto_goTypes = []any{
 	(*WebhookSource)(nil),                 // 12: reliant.v1.WebhookSource
 	(*WebhookHmac)(nil),                   // 13: reliant.v1.WebhookHmac
 	(*IntegrationSource)(nil),             // 14: reliant.v1.IntegrationSource
-	(*WorkflowEventSource)(nil),           // 15: reliant.v1.WorkflowEventSource
-	(*WorkflowTrigger)(nil),               // 16: reliant.v1.WorkflowTrigger
-	(*Trigger)(nil),                       // 17: reliant.v1.Trigger
-	(*TriggerDefinitionSource)(nil),       // 18: reliant.v1.TriggerDefinitionSource
-	(*TriggerChange)(nil),                 // 19: reliant.v1.TriggerChange
-	(*TriggerEvent)(nil),                  // 20: reliant.v1.TriggerEvent
-	(*TriggerEventDefinition)(nil),        // 21: reliant.v1.TriggerEventDefinition
-	(*TriggerSender)(nil),                 // 22: reliant.v1.TriggerSender
-	(*TriggerDefinition)(nil),             // 23: reliant.v1.TriggerDefinition
-	(*WebhookCredential)(nil),             // 24: reliant.v1.WebhookCredential
-	(*CreateTriggerRequest)(nil),          // 25: reliant.v1.CreateTriggerRequest
-	(*CreateTriggerResponse)(nil),         // 26: reliant.v1.CreateTriggerResponse
-	(*TriggerFundingWarning)(nil),         // 27: reliant.v1.TriggerFundingWarning
-	(*RotateWebhookTokenRequest)(nil),     // 28: reliant.v1.RotateWebhookTokenRequest
-	(*RotateWebhookTokenResponse)(nil),    // 29: reliant.v1.RotateWebhookTokenResponse
-	(*GetTriggerRequest)(nil),             // 30: reliant.v1.GetTriggerRequest
-	(*GetTriggerResponse)(nil),            // 31: reliant.v1.GetTriggerResponse
-	(*ListTriggersRequest)(nil),           // 32: reliant.v1.ListTriggersRequest
-	(*ListTriggersResponse)(nil),          // 33: reliant.v1.ListTriggersResponse
-	(*UpdateTriggerRequest)(nil),          // 34: reliant.v1.UpdateTriggerRequest
-	(*UpdateTriggerResponse)(nil),         // 35: reliant.v1.UpdateTriggerResponse
-	(*DeleteTriggerRequest)(nil),          // 36: reliant.v1.DeleteTriggerRequest
-	(*DeleteTriggerResponse)(nil),         // 37: reliant.v1.DeleteTriggerResponse
-	(*SetTriggerEnabledRequest)(nil),      // 38: reliant.v1.SetTriggerEnabledRequest
-	(*SetTriggerEnabledResponse)(nil),     // 39: reliant.v1.SetTriggerEnabledResponse
-	(*EnableWorkflowRequest)(nil),         // 40: reliant.v1.EnableWorkflowRequest
-	(*WorkflowTriggerOverride)(nil),       // 41: reliant.v1.WorkflowTriggerOverride
-	(*WorkflowTriggerResult)(nil),         // 42: reliant.v1.WorkflowTriggerResult
-	(*EnableWorkflowResponse)(nil),        // 43: reliant.v1.EnableWorkflowResponse
-	(*DisableWorkflowRequest)(nil),        // 44: reliant.v1.DisableWorkflowRequest
-	(*DisableWorkflowResponse)(nil),       // 45: reliant.v1.DisableWorkflowResponse
-	(*TriggerFailure)(nil),                // 46: reliant.v1.TriggerFailure
-	(*FireTriggerRequest)(nil),            // 47: reliant.v1.FireTriggerRequest
-	(*FireTriggerResponse)(nil),           // 48: reliant.v1.FireTriggerResponse
-	(*ListTriggerEventsRequest)(nil),      // 49: reliant.v1.ListTriggerEventsRequest
-	(*ListTriggerEventsResponse)(nil),     // 50: reliant.v1.ListTriggerEventsResponse
-	(*GetLaunchEventRequest)(nil),         // 51: reliant.v1.GetLaunchEventRequest
-	(*GetLaunchEventResponse)(nil),        // 52: reliant.v1.GetLaunchEventResponse
-	(*ResolveTriggerSendersRequest)(nil),  // 53: reliant.v1.ResolveTriggerSendersRequest
-	(*ResolvedTriggerSender)(nil),         // 54: reliant.v1.ResolvedTriggerSender
-	(*ResolveTriggerSendersResponse)(nil), // 55: reliant.v1.ResolveTriggerSendersResponse
-	(*ListReplayEventsRequest)(nil),       // 56: reliant.v1.ListReplayEventsRequest
-	(*ReplayCandidate)(nil),               // 57: reliant.v1.ReplayCandidate
-	(*ListReplayEventsResponse)(nil),      // 58: reliant.v1.ListReplayEventsResponse
-	(*PreviewReplayRequest)(nil),          // 59: reliant.v1.PreviewReplayRequest
-	(*PreviewReplayResponse)(nil),         // 60: reliant.v1.PreviewReplayResponse
-	(*DraftAutomationRequest)(nil),        // 61: reliant.v1.DraftAutomationRequest
-	(*DraftAutomationResponse)(nil),       // 62: reliant.v1.DraftAutomationResponse
-	(*AutomationDraft)(nil),               // 63: reliant.v1.AutomationDraft
-	nil,                                   // 64: reliant.v1.IntegrationSource.MatchEntry
-	nil,                                   // 65: reliant.v1.IntegrationSource.MatchInputEntry
-	nil,                                   // 66: reliant.v1.WorkflowTrigger.InputsEntry
-	nil,                                   // 67: reliant.v1.Trigger.PresetsEntry
-	nil,                                   // 68: reliant.v1.Trigger.ParamsEntry
-	nil,                                   // 69: reliant.v1.TriggerDefinition.PresetsEntry
-	nil,                                   // 70: reliant.v1.TriggerDefinition.ParamsEntry
-	nil,                                   // 71: reliant.v1.EnableWorkflowRequest.ConnectionIdsEntry
-	nil,                                   // 72: reliant.v1.EnableWorkflowRequest.ParamsEntry
-	nil,                                   // 73: reliant.v1.EnableWorkflowRequest.PresetsEntry
-	nil,                                   // 74: reliant.v1.WorkflowTriggerOverride.ParamsEntry
-	nil,                                   // 75: reliant.v1.PreviewReplayResponse.InputsEntry
-	(RunDisplayState)(0),                  // 76: reliant.v1.RunDisplayState
-	(WorkflowState)(0),                    // 77: reliant.v1.WorkflowState
-	(WorkflowStopReason)(0),               // 78: reliant.v1.WorkflowStopReason
-	(RunOutcome)(0),                       // 79: reliant.v1.RunOutcome
-	(*structpb.Struct)(nil),               // 80: google.protobuf.Struct
-	(*ReplayEvent)(nil),                   // 81: reliant.v1.ReplayEvent
-	(*structpb.Value)(nil),                // 82: google.protobuf.Value
+	(*RecordDueSource)(nil),               // 15: reliant.v1.RecordDueSource
+	(*WorkflowEventSource)(nil),           // 16: reliant.v1.WorkflowEventSource
+	(*WorkflowTrigger)(nil),               // 17: reliant.v1.WorkflowTrigger
+	(*Trigger)(nil),                       // 18: reliant.v1.Trigger
+	(*TriggerDefinitionSource)(nil),       // 19: reliant.v1.TriggerDefinitionSource
+	(*TriggerChange)(nil),                 // 20: reliant.v1.TriggerChange
+	(*TriggerEvent)(nil),                  // 21: reliant.v1.TriggerEvent
+	(*TriggerEventDefinition)(nil),        // 22: reliant.v1.TriggerEventDefinition
+	(*TriggerSender)(nil),                 // 23: reliant.v1.TriggerSender
+	(*TriggerDefinition)(nil),             // 24: reliant.v1.TriggerDefinition
+	(*WebhookCredential)(nil),             // 25: reliant.v1.WebhookCredential
+	(*CreateTriggerRequest)(nil),          // 26: reliant.v1.CreateTriggerRequest
+	(*CreateTriggerResponse)(nil),         // 27: reliant.v1.CreateTriggerResponse
+	(*TriggerFundingWarning)(nil),         // 28: reliant.v1.TriggerFundingWarning
+	(*RotateWebhookTokenRequest)(nil),     // 29: reliant.v1.RotateWebhookTokenRequest
+	(*RotateWebhookTokenResponse)(nil),    // 30: reliant.v1.RotateWebhookTokenResponse
+	(*GetTriggerRequest)(nil),             // 31: reliant.v1.GetTriggerRequest
+	(*GetTriggerResponse)(nil),            // 32: reliant.v1.GetTriggerResponse
+	(*ListTriggersRequest)(nil),           // 33: reliant.v1.ListTriggersRequest
+	(*ListTriggersResponse)(nil),          // 34: reliant.v1.ListTriggersResponse
+	(*UpdateTriggerRequest)(nil),          // 35: reliant.v1.UpdateTriggerRequest
+	(*UpdateTriggerResponse)(nil),         // 36: reliant.v1.UpdateTriggerResponse
+	(*DeleteTriggerRequest)(nil),          // 37: reliant.v1.DeleteTriggerRequest
+	(*DeleteTriggerResponse)(nil),         // 38: reliant.v1.DeleteTriggerResponse
+	(*SetTriggerEnabledRequest)(nil),      // 39: reliant.v1.SetTriggerEnabledRequest
+	(*SetTriggerEnabledResponse)(nil),     // 40: reliant.v1.SetTriggerEnabledResponse
+	(*EnableWorkflowRequest)(nil),         // 41: reliant.v1.EnableWorkflowRequest
+	(*WorkflowTriggerOverride)(nil),       // 42: reliant.v1.WorkflowTriggerOverride
+	(*WorkflowTriggerResult)(nil),         // 43: reliant.v1.WorkflowTriggerResult
+	(*EnableWorkflowResponse)(nil),        // 44: reliant.v1.EnableWorkflowResponse
+	(*DisableWorkflowRequest)(nil),        // 45: reliant.v1.DisableWorkflowRequest
+	(*DisableWorkflowResponse)(nil),       // 46: reliant.v1.DisableWorkflowResponse
+	(*TriggerFailure)(nil),                // 47: reliant.v1.TriggerFailure
+	(*FireTriggerRequest)(nil),            // 48: reliant.v1.FireTriggerRequest
+	(*FireTriggerResponse)(nil),           // 49: reliant.v1.FireTriggerResponse
+	(*ListTriggerEventsRequest)(nil),      // 50: reliant.v1.ListTriggerEventsRequest
+	(*ListTriggerEventsResponse)(nil),     // 51: reliant.v1.ListTriggerEventsResponse
+	(*GetLaunchEventRequest)(nil),         // 52: reliant.v1.GetLaunchEventRequest
+	(*GetLaunchEventResponse)(nil),        // 53: reliant.v1.GetLaunchEventResponse
+	(*ResolveTriggerSendersRequest)(nil),  // 54: reliant.v1.ResolveTriggerSendersRequest
+	(*ResolvedTriggerSender)(nil),         // 55: reliant.v1.ResolvedTriggerSender
+	(*ResolveTriggerSendersResponse)(nil), // 56: reliant.v1.ResolveTriggerSendersResponse
+	(*ListReplayEventsRequest)(nil),       // 57: reliant.v1.ListReplayEventsRequest
+	(*ReplayCandidate)(nil),               // 58: reliant.v1.ReplayCandidate
+	(*ListReplayEventsResponse)(nil),      // 59: reliant.v1.ListReplayEventsResponse
+	(*PreviewReplayRequest)(nil),          // 60: reliant.v1.PreviewReplayRequest
+	(*PreviewReplayResponse)(nil),         // 61: reliant.v1.PreviewReplayResponse
+	(*DraftAutomationRequest)(nil),        // 62: reliant.v1.DraftAutomationRequest
+	(*DraftAutomationResponse)(nil),       // 63: reliant.v1.DraftAutomationResponse
+	(*AutomationDraft)(nil),               // 64: reliant.v1.AutomationDraft
+	nil,                                   // 65: reliant.v1.IntegrationSource.MatchEntry
+	nil,                                   // 66: reliant.v1.IntegrationSource.MatchInputEntry
+	nil,                                   // 67: reliant.v1.WorkflowTrigger.InputsEntry
+	nil,                                   // 68: reliant.v1.Trigger.PresetsEntry
+	nil,                                   // 69: reliant.v1.Trigger.ParamsEntry
+	nil,                                   // 70: reliant.v1.TriggerDefinition.PresetsEntry
+	nil,                                   // 71: reliant.v1.TriggerDefinition.ParamsEntry
+	nil,                                   // 72: reliant.v1.EnableWorkflowRequest.ConnectionIdsEntry
+	nil,                                   // 73: reliant.v1.EnableWorkflowRequest.ParamsEntry
+	nil,                                   // 74: reliant.v1.EnableWorkflowRequest.PresetsEntry
+	nil,                                   // 75: reliant.v1.WorkflowTriggerOverride.ParamsEntry
+	nil,                                   // 76: reliant.v1.PreviewReplayResponse.InputsEntry
+	(RunDisplayState)(0),                  // 77: reliant.v1.RunDisplayState
+	(WorkflowState)(0),                    // 78: reliant.v1.WorkflowState
+	(WorkflowStopReason)(0),               // 79: reliant.v1.WorkflowStopReason
+	(RunOutcome)(0),                       // 80: reliant.v1.RunOutcome
+	(*structpb.Struct)(nil),               // 81: google.protobuf.Struct
+	(*ReplayEvent)(nil),                   // 82: reliant.v1.ReplayEvent
+	(*structpb.Value)(nil),                // 83: google.protobuf.Value
 }
 var file_reliant_v1_trigger_proto_depIdxs = []int32{
 	6,   // 0: reliant.v1.TriggerHealth.status:type_name -> reliant.v1.TriggerHealthStatus
 	9,   // 1: reliant.v1.TriggerHealth.setup_issues:type_name -> reliant.v1.TriggerSetupIssue
-	76,  // 2: reliant.v1.TriggerEventRun.display_state:type_name -> reliant.v1.RunDisplayState
-	77,  // 3: reliant.v1.TriggerEventRun.state:type_name -> reliant.v1.WorkflowState
-	78,  // 4: reliant.v1.TriggerEventRun.stop_reason:type_name -> reliant.v1.WorkflowStopReason
-	79,  // 5: reliant.v1.TriggerEventRun.run_outcome:type_name -> reliant.v1.RunOutcome
+	77,  // 2: reliant.v1.TriggerEventRun.display_state:type_name -> reliant.v1.RunDisplayState
+	78,  // 3: reliant.v1.TriggerEventRun.state:type_name -> reliant.v1.WorkflowState
+	79,  // 4: reliant.v1.TriggerEventRun.stop_reason:type_name -> reliant.v1.WorkflowStopReason
+	80,  // 5: reliant.v1.TriggerEventRun.run_outcome:type_name -> reliant.v1.RunOutcome
 	5,   // 6: reliant.v1.ScheduleSource.overlap:type_name -> reliant.v1.TriggerOverlapPolicy
 	13,  // 7: reliant.v1.WebhookSource.hmac:type_name -> reliant.v1.WebhookHmac
-	64,  // 8: reliant.v1.IntegrationSource.match:type_name -> reliant.v1.IntegrationSource.MatchEntry
-	65,  // 9: reliant.v1.IntegrationSource.match_input:type_name -> reliant.v1.IntegrationSource.MatchInputEntry
-	66,  // 10: reliant.v1.WorkflowTrigger.inputs:type_name -> reliant.v1.WorkflowTrigger.InputsEntry
+	65,  // 8: reliant.v1.IntegrationSource.match:type_name -> reliant.v1.IntegrationSource.MatchEntry
+	66,  // 9: reliant.v1.IntegrationSource.match_input:type_name -> reliant.v1.IntegrationSource.MatchInputEntry
+	67,  // 10: reliant.v1.WorkflowTrigger.inputs:type_name -> reliant.v1.WorkflowTrigger.InputsEntry
 	11,  // 11: reliant.v1.WorkflowTrigger.schedule:type_name -> reliant.v1.ScheduleSource
 	12,  // 12: reliant.v1.WorkflowTrigger.webhook:type_name -> reliant.v1.WebhookSource
 	14,  // 13: reliant.v1.WorkflowTrigger.integration:type_name -> reliant.v1.IntegrationSource
-	15,  // 14: reliant.v1.WorkflowTrigger.workflow_event:type_name -> reliant.v1.WorkflowEventSource
-	67,  // 15: reliant.v1.Trigger.presets:type_name -> reliant.v1.Trigger.PresetsEntry
-	68,  // 16: reliant.v1.Trigger.params:type_name -> reliant.v1.Trigger.ParamsEntry
-	20,  // 17: reliant.v1.Trigger.last_event:type_name -> reliant.v1.TriggerEvent
-	19,  // 18: reliant.v1.Trigger.changes:type_name -> reliant.v1.TriggerChange
-	8,   // 19: reliant.v1.Trigger.health:type_name -> reliant.v1.TriggerHealth
-	11,  // 20: reliant.v1.Trigger.schedule:type_name -> reliant.v1.ScheduleSource
-	12,  // 21: reliant.v1.Trigger.webhook:type_name -> reliant.v1.WebhookSource
-	14,  // 22: reliant.v1.Trigger.integration:type_name -> reliant.v1.IntegrationSource
-	15,  // 23: reliant.v1.Trigger.workflow_event:type_name -> reliant.v1.WorkflowEventSource
-	3,   // 24: reliant.v1.Trigger.acting_identity:type_name -> reliant.v1.ActingIdentity
-	18,  // 25: reliant.v1.Trigger.definition_source:type_name -> reliant.v1.TriggerDefinitionSource
-	4,   // 26: reliant.v1.Trigger.unattended_funding:type_name -> reliant.v1.UnattendedFunding
-	1,   // 27: reliant.v1.TriggerEvent.kind:type_name -> reliant.v1.TriggerEventKind
-	2,   // 28: reliant.v1.TriggerEvent.outcome:type_name -> reliant.v1.TriggerEventOutcome
-	80,  // 29: reliant.v1.TriggerEvent.payload:type_name -> google.protobuf.Struct
-	10,  // 30: reliant.v1.TriggerEvent.run:type_name -> reliant.v1.TriggerEventRun
-	22,  // 31: reliant.v1.TriggerEvent.sender:type_name -> reliant.v1.TriggerSender
-	21,  // 32: reliant.v1.TriggerEvent.definition:type_name -> reliant.v1.TriggerEventDefinition
-	69,  // 33: reliant.v1.TriggerDefinition.presets:type_name -> reliant.v1.TriggerDefinition.PresetsEntry
-	70,  // 34: reliant.v1.TriggerDefinition.params:type_name -> reliant.v1.TriggerDefinition.ParamsEntry
-	11,  // 35: reliant.v1.TriggerDefinition.schedule:type_name -> reliant.v1.ScheduleSource
-	12,  // 36: reliant.v1.TriggerDefinition.webhook:type_name -> reliant.v1.WebhookSource
-	14,  // 37: reliant.v1.TriggerDefinition.integration:type_name -> reliant.v1.IntegrationSource
-	15,  // 38: reliant.v1.TriggerDefinition.workflow_event:type_name -> reliant.v1.WorkflowEventSource
-	3,   // 39: reliant.v1.TriggerDefinition.acting_identity:type_name -> reliant.v1.ActingIdentity
-	4,   // 40: reliant.v1.TriggerDefinition.unattended_funding:type_name -> reliant.v1.UnattendedFunding
-	23,  // 41: reliant.v1.CreateTriggerRequest.trigger:type_name -> reliant.v1.TriggerDefinition
-	17,  // 42: reliant.v1.CreateTriggerResponse.trigger:type_name -> reliant.v1.Trigger
-	24,  // 43: reliant.v1.CreateTriggerResponse.webhook:type_name -> reliant.v1.WebhookCredential
-	27,  // 44: reliant.v1.CreateTriggerResponse.funding_warning:type_name -> reliant.v1.TriggerFundingWarning
-	17,  // 45: reliant.v1.RotateWebhookTokenResponse.trigger:type_name -> reliant.v1.Trigger
-	24,  // 46: reliant.v1.RotateWebhookTokenResponse.webhook:type_name -> reliant.v1.WebhookCredential
-	17,  // 47: reliant.v1.GetTriggerResponse.trigger:type_name -> reliant.v1.Trigger
-	17,  // 48: reliant.v1.ListTriggersResponse.triggers:type_name -> reliant.v1.Trigger
-	23,  // 49: reliant.v1.UpdateTriggerRequest.trigger:type_name -> reliant.v1.TriggerDefinition
-	17,  // 50: reliant.v1.UpdateTriggerResponse.trigger:type_name -> reliant.v1.Trigger
-	27,  // 51: reliant.v1.UpdateTriggerResponse.funding_warning:type_name -> reliant.v1.TriggerFundingWarning
-	17,  // 52: reliant.v1.SetTriggerEnabledResponse.trigger:type_name -> reliant.v1.Trigger
-	27,  // 53: reliant.v1.SetTriggerEnabledResponse.funding_warning:type_name -> reliant.v1.TriggerFundingWarning
-	71,  // 54: reliant.v1.EnableWorkflowRequest.connection_ids:type_name -> reliant.v1.EnableWorkflowRequest.ConnectionIdsEntry
-	72,  // 55: reliant.v1.EnableWorkflowRequest.params:type_name -> reliant.v1.EnableWorkflowRequest.ParamsEntry
-	73,  // 56: reliant.v1.EnableWorkflowRequest.presets:type_name -> reliant.v1.EnableWorkflowRequest.PresetsEntry
-	41,  // 57: reliant.v1.EnableWorkflowRequest.overrides:type_name -> reliant.v1.WorkflowTriggerOverride
-	3,   // 58: reliant.v1.EnableWorkflowRequest.acting_identity:type_name -> reliant.v1.ActingIdentity
-	4,   // 59: reliant.v1.EnableWorkflowRequest.unattended_funding:type_name -> reliant.v1.UnattendedFunding
-	74,  // 60: reliant.v1.WorkflowTriggerOverride.params:type_name -> reliant.v1.WorkflowTriggerOverride.ParamsEntry
-	7,   // 61: reliant.v1.WorkflowTriggerResult.outcome:type_name -> reliant.v1.WorkflowTriggerOutcome
-	17,  // 62: reliant.v1.WorkflowTriggerResult.activation:type_name -> reliant.v1.Trigger
-	24,  // 63: reliant.v1.WorkflowTriggerResult.webhook:type_name -> reliant.v1.WebhookCredential
-	27,  // 64: reliant.v1.WorkflowTriggerResult.funding_warning:type_name -> reliant.v1.TriggerFundingWarning
-	42,  // 65: reliant.v1.EnableWorkflowResponse.results:type_name -> reliant.v1.WorkflowTriggerResult
-	17,  // 66: reliant.v1.DisableWorkflowResponse.paused:type_name -> reliant.v1.Trigger
-	46,  // 67: reliant.v1.DisableWorkflowResponse.failed:type_name -> reliant.v1.TriggerFailure
-	2,   // 68: reliant.v1.ListTriggerEventsRequest.outcomes:type_name -> reliant.v1.TriggerEventOutcome
-	20,  // 69: reliant.v1.ListTriggerEventsResponse.events:type_name -> reliant.v1.TriggerEvent
-	20,  // 70: reliant.v1.GetLaunchEventResponse.event:type_name -> reliant.v1.TriggerEvent
-	54,  // 71: reliant.v1.ResolveTriggerSendersResponse.senders:type_name -> reliant.v1.ResolvedTriggerSender
-	20,  // 72: reliant.v1.ReplayCandidate.event:type_name -> reliant.v1.TriggerEvent
-	57,  // 73: reliant.v1.ListReplayEventsResponse.events:type_name -> reliant.v1.ReplayCandidate
-	81,  // 74: reliant.v1.PreviewReplayRequest.replay:type_name -> reliant.v1.ReplayEvent
-	22,  // 75: reliant.v1.PreviewReplayRequest.sender:type_name -> reliant.v1.TriggerSender
-	75,  // 76: reliant.v1.PreviewReplayResponse.inputs:type_name -> reliant.v1.PreviewReplayResponse.InputsEntry
-	63,  // 77: reliant.v1.DraftAutomationResponse.draft:type_name -> reliant.v1.AutomationDraft
-	23,  // 78: reliant.v1.AutomationDraft.definition:type_name -> reliant.v1.TriggerDefinition
-	82,  // 79: reliant.v1.Trigger.ParamsEntry.value:type_name -> google.protobuf.Value
-	82,  // 80: reliant.v1.TriggerDefinition.ParamsEntry.value:type_name -> google.protobuf.Value
-	82,  // 81: reliant.v1.EnableWorkflowRequest.ParamsEntry.value:type_name -> google.protobuf.Value
-	82,  // 82: reliant.v1.WorkflowTriggerOverride.ParamsEntry.value:type_name -> google.protobuf.Value
-	82,  // 83: reliant.v1.PreviewReplayResponse.InputsEntry.value:type_name -> google.protobuf.Value
-	25,  // 84: reliant.v1.TriggerService.CreateTrigger:input_type -> reliant.v1.CreateTriggerRequest
-	30,  // 85: reliant.v1.TriggerService.GetTrigger:input_type -> reliant.v1.GetTriggerRequest
-	32,  // 86: reliant.v1.TriggerService.ListTriggers:input_type -> reliant.v1.ListTriggersRequest
-	34,  // 87: reliant.v1.TriggerService.UpdateTrigger:input_type -> reliant.v1.UpdateTriggerRequest
-	36,  // 88: reliant.v1.TriggerService.DeleteTrigger:input_type -> reliant.v1.DeleteTriggerRequest
-	38,  // 89: reliant.v1.TriggerService.SetTriggerEnabled:input_type -> reliant.v1.SetTriggerEnabledRequest
-	47,  // 90: reliant.v1.TriggerService.FireTrigger:input_type -> reliant.v1.FireTriggerRequest
-	49,  // 91: reliant.v1.TriggerService.ListTriggerEvents:input_type -> reliant.v1.ListTriggerEventsRequest
-	51,  // 92: reliant.v1.TriggerService.GetLaunchEvent:input_type -> reliant.v1.GetLaunchEventRequest
-	28,  // 93: reliant.v1.TriggerService.RotateWebhookToken:input_type -> reliant.v1.RotateWebhookTokenRequest
-	40,  // 94: reliant.v1.TriggerService.EnableWorkflow:input_type -> reliant.v1.EnableWorkflowRequest
-	44,  // 95: reliant.v1.TriggerService.DisableWorkflow:input_type -> reliant.v1.DisableWorkflowRequest
-	53,  // 96: reliant.v1.TriggerService.ResolveTriggerSenders:input_type -> reliant.v1.ResolveTriggerSendersRequest
-	56,  // 97: reliant.v1.TriggerService.ListReplayEvents:input_type -> reliant.v1.ListReplayEventsRequest
-	59,  // 98: reliant.v1.TriggerService.PreviewReplay:input_type -> reliant.v1.PreviewReplayRequest
-	61,  // 99: reliant.v1.TriggerService.DraftAutomation:input_type -> reliant.v1.DraftAutomationRequest
-	26,  // 100: reliant.v1.TriggerService.CreateTrigger:output_type -> reliant.v1.CreateTriggerResponse
-	31,  // 101: reliant.v1.TriggerService.GetTrigger:output_type -> reliant.v1.GetTriggerResponse
-	33,  // 102: reliant.v1.TriggerService.ListTriggers:output_type -> reliant.v1.ListTriggersResponse
-	35,  // 103: reliant.v1.TriggerService.UpdateTrigger:output_type -> reliant.v1.UpdateTriggerResponse
-	37,  // 104: reliant.v1.TriggerService.DeleteTrigger:output_type -> reliant.v1.DeleteTriggerResponse
-	39,  // 105: reliant.v1.TriggerService.SetTriggerEnabled:output_type -> reliant.v1.SetTriggerEnabledResponse
-	48,  // 106: reliant.v1.TriggerService.FireTrigger:output_type -> reliant.v1.FireTriggerResponse
-	50,  // 107: reliant.v1.TriggerService.ListTriggerEvents:output_type -> reliant.v1.ListTriggerEventsResponse
-	52,  // 108: reliant.v1.TriggerService.GetLaunchEvent:output_type -> reliant.v1.GetLaunchEventResponse
-	29,  // 109: reliant.v1.TriggerService.RotateWebhookToken:output_type -> reliant.v1.RotateWebhookTokenResponse
-	43,  // 110: reliant.v1.TriggerService.EnableWorkflow:output_type -> reliant.v1.EnableWorkflowResponse
-	45,  // 111: reliant.v1.TriggerService.DisableWorkflow:output_type -> reliant.v1.DisableWorkflowResponse
-	55,  // 112: reliant.v1.TriggerService.ResolveTriggerSenders:output_type -> reliant.v1.ResolveTriggerSendersResponse
-	58,  // 113: reliant.v1.TriggerService.ListReplayEvents:output_type -> reliant.v1.ListReplayEventsResponse
-	60,  // 114: reliant.v1.TriggerService.PreviewReplay:output_type -> reliant.v1.PreviewReplayResponse
-	62,  // 115: reliant.v1.TriggerService.DraftAutomation:output_type -> reliant.v1.DraftAutomationResponse
-	100, // [100:116] is the sub-list for method output_type
-	84,  // [84:100] is the sub-list for method input_type
-	84,  // [84:84] is the sub-list for extension type_name
-	84,  // [84:84] is the sub-list for extension extendee
-	0,   // [0:84] is the sub-list for field type_name
+	16,  // 14: reliant.v1.WorkflowTrigger.workflow_event:type_name -> reliant.v1.WorkflowEventSource
+	15,  // 15: reliant.v1.WorkflowTrigger.record_due:type_name -> reliant.v1.RecordDueSource
+	68,  // 16: reliant.v1.Trigger.presets:type_name -> reliant.v1.Trigger.PresetsEntry
+	69,  // 17: reliant.v1.Trigger.params:type_name -> reliant.v1.Trigger.ParamsEntry
+	21,  // 18: reliant.v1.Trigger.last_event:type_name -> reliant.v1.TriggerEvent
+	20,  // 19: reliant.v1.Trigger.changes:type_name -> reliant.v1.TriggerChange
+	8,   // 20: reliant.v1.Trigger.health:type_name -> reliant.v1.TriggerHealth
+	11,  // 21: reliant.v1.Trigger.schedule:type_name -> reliant.v1.ScheduleSource
+	12,  // 22: reliant.v1.Trigger.webhook:type_name -> reliant.v1.WebhookSource
+	14,  // 23: reliant.v1.Trigger.integration:type_name -> reliant.v1.IntegrationSource
+	16,  // 24: reliant.v1.Trigger.workflow_event:type_name -> reliant.v1.WorkflowEventSource
+	15,  // 25: reliant.v1.Trigger.record_due:type_name -> reliant.v1.RecordDueSource
+	3,   // 26: reliant.v1.Trigger.acting_identity:type_name -> reliant.v1.ActingIdentity
+	19,  // 27: reliant.v1.Trigger.definition_source:type_name -> reliant.v1.TriggerDefinitionSource
+	4,   // 28: reliant.v1.Trigger.unattended_funding:type_name -> reliant.v1.UnattendedFunding
+	1,   // 29: reliant.v1.TriggerEvent.kind:type_name -> reliant.v1.TriggerEventKind
+	2,   // 30: reliant.v1.TriggerEvent.outcome:type_name -> reliant.v1.TriggerEventOutcome
+	81,  // 31: reliant.v1.TriggerEvent.payload:type_name -> google.protobuf.Struct
+	10,  // 32: reliant.v1.TriggerEvent.run:type_name -> reliant.v1.TriggerEventRun
+	23,  // 33: reliant.v1.TriggerEvent.sender:type_name -> reliant.v1.TriggerSender
+	22,  // 34: reliant.v1.TriggerEvent.definition:type_name -> reliant.v1.TriggerEventDefinition
+	70,  // 35: reliant.v1.TriggerDefinition.presets:type_name -> reliant.v1.TriggerDefinition.PresetsEntry
+	71,  // 36: reliant.v1.TriggerDefinition.params:type_name -> reliant.v1.TriggerDefinition.ParamsEntry
+	11,  // 37: reliant.v1.TriggerDefinition.schedule:type_name -> reliant.v1.ScheduleSource
+	12,  // 38: reliant.v1.TriggerDefinition.webhook:type_name -> reliant.v1.WebhookSource
+	14,  // 39: reliant.v1.TriggerDefinition.integration:type_name -> reliant.v1.IntegrationSource
+	16,  // 40: reliant.v1.TriggerDefinition.workflow_event:type_name -> reliant.v1.WorkflowEventSource
+	15,  // 41: reliant.v1.TriggerDefinition.record_due:type_name -> reliant.v1.RecordDueSource
+	3,   // 42: reliant.v1.TriggerDefinition.acting_identity:type_name -> reliant.v1.ActingIdentity
+	4,   // 43: reliant.v1.TriggerDefinition.unattended_funding:type_name -> reliant.v1.UnattendedFunding
+	24,  // 44: reliant.v1.CreateTriggerRequest.trigger:type_name -> reliant.v1.TriggerDefinition
+	18,  // 45: reliant.v1.CreateTriggerResponse.trigger:type_name -> reliant.v1.Trigger
+	25,  // 46: reliant.v1.CreateTriggerResponse.webhook:type_name -> reliant.v1.WebhookCredential
+	28,  // 47: reliant.v1.CreateTriggerResponse.funding_warning:type_name -> reliant.v1.TriggerFundingWarning
+	18,  // 48: reliant.v1.RotateWebhookTokenResponse.trigger:type_name -> reliant.v1.Trigger
+	25,  // 49: reliant.v1.RotateWebhookTokenResponse.webhook:type_name -> reliant.v1.WebhookCredential
+	18,  // 50: reliant.v1.GetTriggerResponse.trigger:type_name -> reliant.v1.Trigger
+	18,  // 51: reliant.v1.ListTriggersResponse.triggers:type_name -> reliant.v1.Trigger
+	24,  // 52: reliant.v1.UpdateTriggerRequest.trigger:type_name -> reliant.v1.TriggerDefinition
+	18,  // 53: reliant.v1.UpdateTriggerResponse.trigger:type_name -> reliant.v1.Trigger
+	28,  // 54: reliant.v1.UpdateTriggerResponse.funding_warning:type_name -> reliant.v1.TriggerFundingWarning
+	18,  // 55: reliant.v1.SetTriggerEnabledResponse.trigger:type_name -> reliant.v1.Trigger
+	28,  // 56: reliant.v1.SetTriggerEnabledResponse.funding_warning:type_name -> reliant.v1.TriggerFundingWarning
+	72,  // 57: reliant.v1.EnableWorkflowRequest.connection_ids:type_name -> reliant.v1.EnableWorkflowRequest.ConnectionIdsEntry
+	73,  // 58: reliant.v1.EnableWorkflowRequest.params:type_name -> reliant.v1.EnableWorkflowRequest.ParamsEntry
+	74,  // 59: reliant.v1.EnableWorkflowRequest.presets:type_name -> reliant.v1.EnableWorkflowRequest.PresetsEntry
+	42,  // 60: reliant.v1.EnableWorkflowRequest.overrides:type_name -> reliant.v1.WorkflowTriggerOverride
+	3,   // 61: reliant.v1.EnableWorkflowRequest.acting_identity:type_name -> reliant.v1.ActingIdentity
+	4,   // 62: reliant.v1.EnableWorkflowRequest.unattended_funding:type_name -> reliant.v1.UnattendedFunding
+	75,  // 63: reliant.v1.WorkflowTriggerOverride.params:type_name -> reliant.v1.WorkflowTriggerOverride.ParamsEntry
+	7,   // 64: reliant.v1.WorkflowTriggerResult.outcome:type_name -> reliant.v1.WorkflowTriggerOutcome
+	18,  // 65: reliant.v1.WorkflowTriggerResult.activation:type_name -> reliant.v1.Trigger
+	25,  // 66: reliant.v1.WorkflowTriggerResult.webhook:type_name -> reliant.v1.WebhookCredential
+	28,  // 67: reliant.v1.WorkflowTriggerResult.funding_warning:type_name -> reliant.v1.TriggerFundingWarning
+	43,  // 68: reliant.v1.EnableWorkflowResponse.results:type_name -> reliant.v1.WorkflowTriggerResult
+	18,  // 69: reliant.v1.DisableWorkflowResponse.paused:type_name -> reliant.v1.Trigger
+	47,  // 70: reliant.v1.DisableWorkflowResponse.failed:type_name -> reliant.v1.TriggerFailure
+	2,   // 71: reliant.v1.ListTriggerEventsRequest.outcomes:type_name -> reliant.v1.TriggerEventOutcome
+	21,  // 72: reliant.v1.ListTriggerEventsResponse.events:type_name -> reliant.v1.TriggerEvent
+	21,  // 73: reliant.v1.GetLaunchEventResponse.event:type_name -> reliant.v1.TriggerEvent
+	55,  // 74: reliant.v1.ResolveTriggerSendersResponse.senders:type_name -> reliant.v1.ResolvedTriggerSender
+	21,  // 75: reliant.v1.ReplayCandidate.event:type_name -> reliant.v1.TriggerEvent
+	58,  // 76: reliant.v1.ListReplayEventsResponse.events:type_name -> reliant.v1.ReplayCandidate
+	82,  // 77: reliant.v1.PreviewReplayRequest.replay:type_name -> reliant.v1.ReplayEvent
+	23,  // 78: reliant.v1.PreviewReplayRequest.sender:type_name -> reliant.v1.TriggerSender
+	76,  // 79: reliant.v1.PreviewReplayResponse.inputs:type_name -> reliant.v1.PreviewReplayResponse.InputsEntry
+	64,  // 80: reliant.v1.DraftAutomationResponse.draft:type_name -> reliant.v1.AutomationDraft
+	24,  // 81: reliant.v1.AutomationDraft.definition:type_name -> reliant.v1.TriggerDefinition
+	83,  // 82: reliant.v1.Trigger.ParamsEntry.value:type_name -> google.protobuf.Value
+	83,  // 83: reliant.v1.TriggerDefinition.ParamsEntry.value:type_name -> google.protobuf.Value
+	83,  // 84: reliant.v1.EnableWorkflowRequest.ParamsEntry.value:type_name -> google.protobuf.Value
+	83,  // 85: reliant.v1.WorkflowTriggerOverride.ParamsEntry.value:type_name -> google.protobuf.Value
+	83,  // 86: reliant.v1.PreviewReplayResponse.InputsEntry.value:type_name -> google.protobuf.Value
+	26,  // 87: reliant.v1.TriggerService.CreateTrigger:input_type -> reliant.v1.CreateTriggerRequest
+	31,  // 88: reliant.v1.TriggerService.GetTrigger:input_type -> reliant.v1.GetTriggerRequest
+	33,  // 89: reliant.v1.TriggerService.ListTriggers:input_type -> reliant.v1.ListTriggersRequest
+	35,  // 90: reliant.v1.TriggerService.UpdateTrigger:input_type -> reliant.v1.UpdateTriggerRequest
+	37,  // 91: reliant.v1.TriggerService.DeleteTrigger:input_type -> reliant.v1.DeleteTriggerRequest
+	39,  // 92: reliant.v1.TriggerService.SetTriggerEnabled:input_type -> reliant.v1.SetTriggerEnabledRequest
+	48,  // 93: reliant.v1.TriggerService.FireTrigger:input_type -> reliant.v1.FireTriggerRequest
+	50,  // 94: reliant.v1.TriggerService.ListTriggerEvents:input_type -> reliant.v1.ListTriggerEventsRequest
+	52,  // 95: reliant.v1.TriggerService.GetLaunchEvent:input_type -> reliant.v1.GetLaunchEventRequest
+	29,  // 96: reliant.v1.TriggerService.RotateWebhookToken:input_type -> reliant.v1.RotateWebhookTokenRequest
+	41,  // 97: reliant.v1.TriggerService.EnableWorkflow:input_type -> reliant.v1.EnableWorkflowRequest
+	45,  // 98: reliant.v1.TriggerService.DisableWorkflow:input_type -> reliant.v1.DisableWorkflowRequest
+	54,  // 99: reliant.v1.TriggerService.ResolveTriggerSenders:input_type -> reliant.v1.ResolveTriggerSendersRequest
+	57,  // 100: reliant.v1.TriggerService.ListReplayEvents:input_type -> reliant.v1.ListReplayEventsRequest
+	60,  // 101: reliant.v1.TriggerService.PreviewReplay:input_type -> reliant.v1.PreviewReplayRequest
+	62,  // 102: reliant.v1.TriggerService.DraftAutomation:input_type -> reliant.v1.DraftAutomationRequest
+	27,  // 103: reliant.v1.TriggerService.CreateTrigger:output_type -> reliant.v1.CreateTriggerResponse
+	32,  // 104: reliant.v1.TriggerService.GetTrigger:output_type -> reliant.v1.GetTriggerResponse
+	34,  // 105: reliant.v1.TriggerService.ListTriggers:output_type -> reliant.v1.ListTriggersResponse
+	36,  // 106: reliant.v1.TriggerService.UpdateTrigger:output_type -> reliant.v1.UpdateTriggerResponse
+	38,  // 107: reliant.v1.TriggerService.DeleteTrigger:output_type -> reliant.v1.DeleteTriggerResponse
+	40,  // 108: reliant.v1.TriggerService.SetTriggerEnabled:output_type -> reliant.v1.SetTriggerEnabledResponse
+	49,  // 109: reliant.v1.TriggerService.FireTrigger:output_type -> reliant.v1.FireTriggerResponse
+	51,  // 110: reliant.v1.TriggerService.ListTriggerEvents:output_type -> reliant.v1.ListTriggerEventsResponse
+	53,  // 111: reliant.v1.TriggerService.GetLaunchEvent:output_type -> reliant.v1.GetLaunchEventResponse
+	30,  // 112: reliant.v1.TriggerService.RotateWebhookToken:output_type -> reliant.v1.RotateWebhookTokenResponse
+	44,  // 113: reliant.v1.TriggerService.EnableWorkflow:output_type -> reliant.v1.EnableWorkflowResponse
+	46,  // 114: reliant.v1.TriggerService.DisableWorkflow:output_type -> reliant.v1.DisableWorkflowResponse
+	56,  // 115: reliant.v1.TriggerService.ResolveTriggerSenders:output_type -> reliant.v1.ResolveTriggerSendersResponse
+	59,  // 116: reliant.v1.TriggerService.ListReplayEvents:output_type -> reliant.v1.ListReplayEventsResponse
+	61,  // 117: reliant.v1.TriggerService.PreviewReplay:output_type -> reliant.v1.PreviewReplayResponse
+	63,  // 118: reliant.v1.TriggerService.DraftAutomation:output_type -> reliant.v1.DraftAutomationResponse
+	103, // [103:119] is the sub-list for method output_type
+	87,  // [87:103] is the sub-list for method input_type
+	87,  // [87:87] is the sub-list for extension type_name
+	87,  // [87:87] is the sub-list for extension extendee
+	0,   // [0:87] is the sub-list for field type_name
 }
 
 func init() { file_reliant_v1_trigger_proto_init() }
@@ -6174,42 +6303,45 @@ func file_reliant_v1_trigger_proto_init() {
 	file_reliant_v1_chat_proto_init()
 	file_reliant_v1_run_proto_init()
 	file_reliant_v1_trigger_proto_msgTypes[3].OneofWrappers = []any{}
-	file_reliant_v1_trigger_proto_msgTypes[8].OneofWrappers = []any{
+	file_reliant_v1_trigger_proto_msgTypes[9].OneofWrappers = []any{
 		(*WorkflowTrigger_Schedule)(nil),
 		(*WorkflowTrigger_Webhook)(nil),
 		(*WorkflowTrigger_Integration)(nil),
 		(*WorkflowTrigger_WorkflowEvent)(nil),
+		(*WorkflowTrigger_RecordDue)(nil),
 	}
-	file_reliant_v1_trigger_proto_msgTypes[9].OneofWrappers = []any{
+	file_reliant_v1_trigger_proto_msgTypes[10].OneofWrappers = []any{
 		(*Trigger_Schedule)(nil),
 		(*Trigger_Webhook)(nil),
 		(*Trigger_Integration)(nil),
 		(*Trigger_WorkflowEvent)(nil),
+		(*Trigger_RecordDue)(nil),
 	}
-	file_reliant_v1_trigger_proto_msgTypes[12].OneofWrappers = []any{}
-	file_reliant_v1_trigger_proto_msgTypes[15].OneofWrappers = []any{
+	file_reliant_v1_trigger_proto_msgTypes[13].OneofWrappers = []any{}
+	file_reliant_v1_trigger_proto_msgTypes[16].OneofWrappers = []any{
 		(*TriggerDefinition_Schedule)(nil),
 		(*TriggerDefinition_Webhook)(nil),
 		(*TriggerDefinition_Integration)(nil),
 		(*TriggerDefinition_WorkflowEvent)(nil),
+		(*TriggerDefinition_RecordDue)(nil),
 		(*TriggerDefinition_WorkflowTrigger)(nil),
 	}
-	file_reliant_v1_trigger_proto_msgTypes[17].OneofWrappers = []any{}
-	file_reliant_v1_trigger_proto_msgTypes[24].OneofWrappers = []any{}
-	file_reliant_v1_trigger_proto_msgTypes[32].OneofWrappers = []any{}
+	file_reliant_v1_trigger_proto_msgTypes[18].OneofWrappers = []any{}
+	file_reliant_v1_trigger_proto_msgTypes[25].OneofWrappers = []any{}
 	file_reliant_v1_trigger_proto_msgTypes[33].OneofWrappers = []any{}
-	file_reliant_v1_trigger_proto_msgTypes[36].OneofWrappers = []any{}
-	file_reliant_v1_trigger_proto_msgTypes[41].OneofWrappers = []any{}
-	file_reliant_v1_trigger_proto_msgTypes[44].OneofWrappers = []any{}
-	file_reliant_v1_trigger_proto_msgTypes[48].OneofWrappers = []any{}
-	file_reliant_v1_trigger_proto_msgTypes[51].OneofWrappers = []any{}
+	file_reliant_v1_trigger_proto_msgTypes[34].OneofWrappers = []any{}
+	file_reliant_v1_trigger_proto_msgTypes[37].OneofWrappers = []any{}
+	file_reliant_v1_trigger_proto_msgTypes[42].OneofWrappers = []any{}
+	file_reliant_v1_trigger_proto_msgTypes[45].OneofWrappers = []any{}
+	file_reliant_v1_trigger_proto_msgTypes[49].OneofWrappers = []any{}
+	file_reliant_v1_trigger_proto_msgTypes[52].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_reliant_v1_trigger_proto_rawDesc), len(file_reliant_v1_trigger_proto_rawDesc)),
 			NumEnums:      8,
-			NumMessages:   68,
+			NumMessages:   69,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
