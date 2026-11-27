@@ -496,7 +496,10 @@ function isUserTurn(item: ToolRowSpacingItem | undefined): boolean {
   );
 }
 
-type TurnItem = ToolRowSpacingItem & { workflow?: { thread?: string } };
+type TurnItem = ToolRowSpacingItem & {
+  workflow?: { thread?: string };
+  slice?: Pick<MessageSlice, "role" | "chrome">;
+};
 
 /** Where one row sits in the conversation's turns: see rowTurns. */
 interface RowTurn {
@@ -580,23 +583,66 @@ export function turnRhythm(items: readonly TurnItem[]): string[] {
  *                        rows, and neutral rows (see rowTurns), between them
  *                        change nothing.
  *   a row with no thread is its own end: nothing can continue it.
+ *
+ * Only a row that draws the actions row can end a part (carriesActions): a
+ * fold of work, a notice, a card or a slice without the message's chrome that
+ * follows the answer joins its turn but leaves the actions under the answer.
+ * Ending the part on one of those took the actions off the answer and put
+ * them nowhere.
+ *
+ * `live`: the run is still going. The part the last row belongs to is still
+ * being written, so nothing in it ends yet: no actions under an answer that
+ * may still grow.
  */
-export function turnEnds(items: readonly TurnItem[]): boolean[] {
+export function turnEnds(items: readonly TurnItem[], { live = false }: { live?: boolean } = {}): boolean[] {
   const rows = rowTurns(items);
-  // A thread's part of a turn → the index of its last row to join the turn.
+  // A thread's part of a turn → the index of its last row to carry actions.
   const partKey = (row: RowTurn) => `${row.turn ?? ""}\u0000${row.thread}`;
-  const lastJoin = new Map<string, number>();
+  const lastCarrier = new Map<string, number>();
   const answered = new Set<string | null>();
   rows.forEach((row, index) => {
     if (!row.joins) return;
-    lastJoin.set(partKey(row), index);
     answered.add(row.turn);
+    if (carriesActions(items[index])) lastCarrier.set(partKey(row), index);
   });
+  const lastRow = rows[rows.length - 1];
+  const openPart = live && lastRow?.joins ? partKey(lastRow) : undefined;
   return rows.map((row, index) => {
     if (row.opener) return !answered.has(row.turn);
     if (row.thread === undefined) return true;
-    return (lastJoin.get(partKey(row)) ?? index) <= index;
+    if (openPart !== undefined && row.joins && partKey(row) === openPart) return false;
+    return (lastCarrier.get(partKey(row)) ?? index) <= index;
   });
+}
+
+/**
+ * Whether a row draws ChatMessage's actions row when it ends its turn: a
+ * person's message, or an answer row with the message's chrome. A fold, a
+ * notice, a compaction marker, another agent's mail and a slice without the
+ * chrome (a surfaced call, an earlier prose slice) never do.
+ */
+function carriesActions(item: TurnItem | undefined): boolean {
+  if (item?.type !== "message" || !item.message) return false;
+  const { message } = item;
+  if (isAgentMessage(message) || isCompactionMessage(message) || message.displayStyle) return false;
+  return !item.slice || Boolean(item.slice.chrome);
+}
+
+/**
+ * The row whose actions stay on screen: the one that ends the latest turn
+ * (the turn the composer would reply to), or none. While the run is live only
+ * the last row may hold them, a prompt nothing has answered yet; an answer
+ * still being written has none.
+ */
+export function latestTurnEnd(items: readonly TurnItem[], ends: readonly boolean[], { live = false }: { live?: boolean } = {}): number {
+  const rows = rowTurns(items);
+  const last = rows.length - 1;
+  if (last < 0) return -1;
+  if (live) return ends[last] && carriesActions(items[last]) ? last : -1;
+  for (let index = last; index >= 0 && rows[index].turn === rows[last].turn; index--) {
+    if (ends[index] && carriesActions(items[index])) return index;
+  }
+  return -1;
 }
 
 /**
@@ -1068,7 +1114,13 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
 
   // Per row, in one pass over the turns: which rows carry the actions row,
   // and the space above each.
-  const turnEndByRow = useMemo(() => turnEnds(timelineItems), [timelineItems]);
+  const turnEndByRow = useMemo(() => turnEnds(timelineItems, { live: isStreaming }), [timelineItems, isStreaming]);
+  // The row whose actions stay on screen: the end of the latest turn, which
+  // is not always the last row (a notice or a fold can follow the answer).
+  const latestEndIndex = useMemo(
+    () => latestTurnEnd(timelineItems, turnEndByRow, { live: isStreaming }),
+    [timelineItems, turnEndByRow, isStreaming],
+  );
   const rhythmByRow = useMemo(() => turnRhythm(timelineItems), [timelineItems]);
 
   // `timelineItems` IS the list the virtualizer renders. There is deliberately
@@ -1545,7 +1597,7 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
         <ChatMessage
           message={msg}
           approvals={approvals}
-          isLatestMessage={isLastItem}
+          isLatestMessage={index === latestEndIndex}
           chatId={chatId}
           isStreaming={false}
           onSelectThread={onSelectThread}
@@ -1565,7 +1617,7 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
           <ChatMessage
             message={msg}
             approvals={approvals}
-            isLatestMessage={isLastItem}
+            isLatestMessage={index === latestEndIndex}
             chatId={chatId}
             isStreaming={isStreaming && isLastItem}
             onSelectThread={onSelectThread}
@@ -1575,7 +1627,7 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
         )}
       </>,
     );
-  }, [approvals, chatId, isStreaming, lastItemIndex, liveWorkIndex, onSelectThread, turnEndByRow]);
+  }, [approvals, chatId, isStreaming, lastItemIndex, latestEndIndex, liveWorkIndex, onSelectThread, turnEndByRow]);
 
   // Wrap each row in the column, with the turn rhythm above it.
   // One virtual row: absolutely positioned at its measured offset, and handed

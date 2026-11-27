@@ -18,8 +18,12 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/dblock"
 	"github.com/reliant-labs/reliant/internal/mergequeue"
+	"github.com/reliant-labs/reliant/internal/mergequeue/buildjob"
+	"github.com/reliant-labs/reliant/internal/mergequeue/candidate"
 	"github.com/reliant-labs/reliant/internal/mergequeue/fakegithub"
+	"github.com/reliant-labs/reliant/internal/mergequeue/ghport"
 	"github.com/reliant-labs/reliant/internal/mergequeue/gitport"
+	"github.com/reliant-labs/reliant/internal/pipeline/grants"
 	"github.com/reliant-labs/reliant/pkg/config"
 )
 
@@ -42,6 +46,10 @@ const (
 	testOrg     = "org-1"
 	testProject = "test-project"
 	testUser    = "test-user"
+	// testTrigger and testDaemon are the activation and machine of the run
+	// that wrote every pass verdict the fixture records.
+	testTrigger = "trigger-1"
+	testDaemon  = "daemon-1"
 )
 
 // fixture is one enrolled repository on fakegithub, a real git workdir, a
@@ -54,9 +62,10 @@ type fixture struct {
 	g    *fakegithub.GitHub
 	r    *fakegithub.Repo
 	repo *core.PipelineRepo
-	wd   mergequeue.Workdir
+	wd   localBuilder
 	gate *fakeGate
 	land *fakeLander
+	auth *fakeAuth
 	prs  map[string]*testPR
 }
 
@@ -90,8 +99,8 @@ func newFixture(t *testing.T, mode core.PipelineRepoMode) *fixture {
 	}
 	return &fixture{
 		t: t, ctx: ctx, db: repo, raw: raw, g: g, r: r, repo: pr,
-		wd:   mergequeue.Workdir{Git: wk, Remote: r.URL(), GitHub: g},
-		gate: &fakeGate{g: g, r: r}, land: &fakeLander{}, prs: map[string]*testPR{},
+		wd:   localBuilder{job: candidate.Job{Ports: candidate.Ports{Git: wk, Remote: r.URL(), GitHub: g}}, g: g},
+		gate: &fakeGate{g: g, r: r}, land: &fakeLander{}, auth: &fakeAuth{}, prs: map[string]*testPR{},
 	}
 }
 
@@ -109,13 +118,19 @@ func (f *fixture) setConfig(doc string) {
 
 func (f *fixture) scheduler() *mergequeue.Scheduler {
 	f.t.Helper()
+	return f.schedulerWith(f.wd)
+}
+
+// schedulerWith is the fixture's scheduler over builder.
+func (f *fixture) schedulerWith(builder mergequeue.Builder) *mergequeue.Scheduler {
+	f.t.Helper()
 	locks, err := dblock.New(dblock.Deps{Logger: slog.Default(), Config: &config.Config{}, Sessions: f.db.SessionPool()})
 	if err != nil {
 		f.t.Fatal(err)
 	}
 	s, err := mergequeue.New(mergequeue.Deps{
 		Store: f.db, Leader: mergequeue.AdvisoryLeader{Locks: locks},
-		Workdirs: fixedWorkdir{f.wd}, Gate: f.gate, Lander: f.land,
+		Refs: f.wd, Builder: builder, Gate: f.gate, Lander: f.land, Authorizer: f.auth,
 	})
 	if err != nil {
 		f.t.Fatal(err)
@@ -123,10 +138,29 @@ func (f *fixture) scheduler() *mergequeue.Scheduler {
 	return s
 }
 
-type fixedWorkdir struct{ wd mergequeue.Workdir }
+// localBuilder runs the queue's code operations in-process on a real git
+// workdir (candidate.Job, the daemon side), and reads refs from fakegithub:
+// the scheduler sees only what a gate pool daemon would report.
+type localBuilder struct {
+	job candidate.Job
+	g   *fakegithub.GitHub
+}
 
-func (w fixedWorkdir) Open(context.Context, *core.PipelineRepo) (mergequeue.Workdir, error) {
-	return w.wd, nil
+func (b localBuilder) Build(ctx context.Context, _ *core.PipelineRepo, req buildjob.BuildRequest) (buildjob.BuildResult, error) {
+	return b.job.Build(ctx, req)
+}
+
+func (b localBuilder) ChangedPaths(ctx context.Context, _ *core.PipelineRepo, req buildjob.PathsRequest) (buildjob.PathsResult, error) {
+	return b.job.ChangedPaths(ctx, req)
+}
+
+func (b localBuilder) BranchTip(ctx context.Context, repo *core.PipelineRepo, branch string) (string, error) {
+	gh, err := ghport.ParseRepo(repo.Repository)
+	if err != nil {
+		return "", err
+	}
+	ref, err := b.g.GetRef(ctx, gh, ghport.BranchRef(branch))
+	return ref.SHA, err
 }
 
 // open opens a PR on branch, adding pr/<branch>.txt (plus files), with a
@@ -162,6 +196,7 @@ func (f *fixture) pass(p *testPR, head string) {
 	if _, err := f.db.InsertPRHeadVerdict(f.ctx, core.PRHeadVerdictRecord{
 		OrgID: testOrg, ProjectID: testProject, RecordID: p.recordID, HeadSHA: head, Round: 1,
 		Verdict: core.PRHeadVerdictPass, Rule: core.PRVerdictRuleNoModelLowRisk, RiskTier: "low", ReviewerPrincipal: "test",
+		TriggerID: testTrigger, DaemonID: testDaemon,
 	}); err != nil {
 		f.t.Fatalf("verdict: %v", err)
 	}
@@ -345,4 +380,34 @@ func (l *fakeLander) Land(_ context.Context, req mergequeue.LandRequest) error {
 	defer l.mu.Unlock()
 	l.lands = append(l.lands, req)
 	return nil
+}
+
+// fakeAuth grants every capability except to the activations in deny, and
+// records what it was asked.
+type fakeAuth struct {
+	mu    sync.Mutex
+	deny  map[string]bool
+	asked []grants.Run
+}
+
+func (a *fakeAuth) Authorize(_ context.Context, run grants.Run, c grants.Capability) error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.asked = append(a.asked, run)
+	if c != grants.Land {
+		return &grants.NotAuthorizedError{Capability: c, Reason: grants.ReasonNoGrant, Detail: "the queue asks only for land"}
+	}
+	if a.deny[run.TriggerID] {
+		return &grants.NotAuthorizedError{Capability: c, Reason: grants.ReasonNoGrant, Detail: "revoked"}
+	}
+	return nil
+}
+
+func (a *fakeAuth) revoke(trigger string) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.deny == nil {
+		a.deny = map[string]bool{}
+	}
+	a.deny[trigger] = true
 }

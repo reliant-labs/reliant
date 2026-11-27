@@ -34,7 +34,7 @@ export function MobilePrivacyPanel() {
       <div className="space-y-2 bg-background p-4 text-meta text-muted-foreground">
         <p>
           <strong className="text-foreground">Chats are stored on {servers}</strong>, with what agents read and
-          commands print. Your code stays on the machine it runs on; a Reliant cloud machine keeps the whole
+          commands print. Your code stays on the machine it runs on; a Reliant sandbox keeps the whole
           repository on its disk.
         </p>
         <p>These switches only control crash reports and usage analytics. A change applies immediately.</p>
