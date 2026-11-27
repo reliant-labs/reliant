@@ -33,7 +33,7 @@ import { toast } from "@/lib/toast-manager";
 
 import { GtmShell, useGtmOrgId } from "../shared/GtmShell";
 import { AssetPanel } from "../shared/Assets";
-import { ItemDialog, useGtmChannels } from "../shared/ItemDialog";
+import { ClaimCheck, ItemDialog, useGtmChannels } from "../shared/ItemDialog";
 import { canApprove, isEmailItem } from "../shared/lifecycle";
 import { PersonActionDialog, PersonOnlyTag } from "../shared/PersonAction";
 import { CAMPAIGN_STATUS, formatAndChannel, formatDay, formatLabel, formatWhen, IDEA_STATUS, isItemOut, tsMs } from "../shared/ui";
@@ -61,6 +61,7 @@ const STAGE_OF: Partial<Record<GtmItemStatus, Stage>> = {
   [GtmItemStatus.PUBLISHED]: "out",
 };
 
+const NEW = "new";
 const IDEA_CARD = "idea:";
 const ITEM_CARD = "item:";
 
@@ -120,7 +121,9 @@ export function CampaignsView() {
   const itemsQ = useListItems({ orgId, pageSize: PAGE.items }, { enabled: !!orgId });
   const strategiesQ = useListStrategies({ orgId, pageSize: 200 }, { enabled: !!orgId });
   const channels = useGtmChannels();
-  const [editing, setEditing] = useState<"new" | GtmCampaign | null>(null);
+  // "new", or the id of the campaign being edited: the form reads the campaign
+  // live from the list, so after a conflict it is on the current revision.
+  const [editing, setEditing] = useState<string | null>(null);
   const navigate = useNavigate();
   const search = useSearch({ strict: false }) as Record<string, unknown>;
   const [openItemId, setOpenItemId] = useState<string | null>(null);
@@ -174,14 +177,16 @@ export function CampaignsView() {
   const header = (
     <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-3">
       <PageHeader title="Campaigns" meta={<span>Each campaign's plan, what covers it, and its ideas, posts and emails by stage.</span>} className="" />
-      <Button variant="primary" size="sm" leftIcon={<Plus />} onClick={() => setEditing("new")} aria-haspopup="dialog">
+      <Button variant="primary" size="sm" leftIcon={<Plus />} onClick={() => setEditing(NEW)} aria-haspopup="dialog">
         New campaign
       </Button>
     </div>
   );
-  const form = editing && (
+  const editingCampaign = editing && editing !== NEW ? campaigns.find((c) => c.id === editing) : undefined;
+  const form = editing && (editing === NEW || editingCampaign) && (
     <CampaignForm
-      campaign={editing === "new" ? undefined : editing}
+      key={editingCampaign ? `${editingCampaign.id}@${editingCampaign.revision}` : NEW}
+      campaign={editingCampaign}
       channels={channels}
       onClose={() => setEditing(null)}
       onSaved={(id) => id && select(id)}
@@ -216,13 +221,13 @@ export function CampaignsView() {
   return (
     <>
       {header}
-      <div className="grid gap-3 md:grid-cols-2" role="radiogroup" aria-label="Campaign">
+      <div className="grid gap-3 md:grid-cols-2" role="group" aria-label="Campaigns">
         {campaigns.map((c) => (
           <CampaignCard key={c.id} campaign={c} strategy={strategyOf(c)} counts={countsOf(ideas, items, c.id)} selected={c.id === selected.id} onSelect={() => select(c.id)} />
         ))}
       </div>
       <div className="flex justify-end">
-        <Button variant="outline" size="sm" leftIcon={<Pencil />} onClick={() => setEditing(selected)} aria-haspopup="dialog">
+        <Button variant="outline" size="sm" leftIcon={<Pencil />} onClick={() => setEditing(selected.id)} aria-haspopup="dialog">
           Edit {selected.name}
         </Button>
       </div>
@@ -244,7 +249,8 @@ export function CampaignsView() {
           Showing the first {PAGE.campaigns} campaigns, {PAGE.ideas} ideas and {PAGE.items} posts and emails.
         </p>
       )}
-      <div className="h-[620px]" data-testid="gtm-campaign-board">
+      {/* No fixed height: each column grows with its cards, and the page scrolls. */}
+      <div className="min-h-80" data-testid="gtm-campaign-board">
         <KanbanBoard
           columns={columns}
           columnClassName="w-64 shrink-0 lg:w-auto lg:min-w-48 lg:flex-1 lg:shrink"
@@ -268,7 +274,10 @@ export function CampaignsView() {
           subject={approving.title}
           busy={approve.isPending}
           onConfirm={() => approve.mutate({ orgId, id: approving.id, expectedRevision: approving.revision, status: GtmItemStatus.APPROVED })}
-        />
+        >
+          {/* What the approval overrides, as in the item's drawer: the copy's claims against the org's verified facts. */}
+          <ClaimCheck orgId={orgId} text={approving.bodyMd} />
+        </PersonActionDialog>
       )}
     </>
   );
@@ -291,8 +300,7 @@ function CampaignCard({
   return (
     <button
       type="button"
-      role="radio"
-      aria-checked={selected}
+      aria-pressed={selected}
       onClick={onSelect}
       className={`rounded-lg border bg-surface p-4 text-left transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${
         selected ? "border-ink/40 ring-1 ring-ink/20" : "border-border hover:border-border-strong"
