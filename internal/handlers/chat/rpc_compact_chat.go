@@ -91,7 +91,7 @@ func (s *Service) CompactChat(
 			Thread:       threadToCompact,
 			ThreadMode:   model.ThreadModeInherit,
 		},
-		Trigger: launch.LoadChatTrigger(ctx, s.deps.Repo, req.Msg.ChatId),
+		Trigger: launch.LoadChatTrigger(ctx, s.triggerReads(), req.Msg.ChatId),
 	}
 
 	workflowRun, err := s.deps.Temporal.ExecuteWorkflow(ctx, workflowOptions, v2.DynamicWorkflow, workflowInput)

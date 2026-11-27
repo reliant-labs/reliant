@@ -11,6 +11,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/reliant-labs/forge/pkg/gocache"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/dockerengine"
 )
@@ -32,8 +34,8 @@ const (
 	// reclaimable in the breakdown (an estimate; forge's reaper decides what it
 	// actually removes, reaper.go). Go bumps an entry's mtime on use once it
 	// is an hour stale, so an entry untouched for two hours is not in use by a
-	// live build — the floor forge's own storage GC uses, for the same reason.
-	GoCacheTrimAge = 2 * time.Hour
+	// live build — forge/pkg/gocache's Floor, which forge's trim holds too.
+	GoCacheTrimAge = gocache.Floor
 )
 
 // dirMeasure is one directory's measurement.

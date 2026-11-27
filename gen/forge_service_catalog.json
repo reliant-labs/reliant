@@ -540,7 +540,6 @@
         "IntegrationsWriteledger",
         "LedgerRetention",
         "MachineController",
-        "MergeQueue",
         "NATSConn",
         "OrgMoves",
         "OrgPolicyResolver",
@@ -57626,18 +57625,6 @@
       "implementation_candidates": []
     },
     {
-      "id": "MergeQueue",
-      "name": "MergeQueue",
-      "kind": "provider",
-      "type": "*github.com/reliant-labs/reliant/internal/app.MergeQueue",
-      "source": {
-        "path": "internal/app/providers_mergequeue.go",
-        "symbol": "NewMergeQueue"
-      },
-      "methods": [],
-      "implementation_candidates": []
-    },
-    {
       "id": "Message",
       "name": "Message",
       "kind": "component",
@@ -59220,12 +59207,10 @@
     },
     {
       "consumer": "AutomationTakeover",
-      "field": "Repo",
-      "interface": "github.com/reliant-labs/reliant/internal/handlers/automation_takeover.Repository",
+      "field": "TriggerReads",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/automation_takeover.TriggerReads",
       "methods": [],
-      "candidates": [
-        "Database"
-      ],
+      "candidates": [],
       "providers": [
         "Database"
       ],
@@ -59575,6 +59560,17 @@
       "consumer": "Chat",
       "field": "TriggerEvents",
       "interface": "github.com/reliant-labs/reliant/internal/launch.TriggerEventStore",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Chat",
+      "field": "TriggerReads",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/chat.TriggerReads",
       "methods": [],
       "candidates": [],
       "providers": [
@@ -62170,6 +62166,17 @@
       "consumer": "Streaming",
       "field": "SpawnCalls",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/streaming.SpawnCalls",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Streaming",
+      "field": "TriggerReads",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/streaming.TriggerReads",
       "methods": [],
       "candidates": [],
       "providers": [

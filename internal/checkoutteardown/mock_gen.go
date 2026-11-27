@@ -16,14 +16,15 @@ import (
 )
 
 // forge:section MockMachine
-// forge:hash=36fa15cb97ca0435b3f016e10046f55df574dce82207cbbbb6e4ab33951264fe
+// forge:hash=80f1cae44555cccdcf7eb0caff9d49af427e45ea25b04cfd0a4afe88343a5543
 
 // MockMachine is a test mock for the Machine interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockMachine.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockMachine.<Method>Func not set" error.
 type MockMachine struct {
 	contractkit.Recorder
 	SendFunc func(context.Context, string, any, any, int32) error
@@ -38,18 +39,45 @@ func (m *MockMachine) Send(ctx context.Context, commandType string, payload any,
 	return contractkit.MockNotSet("MockMachine", "Send")
 }
 
+// MockMachineSendCall is one recorded call of MockMachine.Send, one
+// field per parameter.
+type MockMachineSendCall struct {
+	Ctx         context.Context
+	CommandType string
+	Payload     any
+	Resp        any
+	TimeoutMs   int32
+}
+
+// SendCalls returns every recorded Send call, oldest first, with
+// its arguments typed. It reads the same log as Calls("Send").
+func (m *MockMachine) SendCalls() []MockMachineSendCall {
+	var out []MockMachineSendCall
+	for _, c := range m.Recorder.Calls("Send") {
+		var r MockMachineSendCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.CommandType, _ = c.Args[1].(string)
+		r.Payload, _ = c.Args[2].(any)
+		r.Resp, _ = c.Args[3].(any)
+		r.TimeoutMs, _ = c.Args[4].(int32)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ Machine = (*MockMachine)(nil)
 
 // forge:section MockStore
-// forge:hash=bda0bfcf04ee9a71df3361a99b399138d18b40b058a94ba25fbd09727372df45
+// forge:hash=e305125e4d18f3ef505c187dcd98a4b44739d25f2148b57e36b30fb463c619f2
 
 // MockStore is a test mock for the Store interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockStore.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockStore.<Method>Func not set" error.
 type MockStore struct {
 	contractkit.Recorder
 	SettleCheckoutTeardownFunc func(context.Context, string, string, string) (*db.CheckoutTeardown, error)
@@ -62,6 +90,30 @@ func (m *MockStore) SettleCheckoutTeardown(ctx context.Context, id string, state
 		return m.SettleCheckoutTeardownFunc(ctx, id, state, detail)
 	}
 	return nil, contractkit.MockNotSet("MockStore", "SettleCheckoutTeardown")
+}
+
+// MockStoreSettleCheckoutTeardownCall is one recorded call of MockStore.SettleCheckoutTeardown, one
+// field per parameter.
+type MockStoreSettleCheckoutTeardownCall struct {
+	Ctx    context.Context
+	ID     string
+	State  string
+	Detail string
+}
+
+// SettleCheckoutTeardownCalls returns every recorded SettleCheckoutTeardown call, oldest first, with
+// its arguments typed. It reads the same log as Calls("SettleCheckoutTeardown").
+func (m *MockStore) SettleCheckoutTeardownCalls() []MockStoreSettleCheckoutTeardownCall {
+	var out []MockStoreSettleCheckoutTeardownCall
+	for _, c := range m.Recorder.Calls("SettleCheckoutTeardown") {
+		var r MockStoreSettleCheckoutTeardownCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ID, _ = c.Args[1].(string)
+		r.State, _ = c.Args[2].(string)
+		r.Detail, _ = c.Args[3].(string)
+		out = append(out, r)
+	}
+	return out
 }
 
 // Compile-time check.

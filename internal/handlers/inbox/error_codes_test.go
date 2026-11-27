@@ -34,16 +34,17 @@ func TestInboxStoreErrorCodes(t *testing.T) {
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			repo := &MockRepository{
-				// The other required read succeeds, so the pending read's
-				// error is the one the caller sees.
-				ListTriggersFunc: func(context.Context, core.TriggerFilters) ([]*core.Trigger, error) { return nil, nil },
+			repo := &MockRepository{}
+			// The other required read succeeds, so the pending read's error
+			// is the one the caller sees.
+			notices := &MockNotices{
+				ListTriggersForUserFunc: func(context.Context, core.TriggerFilters) ([]*core.Trigger, error) { return nil, nil },
 			}
 			items := &MockItems{
 				ListAttentionIncidentsFunc: func(context.Context, string) ([]*core.AttentionIncident, error) { return nil, nil },
 				ListInboxPendingFunc:       func(context.Context, string) ([]*core.InboxPending, error) { return nil, tc.err },
 			}
-			svc := NewTestInbox(t, WithInboxDeps(Deps{Repo: repo, Registrations: &MockRegistrations{}, Items: items, Recoveries: noRecoveries(), Marks: &MockMarkDecisionStore{}}), WithPlaceholderDeps())
+			svc := NewTestInbox(t, WithInboxDeps(Deps{Repo: repo, Notices: notices, Registrations: &MockRegistrations{}, Items: items, Recoveries: noRecoveries(), Marks: &MockMarkDecisionStore{}}), WithPlaceholderDeps())
 			_, err := svc.ListInbox(AuthedContext(t), connect.NewRequest(&reliantv1.ListInboxRequest{}))
 			require.Error(t, err)
 			assert.Equal(t, tc.code, svcerr.Code(err))

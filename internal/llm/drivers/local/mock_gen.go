@@ -18,14 +18,15 @@ import (
 )
 
 // forge:section MockDirectory
-// forge:hash=dfc193ae98248b2b30339632aac078a3abcbaabda8927854a12f709745bb42b3
+// forge:hash=0bb1947095a8c64e395b98f694118b6f8abefd90fed53afad8253f0aad918b36
 
 // MockDirectory is a test mock for the Directory interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockDirectory.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockDirectory.<Method>Func not set" error.
 type MockDirectory struct {
 	contractkit.Recorder
 	LocalDaemonsFunc func(context.Context, string) ([]DaemonInventory, error)
@@ -40,18 +41,39 @@ func (m *MockDirectory) LocalDaemons(ctx context.Context, userID string) ([]Daem
 	return nil, contractkit.MockNotSet("MockDirectory", "LocalDaemons")
 }
 
+// MockDirectoryLocalDaemonsCall is one recorded call of MockDirectory.LocalDaemons, one
+// field per parameter.
+type MockDirectoryLocalDaemonsCall struct {
+	Ctx    context.Context
+	UserID string
+}
+
+// LocalDaemonsCalls returns every recorded LocalDaemons call, oldest first, with
+// its arguments typed. It reads the same log as Calls("LocalDaemons").
+func (m *MockDirectory) LocalDaemonsCalls() []MockDirectoryLocalDaemonsCall {
+	var out []MockDirectoryLocalDaemonsCall
+	for _, c := range m.Recorder.Calls("LocalDaemons") {
+		var r MockDirectoryLocalDaemonsCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ Directory = (*MockDirectory)(nil)
 
 // forge:section MockEndpointLister
-// forge:hash=e59ec6deb6421fc47204809d9eca5b5174825069074a77429a170549728882e7
+// forge:hash=3b273fe05da49fb0f95d1fdd9870509c19f64ed498d2e1f1aa6e6881c8a041ea
 
 // MockEndpointLister is a test mock for the EndpointLister interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockEndpointLister.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockEndpointLister.<Method>Func not set" error.
 type MockEndpointLister struct {
 	contractkit.Recorder
 	ConfiguredEndpointsFunc func(context.Context, string) ([]EndpointConfig, error)
@@ -66,18 +88,39 @@ func (m *MockEndpointLister) ConfiguredEndpoints(ctx context.Context, userID str
 	return nil, contractkit.MockNotSet("MockEndpointLister", "ConfiguredEndpoints")
 }
 
+// MockEndpointListerConfiguredEndpointsCall is one recorded call of MockEndpointLister.ConfiguredEndpoints, one
+// field per parameter.
+type MockEndpointListerConfiguredEndpointsCall struct {
+	Ctx    context.Context
+	UserID string
+}
+
+// ConfiguredEndpointsCalls returns every recorded ConfiguredEndpoints call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ConfiguredEndpoints").
+func (m *MockEndpointLister) ConfiguredEndpointsCalls() []MockEndpointListerConfiguredEndpointsCall {
+	var out []MockEndpointListerConfiguredEndpointsCall
+	for _, c := range m.Recorder.Calls("ConfiguredEndpoints") {
+		var r MockEndpointListerConfiguredEndpointsCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ EndpointLister = (*MockEndpointLister)(nil)
 
 // forge:section MockSource
-// forge:hash=de26dc5001fc63a01cd96eb37827e8ec0db7eba70c7ba5a289709cea9fb030b9
+// forge:hash=033392a5476f092e96328aff39fc875eccfd931307c630670c2da8cc06a7b487
 
 // MockSource is a test mock for the Source interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockSource.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockSource.<Method>Func not set" error.
 type MockSource struct {
 	contractkit.Recorder
 	ListDaemonsByUserIDFunc               func(context.Context, string) ([]*db.Daemon, error)
@@ -112,18 +155,81 @@ func (m *MockSource) ListFreshDaemonAttachmentsForUser(ctx context.Context, user
 	return nil, contractkit.MockNotSet("MockSource", "ListFreshDaemonAttachmentsForUser")
 }
 
+// MockSourceListDaemonsByUserIDCall is one recorded call of MockSource.ListDaemonsByUserID, one
+// field per parameter.
+type MockSourceListDaemonsByUserIDCall struct {
+	Ctx    context.Context
+	UserID string
+}
+
+// ListDaemonsByUserIDCalls returns every recorded ListDaemonsByUserID call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListDaemonsByUserID").
+func (m *MockSource) ListDaemonsByUserIDCalls() []MockSourceListDaemonsByUserIDCall {
+	var out []MockSourceListDaemonsByUserIDCall
+	for _, c := range m.Recorder.Calls("ListDaemonsByUserID") {
+		var r MockSourceListDaemonsByUserIDCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockSourceListDaemonLocalModelsCall is one recorded call of MockSource.ListDaemonLocalModels, one
+// field per parameter.
+type MockSourceListDaemonLocalModelsCall struct {
+	Ctx    context.Context
+	UserID string
+}
+
+// ListDaemonLocalModelsCalls returns every recorded ListDaemonLocalModels call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListDaemonLocalModels").
+func (m *MockSource) ListDaemonLocalModelsCalls() []MockSourceListDaemonLocalModelsCall {
+	var out []MockSourceListDaemonLocalModelsCall
+	for _, c := range m.Recorder.Calls("ListDaemonLocalModels") {
+		var r MockSourceListDaemonLocalModelsCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockSourceListFreshDaemonAttachmentsForUserCall is one recorded call of MockSource.ListFreshDaemonAttachmentsForUser, one
+// field per parameter.
+type MockSourceListFreshDaemonAttachmentsForUserCall struct {
+	Ctx            context.Context
+	UserID         string
+	StaleThreshold time.Duration
+}
+
+// ListFreshDaemonAttachmentsForUserCalls returns every recorded ListFreshDaemonAttachmentsForUser call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListFreshDaemonAttachmentsForUser").
+func (m *MockSource) ListFreshDaemonAttachmentsForUserCalls() []MockSourceListFreshDaemonAttachmentsForUserCall {
+	var out []MockSourceListFreshDaemonAttachmentsForUserCall
+	for _, c := range m.Recorder.Calls("ListFreshDaemonAttachmentsForUser") {
+		var r MockSourceListFreshDaemonAttachmentsForUserCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.StaleThreshold, _ = c.Args[2].(time.Duration)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ Source = (*MockSource)(nil)
 
 // forge:section MockEndpointSource
-// forge:hash=069116ed0de8713fdbab7beec7ce9808f07422ea4db3dd3a5751490c4ff06f9f
+// forge:hash=d79ea3334fc05ed99bb6dec3501a42305479acfc0995d1c04e9512770844af3b
 
 // MockEndpointSource is a test mock for the EndpointSource interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockEndpointSource.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockEndpointSource.<Method>Func not set" error.
 type MockEndpointSource struct {
 	contractkit.Recorder
 	ListModelEndpointsFunc func(context.Context, string) ([]*core.ModelEndpoint, error)
@@ -138,18 +244,39 @@ func (m *MockEndpointSource) ListModelEndpoints(ctx context.Context, userID stri
 	return nil, contractkit.MockNotSet("MockEndpointSource", "ListModelEndpoints")
 }
 
+// MockEndpointSourceListModelEndpointsCall is one recorded call of MockEndpointSource.ListModelEndpoints, one
+// field per parameter.
+type MockEndpointSourceListModelEndpointsCall struct {
+	Ctx    context.Context
+	UserID string
+}
+
+// ListModelEndpointsCalls returns every recorded ListModelEndpoints call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListModelEndpoints").
+func (m *MockEndpointSource) ListModelEndpointsCalls() []MockEndpointSourceListModelEndpointsCall {
+	var out []MockEndpointSourceListModelEndpointsCall
+	for _, c := range m.Recorder.Calls("ListModelEndpoints") {
+		var r MockEndpointSourceListModelEndpointsCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ EndpointSource = (*MockEndpointSource)(nil)
 
 // forge:section MockCredentialSource
-// forge:hash=6304b13488c96ffc59027557bf4e41dba2cdbe2a362e98eb4b64413d9fb5fef8
+// forge:hash=775a940f4be7de5749f2cc654d3828b7ed9a90b7df296d6765dbe398b2424020
 
 // MockCredentialSource is a test mock for the CredentialSource interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockCredentialSource.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockCredentialSource.<Method>Func not set" error.
 type MockCredentialSource struct {
 	contractkit.Recorder
 	GetFunc func(context.Context, string, string) (string, map[string]string, error)
@@ -162,6 +289,28 @@ func (m *MockCredentialSource) Get(ctx context.Context, userID string, connectio
 		return m.GetFunc(ctx, userID, connectionID)
 	}
 	return "", nil, contractkit.MockNotSet("MockCredentialSource", "Get")
+}
+
+// MockCredentialSourceGetCall is one recorded call of MockCredentialSource.Get, one
+// field per parameter.
+type MockCredentialSourceGetCall struct {
+	Ctx          context.Context
+	UserID       string
+	ConnectionID string
+}
+
+// GetCalls returns every recorded Get call, oldest first, with
+// its arguments typed. It reads the same log as Calls("Get").
+func (m *MockCredentialSource) GetCalls() []MockCredentialSourceGetCall {
+	var out []MockCredentialSourceGetCall
+	for _, c := range m.Recorder.Calls("Get") {
+		var r MockCredentialSourceGetCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.ConnectionID, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
 }
 
 // Compile-time check.

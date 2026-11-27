@@ -18,14 +18,15 @@ import (
 )
 
 // forge:section MockRepository
-// forge:hash=af786b506a5444d2e74a3331e6504e66b20789478030e85e216ae166496a6fbd
+// forge:hash=f7ef8d8746095cf6bc1b7dab7fb0522c89fdb190bfe206760d4c0702cf8f5b78
 
 // MockRepository is a test mock for the Repository interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockRepository.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockRepository.<Method>Func not set" error.
 type MockRepository struct {
 	contractkit.Recorder
 	GetDaemonFunc                                 func(context.Context, string) (*db.Daemon, error)
@@ -240,18 +241,493 @@ func (m *MockRepository) ListDaemonsByUserID(ctx context.Context, userID string)
 	return nil, contractkit.MockNotSet("MockRepository", "ListDaemonsByUserID")
 }
 
+// MockRepositoryGetDaemonCall is one recorded call of MockRepository.GetDaemon, one
+// field per parameter.
+type MockRepositoryGetDaemonCall struct {
+	Ctx context.Context
+	ID  string
+}
+
+// GetDaemonCalls returns every recorded GetDaemon call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetDaemon").
+func (m *MockRepository) GetDaemonCalls() []MockRepositoryGetDaemonCall {
+	var out []MockRepositoryGetDaemonCall
+	for _, c := range m.Recorder.Calls("GetDaemon") {
+		var r MockRepositoryGetDaemonCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockRepositoryUpsertDaemonCall is one recorded call of MockRepository.UpsertDaemon, one
+// field per parameter.
+type MockRepositoryUpsertDaemonCall struct {
+	Ctx    context.Context
+	Daemon *db.Daemon
+}
+
+// UpsertDaemonCalls returns every recorded UpsertDaemon call, oldest first, with
+// its arguments typed. It reads the same log as Calls("UpsertDaemon").
+func (m *MockRepository) UpsertDaemonCalls() []MockRepositoryUpsertDaemonCall {
+	var out []MockRepositoryUpsertDaemonCall
+	for _, c := range m.Recorder.Calls("UpsertDaemon") {
+		var r MockRepositoryUpsertDaemonCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Daemon, _ = c.Args[1].(*db.Daemon)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockRepositoryGetDaemonStorageStateCall is one recorded call of MockRepository.GetDaemonStorageState, one
+// field per parameter.
+type MockRepositoryGetDaemonStorageStateCall struct {
+	Ctx      context.Context
+	DaemonID string
+}
+
+// GetDaemonStorageStateCalls returns every recorded GetDaemonStorageState call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetDaemonStorageState").
+func (m *MockRepository) GetDaemonStorageStateCalls() []MockRepositoryGetDaemonStorageStateCall {
+	var out []MockRepositoryGetDaemonStorageStateCall
+	for _, c := range m.Recorder.Calls("GetDaemonStorageState") {
+		var r MockRepositoryGetDaemonStorageStateCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.DaemonID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockRepositorySetDaemonStorageStateCall is one recorded call of MockRepository.SetDaemonStorageState, one
+// field per parameter.
+type MockRepositorySetDaemonStorageStateCall struct {
+	Ctx       context.Context
+	DaemonID  string
+	StateJSON string
+}
+
+// SetDaemonStorageStateCalls returns every recorded SetDaemonStorageState call, oldest first, with
+// its arguments typed. It reads the same log as Calls("SetDaemonStorageState").
+func (m *MockRepository) SetDaemonStorageStateCalls() []MockRepositorySetDaemonStorageStateCall {
+	var out []MockRepositorySetDaemonStorageStateCall
+	for _, c := range m.Recorder.Calls("SetDaemonStorageState") {
+		var r MockRepositorySetDaemonStorageStateCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.DaemonID, _ = c.Args[1].(string)
+		r.StateJSON, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockRepositoryUpsertDaemonAttachmentCall is one recorded call of MockRepository.UpsertDaemonAttachment, one
+// field per parameter.
+type MockRepositoryUpsertDaemonAttachmentCall struct {
+	Ctx context.Context
+	Att *db.DaemonAttachment
+}
+
+// UpsertDaemonAttachmentCalls returns every recorded UpsertDaemonAttachment call, oldest first, with
+// its arguments typed. It reads the same log as Calls("UpsertDaemonAttachment").
+func (m *MockRepository) UpsertDaemonAttachmentCalls() []MockRepositoryUpsertDaemonAttachmentCall {
+	var out []MockRepositoryUpsertDaemonAttachmentCall
+	for _, c := range m.Recorder.Calls("UpsertDaemonAttachment") {
+		var r MockRepositoryUpsertDaemonAttachmentCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Att, _ = c.Args[1].(*db.DaemonAttachment)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockRepositoryGetProjectWithUserCheckCall is one recorded call of MockRepository.GetProjectWithUserCheck, one
+// field per parameter.
+type MockRepositoryGetProjectWithUserCheckCall struct {
+	Ctx    context.Context
+	ID     string
+	UserID string
+}
+
+// GetProjectWithUserCheckCalls returns every recorded GetProjectWithUserCheck call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetProjectWithUserCheck").
+func (m *MockRepository) GetProjectWithUserCheckCalls() []MockRepositoryGetProjectWithUserCheckCall {
+	var out []MockRepositoryGetProjectWithUserCheckCall
+	for _, c := range m.Recorder.Calls("GetProjectWithUserCheck") {
+		var r MockRepositoryGetProjectWithUserCheckCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ID, _ = c.Args[1].(string)
+		r.UserID, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockRepositoryCreateProjectCall is one recorded call of MockRepository.CreateProject, one
+// field per parameter.
+type MockRepositoryCreateProjectCall struct {
+	Ctx     context.Context
+	Project *db.Project
+}
+
+// CreateProjectCalls returns every recorded CreateProject call, oldest first, with
+// its arguments typed. It reads the same log as Calls("CreateProject").
+func (m *MockRepository) CreateProjectCalls() []MockRepositoryCreateProjectCall {
+	var out []MockRepositoryCreateProjectCall
+	for _, c := range m.Recorder.Calls("CreateProject") {
+		var r MockRepositoryCreateProjectCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Project, _ = c.Args[1].(*db.Project)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockRepositorySyncProjectConfigSnapshotCall is one recorded call of MockRepository.SyncProjectConfigSnapshot, one
+// field per parameter.
+type MockRepositorySyncProjectConfigSnapshotCall struct {
+	Ctx    context.Context
+	Record *db.ProjectConfigRecord
+	Force  bool
+	Scope  *core.OrgScope
+}
+
+// SyncProjectConfigSnapshotCalls returns every recorded SyncProjectConfigSnapshot call, oldest first, with
+// its arguments typed. It reads the same log as Calls("SyncProjectConfigSnapshot").
+func (m *MockRepository) SyncProjectConfigSnapshotCalls() []MockRepositorySyncProjectConfigSnapshotCall {
+	var out []MockRepositorySyncProjectConfigSnapshotCall
+	for _, c := range m.Recorder.Calls("SyncProjectConfigSnapshot") {
+		var r MockRepositorySyncProjectConfigSnapshotCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Record, _ = c.Args[1].(*db.ProjectConfigRecord)
+		r.Force, _ = c.Args[2].(bool)
+		r.Scope, _ = c.Args[3].(*core.OrgScope)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockRepositoryGetProjectMachineCatalogPushedAtCall is one recorded call of MockRepository.GetProjectMachineCatalogPushedAt, one
+// field per parameter.
+type MockRepositoryGetProjectMachineCatalogPushedAtCall struct {
+	Ctx       context.Context
+	ProjectID string
+	DaemonID  string
+}
+
+// GetProjectMachineCatalogPushedAtCalls returns every recorded GetProjectMachineCatalogPushedAt call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetProjectMachineCatalogPushedAt").
+func (m *MockRepository) GetProjectMachineCatalogPushedAtCalls() []MockRepositoryGetProjectMachineCatalogPushedAtCall {
+	var out []MockRepositoryGetProjectMachineCatalogPushedAtCall
+	for _, c := range m.Recorder.Calls("GetProjectMachineCatalogPushedAt") {
+		var r MockRepositoryGetProjectMachineCatalogPushedAtCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ProjectID, _ = c.Args[1].(string)
+		r.DaemonID, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockRepositoryCreateUserUpdateCall is one recorded call of MockRepository.CreateUserUpdate, one
+// field per parameter.
+type MockRepositoryCreateUserUpdateCall struct {
+	Ctx    context.Context
+	Update *db.UserUpdate
+}
+
+// CreateUserUpdateCalls returns every recorded CreateUserUpdate call, oldest first, with
+// its arguments typed. It reads the same log as Calls("CreateUserUpdate").
+func (m *MockRepository) CreateUserUpdateCalls() []MockRepositoryCreateUserUpdateCall {
+	var out []MockRepositoryCreateUserUpdateCall
+	for _, c := range m.Recorder.Calls("CreateUserUpdate") {
+		var r MockRepositoryCreateUserUpdateCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Update, _ = c.Args[1].(*db.UserUpdate)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockRepositorySetProjectForgeNameCall is one recorded call of MockRepository.SetProjectForgeName, one
+// field per parameter.
+type MockRepositorySetProjectForgeNameCall struct {
+	Ctx              context.Context
+	ID               string
+	UserID           string
+	ForgeProjectName string
+}
+
+// SetProjectForgeNameCalls returns every recorded SetProjectForgeName call, oldest first, with
+// its arguments typed. It reads the same log as Calls("SetProjectForgeName").
+func (m *MockRepository) SetProjectForgeNameCalls() []MockRepositorySetProjectForgeNameCall {
+	var out []MockRepositorySetProjectForgeNameCall
+	for _, c := range m.Recorder.Calls("SetProjectForgeName") {
+		var r MockRepositorySetProjectForgeNameCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ID, _ = c.Args[1].(string)
+		r.UserID, _ = c.Args[2].(string)
+		r.ForgeProjectName, _ = c.Args[3].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockRepositoryListProjectsCall is one recorded call of MockRepository.ListProjects, one
+// field per parameter.
+type MockRepositoryListProjectsCall struct {
+	Ctx     context.Context
+	Filters db.ProjectFilters
+}
+
+// ListProjectsCalls returns every recorded ListProjects call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListProjects").
+func (m *MockRepository) ListProjectsCalls() []MockRepositoryListProjectsCall {
+	var out []MockRepositoryListProjectsCall
+	for _, c := range m.Recorder.Calls("ListProjects") {
+		var r MockRepositoryListProjectsCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Filters, _ = c.Args[1].(db.ProjectFilters)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockRepositoryRecordObservedProjectDaemonInScopeCall is one recorded call of MockRepository.RecordObservedProjectDaemonInScope, one
+// field per parameter.
+type MockRepositoryRecordObservedProjectDaemonInScopeCall struct {
+	Ctx           context.Context
+	ProjectID     string
+	DaemonID      string
+	Path          string
+	DefaultBranch *string
+	Scope         *core.OrgScope
+}
+
+// RecordObservedProjectDaemonInScopeCalls returns every recorded RecordObservedProjectDaemonInScope call, oldest first, with
+// its arguments typed. It reads the same log as Calls("RecordObservedProjectDaemonInScope").
+func (m *MockRepository) RecordObservedProjectDaemonInScopeCalls() []MockRepositoryRecordObservedProjectDaemonInScopeCall {
+	var out []MockRepositoryRecordObservedProjectDaemonInScopeCall
+	for _, c := range m.Recorder.Calls("RecordObservedProjectDaemonInScope") {
+		var r MockRepositoryRecordObservedProjectDaemonInScopeCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ProjectID, _ = c.Args[1].(string)
+		r.DaemonID, _ = c.Args[2].(string)
+		r.Path, _ = c.Args[3].(string)
+		r.DefaultBranch, _ = c.Args[4].(*string)
+		r.Scope, _ = c.Args[5].(*core.OrgScope)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockRepositoryMarkProjectDaemonInstalledInScopeCall is one recorded call of MockRepository.MarkProjectDaemonInstalledInScope, one
+// field per parameter.
+type MockRepositoryMarkProjectDaemonInstalledInScopeCall struct {
+	Ctx       context.Context
+	ProjectID string
+	DaemonID  string
+	Scope     *core.OrgScope
+}
+
+// MarkProjectDaemonInstalledInScopeCalls returns every recorded MarkProjectDaemonInstalledInScope call, oldest first, with
+// its arguments typed. It reads the same log as Calls("MarkProjectDaemonInstalledInScope").
+func (m *MockRepository) MarkProjectDaemonInstalledInScopeCalls() []MockRepositoryMarkProjectDaemonInstalledInScopeCall {
+	var out []MockRepositoryMarkProjectDaemonInstalledInScopeCall
+	for _, c := range m.Recorder.Calls("MarkProjectDaemonInstalledInScope") {
+		var r MockRepositoryMarkProjectDaemonInstalledInScopeCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ProjectID, _ = c.Args[1].(string)
+		r.DaemonID, _ = c.Args[2].(string)
+		r.Scope, _ = c.Args[3].(*core.OrgScope)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockRepositoryFailProjectDaemonInstallInScopeCall is one recorded call of MockRepository.FailProjectDaemonInstallInScope, one
+// field per parameter.
+type MockRepositoryFailProjectDaemonInstallInScopeCall struct {
+	Ctx        context.Context
+	ProjectID  string
+	DaemonID   string
+	InstallErr string
+	Scope      *core.OrgScope
+}
+
+// FailProjectDaemonInstallInScopeCalls returns every recorded FailProjectDaemonInstallInScope call, oldest first, with
+// its arguments typed. It reads the same log as Calls("FailProjectDaemonInstallInScope").
+func (m *MockRepository) FailProjectDaemonInstallInScopeCalls() []MockRepositoryFailProjectDaemonInstallInScopeCall {
+	var out []MockRepositoryFailProjectDaemonInstallInScopeCall
+	for _, c := range m.Recorder.Calls("FailProjectDaemonInstallInScope") {
+		var r MockRepositoryFailProjectDaemonInstallInScopeCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ProjectID, _ = c.Args[1].(string)
+		r.DaemonID, _ = c.Args[2].(string)
+		r.InstallErr, _ = c.Args[3].(string)
+		r.Scope, _ = c.Args[4].(*core.OrgScope)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockRepositorySettleProjectDaemonFromNestedReposInScopeCall is one recorded call of MockRepository.SettleProjectDaemonFromNestedReposInScope, one
+// field per parameter.
+type MockRepositorySettleProjectDaemonFromNestedReposInScopeCall struct {
+	Ctx        context.Context
+	ProjectID  string
+	DaemonID   string
+	InstallErr string
+	Scope      *core.OrgScope
+}
+
+// SettleProjectDaemonFromNestedReposInScopeCalls returns every recorded SettleProjectDaemonFromNestedReposInScope call, oldest first, with
+// its arguments typed. It reads the same log as Calls("SettleProjectDaemonFromNestedReposInScope").
+func (m *MockRepository) SettleProjectDaemonFromNestedReposInScopeCalls() []MockRepositorySettleProjectDaemonFromNestedReposInScopeCall {
+	var out []MockRepositorySettleProjectDaemonFromNestedReposInScopeCall
+	for _, c := range m.Recorder.Calls("SettleProjectDaemonFromNestedReposInScope") {
+		var r MockRepositorySettleProjectDaemonFromNestedReposInScopeCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ProjectID, _ = c.Args[1].(string)
+		r.DaemonID, _ = c.Args[2].(string)
+		r.InstallErr, _ = c.Args[3].(string)
+		r.Scope, _ = c.Args[4].(*core.OrgScope)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockRepositoryUpdateProjectCall is one recorded call of MockRepository.UpdateProject, one
+// field per parameter.
+type MockRepositoryUpdateProjectCall struct {
+	Ctx     context.Context
+	Project *db.Project
+	UserID  string
+}
+
+// UpdateProjectCalls returns every recorded UpdateProject call, oldest first, with
+// its arguments typed. It reads the same log as Calls("UpdateProject").
+func (m *MockRepository) UpdateProjectCalls() []MockRepositoryUpdateProjectCall {
+	var out []MockRepositoryUpdateProjectCall
+	for _, c := range m.Recorder.Calls("UpdateProject") {
+		var r MockRepositoryUpdateProjectCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Project, _ = c.Args[1].(*db.Project)
+		r.UserID, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockRepositoryListReposByProjectCall is one recorded call of MockRepository.ListReposByProject, one
+// field per parameter.
+type MockRepositoryListReposByProjectCall struct {
+	Ctx       context.Context
+	ProjectID string
+}
+
+// ListReposByProjectCalls returns every recorded ListReposByProject call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListReposByProject").
+func (m *MockRepository) ListReposByProjectCalls() []MockRepositoryListReposByProjectCall {
+	var out []MockRepositoryListReposByProjectCall
+	for _, c := range m.Recorder.Calls("ListReposByProject") {
+		var r MockRepositoryListReposByProjectCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ProjectID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockRepositorySetRepoForgeAppsCall is one recorded call of MockRepository.SetRepoForgeApps, one
+// field per parameter.
+type MockRepositorySetRepoForgeAppsCall struct {
+	Ctx      context.Context
+	RepoID   string
+	Apps     []core.RepoForgeApp
+	Complete bool
+}
+
+// SetRepoForgeAppsCalls returns every recorded SetRepoForgeApps call, oldest first, with
+// its arguments typed. It reads the same log as Calls("SetRepoForgeApps").
+func (m *MockRepository) SetRepoForgeAppsCalls() []MockRepositorySetRepoForgeAppsCall {
+	var out []MockRepositorySetRepoForgeAppsCall
+	for _, c := range m.Recorder.Calls("SetRepoForgeApps") {
+		var r MockRepositorySetRepoForgeAppsCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.RepoID, _ = c.Args[1].(string)
+		r.Apps, _ = c.Args[2].([]core.RepoForgeApp)
+		r.Complete, _ = c.Args[3].(bool)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockRepositoryRecordFailedProjectDaemonRestoreInScopeCall is one recorded call of MockRepository.RecordFailedProjectDaemonRestoreInScope, one
+// field per parameter.
+type MockRepositoryRecordFailedProjectDaemonRestoreInScopeCall struct {
+	Ctx           context.Context
+	ProjectID     string
+	DaemonID      string
+	Path          string
+	DefaultBranch *string
+	InstallErr    string
+	Scope         *core.OrgScope
+}
+
+// RecordFailedProjectDaemonRestoreInScopeCalls returns every recorded RecordFailedProjectDaemonRestoreInScope call, oldest first, with
+// its arguments typed. It reads the same log as Calls("RecordFailedProjectDaemonRestoreInScope").
+func (m *MockRepository) RecordFailedProjectDaemonRestoreInScopeCalls() []MockRepositoryRecordFailedProjectDaemonRestoreInScopeCall {
+	var out []MockRepositoryRecordFailedProjectDaemonRestoreInScopeCall
+	for _, c := range m.Recorder.Calls("RecordFailedProjectDaemonRestoreInScope") {
+		var r MockRepositoryRecordFailedProjectDaemonRestoreInScopeCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ProjectID, _ = c.Args[1].(string)
+		r.DaemonID, _ = c.Args[2].(string)
+		r.Path, _ = c.Args[3].(string)
+		r.DefaultBranch, _ = c.Args[4].(*string)
+		r.InstallErr, _ = c.Args[5].(string)
+		r.Scope, _ = c.Args[6].(*core.OrgScope)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockRepositoryListDaemonsByUserIDCall is one recorded call of MockRepository.ListDaemonsByUserID, one
+// field per parameter.
+type MockRepositoryListDaemonsByUserIDCall struct {
+	Ctx    context.Context
+	UserID string
+}
+
+// ListDaemonsByUserIDCalls returns every recorded ListDaemonsByUserID call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListDaemonsByUserID").
+func (m *MockRepository) ListDaemonsByUserIDCalls() []MockRepositoryListDaemonsByUserIDCall {
+	var out []MockRepositoryListDaemonsByUserIDCall
+	for _, c := range m.Recorder.Calls("ListDaemonsByUserID") {
+		var r MockRepositoryListDaemonsByUserIDCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ Repository = (*MockRepository)(nil)
 
 // forge:section MockMachineCheckouts
-// forge:hash=a281261f2ee0d7a1a0308a97bd7b6af4438146d7d1fd1d6b60735b1809e4ad04
+// forge:hash=ac3b9a06d7d781c99bc0219f30b023808974f1fdce1701511b4e4e835196b944
 
 // MockMachineCheckouts is a test mock for the MachineCheckouts interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockMachineCheckouts.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockMachineCheckouts.<Method>Func not set" error.
 type MockMachineCheckouts struct {
 	contractkit.Recorder
 	WithMachineCheckoutsLockedFunc            func(context.Context, string, func(ctx context.Context) error) error
@@ -286,18 +762,87 @@ func (m *MockMachineCheckouts) ListProjectDaemonDetachmentsForDaemon(ctx context
 	return nil, contractkit.MockNotSet("MockMachineCheckouts", "ListProjectDaemonDetachmentsForDaemon")
 }
 
+// MockMachineCheckoutsWithMachineCheckoutsLockedCall is one recorded call of MockMachineCheckouts.WithMachineCheckoutsLocked, one
+// field per parameter.
+type MockMachineCheckoutsWithMachineCheckoutsLockedCall struct {
+	Ctx      context.Context
+	DaemonID string
+	Fn       func(ctx context.Context) error
+}
+
+// WithMachineCheckoutsLockedCalls returns every recorded WithMachineCheckoutsLocked call, oldest first, with
+// its arguments typed. It reads the same log as Calls("WithMachineCheckoutsLocked").
+func (m *MockMachineCheckouts) WithMachineCheckoutsLockedCalls() []MockMachineCheckoutsWithMachineCheckoutsLockedCall {
+	var out []MockMachineCheckoutsWithMachineCheckoutsLockedCall
+	for _, c := range m.Recorder.Calls("WithMachineCheckoutsLocked") {
+		var r MockMachineCheckoutsWithMachineCheckoutsLockedCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.DaemonID, _ = c.Args[1].(string)
+		r.Fn, _ = c.Args[2].(func(ctx context.Context) error)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockMachineCheckoutsDetachProjectDaemonOfOtherOrgCall is one recorded call of MockMachineCheckouts.DetachProjectDaemonOfOtherOrg, one
+// field per parameter.
+type MockMachineCheckoutsDetachProjectDaemonOfOtherOrgCall struct {
+	Ctx        context.Context
+	ProjectID  string
+	DaemonID   string
+	UserID     string
+	MachineOrg string
+}
+
+// DetachProjectDaemonOfOtherOrgCalls returns every recorded DetachProjectDaemonOfOtherOrg call, oldest first, with
+// its arguments typed. It reads the same log as Calls("DetachProjectDaemonOfOtherOrg").
+func (m *MockMachineCheckouts) DetachProjectDaemonOfOtherOrgCalls() []MockMachineCheckoutsDetachProjectDaemonOfOtherOrgCall {
+	var out []MockMachineCheckoutsDetachProjectDaemonOfOtherOrgCall
+	for _, c := range m.Recorder.Calls("DetachProjectDaemonOfOtherOrg") {
+		var r MockMachineCheckoutsDetachProjectDaemonOfOtherOrgCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ProjectID, _ = c.Args[1].(string)
+		r.DaemonID, _ = c.Args[2].(string)
+		r.UserID, _ = c.Args[3].(string)
+		r.MachineOrg, _ = c.Args[4].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockMachineCheckoutsListProjectDaemonDetachmentsForDaemonCall is one recorded call of MockMachineCheckouts.ListProjectDaemonDetachmentsForDaemon, one
+// field per parameter.
+type MockMachineCheckoutsListProjectDaemonDetachmentsForDaemonCall struct {
+	Ctx      context.Context
+	DaemonID string
+}
+
+// ListProjectDaemonDetachmentsForDaemonCalls returns every recorded ListProjectDaemonDetachmentsForDaemon call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListProjectDaemonDetachmentsForDaemon").
+func (m *MockMachineCheckouts) ListProjectDaemonDetachmentsForDaemonCalls() []MockMachineCheckoutsListProjectDaemonDetachmentsForDaemonCall {
+	var out []MockMachineCheckoutsListProjectDaemonDetachmentsForDaemonCall
+	for _, c := range m.Recorder.Calls("ListProjectDaemonDetachmentsForDaemon") {
+		var r MockMachineCheckoutsListProjectDaemonDetachmentsForDaemonCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.DaemonID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ MachineCheckouts = (*MockMachineCheckouts)(nil)
 
 // forge:section MockMachineDetachments
-// forge:hash=ca0f4be9fdd1190071c7e73e67e69cf36e4156c73cdf6f80fab1f7ca29b978b4
+// forge:hash=c2987b427e9a78661999fec0b480349f48919c287de05be7d54cf9ec177c6e96
 
 // MockMachineDetachments is a test mock for the MachineDetachments interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockMachineDetachments.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockMachineDetachments.<Method>Func not set" error.
 type MockMachineDetachments struct {
 	contractkit.Recorder
 	DetachProjectDaemonOfOtherOrgFunc         func(context.Context, string, string, string, string) (bool, error)
@@ -322,18 +867,65 @@ func (m *MockMachineDetachments) ListProjectDaemonDetachmentsForDaemon(ctx conte
 	return nil, contractkit.MockNotSet("MockMachineDetachments", "ListProjectDaemonDetachmentsForDaemon")
 }
 
+// MockMachineDetachmentsDetachProjectDaemonOfOtherOrgCall is one recorded call of MockMachineDetachments.DetachProjectDaemonOfOtherOrg, one
+// field per parameter.
+type MockMachineDetachmentsDetachProjectDaemonOfOtherOrgCall struct {
+	Ctx        context.Context
+	ProjectID  string
+	DaemonID   string
+	UserID     string
+	MachineOrg string
+}
+
+// DetachProjectDaemonOfOtherOrgCalls returns every recorded DetachProjectDaemonOfOtherOrg call, oldest first, with
+// its arguments typed. It reads the same log as Calls("DetachProjectDaemonOfOtherOrg").
+func (m *MockMachineDetachments) DetachProjectDaemonOfOtherOrgCalls() []MockMachineDetachmentsDetachProjectDaemonOfOtherOrgCall {
+	var out []MockMachineDetachmentsDetachProjectDaemonOfOtherOrgCall
+	for _, c := range m.Recorder.Calls("DetachProjectDaemonOfOtherOrg") {
+		var r MockMachineDetachmentsDetachProjectDaemonOfOtherOrgCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ProjectID, _ = c.Args[1].(string)
+		r.DaemonID, _ = c.Args[2].(string)
+		r.UserID, _ = c.Args[3].(string)
+		r.MachineOrg, _ = c.Args[4].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockMachineDetachmentsListProjectDaemonDetachmentsForDaemonCall is one recorded call of MockMachineDetachments.ListProjectDaemonDetachmentsForDaemon, one
+// field per parameter.
+type MockMachineDetachmentsListProjectDaemonDetachmentsForDaemonCall struct {
+	Ctx      context.Context
+	DaemonID string
+}
+
+// ListProjectDaemonDetachmentsForDaemonCalls returns every recorded ListProjectDaemonDetachmentsForDaemon call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListProjectDaemonDetachmentsForDaemon").
+func (m *MockMachineDetachments) ListProjectDaemonDetachmentsForDaemonCalls() []MockMachineDetachmentsListProjectDaemonDetachmentsForDaemonCall {
+	var out []MockMachineDetachmentsListProjectDaemonDetachmentsForDaemonCall
+	for _, c := range m.Recorder.Calls("ListProjectDaemonDetachmentsForDaemon") {
+		var r MockMachineDetachmentsListProjectDaemonDetachmentsForDaemonCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.DaemonID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ MachineDetachments = (*MockMachineDetachments)(nil)
 
 // forge:section MockProjectReconcileStore
-// forge:hash=e8a9bfe717087b3c953654e356d416b43637b168eac428f38eab8faf1c45f142
+// forge:hash=a377d08f93fe955df5858e9bc1ea23372754a1e32ca96705e96245b30daf5dd5
 
 // MockProjectReconcileStore is a test mock for the ProjectReconcileStore interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockProjectReconcileStore.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockProjectReconcileStore.<Method>Func not set" error.
 type MockProjectReconcileStore struct {
 	contractkit.Recorder
 	ListProjectsFunc                              func(context.Context, db.ProjectFilters) ([]*db.Project, error)
@@ -538,18 +1130,485 @@ func (m *MockProjectReconcileStore) ListProjectsWithUnsettledDaemonRepos(ctx con
 	return nil, contractkit.MockNotSet("MockProjectReconcileStore", "ListProjectsWithUnsettledDaemonRepos")
 }
 
+// MockProjectReconcileStoreListProjectsCall is one recorded call of MockProjectReconcileStore.ListProjects, one
+// field per parameter.
+type MockProjectReconcileStoreListProjectsCall struct {
+	Ctx     context.Context
+	Filters db.ProjectFilters
+}
+
+// ListProjectsCalls returns every recorded ListProjects call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListProjects").
+func (m *MockProjectReconcileStore) ListProjectsCalls() []MockProjectReconcileStoreListProjectsCall {
+	var out []MockProjectReconcileStoreListProjectsCall
+	for _, c := range m.Recorder.Calls("ListProjects") {
+		var r MockProjectReconcileStoreListProjectsCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Filters, _ = c.Args[1].(db.ProjectFilters)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockProjectReconcileStoreRecordObservedProjectDaemonInScopeCall is one recorded call of MockProjectReconcileStore.RecordObservedProjectDaemonInScope, one
+// field per parameter.
+type MockProjectReconcileStoreRecordObservedProjectDaemonInScopeCall struct {
+	Ctx           context.Context
+	ProjectID     string
+	DaemonID      string
+	Path          string
+	DefaultBranch *string
+	Scope         *core.OrgScope
+}
+
+// RecordObservedProjectDaemonInScopeCalls returns every recorded RecordObservedProjectDaemonInScope call, oldest first, with
+// its arguments typed. It reads the same log as Calls("RecordObservedProjectDaemonInScope").
+func (m *MockProjectReconcileStore) RecordObservedProjectDaemonInScopeCalls() []MockProjectReconcileStoreRecordObservedProjectDaemonInScopeCall {
+	var out []MockProjectReconcileStoreRecordObservedProjectDaemonInScopeCall
+	for _, c := range m.Recorder.Calls("RecordObservedProjectDaemonInScope") {
+		var r MockProjectReconcileStoreRecordObservedProjectDaemonInScopeCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ProjectID, _ = c.Args[1].(string)
+		r.DaemonID, _ = c.Args[2].(string)
+		r.Path, _ = c.Args[3].(string)
+		r.DefaultBranch, _ = c.Args[4].(*string)
+		r.Scope, _ = c.Args[5].(*core.OrgScope)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockProjectReconcileStoreMarkProjectDaemonInstalledInScopeCall is one recorded call of MockProjectReconcileStore.MarkProjectDaemonInstalledInScope, one
+// field per parameter.
+type MockProjectReconcileStoreMarkProjectDaemonInstalledInScopeCall struct {
+	Ctx       context.Context
+	ProjectID string
+	DaemonID  string
+	Scope     *core.OrgScope
+}
+
+// MarkProjectDaemonInstalledInScopeCalls returns every recorded MarkProjectDaemonInstalledInScope call, oldest first, with
+// its arguments typed. It reads the same log as Calls("MarkProjectDaemonInstalledInScope").
+func (m *MockProjectReconcileStore) MarkProjectDaemonInstalledInScopeCalls() []MockProjectReconcileStoreMarkProjectDaemonInstalledInScopeCall {
+	var out []MockProjectReconcileStoreMarkProjectDaemonInstalledInScopeCall
+	for _, c := range m.Recorder.Calls("MarkProjectDaemonInstalledInScope") {
+		var r MockProjectReconcileStoreMarkProjectDaemonInstalledInScopeCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ProjectID, _ = c.Args[1].(string)
+		r.DaemonID, _ = c.Args[2].(string)
+		r.Scope, _ = c.Args[3].(*core.OrgScope)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockProjectReconcileStoreFailProjectDaemonInstallInScopeCall is one recorded call of MockProjectReconcileStore.FailProjectDaemonInstallInScope, one
+// field per parameter.
+type MockProjectReconcileStoreFailProjectDaemonInstallInScopeCall struct {
+	Ctx        context.Context
+	ProjectID  string
+	DaemonID   string
+	InstallErr string
+	Scope      *core.OrgScope
+}
+
+// FailProjectDaemonInstallInScopeCalls returns every recorded FailProjectDaemonInstallInScope call, oldest first, with
+// its arguments typed. It reads the same log as Calls("FailProjectDaemonInstallInScope").
+func (m *MockProjectReconcileStore) FailProjectDaemonInstallInScopeCalls() []MockProjectReconcileStoreFailProjectDaemonInstallInScopeCall {
+	var out []MockProjectReconcileStoreFailProjectDaemonInstallInScopeCall
+	for _, c := range m.Recorder.Calls("FailProjectDaemonInstallInScope") {
+		var r MockProjectReconcileStoreFailProjectDaemonInstallInScopeCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ProjectID, _ = c.Args[1].(string)
+		r.DaemonID, _ = c.Args[2].(string)
+		r.InstallErr, _ = c.Args[3].(string)
+		r.Scope, _ = c.Args[4].(*core.OrgScope)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockProjectReconcileStoreSettleProjectDaemonFromNestedReposInScopeCall is one recorded call of MockProjectReconcileStore.SettleProjectDaemonFromNestedReposInScope, one
+// field per parameter.
+type MockProjectReconcileStoreSettleProjectDaemonFromNestedReposInScopeCall struct {
+	Ctx        context.Context
+	ProjectID  string
+	DaemonID   string
+	InstallErr string
+	Scope      *core.OrgScope
+}
+
+// SettleProjectDaemonFromNestedReposInScopeCalls returns every recorded SettleProjectDaemonFromNestedReposInScope call, oldest first, with
+// its arguments typed. It reads the same log as Calls("SettleProjectDaemonFromNestedReposInScope").
+func (m *MockProjectReconcileStore) SettleProjectDaemonFromNestedReposInScopeCalls() []MockProjectReconcileStoreSettleProjectDaemonFromNestedReposInScopeCall {
+	var out []MockProjectReconcileStoreSettleProjectDaemonFromNestedReposInScopeCall
+	for _, c := range m.Recorder.Calls("SettleProjectDaemonFromNestedReposInScope") {
+		var r MockProjectReconcileStoreSettleProjectDaemonFromNestedReposInScopeCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ProjectID, _ = c.Args[1].(string)
+		r.DaemonID, _ = c.Args[2].(string)
+		r.InstallErr, _ = c.Args[3].(string)
+		r.Scope, _ = c.Args[4].(*core.OrgScope)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockProjectReconcileStoreUpdateProjectCall is one recorded call of MockProjectReconcileStore.UpdateProject, one
+// field per parameter.
+type MockProjectReconcileStoreUpdateProjectCall struct {
+	Ctx     context.Context
+	Project *db.Project
+	UserID  string
+}
+
+// UpdateProjectCalls returns every recorded UpdateProject call, oldest first, with
+// its arguments typed. It reads the same log as Calls("UpdateProject").
+func (m *MockProjectReconcileStore) UpdateProjectCalls() []MockProjectReconcileStoreUpdateProjectCall {
+	var out []MockProjectReconcileStoreUpdateProjectCall
+	for _, c := range m.Recorder.Calls("UpdateProject") {
+		var r MockProjectReconcileStoreUpdateProjectCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Project, _ = c.Args[1].(*db.Project)
+		r.UserID, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockProjectReconcileStoreListReposByProjectCall is one recorded call of MockProjectReconcileStore.ListReposByProject, one
+// field per parameter.
+type MockProjectReconcileStoreListReposByProjectCall struct {
+	Ctx       context.Context
+	ProjectID string
+}
+
+// ListReposByProjectCalls returns every recorded ListReposByProject call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListReposByProject").
+func (m *MockProjectReconcileStore) ListReposByProjectCalls() []MockProjectReconcileStoreListReposByProjectCall {
+	var out []MockProjectReconcileStoreListReposByProjectCall
+	for _, c := range m.Recorder.Calls("ListReposByProject") {
+		var r MockProjectReconcileStoreListReposByProjectCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ProjectID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockProjectReconcileStoreSetRepoForgeAppsCall is one recorded call of MockProjectReconcileStore.SetRepoForgeApps, one
+// field per parameter.
+type MockProjectReconcileStoreSetRepoForgeAppsCall struct {
+	Ctx      context.Context
+	RepoID   string
+	Apps     []core.RepoForgeApp
+	Complete bool
+}
+
+// SetRepoForgeAppsCalls returns every recorded SetRepoForgeApps call, oldest first, with
+// its arguments typed. It reads the same log as Calls("SetRepoForgeApps").
+func (m *MockProjectReconcileStore) SetRepoForgeAppsCalls() []MockProjectReconcileStoreSetRepoForgeAppsCall {
+	var out []MockProjectReconcileStoreSetRepoForgeAppsCall
+	for _, c := range m.Recorder.Calls("SetRepoForgeApps") {
+		var r MockProjectReconcileStoreSetRepoForgeAppsCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.RepoID, _ = c.Args[1].(string)
+		r.Apps, _ = c.Args[2].([]core.RepoForgeApp)
+		r.Complete, _ = c.Args[3].(bool)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockProjectReconcileStoreDetachProjectDaemonOfOtherOrgCall is one recorded call of MockProjectReconcileStore.DetachProjectDaemonOfOtherOrg, one
+// field per parameter.
+type MockProjectReconcileStoreDetachProjectDaemonOfOtherOrgCall struct {
+	Ctx        context.Context
+	ProjectID  string
+	DaemonID   string
+	UserID     string
+	MachineOrg string
+}
+
+// DetachProjectDaemonOfOtherOrgCalls returns every recorded DetachProjectDaemonOfOtherOrg call, oldest first, with
+// its arguments typed. It reads the same log as Calls("DetachProjectDaemonOfOtherOrg").
+func (m *MockProjectReconcileStore) DetachProjectDaemonOfOtherOrgCalls() []MockProjectReconcileStoreDetachProjectDaemonOfOtherOrgCall {
+	var out []MockProjectReconcileStoreDetachProjectDaemonOfOtherOrgCall
+	for _, c := range m.Recorder.Calls("DetachProjectDaemonOfOtherOrg") {
+		var r MockProjectReconcileStoreDetachProjectDaemonOfOtherOrgCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ProjectID, _ = c.Args[1].(string)
+		r.DaemonID, _ = c.Args[2].(string)
+		r.UserID, _ = c.Args[3].(string)
+		r.MachineOrg, _ = c.Args[4].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockProjectReconcileStoreListProjectDaemonDetachmentsForDaemonCall is one recorded call of MockProjectReconcileStore.ListProjectDaemonDetachmentsForDaemon, one
+// field per parameter.
+type MockProjectReconcileStoreListProjectDaemonDetachmentsForDaemonCall struct {
+	Ctx      context.Context
+	DaemonID string
+}
+
+// ListProjectDaemonDetachmentsForDaemonCalls returns every recorded ListProjectDaemonDetachmentsForDaemon call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListProjectDaemonDetachmentsForDaemon").
+func (m *MockProjectReconcileStore) ListProjectDaemonDetachmentsForDaemonCalls() []MockProjectReconcileStoreListProjectDaemonDetachmentsForDaemonCall {
+	var out []MockProjectReconcileStoreListProjectDaemonDetachmentsForDaemonCall
+	for _, c := range m.Recorder.Calls("ListProjectDaemonDetachmentsForDaemon") {
+		var r MockProjectReconcileStoreListProjectDaemonDetachmentsForDaemonCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.DaemonID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockProjectReconcileStoreGetProjectByPathAndUserInScopeCall is one recorded call of MockProjectReconcileStore.GetProjectByPathAndUserInScope, one
+// field per parameter.
+type MockProjectReconcileStoreGetProjectByPathAndUserInScopeCall struct {
+	Ctx    context.Context
+	Path   string
+	UserID string
+	Scope  *core.OrgScope
+}
+
+// GetProjectByPathAndUserInScopeCalls returns every recorded GetProjectByPathAndUserInScope call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetProjectByPathAndUserInScope").
+func (m *MockProjectReconcileStore) GetProjectByPathAndUserInScopeCalls() []MockProjectReconcileStoreGetProjectByPathAndUserInScopeCall {
+	var out []MockProjectReconcileStoreGetProjectByPathAndUserInScopeCall
+	for _, c := range m.Recorder.Calls("GetProjectByPathAndUserInScope") {
+		var r MockProjectReconcileStoreGetProjectByPathAndUserInScopeCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Path, _ = c.Args[1].(string)
+		r.UserID, _ = c.Args[2].(string)
+		r.Scope, _ = c.Args[3].(*core.OrgScope)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockProjectReconcileStoreGetProjectByRemoteURLAndUserInScopeCall is one recorded call of MockProjectReconcileStore.GetProjectByRemoteURLAndUserInScope, one
+// field per parameter.
+type MockProjectReconcileStoreGetProjectByRemoteURLAndUserInScopeCall struct {
+	Ctx       context.Context
+	RemoteURL string
+	UserID    string
+	Scope     *core.OrgScope
+}
+
+// GetProjectByRemoteURLAndUserInScopeCalls returns every recorded GetProjectByRemoteURLAndUserInScope call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetProjectByRemoteURLAndUserInScope").
+func (m *MockProjectReconcileStore) GetProjectByRemoteURLAndUserInScopeCalls() []MockProjectReconcileStoreGetProjectByRemoteURLAndUserInScopeCall {
+	var out []MockProjectReconcileStoreGetProjectByRemoteURLAndUserInScopeCall
+	for _, c := range m.Recorder.Calls("GetProjectByRemoteURLAndUserInScope") {
+		var r MockProjectReconcileStoreGetProjectByRemoteURLAndUserInScopeCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.RemoteURL, _ = c.Args[1].(string)
+		r.UserID, _ = c.Args[2].(string)
+		r.Scope, _ = c.Args[3].(*core.OrgScope)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockProjectReconcileStoreGetProjectByRemoteKeyAndUserInScopeCall is one recorded call of MockProjectReconcileStore.GetProjectByRemoteKeyAndUserInScope, one
+// field per parameter.
+type MockProjectReconcileStoreGetProjectByRemoteKeyAndUserInScopeCall struct {
+	Ctx       context.Context
+	RemoteURL string
+	UserID    string
+	Scope     *core.OrgScope
+}
+
+// GetProjectByRemoteKeyAndUserInScopeCalls returns every recorded GetProjectByRemoteKeyAndUserInScope call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetProjectByRemoteKeyAndUserInScope").
+func (m *MockProjectReconcileStore) GetProjectByRemoteKeyAndUserInScopeCalls() []MockProjectReconcileStoreGetProjectByRemoteKeyAndUserInScopeCall {
+	var out []MockProjectReconcileStoreGetProjectByRemoteKeyAndUserInScopeCall
+	for _, c := range m.Recorder.Calls("GetProjectByRemoteKeyAndUserInScope") {
+		var r MockProjectReconcileStoreGetProjectByRemoteKeyAndUserInScopeCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.RemoteURL, _ = c.Args[1].(string)
+		r.UserID, _ = c.Args[2].(string)
+		r.Scope, _ = c.Args[3].(*core.OrgScope)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockProjectReconcileStoreListProjectDaemonsForDaemonCall is one recorded call of MockProjectReconcileStore.ListProjectDaemonsForDaemon, one
+// field per parameter.
+type MockProjectReconcileStoreListProjectDaemonsForDaemonCall struct {
+	Ctx      context.Context
+	DaemonID string
+}
+
+// ListProjectDaemonsForDaemonCalls returns every recorded ListProjectDaemonsForDaemon call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListProjectDaemonsForDaemon").
+func (m *MockProjectReconcileStore) ListProjectDaemonsForDaemonCalls() []MockProjectReconcileStoreListProjectDaemonsForDaemonCall {
+	var out []MockProjectReconcileStoreListProjectDaemonsForDaemonCall
+	for _, c := range m.Recorder.Calls("ListProjectDaemonsForDaemon") {
+		var r MockProjectReconcileStoreListProjectDaemonsForDaemonCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.DaemonID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockProjectReconcileStoreStartQueuedProjectDaemonClonesCall is one recorded call of MockProjectReconcileStore.StartQueuedProjectDaemonClones, one
+// field per parameter.
+type MockProjectReconcileStoreStartQueuedProjectDaemonClonesCall struct {
+	Ctx      context.Context
+	DaemonID string
+}
+
+// StartQueuedProjectDaemonClonesCalls returns every recorded StartQueuedProjectDaemonClones call, oldest first, with
+// its arguments typed. It reads the same log as Calls("StartQueuedProjectDaemonClones").
+func (m *MockProjectReconcileStore) StartQueuedProjectDaemonClonesCalls() []MockProjectReconcileStoreStartQueuedProjectDaemonClonesCall {
+	var out []MockProjectReconcileStoreStartQueuedProjectDaemonClonesCall
+	for _, c := range m.Recorder.Calls("StartQueuedProjectDaemonClones") {
+		var r MockProjectReconcileStoreStartQueuedProjectDaemonClonesCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.DaemonID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockProjectReconcileStoreResolveQueuedProjectDaemonCall is one recorded call of MockProjectReconcileStore.ResolveQueuedProjectDaemon, one
+// field per parameter.
+type MockProjectReconcileStoreResolveQueuedProjectDaemonCall struct {
+	Ctx        context.Context
+	RequestID  string
+	InstallErr string
+}
+
+// ResolveQueuedProjectDaemonCalls returns every recorded ResolveQueuedProjectDaemon call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ResolveQueuedProjectDaemon").
+func (m *MockProjectReconcileStore) ResolveQueuedProjectDaemonCalls() []MockProjectReconcileStoreResolveQueuedProjectDaemonCall {
+	var out []MockProjectReconcileStoreResolveQueuedProjectDaemonCall
+	for _, c := range m.Recorder.Calls("ResolveQueuedProjectDaemon") {
+		var r MockProjectReconcileStoreResolveQueuedProjectDaemonCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.RequestID, _ = c.Args[1].(string)
+		r.InstallErr, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockProjectReconcileStoreClaimNextProjectDaemonRepoCall is one recorded call of MockProjectReconcileStore.ClaimNextProjectDaemonRepo, one
+// field per parameter.
+type MockProjectReconcileStoreClaimNextProjectDaemonRepoCall struct {
+	Ctx       context.Context
+	ProjectID string
+	DaemonID  string
+	ClaimID   string
+	Lease     time.Duration
+}
+
+// ClaimNextProjectDaemonRepoCalls returns every recorded ClaimNextProjectDaemonRepo call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ClaimNextProjectDaemonRepo").
+func (m *MockProjectReconcileStore) ClaimNextProjectDaemonRepoCalls() []MockProjectReconcileStoreClaimNextProjectDaemonRepoCall {
+	var out []MockProjectReconcileStoreClaimNextProjectDaemonRepoCall
+	for _, c := range m.Recorder.Calls("ClaimNextProjectDaemonRepo") {
+		var r MockProjectReconcileStoreClaimNextProjectDaemonRepoCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ProjectID, _ = c.Args[1].(string)
+		r.DaemonID, _ = c.Args[2].(string)
+		r.ClaimID, _ = c.Args[3].(string)
+		r.Lease, _ = c.Args[4].(time.Duration)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockProjectReconcileStoreSettleProjectDaemonRepoCall is one recorded call of MockProjectReconcileStore.SettleProjectDaemonRepo, one
+// field per parameter.
+type MockProjectReconcileStoreSettleProjectDaemonRepoCall struct {
+	Ctx        context.Context
+	ProjectID  string
+	DaemonID   string
+	RepoID     string
+	ClaimID    string
+	InstallErr string
+}
+
+// SettleProjectDaemonRepoCalls returns every recorded SettleProjectDaemonRepo call, oldest first, with
+// its arguments typed. It reads the same log as Calls("SettleProjectDaemonRepo").
+func (m *MockProjectReconcileStore) SettleProjectDaemonRepoCalls() []MockProjectReconcileStoreSettleProjectDaemonRepoCall {
+	var out []MockProjectReconcileStoreSettleProjectDaemonRepoCall
+	for _, c := range m.Recorder.Calls("SettleProjectDaemonRepo") {
+		var r MockProjectReconcileStoreSettleProjectDaemonRepoCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ProjectID, _ = c.Args[1].(string)
+		r.DaemonID, _ = c.Args[2].(string)
+		r.RepoID, _ = c.Args[3].(string)
+		r.ClaimID, _ = c.Args[4].(string)
+		r.InstallErr, _ = c.Args[5].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockProjectReconcileStoreListProjectDaemonReposForPairCall is one recorded call of MockProjectReconcileStore.ListProjectDaemonReposForPair, one
+// field per parameter.
+type MockProjectReconcileStoreListProjectDaemonReposForPairCall struct {
+	Ctx       context.Context
+	ProjectID string
+	DaemonID  string
+}
+
+// ListProjectDaemonReposForPairCalls returns every recorded ListProjectDaemonReposForPair call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListProjectDaemonReposForPair").
+func (m *MockProjectReconcileStore) ListProjectDaemonReposForPairCalls() []MockProjectReconcileStoreListProjectDaemonReposForPairCall {
+	var out []MockProjectReconcileStoreListProjectDaemonReposForPairCall
+	for _, c := range m.Recorder.Calls("ListProjectDaemonReposForPair") {
+		var r MockProjectReconcileStoreListProjectDaemonReposForPairCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ProjectID, _ = c.Args[1].(string)
+		r.DaemonID, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockProjectReconcileStoreListProjectsWithUnsettledDaemonReposCall is one recorded call of MockProjectReconcileStore.ListProjectsWithUnsettledDaemonRepos, one
+// field per parameter.
+type MockProjectReconcileStoreListProjectsWithUnsettledDaemonReposCall struct {
+	Ctx      context.Context
+	DaemonID string
+}
+
+// ListProjectsWithUnsettledDaemonReposCalls returns every recorded ListProjectsWithUnsettledDaemonRepos call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListProjectsWithUnsettledDaemonRepos").
+func (m *MockProjectReconcileStore) ListProjectsWithUnsettledDaemonReposCalls() []MockProjectReconcileStoreListProjectsWithUnsettledDaemonReposCall {
+	var out []MockProjectReconcileStoreListProjectsWithUnsettledDaemonReposCall
+	for _, c := range m.Recorder.Calls("ListProjectsWithUnsettledDaemonRepos") {
+		var r MockProjectReconcileStoreListProjectsWithUnsettledDaemonReposCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.DaemonID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ ProjectReconcileStore = (*MockProjectReconcileStore)(nil)
 
 // forge:section MockProjectReconcileRepo
-// forge:hash=3ddaa85336592f0f968ba060415546446012af32f07d72cc7aad27d5a6692f71
+// forge:hash=0136c23725bd9f491316d8720c79b11a785f8ec05cae77763ed19f6db0432312
 
 // MockProjectReconcileRepo is a test mock for the ProjectReconcileRepo interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockProjectReconcileRepo.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockProjectReconcileRepo.<Method>Func not set" error.
 type MockProjectReconcileRepo struct {
 	contractkit.Recorder
 	ListProjectsFunc                              func(context.Context, db.ProjectFilters) ([]*db.Project, error)
@@ -634,18 +1693,209 @@ func (m *MockProjectReconcileRepo) SetRepoForgeApps(ctx context.Context, repoID 
 	return contractkit.MockNotSet("MockProjectReconcileRepo", "SetRepoForgeApps")
 }
 
+// MockProjectReconcileRepoListProjectsCall is one recorded call of MockProjectReconcileRepo.ListProjects, one
+// field per parameter.
+type MockProjectReconcileRepoListProjectsCall struct {
+	Ctx     context.Context
+	Filters db.ProjectFilters
+}
+
+// ListProjectsCalls returns every recorded ListProjects call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListProjects").
+func (m *MockProjectReconcileRepo) ListProjectsCalls() []MockProjectReconcileRepoListProjectsCall {
+	var out []MockProjectReconcileRepoListProjectsCall
+	for _, c := range m.Recorder.Calls("ListProjects") {
+		var r MockProjectReconcileRepoListProjectsCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Filters, _ = c.Args[1].(db.ProjectFilters)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockProjectReconcileRepoRecordObservedProjectDaemonInScopeCall is one recorded call of MockProjectReconcileRepo.RecordObservedProjectDaemonInScope, one
+// field per parameter.
+type MockProjectReconcileRepoRecordObservedProjectDaemonInScopeCall struct {
+	Ctx           context.Context
+	ProjectID     string
+	DaemonID      string
+	Path          string
+	DefaultBranch *string
+	Scope         *core.OrgScope
+}
+
+// RecordObservedProjectDaemonInScopeCalls returns every recorded RecordObservedProjectDaemonInScope call, oldest first, with
+// its arguments typed. It reads the same log as Calls("RecordObservedProjectDaemonInScope").
+func (m *MockProjectReconcileRepo) RecordObservedProjectDaemonInScopeCalls() []MockProjectReconcileRepoRecordObservedProjectDaemonInScopeCall {
+	var out []MockProjectReconcileRepoRecordObservedProjectDaemonInScopeCall
+	for _, c := range m.Recorder.Calls("RecordObservedProjectDaemonInScope") {
+		var r MockProjectReconcileRepoRecordObservedProjectDaemonInScopeCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ProjectID, _ = c.Args[1].(string)
+		r.DaemonID, _ = c.Args[2].(string)
+		r.Path, _ = c.Args[3].(string)
+		r.DefaultBranch, _ = c.Args[4].(*string)
+		r.Scope, _ = c.Args[5].(*core.OrgScope)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockProjectReconcileRepoMarkProjectDaemonInstalledInScopeCall is one recorded call of MockProjectReconcileRepo.MarkProjectDaemonInstalledInScope, one
+// field per parameter.
+type MockProjectReconcileRepoMarkProjectDaemonInstalledInScopeCall struct {
+	Ctx       context.Context
+	ProjectID string
+	DaemonID  string
+	Scope     *core.OrgScope
+}
+
+// MarkProjectDaemonInstalledInScopeCalls returns every recorded MarkProjectDaemonInstalledInScope call, oldest first, with
+// its arguments typed. It reads the same log as Calls("MarkProjectDaemonInstalledInScope").
+func (m *MockProjectReconcileRepo) MarkProjectDaemonInstalledInScopeCalls() []MockProjectReconcileRepoMarkProjectDaemonInstalledInScopeCall {
+	var out []MockProjectReconcileRepoMarkProjectDaemonInstalledInScopeCall
+	for _, c := range m.Recorder.Calls("MarkProjectDaemonInstalledInScope") {
+		var r MockProjectReconcileRepoMarkProjectDaemonInstalledInScopeCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ProjectID, _ = c.Args[1].(string)
+		r.DaemonID, _ = c.Args[2].(string)
+		r.Scope, _ = c.Args[3].(*core.OrgScope)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockProjectReconcileRepoFailProjectDaemonInstallInScopeCall is one recorded call of MockProjectReconcileRepo.FailProjectDaemonInstallInScope, one
+// field per parameter.
+type MockProjectReconcileRepoFailProjectDaemonInstallInScopeCall struct {
+	Ctx        context.Context
+	ProjectID  string
+	DaemonID   string
+	InstallErr string
+	Scope      *core.OrgScope
+}
+
+// FailProjectDaemonInstallInScopeCalls returns every recorded FailProjectDaemonInstallInScope call, oldest first, with
+// its arguments typed. It reads the same log as Calls("FailProjectDaemonInstallInScope").
+func (m *MockProjectReconcileRepo) FailProjectDaemonInstallInScopeCalls() []MockProjectReconcileRepoFailProjectDaemonInstallInScopeCall {
+	var out []MockProjectReconcileRepoFailProjectDaemonInstallInScopeCall
+	for _, c := range m.Recorder.Calls("FailProjectDaemonInstallInScope") {
+		var r MockProjectReconcileRepoFailProjectDaemonInstallInScopeCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ProjectID, _ = c.Args[1].(string)
+		r.DaemonID, _ = c.Args[2].(string)
+		r.InstallErr, _ = c.Args[3].(string)
+		r.Scope, _ = c.Args[4].(*core.OrgScope)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockProjectReconcileRepoSettleProjectDaemonFromNestedReposInScopeCall is one recorded call of MockProjectReconcileRepo.SettleProjectDaemonFromNestedReposInScope, one
+// field per parameter.
+type MockProjectReconcileRepoSettleProjectDaemonFromNestedReposInScopeCall struct {
+	Ctx        context.Context
+	ProjectID  string
+	DaemonID   string
+	InstallErr string
+	Scope      *core.OrgScope
+}
+
+// SettleProjectDaemonFromNestedReposInScopeCalls returns every recorded SettleProjectDaemonFromNestedReposInScope call, oldest first, with
+// its arguments typed. It reads the same log as Calls("SettleProjectDaemonFromNestedReposInScope").
+func (m *MockProjectReconcileRepo) SettleProjectDaemonFromNestedReposInScopeCalls() []MockProjectReconcileRepoSettleProjectDaemonFromNestedReposInScopeCall {
+	var out []MockProjectReconcileRepoSettleProjectDaemonFromNestedReposInScopeCall
+	for _, c := range m.Recorder.Calls("SettleProjectDaemonFromNestedReposInScope") {
+		var r MockProjectReconcileRepoSettleProjectDaemonFromNestedReposInScopeCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ProjectID, _ = c.Args[1].(string)
+		r.DaemonID, _ = c.Args[2].(string)
+		r.InstallErr, _ = c.Args[3].(string)
+		r.Scope, _ = c.Args[4].(*core.OrgScope)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockProjectReconcileRepoUpdateProjectCall is one recorded call of MockProjectReconcileRepo.UpdateProject, one
+// field per parameter.
+type MockProjectReconcileRepoUpdateProjectCall struct {
+	Ctx     context.Context
+	Project *db.Project
+	UserID  string
+}
+
+// UpdateProjectCalls returns every recorded UpdateProject call, oldest first, with
+// its arguments typed. It reads the same log as Calls("UpdateProject").
+func (m *MockProjectReconcileRepo) UpdateProjectCalls() []MockProjectReconcileRepoUpdateProjectCall {
+	var out []MockProjectReconcileRepoUpdateProjectCall
+	for _, c := range m.Recorder.Calls("UpdateProject") {
+		var r MockProjectReconcileRepoUpdateProjectCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Project, _ = c.Args[1].(*db.Project)
+		r.UserID, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockProjectReconcileRepoListReposByProjectCall is one recorded call of MockProjectReconcileRepo.ListReposByProject, one
+// field per parameter.
+type MockProjectReconcileRepoListReposByProjectCall struct {
+	Ctx       context.Context
+	ProjectID string
+}
+
+// ListReposByProjectCalls returns every recorded ListReposByProject call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListReposByProject").
+func (m *MockProjectReconcileRepo) ListReposByProjectCalls() []MockProjectReconcileRepoListReposByProjectCall {
+	var out []MockProjectReconcileRepoListReposByProjectCall
+	for _, c := range m.Recorder.Calls("ListReposByProject") {
+		var r MockProjectReconcileRepoListReposByProjectCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ProjectID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockProjectReconcileRepoSetRepoForgeAppsCall is one recorded call of MockProjectReconcileRepo.SetRepoForgeApps, one
+// field per parameter.
+type MockProjectReconcileRepoSetRepoForgeAppsCall struct {
+	Ctx      context.Context
+	RepoID   string
+	Apps     []core.RepoForgeApp
+	Complete bool
+}
+
+// SetRepoForgeAppsCalls returns every recorded SetRepoForgeApps call, oldest first, with
+// its arguments typed. It reads the same log as Calls("SetRepoForgeApps").
+func (m *MockProjectReconcileRepo) SetRepoForgeAppsCalls() []MockProjectReconcileRepoSetRepoForgeAppsCall {
+	var out []MockProjectReconcileRepoSetRepoForgeAppsCall
+	for _, c := range m.Recorder.Calls("SetRepoForgeApps") {
+		var r MockProjectReconcileRepoSetRepoForgeAppsCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.RepoID, _ = c.Args[1].(string)
+		r.Apps, _ = c.Args[2].([]core.RepoForgeApp)
+		r.Complete, _ = c.Args[3].(bool)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ ProjectReconcileRepo = (*MockProjectReconcileRepo)(nil)
 
 // forge:section MockAttachments
-// forge:hash=e6eefebcd27d45fa5af0241413d8a09563451cdce20b09374b65d2a127a8d8d0
+// forge:hash=cb154eca16058f3d51efcf0e5feae37949bca12780182604d8654f3f39ebbb8e
 
 // MockAttachments is a test mock for the Attachments interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockAttachments.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockAttachments.<Method>Func not set" error.
 type MockAttachments struct {
 	contractkit.Recorder
 	RenewDaemonAttachmentFunc        func(context.Context, *core.DaemonAttachment) (bool, error)
@@ -710,18 +1960,153 @@ func (m *MockAttachments) SetDaemonAttachmentResources(ctx context.Context, daem
 	return contractkit.MockNotSet("MockAttachments", "SetDaemonAttachmentResources")
 }
 
+// MockAttachmentsRenewDaemonAttachmentCall is one recorded call of MockAttachments.RenewDaemonAttachment, one
+// field per parameter.
+type MockAttachmentsRenewDaemonAttachmentCall struct {
+	Ctx context.Context
+	Att *core.DaemonAttachment
+}
+
+// RenewDaemonAttachmentCalls returns every recorded RenewDaemonAttachment call, oldest first, with
+// its arguments typed. It reads the same log as Calls("RenewDaemonAttachment").
+func (m *MockAttachments) RenewDaemonAttachmentCalls() []MockAttachmentsRenewDaemonAttachmentCall {
+	var out []MockAttachmentsRenewDaemonAttachmentCall
+	for _, c := range m.Recorder.Calls("RenewDaemonAttachment") {
+		var r MockAttachmentsRenewDaemonAttachmentCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Att, _ = c.Args[1].(*core.DaemonAttachment)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockAttachmentsReleaseDaemonAttachmentCall is one recorded call of MockAttachments.ReleaseDaemonAttachment, one
+// field per parameter.
+type MockAttachmentsReleaseDaemonAttachmentCall struct {
+	Ctx        context.Context
+	DaemonID   string
+	AttachedAt time.Time
+}
+
+// ReleaseDaemonAttachmentCalls returns every recorded ReleaseDaemonAttachment call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ReleaseDaemonAttachment").
+func (m *MockAttachments) ReleaseDaemonAttachmentCalls() []MockAttachmentsReleaseDaemonAttachmentCall {
+	var out []MockAttachmentsReleaseDaemonAttachmentCall
+	for _, c := range m.Recorder.Calls("ReleaseDaemonAttachment") {
+		var r MockAttachmentsReleaseDaemonAttachmentCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.DaemonID, _ = c.Args[1].(string)
+		r.AttachedAt, _ = c.Args[2].(time.Time)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockAttachmentsSetDaemonAttachmentPortsCall is one recorded call of MockAttachments.SetDaemonAttachmentPorts, one
+// field per parameter.
+type MockAttachmentsSetDaemonAttachmentPortsCall struct {
+	Ctx      context.Context
+	DaemonID string
+	Ports    []uint32
+}
+
+// SetDaemonAttachmentPortsCalls returns every recorded SetDaemonAttachmentPorts call, oldest first, with
+// its arguments typed. It reads the same log as Calls("SetDaemonAttachmentPorts").
+func (m *MockAttachments) SetDaemonAttachmentPortsCalls() []MockAttachmentsSetDaemonAttachmentPortsCall {
+	var out []MockAttachmentsSetDaemonAttachmentPortsCall
+	for _, c := range m.Recorder.Calls("SetDaemonAttachmentPorts") {
+		var r MockAttachmentsSetDaemonAttachmentPortsCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.DaemonID, _ = c.Args[1].(string)
+		r.Ports, _ = c.Args[2].([]uint32)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockAttachmentsSetDaemonAttachmentMemoryCall is one recorded call of MockAttachments.SetDaemonAttachmentMemory, one
+// field per parameter.
+type MockAttachmentsSetDaemonAttachmentMemoryCall struct {
+	Ctx        context.Context
+	DaemonID   string
+	UsedBytes  int64
+	LimitBytes int64
+	Pressure   bool
+}
+
+// SetDaemonAttachmentMemoryCalls returns every recorded SetDaemonAttachmentMemory call, oldest first, with
+// its arguments typed. It reads the same log as Calls("SetDaemonAttachmentMemory").
+func (m *MockAttachments) SetDaemonAttachmentMemoryCalls() []MockAttachmentsSetDaemonAttachmentMemoryCall {
+	var out []MockAttachmentsSetDaemonAttachmentMemoryCall
+	for _, c := range m.Recorder.Calls("SetDaemonAttachmentMemory") {
+		var r MockAttachmentsSetDaemonAttachmentMemoryCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.DaemonID, _ = c.Args[1].(string)
+		r.UsedBytes, _ = c.Args[2].(int64)
+		r.LimitBytes, _ = c.Args[3].(int64)
+		r.Pressure, _ = c.Args[4].(bool)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockAttachmentsSetDaemonAttachmentHealthCall is one recorded call of MockAttachments.SetDaemonAttachmentHealth, one
+// field per parameter.
+type MockAttachmentsSetDaemonAttachmentHealthCall struct {
+	Ctx      context.Context
+	DaemonID string
+	Health   core.MachineHealth
+}
+
+// SetDaemonAttachmentHealthCalls returns every recorded SetDaemonAttachmentHealth call, oldest first, with
+// its arguments typed. It reads the same log as Calls("SetDaemonAttachmentHealth").
+func (m *MockAttachments) SetDaemonAttachmentHealthCalls() []MockAttachmentsSetDaemonAttachmentHealthCall {
+	var out []MockAttachmentsSetDaemonAttachmentHealthCall
+	for _, c := range m.Recorder.Calls("SetDaemonAttachmentHealth") {
+		var r MockAttachmentsSetDaemonAttachmentHealthCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.DaemonID, _ = c.Args[1].(string)
+		r.Health, _ = c.Args[2].(core.MachineHealth)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockAttachmentsSetDaemonAttachmentResourcesCall is one recorded call of MockAttachments.SetDaemonAttachmentResources, one
+// field per parameter.
+type MockAttachmentsSetDaemonAttachmentResourcesCall struct {
+	Ctx       context.Context
+	DaemonID  string
+	StatsJSON string
+}
+
+// SetDaemonAttachmentResourcesCalls returns every recorded SetDaemonAttachmentResources call, oldest first, with
+// its arguments typed. It reads the same log as Calls("SetDaemonAttachmentResources").
+func (m *MockAttachments) SetDaemonAttachmentResourcesCalls() []MockAttachmentsSetDaemonAttachmentResourcesCall {
+	var out []MockAttachmentsSetDaemonAttachmentResourcesCall
+	for _, c := range m.Recorder.Calls("SetDaemonAttachmentResources") {
+		var r MockAttachmentsSetDaemonAttachmentResourcesCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.DaemonID, _ = c.Args[1].(string)
+		r.StatsJSON, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ Attachments = (*MockAttachments)(nil)
 
 // forge:section MockLocalModels
-// forge:hash=ea7b082aeb1a64b216939993a028e51fa329ff11d3a1f0854a434cab81f89742
+// forge:hash=2c88a6818f81b9d2ead839631467f3786ee4863faceca3c08f5661a762d00fc0
 
 // MockLocalModels is a test mock for the LocalModels interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockLocalModels.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockLocalModels.<Method>Func not set" error.
 type MockLocalModels struct {
 	contractkit.Recorder
 	SetDaemonLocalModelsFunc func(context.Context, string, string) error
@@ -736,18 +2121,41 @@ func (m *MockLocalModels) SetDaemonLocalModels(ctx context.Context, daemonID str
 	return contractkit.MockNotSet("MockLocalModels", "SetDaemonLocalModels")
 }
 
+// MockLocalModelsSetDaemonLocalModelsCall is one recorded call of MockLocalModels.SetDaemonLocalModels, one
+// field per parameter.
+type MockLocalModelsSetDaemonLocalModelsCall struct {
+	Ctx           context.Context
+	DaemonID      string
+	InventoryJSON string
+}
+
+// SetDaemonLocalModelsCalls returns every recorded SetDaemonLocalModels call, oldest first, with
+// its arguments typed. It reads the same log as Calls("SetDaemonLocalModels").
+func (m *MockLocalModels) SetDaemonLocalModelsCalls() []MockLocalModelsSetDaemonLocalModelsCall {
+	var out []MockLocalModelsSetDaemonLocalModelsCall
+	for _, c := range m.Recorder.Calls("SetDaemonLocalModels") {
+		var r MockLocalModelsSetDaemonLocalModelsCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.DaemonID, _ = c.Args[1].(string)
+		r.InventoryJSON, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ LocalModels = (*MockLocalModels)(nil)
 
 // forge:section MockProjectLookups
-// forge:hash=aaf5182764a3ac0afacc9b96def932ec632590a27159b0dbfa3f5783ff4dcbb8
+// forge:hash=ea081b161b6ce509e91e94845810d067014d674c6a8feac54f294be97086ab7a
 
 // MockProjectLookups is a test mock for the ProjectLookups interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockProjectLookups.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockProjectLookups.<Method>Func not set" error.
 type MockProjectLookups struct {
 	contractkit.Recorder
 	GetProjectByPathAndUserInScopeFunc      func(context.Context, string, string, *core.OrgScope) (*core.Project, error)
@@ -782,18 +2190,91 @@ func (m *MockProjectLookups) GetProjectByRemoteKeyAndUserInScope(ctx context.Con
 	return nil, contractkit.MockNotSet("MockProjectLookups", "GetProjectByRemoteKeyAndUserInScope")
 }
 
+// MockProjectLookupsGetProjectByPathAndUserInScopeCall is one recorded call of MockProjectLookups.GetProjectByPathAndUserInScope, one
+// field per parameter.
+type MockProjectLookupsGetProjectByPathAndUserInScopeCall struct {
+	Ctx    context.Context
+	Path   string
+	UserID string
+	Scope  *core.OrgScope
+}
+
+// GetProjectByPathAndUserInScopeCalls returns every recorded GetProjectByPathAndUserInScope call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetProjectByPathAndUserInScope").
+func (m *MockProjectLookups) GetProjectByPathAndUserInScopeCalls() []MockProjectLookupsGetProjectByPathAndUserInScopeCall {
+	var out []MockProjectLookupsGetProjectByPathAndUserInScopeCall
+	for _, c := range m.Recorder.Calls("GetProjectByPathAndUserInScope") {
+		var r MockProjectLookupsGetProjectByPathAndUserInScopeCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Path, _ = c.Args[1].(string)
+		r.UserID, _ = c.Args[2].(string)
+		r.Scope, _ = c.Args[3].(*core.OrgScope)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockProjectLookupsGetProjectByRemoteURLAndUserInScopeCall is one recorded call of MockProjectLookups.GetProjectByRemoteURLAndUserInScope, one
+// field per parameter.
+type MockProjectLookupsGetProjectByRemoteURLAndUserInScopeCall struct {
+	Ctx       context.Context
+	RemoteURL string
+	UserID    string
+	Scope     *core.OrgScope
+}
+
+// GetProjectByRemoteURLAndUserInScopeCalls returns every recorded GetProjectByRemoteURLAndUserInScope call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetProjectByRemoteURLAndUserInScope").
+func (m *MockProjectLookups) GetProjectByRemoteURLAndUserInScopeCalls() []MockProjectLookupsGetProjectByRemoteURLAndUserInScopeCall {
+	var out []MockProjectLookupsGetProjectByRemoteURLAndUserInScopeCall
+	for _, c := range m.Recorder.Calls("GetProjectByRemoteURLAndUserInScope") {
+		var r MockProjectLookupsGetProjectByRemoteURLAndUserInScopeCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.RemoteURL, _ = c.Args[1].(string)
+		r.UserID, _ = c.Args[2].(string)
+		r.Scope, _ = c.Args[3].(*core.OrgScope)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockProjectLookupsGetProjectByRemoteKeyAndUserInScopeCall is one recorded call of MockProjectLookups.GetProjectByRemoteKeyAndUserInScope, one
+// field per parameter.
+type MockProjectLookupsGetProjectByRemoteKeyAndUserInScopeCall struct {
+	Ctx       context.Context
+	RemoteURL string
+	UserID    string
+	Scope     *core.OrgScope
+}
+
+// GetProjectByRemoteKeyAndUserInScopeCalls returns every recorded GetProjectByRemoteKeyAndUserInScope call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetProjectByRemoteKeyAndUserInScope").
+func (m *MockProjectLookups) GetProjectByRemoteKeyAndUserInScopeCalls() []MockProjectLookupsGetProjectByRemoteKeyAndUserInScopeCall {
+	var out []MockProjectLookupsGetProjectByRemoteKeyAndUserInScopeCall
+	for _, c := range m.Recorder.Calls("GetProjectByRemoteKeyAndUserInScope") {
+		var r MockProjectLookupsGetProjectByRemoteKeyAndUserInScopeCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.RemoteURL, _ = c.Args[1].(string)
+		r.UserID, _ = c.Args[2].(string)
+		r.Scope, _ = c.Args[3].(*core.OrgScope)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ ProjectLookups = (*MockProjectLookups)(nil)
 
 // forge:section MockProjectDaemons
-// forge:hash=d6b336fadaae1f712af9f29414d552f2a6821105bee1aa1b54dfc2723b875915
+// forge:hash=c28256d3d06606cab04b41a2890d3a691b24585aa2a2bb97eb6a4f0bd958c953
 
 // MockProjectDaemons is a test mock for the ProjectDaemons interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockProjectDaemons.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockProjectDaemons.<Method>Func not set" error.
 type MockProjectDaemons struct {
 	contractkit.Recorder
 	ListProjectDaemonsForDaemonFunc          func(context.Context, string) ([]*core.ProjectDaemon, error)
@@ -868,18 +2349,177 @@ func (m *MockProjectDaemons) ListProjectsWithUnsettledDaemonRepos(ctx context.Co
 	return nil, contractkit.MockNotSet("MockProjectDaemons", "ListProjectsWithUnsettledDaemonRepos")
 }
 
+// MockProjectDaemonsListProjectDaemonsForDaemonCall is one recorded call of MockProjectDaemons.ListProjectDaemonsForDaemon, one
+// field per parameter.
+type MockProjectDaemonsListProjectDaemonsForDaemonCall struct {
+	Ctx      context.Context
+	DaemonID string
+}
+
+// ListProjectDaemonsForDaemonCalls returns every recorded ListProjectDaemonsForDaemon call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListProjectDaemonsForDaemon").
+func (m *MockProjectDaemons) ListProjectDaemonsForDaemonCalls() []MockProjectDaemonsListProjectDaemonsForDaemonCall {
+	var out []MockProjectDaemonsListProjectDaemonsForDaemonCall
+	for _, c := range m.Recorder.Calls("ListProjectDaemonsForDaemon") {
+		var r MockProjectDaemonsListProjectDaemonsForDaemonCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.DaemonID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockProjectDaemonsStartQueuedProjectDaemonClonesCall is one recorded call of MockProjectDaemons.StartQueuedProjectDaemonClones, one
+// field per parameter.
+type MockProjectDaemonsStartQueuedProjectDaemonClonesCall struct {
+	Ctx      context.Context
+	DaemonID string
+}
+
+// StartQueuedProjectDaemonClonesCalls returns every recorded StartQueuedProjectDaemonClones call, oldest first, with
+// its arguments typed. It reads the same log as Calls("StartQueuedProjectDaemonClones").
+func (m *MockProjectDaemons) StartQueuedProjectDaemonClonesCalls() []MockProjectDaemonsStartQueuedProjectDaemonClonesCall {
+	var out []MockProjectDaemonsStartQueuedProjectDaemonClonesCall
+	for _, c := range m.Recorder.Calls("StartQueuedProjectDaemonClones") {
+		var r MockProjectDaemonsStartQueuedProjectDaemonClonesCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.DaemonID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockProjectDaemonsResolveQueuedProjectDaemonCall is one recorded call of MockProjectDaemons.ResolveQueuedProjectDaemon, one
+// field per parameter.
+type MockProjectDaemonsResolveQueuedProjectDaemonCall struct {
+	Ctx        context.Context
+	RequestID  string
+	InstallErr string
+}
+
+// ResolveQueuedProjectDaemonCalls returns every recorded ResolveQueuedProjectDaemon call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ResolveQueuedProjectDaemon").
+func (m *MockProjectDaemons) ResolveQueuedProjectDaemonCalls() []MockProjectDaemonsResolveQueuedProjectDaemonCall {
+	var out []MockProjectDaemonsResolveQueuedProjectDaemonCall
+	for _, c := range m.Recorder.Calls("ResolveQueuedProjectDaemon") {
+		var r MockProjectDaemonsResolveQueuedProjectDaemonCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.RequestID, _ = c.Args[1].(string)
+		r.InstallErr, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockProjectDaemonsClaimNextProjectDaemonRepoCall is one recorded call of MockProjectDaemons.ClaimNextProjectDaemonRepo, one
+// field per parameter.
+type MockProjectDaemonsClaimNextProjectDaemonRepoCall struct {
+	Ctx       context.Context
+	ProjectID string
+	DaemonID  string
+	ClaimID   string
+	Lease     time.Duration
+}
+
+// ClaimNextProjectDaemonRepoCalls returns every recorded ClaimNextProjectDaemonRepo call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ClaimNextProjectDaemonRepo").
+func (m *MockProjectDaemons) ClaimNextProjectDaemonRepoCalls() []MockProjectDaemonsClaimNextProjectDaemonRepoCall {
+	var out []MockProjectDaemonsClaimNextProjectDaemonRepoCall
+	for _, c := range m.Recorder.Calls("ClaimNextProjectDaemonRepo") {
+		var r MockProjectDaemonsClaimNextProjectDaemonRepoCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ProjectID, _ = c.Args[1].(string)
+		r.DaemonID, _ = c.Args[2].(string)
+		r.ClaimID, _ = c.Args[3].(string)
+		r.Lease, _ = c.Args[4].(time.Duration)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockProjectDaemonsSettleProjectDaemonRepoCall is one recorded call of MockProjectDaemons.SettleProjectDaemonRepo, one
+// field per parameter.
+type MockProjectDaemonsSettleProjectDaemonRepoCall struct {
+	Ctx        context.Context
+	ProjectID  string
+	DaemonID   string
+	RepoID     string
+	ClaimID    string
+	InstallErr string
+}
+
+// SettleProjectDaemonRepoCalls returns every recorded SettleProjectDaemonRepo call, oldest first, with
+// its arguments typed. It reads the same log as Calls("SettleProjectDaemonRepo").
+func (m *MockProjectDaemons) SettleProjectDaemonRepoCalls() []MockProjectDaemonsSettleProjectDaemonRepoCall {
+	var out []MockProjectDaemonsSettleProjectDaemonRepoCall
+	for _, c := range m.Recorder.Calls("SettleProjectDaemonRepo") {
+		var r MockProjectDaemonsSettleProjectDaemonRepoCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ProjectID, _ = c.Args[1].(string)
+		r.DaemonID, _ = c.Args[2].(string)
+		r.RepoID, _ = c.Args[3].(string)
+		r.ClaimID, _ = c.Args[4].(string)
+		r.InstallErr, _ = c.Args[5].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockProjectDaemonsListProjectDaemonReposForPairCall is one recorded call of MockProjectDaemons.ListProjectDaemonReposForPair, one
+// field per parameter.
+type MockProjectDaemonsListProjectDaemonReposForPairCall struct {
+	Ctx       context.Context
+	ProjectID string
+	DaemonID  string
+}
+
+// ListProjectDaemonReposForPairCalls returns every recorded ListProjectDaemonReposForPair call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListProjectDaemonReposForPair").
+func (m *MockProjectDaemons) ListProjectDaemonReposForPairCalls() []MockProjectDaemonsListProjectDaemonReposForPairCall {
+	var out []MockProjectDaemonsListProjectDaemonReposForPairCall
+	for _, c := range m.Recorder.Calls("ListProjectDaemonReposForPair") {
+		var r MockProjectDaemonsListProjectDaemonReposForPairCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ProjectID, _ = c.Args[1].(string)
+		r.DaemonID, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockProjectDaemonsListProjectsWithUnsettledDaemonReposCall is one recorded call of MockProjectDaemons.ListProjectsWithUnsettledDaemonRepos, one
+// field per parameter.
+type MockProjectDaemonsListProjectsWithUnsettledDaemonReposCall struct {
+	Ctx      context.Context
+	DaemonID string
+}
+
+// ListProjectsWithUnsettledDaemonReposCalls returns every recorded ListProjectsWithUnsettledDaemonRepos call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListProjectsWithUnsettledDaemonRepos").
+func (m *MockProjectDaemons) ListProjectsWithUnsettledDaemonReposCalls() []MockProjectDaemonsListProjectsWithUnsettledDaemonReposCall {
+	var out []MockProjectDaemonsListProjectsWithUnsettledDaemonReposCall
+	for _, c := range m.Recorder.Calls("ListProjectsWithUnsettledDaemonRepos") {
+		var r MockProjectDaemonsListProjectsWithUnsettledDaemonReposCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.DaemonID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ ProjectDaemons = (*MockProjectDaemons)(nil)
 
 // forge:section MockUserRefetch
-// forge:hash=033cac35f861599e4ee72a85e10b9f12c035126ba7c2043aa1d617de89e3ac3e
+// forge:hash=ef575b80ae3bd3d042815a9149182ed7da125208bacbc3e03a85f396fbd69669
 
 // MockUserRefetch is a test mock for the UserRefetch interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockUserRefetch.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockUserRefetch.<Method>Func not set" error.
 type MockUserRefetch struct {
 	contractkit.Recorder
 	EmitUserRefetchFunc func(context.Context, string, core.RefetchType, core.RefetchOpts) error
@@ -892,6 +2532,30 @@ func (m *MockUserRefetch) EmitUserRefetch(ctx context.Context, userID string, re
 		return m.EmitUserRefetchFunc(ctx, userID, refetchType, opts)
 	}
 	return contractkit.MockNotSet("MockUserRefetch", "EmitUserRefetch")
+}
+
+// MockUserRefetchEmitUserRefetchCall is one recorded call of MockUserRefetch.EmitUserRefetch, one
+// field per parameter.
+type MockUserRefetchEmitUserRefetchCall struct {
+	Ctx         context.Context
+	UserID      string
+	RefetchType core.RefetchType
+	Opts        core.RefetchOpts
+}
+
+// EmitUserRefetchCalls returns every recorded EmitUserRefetch call, oldest first, with
+// its arguments typed. It reads the same log as Calls("EmitUserRefetch").
+func (m *MockUserRefetch) EmitUserRefetchCalls() []MockUserRefetchEmitUserRefetchCall {
+	var out []MockUserRefetchEmitUserRefetchCall
+	for _, c := range m.Recorder.Calls("EmitUserRefetch") {
+		var r MockUserRefetchEmitUserRefetchCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.RefetchType, _ = c.Args[2].(core.RefetchType)
+		r.Opts, _ = c.Args[3].(core.RefetchOpts)
+		out = append(out, r)
+	}
+	return out
 }
 
 // Compile-time check.
