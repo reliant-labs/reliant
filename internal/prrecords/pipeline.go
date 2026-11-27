@@ -13,6 +13,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/integrations/ghcontents"
 	"github.com/reliant-labs/reliant/internal/pipeline/config"
 )
 
@@ -249,11 +250,11 @@ func (p *projector) readConfig(ctx context.Context, repo *core.PipelineRepo, sha
 		return config.Resolved{}, nil, "this server has no GitHub App to read " + config.FilePath + " with"
 	}
 	owner, name, _ := strings.Cut(repo.Repository, "/")
-	data, err := p.contents.Read(ctx, ContentsRequest{
+	data, err := p.contents.Read(ctx, ghcontents.Request{
 		UserID: repo.CreatedByUserID, OrgID: repo.OrgID, Owner: owner, Repo: name, Path: config.FilePath, Ref: sha,
 	})
 	switch {
-	case errors.Is(err, ErrContentsNotFound):
+	case errors.Is(err, ghcontents.ErrNotFound):
 		return config.Resolved{}, nil, config.FilePath + " is missing at " + sha
 	case err != nil:
 		return config.Resolved{}, nil, "could not read " + config.FilePath + ": " + err.Error()

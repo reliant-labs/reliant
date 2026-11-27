@@ -16,7 +16,7 @@ import (
 )
 
 // forge:section MockService
-// forge:hash=1b62f5b9398d6e5fd26d75130af5ec0d996e62cc8aaa6be4d6f771f9535ee1a8
+// forge:hash=37280ff1c8e33886ce01860738fb0acd441827b1d97fc51ad17350480abaf65b
 
 // MockService is a test mock for the Service interface.
 //
@@ -35,6 +35,7 @@ type MockService struct {
 	CreateCheckRunFunc     func(context.Context, ghport.Repo, ghport.CreateCheckRun) (ghport.CheckRun, error)
 	UpdateCheckRunFunc     func(context.Context, ghport.Repo, int64, ghport.UpdateCheckRun) (ghport.CheckRun, error)
 	ListCheckRunsFunc      func(context.Context, ghport.Repo, string, ghport.ListCheckRuns) ([]ghport.CheckRun, error)
+	GetContentsFunc        func(context.Context, ghport.Repo, string, string) ([]byte, error)
 	GetCommitFunc          func(context.Context, ghport.Repo, string) (ghport.Commit, error)
 	CreateCommitFunc       func(context.Context, ghport.Repo, ghport.NewCommit) (ghport.Commit, error)
 	CreateIssueCommentFunc func(context.Context, ghport.Repo, int, string) (ghport.IssueComment, error)
@@ -120,6 +121,15 @@ func (m *MockService) ListCheckRuns(ctx context.Context, repo ghport.Repo, sha s
 		return m.ListCheckRunsFunc(ctx, repo, sha, opts)
 	}
 	return nil, contractkit.MockNotSet("MockService", "ListCheckRuns")
+}
+
+// GetContents records the call and delegates to GetContentsFunc when set.
+func (m *MockService) GetContents(ctx context.Context, repo ghport.Repo, path string, ref string) ([]byte, error) {
+	m.Recorder.Record("GetContents", ctx, repo, path, ref)
+	if m.GetContentsFunc != nil {
+		return m.GetContentsFunc(ctx, repo, path, ref)
+	}
+	return nil, contractkit.MockNotSet("MockService", "GetContents")
 }
 
 // GetCommit records the call and delegates to GetCommitFunc when set.

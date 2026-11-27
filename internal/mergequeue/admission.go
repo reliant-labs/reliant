@@ -2,15 +2,17 @@
 package mergequeue
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"os/exec"
 	"slices"
 	"strings"
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
-	"github.com/reliant-labs/reliant/internal/mergequeue/buildjob"
 	"github.com/reliant-labs/reliant/internal/mergequeue/ghport"
+	"github.com/reliant-labs/reliant/internal/mergequeue/gitport"
 	"github.com/reliant-labs/reliant/internal/pipeline/config"
 	"github.com/reliant-labs/reliant/internal/pipeline/prpolicy"
 )
@@ -170,24 +172,55 @@ func (a admission) checkTier(ctx context.Context, cfg config.Resolved, rec *core
 	return Refusal{}, nil
 }
 
-// changedPaths lists the paths head changes against the base branch's tip,
-// as a gate pool daemon computes them (the queue holds no repository bytes):
-// the server reads the tip through the GitHub API and the daemon diffs.
-func changedPaths(ctx context.Context, refs Refs, builder Builder, repo *core.PipelineRepo, head string) ([]string, error) {
-	tip, err := refs.BranchTip(ctx, repo, repo.BaseBranch)
+// changedPaths lists the paths head changes against the base branch's tip:
+// the diff from their merge base, rename detection off.
+func changedPaths(ctx context.Context, wd Workdir, repo ghport.Repo, baseBranch, head string) ([]string, error) {
+	tip, err := wd.GitHub.GetRef(ctx, repo, ghport.BranchRef(baseBranch))
 	if err != nil {
-		return nil, fmt.Errorf("read %s: %w", repo.BaseBranch, err)
+		return nil, fmt.Errorf("read %s: %w", baseBranch, err)
 	}
-	res, err := builder.ChangedPaths(ctx, repo, buildjob.PathsRequest{Repository: repo.Repository, Base: tip, Head: head})
+	if err := ensureCommits(ctx, wd, tip.SHA, head); err != nil {
+		return nil, err
+	}
+	mb, err := gitOut(ctx, wd.Git.Dir(), "merge-base", tip.SHA, head)
+	if err != nil {
+		return nil, err
+	}
+	out, err := gitOut(ctx, wd.Git.Dir(), "diff-tree", "-r", "-z", "--name-only", "--no-renames", strings.TrimSpace(mb), head)
 	if err != nil {
 		return nil, err
 	}
 	var paths []string
-	for _, p := range res.Paths {
+	for _, p := range strings.Split(out, "\x00") {
 		if p != "" && !slices.Contains(paths, p) {
 			paths = append(paths, p)
 		}
 	}
 	slices.Sort(paths)
 	return paths, nil
+}
+
+// ensureCommits fetches the commits the workdir does not have.
+func ensureCommits(ctx context.Context, wd Workdir, shas ...string) error {
+	var missing []string
+	for _, s := range shas {
+		if _, err := wd.Git.ResolveCommit(ctx, s); err != nil && !slices.Contains(missing, s) {
+			missing = append(missing, s)
+		}
+	}
+	if len(missing) == 0 {
+		return nil
+	}
+	return wd.Git.Fetch(ctx, wd.Remote, missing...)
+}
+
+func gitOut(ctx context.Context, gitDir string, args ...string) (string, error) {
+	cmd := exec.CommandContext(ctx, "git", append([]string{"--git-dir=" + gitDir}, args...)...)
+	cmd.Env = gitport.HermeticEnv(gitport.DefaultIdentity())
+	var out, errb bytes.Buffer
+	cmd.Stdout, cmd.Stderr = &out, &errb
+	if err := cmd.Run(); err != nil {
+		return "", fmt.Errorf("git %s: %w: %s", args[0], err, strings.TrimSpace(errb.String()))
+	}
+	return out.String(), nil
 }

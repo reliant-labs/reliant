@@ -22,6 +22,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/handlers/coverage_source"
 	"github.com/reliant-labs/reliant/internal/integrations/ghaccess"
+	"github.com/reliant-labs/reliant/internal/integrations/ghblobs"
 	"github.com/reliant-labs/reliant/internal/orgs"
 	"github.com/reliant-labs/reliant/pkg/config"
 )
@@ -104,7 +105,7 @@ func (g *gitHub) Read(_ context.Context, userID, owner, repo, blobID string) ([]
 	if a, ok := g.answers[key]; ok {
 		return a()
 	}
-	return nil, coverage_source.ErrNotFound
+	return nil, ghblobs.ErrNotFound
 }
 
 func (g *gitHub) count() int {
@@ -332,9 +333,9 @@ func TestGetCoverageSource_MapsGitHubsAnswers(t *testing.T) {
 	}{
 		"not connected":      {fails(ghaccess.ErrNotConnected), pb.CoverageSourceUnavailable_COVERAGE_SOURCE_UNAVAILABLE_REVOKED},
 		"needs reconnect":    {fails(ghaccess.ErrNeedsReconnect), pb.CoverageSourceUnavailable_COVERAGE_SOURCE_UNAVAILABLE_REVOKED},
-		"401":                {fails(coverage_source.ErrTokenRejected), pb.CoverageSourceUnavailable_COVERAGE_SOURCE_UNAVAILABLE_REVOKED},
-		"404":                {fails(coverage_source.ErrNotFound), pb.CoverageSourceUnavailable_COVERAGE_SOURCE_UNAVAILABLE_GONE},
-		"too large":          {fails(coverage_source.ErrTooLarge), pb.CoverageSourceUnavailable_COVERAGE_SOURCE_UNAVAILABLE_TOO_LARGE},
+		"401":                {fails(ghblobs.ErrTokenRejected), pb.CoverageSourceUnavailable_COVERAGE_SOURCE_UNAVAILABLE_REVOKED},
+		"404":                {fails(ghblobs.ErrNotFound), pb.CoverageSourceUnavailable_COVERAGE_SOURCE_UNAVAILABLE_GONE},
+		"too large":          {fails(ghblobs.ErrTooLarge), pb.CoverageSourceUnavailable_COVERAGE_SOURCE_UNAVAILABLE_TOO_LARGE},
 		"bytes not the blob": {serves([]byte("something else\n")), pb.CoverageSourceUnavailable_COVERAGE_SOURCE_UNAVAILABLE_GONE},
 	} {
 		t.Run(name, func(t *testing.T) {

@@ -31,11 +31,8 @@
 // commit (the same tree on the same parents).
 //
 // The package holds no state and reads no database: it works over the ports
-// (gitport, ghport) and the regen [Runner] it is handed. It is the daemon side
-// of the merge queue: [Job] runs the queue's build and changed-paths jobs
-// (internal/mergequeue/buildjob) on a machine of the repository's gate pool.
-// No server role may import it (internal/architecture's
-// TestServerRolesRunNoCode): a server holds no repository bytes.
+// (gitport, ghport) and the regen [Runner] it is handed. Nothing calls it yet;
+// the queue's scheduler (M7) will.
 //
 //forge:exclude-contract: a stateless function (Build) over the ports it is handed; its seams are those ports and the Runner interface, not a service of its own
 package candidate

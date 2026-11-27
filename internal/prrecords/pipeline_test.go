@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/integrations/ghcontents"
 	"github.com/reliant-labs/reliant/internal/integrations/webhook/github"
 	"github.com/reliant-labs/reliant/internal/pipeline/config"
 	"github.com/reliant-labs/reliant/internal/store"
@@ -60,17 +61,17 @@ func recorded(t *testing.T, event, file string, edit func(map[string]any)) []Eve
 type fakeContents struct {
 	files map[string]string // ref -> file
 	err   error
-	reqs  []ContentsRequest
+	reqs  []ghcontents.Request
 }
 
-func (f *fakeContents) Read(_ context.Context, req ContentsRequest) ([]byte, error) {
+func (f *fakeContents) Read(_ context.Context, req ghcontents.Request) ([]byte, error) {
 	f.reqs = append(f.reqs, req)
 	if f.err != nil {
 		return nil, f.err
 	}
 	data, ok := f.files[req.Ref]
 	if !ok {
-		return nil, ErrContentsNotFound
+		return nil, ghcontents.ErrNotFound
 	}
 	return []byte(data), nil
 }

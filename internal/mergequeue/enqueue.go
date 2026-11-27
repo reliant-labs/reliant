@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/mergequeue/ghport"
 	"github.com/reliant-labs/reliant/internal/serveraction"
 )
 
@@ -21,15 +22,10 @@ const EnqueueAction = serveraction.QueueEnqueue
 // current head in the queue. It is idempotent: a head already queued is
 // queued. It answers {queued, reason, code, entry_id, head}.
 type EnqueueHandler struct {
-	Store   Store
-	Configs Configs
-	// Refs and Builder list a head's changed paths, for an owner_approval
-	// entry with paths: Refs reads the base branch's tip from GitHub, and
-	// Builder diffs on a gate pool daemon. Without them such an entry
-	// cannot be decided, and the head is not queued.
-	Refs    Refs
-	Builder Builder
-	Now     func() time.Time
+	Store    Store
+	Configs  Configs
+	Workdirs Workdirs
+	Now      func() time.Time
 }
 
 // Handle implements serveraction.Handler.
@@ -83,10 +79,18 @@ func (h EnqueueHandler) Handle(ctx context.Context, req *serveraction.Request) (
 	}
 	adm := admission{store: h.Store, now: now}
 	refusal, err := adm.admit(ctx, repo, cfg, rec, head, func(ctx context.Context) ([]string, error) {
-		if h.Refs == nil || h.Builder == nil {
-			return nil, ErrNoBuilder
+		if h.Workdirs == nil {
+			return nil, errors.New("no workdir to diff the head in")
 		}
-		return changedPaths(ctx, h.Refs, h.Builder, repo, head)
+		wd, err := h.Workdirs.Open(ctx, repo)
+		if err != nil {
+			return nil, err
+		}
+		gh, err := ghport.ParseRepo(repo.Repository)
+		if err != nil {
+			return nil, err
+		}
+		return changedPaths(ctx, wd, gh, repo.BaseBranch, head)
 	})
 	if err != nil {
 		return nil, err

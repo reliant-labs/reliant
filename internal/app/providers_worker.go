@@ -46,6 +46,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/integrations/connauth"
 	"github.com/reliant-labs/reliant/internal/integrations/credwire"
 	"github.com/reliant-labs/reliant/internal/integrations/ghaccess"
+	"github.com/reliant-labs/reliant/internal/integrations/ghcontents"
 	"github.com/reliant-labs/reliant/internal/integrations/httpaction"
 	"github.com/reliant-labs/reliant/internal/integrations/webhook"
 	"github.com/reliant-labs/reliant/internal/integrations/writeledger"
@@ -1125,10 +1126,14 @@ func NewTriggerDeliveryRelay(d TriggerDeliveryRelayDeps) (*TriggerDeliveryRelay,
 	relay := webhook.NewRelay(webhook.NewStores(repo), intake, d.ConnectionVault, triggers.NewAutoPause(store.NewTriggerWritesExtStore(repo.ORM()), nil))
 	records := prrecords.Deps{Store: store.NewPrRecordExtStore(repo.ORM()), Scope: prrecords.NewScope(d.Integrations.PRRecordRepositories)}
 	if d.Pipeline.GetEnabled() {
-		// No Contents: a server role reads no repository contents (owner,
-		// 2026-11-27), so the projector records "no reader" as the config
-		// error until a gate pool daemon reads pipeline.yaml for it.
 		records.Pipeline = repo
+		tokens, err := gitTokens(d.ControlPlane)
+		if err != nil {
+			return nil, err
+		}
+		if tokens != nil {
+			records.Contents = ghcontents.NewInstrumented(ghcontents.Deps{Tokens: tokens})
+		}
 	}
 	if !records.Scope.Empty() || records.Pipeline != nil {
 		relay.WithDeliveryConsumer(webhook.PRRecordConsumer(prrecords.NewInstrumented(records)))

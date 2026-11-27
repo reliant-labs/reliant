@@ -10,7 +10,8 @@ import (
 	"strings"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
-	"github.com/reliant-labs/reliant/internal/mergequeue/buildjob"
+	"github.com/reliant-labs/reliant/internal/mergequeue/candidate"
+	"github.com/reliant-labs/reliant/internal/mergequeue/gitport"
 )
 
 // built is a batch with a candidate to gate.
@@ -61,7 +62,7 @@ func (r *round) build(ctx context.Context, entries []*core.QueueEntry, kind core
 	v := r.newVerdict()
 
 	byNumber := map[int]*core.QueueEntry{}
-	cands := make([]buildjob.Entry, 0, len(entries))
+	cands := make([]candidate.Entry, 0, len(entries))
 	for _, e := range entries {
 		rec, err := r.record(ctx, e.RecordID)
 		if err != nil {
@@ -71,25 +72,18 @@ func (r *round) build(ctx context.Context, entries []*core.QueueEntry, kind core
 			return nil, r.abandon(ctx, batch, v, fmt.Errorf("entry %s: no PR record %s", e.ID, e.RecordID))
 		}
 		byNumber[rec.Number] = e
-		cands = append(cands, buildjob.Entry{Number: rec.Number, Head: e.HeadSHA, Title: rec.Title})
+		cands = append(cands, candidate.Entry{Repo: r.gh, Number: rec.Number, Head: e.HeadSHA, Title: rec.Title})
 	}
-	cand, err := r.s.deps.Builder.Build(ctx, r.repo, buildjob.BuildRequest{
-		Repository: r.repo.Repository, BatchID: batch.ID, Base: r.base, Entries: cands,
-		Generated: slices.Clone(r.cfg.Generated), Regen: r.cfg.Regen, Shadow: r.shadow,
-	})
+	r.wouldPush = nil
+	cand, ejections, err := candidate.Build(ctx, candidate.Ports{
+		Git: r.wd.Git, GitHub: r.wd.GitHub, Remote: r.wd.Remote, Runner: r.s.deps.Regen,
+	}, r.base, cands, candidate.ConfigFor(batch.ID, r.cfg))
 	if err != nil {
 		return nil, r.abandon(ctx, batch, v, fmt.Errorf("build batch %s: %w", batch.ID, err))
 	}
-	if err := checkBuild(r.base, cands, cand); err != nil {
-		return nil, r.abandon(ctx, batch, v, fmt.Errorf("build batch %s: %w", batch.ID, err))
-	}
-	if r.shadow {
-		for _, p := range cand.WouldPush {
-			v.WouldPush = append(v.WouldPush, WouldPush{Ref: p.Ref, SHA: p.SHA})
-		}
-	}
+	v.WouldPush = r.wouldPush
 
-	for _, ej := range cand.Ejections {
+	for _, ej := range ejections {
 		e := byNumber[ej.Entry.Number]
 		reason, cause, ok := ejectReason(ej.Reason)
 		if !ok {
@@ -366,55 +360,24 @@ func (r *round) land(ctx context.Context, batch *core.QueueBatch, v Verdict) err
 	return r.s.lander.Land(ctx, LandRequest{Repo: r.repo, Batch: batch, Entries: active, Heads: heads, Trees: trees})
 }
 
+// shadowGit is the queue's git in shadow mode: it pushes only the candidate
+// refs (refs/heads/reliant-queue/*) and records every other push (a regen
+// commit to a PR's branch) instead of making it. Shadow makes no other
+// GitHub write.
+type shadowGit struct {
+	gitport.Port
+	round *round
+}
+
 // QueueRefPrefix is the namespace of the queue's candidate refs, the one
-// GitHub write a shadow build makes.
+// GitHub write shadow mode makes.
 const QueueRefPrefix = "refs/heads/reliant-queue/"
 
-// checkBuild holds a daemon's build report to the request: the daemon runs
-// on a user's machine, so its report is checked before the queue records
-// it. Every included or ejected entry is one the batch asked for, at the
-// head asked (a regenerated entry's new head is reported separately), the
-// candidate is on the batch's queue ref, and there is one tree per included
-// entry.
-func checkBuild(base string, asked []buildjob.Entry, res buildjob.BuildResult) error {
-	heads := map[int]string{}
-	for _, e := range asked {
-		heads[e.Number] = e.Head
+// Push implements gitport.Port.
+func (g *shadowGit) Push(ctx context.Context, url string, in gitport.PushInput) error {
+	if strings.HasPrefix(in.Ref, QueueRefPrefix) {
+		return g.Port.Push(ctx, url, in)
 	}
-	regen := map[int]string{}
-	for _, rg := range res.Regenerated {
-		if heads[rg.Entry.Number] != rg.Entry.Head {
-			return fmt.Errorf("the build regenerated #%d at %s, which the batch did not ask for", rg.Entry.Number, rg.Entry.Head)
-		}
-		regen[rg.Entry.Number] = rg.NewHead
-	}
-	seen := map[int]bool{}
-	for _, e := range res.Included {
-		want, ok := heads[e.Number]
-		if nn, regenerated := regen[e.Number]; regenerated {
-			want = nn
-		}
-		if !ok || e.Head != want || seen[e.Number] {
-			return fmt.Errorf("the build included #%d at %s, which the batch did not ask for", e.Number, e.Head)
-		}
-		seen[e.Number] = true
-	}
-	for _, ej := range res.Ejections {
-		if _, ok := heads[ej.Entry.Number]; !ok || seen[ej.Entry.Number] {
-			return fmt.Errorf("the build ejected #%d, which the batch did not ask for", ej.Entry.Number)
-		}
-		seen[ej.Entry.Number] = true
-	}
-	if len(res.Included) == 0 {
-		return nil
-	}
-	switch {
-	case res.Base != base:
-		return fmt.Errorf("the build started from %s, not %s", res.Base, base)
-	case res.Commit == "" || !strings.HasPrefix(res.Ref, QueueRefPrefix):
-		return fmt.Errorf("the build pushed %q to %q, outside the queue's refs", res.Commit, res.Ref)
-	case len(res.Trees) != len(res.Included):
-		return fmt.Errorf("the build reported %d trees for %d entries", len(res.Trees), len(res.Included))
-	}
+	g.round.wouldPush = append(g.round.wouldPush, WouldPush{Ref: in.Ref, SHA: in.SHA})
 	return nil
 }

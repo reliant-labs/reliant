@@ -18,10 +18,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/dblock"
 	"github.com/reliant-labs/reliant/internal/mergequeue"
-	"github.com/reliant-labs/reliant/internal/mergequeue/buildjob"
-	"github.com/reliant-labs/reliant/internal/mergequeue/candidate"
 	"github.com/reliant-labs/reliant/internal/mergequeue/fakegithub"
-	"github.com/reliant-labs/reliant/internal/mergequeue/ghport"
 	"github.com/reliant-labs/reliant/internal/mergequeue/gitport"
 	"github.com/reliant-labs/reliant/pkg/config"
 )
@@ -57,7 +54,7 @@ type fixture struct {
 	g    *fakegithub.GitHub
 	r    *fakegithub.Repo
 	repo *core.PipelineRepo
-	wd   localBuilder
+	wd   mergequeue.Workdir
 	gate *fakeGate
 	land *fakeLander
 	prs  map[string]*testPR
@@ -93,7 +90,7 @@ func newFixture(t *testing.T, mode core.PipelineRepoMode) *fixture {
 	}
 	return &fixture{
 		t: t, ctx: ctx, db: repo, raw: raw, g: g, r: r, repo: pr,
-		wd:   localBuilder{job: candidate.Job{Ports: candidate.Ports{Git: wk, Remote: r.URL(), GitHub: g}}, g: g},
+		wd:   mergequeue.Workdir{Git: wk, Remote: r.URL(), GitHub: g},
 		gate: &fakeGate{g: g, r: r}, land: &fakeLander{}, prs: map[string]*testPR{},
 	}
 }
@@ -118,7 +115,7 @@ func (f *fixture) scheduler() *mergequeue.Scheduler {
 	}
 	s, err := mergequeue.New(mergequeue.Deps{
 		Store: f.db, Leader: mergequeue.AdvisoryLeader{Locks: locks},
-		Refs: f.wd, Builder: f.wd, Gate: f.gate, Lander: f.land,
+		Workdirs: fixedWorkdir{f.wd}, Gate: f.gate, Lander: f.land,
 	})
 	if err != nil {
 		f.t.Fatal(err)
@@ -126,29 +123,10 @@ func (f *fixture) scheduler() *mergequeue.Scheduler {
 	return s
 }
 
-// localBuilder runs the queue's code operations in-process on a real git
-// workdir (candidate.Job, the daemon side), and reads refs from fakegithub:
-// the scheduler sees only what a gate pool daemon would report.
-type localBuilder struct {
-	job candidate.Job
-	g   *fakegithub.GitHub
-}
+type fixedWorkdir struct{ wd mergequeue.Workdir }
 
-func (b localBuilder) Build(ctx context.Context, _ *core.PipelineRepo, req buildjob.BuildRequest) (buildjob.BuildResult, error) {
-	return b.job.Build(ctx, req)
-}
-
-func (b localBuilder) ChangedPaths(ctx context.Context, _ *core.PipelineRepo, req buildjob.PathsRequest) (buildjob.PathsResult, error) {
-	return b.job.ChangedPaths(ctx, req)
-}
-
-func (b localBuilder) BranchTip(ctx context.Context, repo *core.PipelineRepo, branch string) (string, error) {
-	gh, err := ghport.ParseRepo(repo.Repository)
-	if err != nil {
-		return "", err
-	}
-	ref, err := b.g.GetRef(ctx, gh, ghport.BranchRef(branch))
-	return ref.SHA, err
+func (w fixedWorkdir) Open(context.Context, *core.PipelineRepo) (mergequeue.Workdir, error) {
+	return w.wd, nil
 }
 
 // open opens a PR on branch, adding pr/<branch>.txt (plus files), with a

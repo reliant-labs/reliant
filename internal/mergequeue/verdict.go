@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
-	"github.com/reliant-labs/reliant/internal/mergequeue/buildjob"
+	"github.com/reliant-labs/reliant/internal/mergequeue/candidate"
 )
 
 // Verdict is queue_batches.verdict_json: what the queue decided about a
@@ -132,13 +132,13 @@ func ParseVerdict(raw json.RawMessage) Verdict {
 //	regen_failed       → conflict, cause regen_failed
 //	not_generated_only → conflict, cause not_generated_only
 //	head_moved         → head_moved
-func ejectReason(r buildjob.Reason) (reason core.QueueEjectReason, cause string, ok bool) {
+func ejectReason(r candidate.Reason) (reason core.QueueEjectReason, cause string, ok bool) {
 	switch r {
-	case buildjob.ReasonBatchConflict:
+	case candidate.ReasonBatchConflict:
 		return "", "", false
-	case buildjob.ReasonHeadMoved:
+	case candidate.ReasonHeadMoved:
 		return core.QueueEjectHeadMoved, "", true
-	case buildjob.ReasonRegenFailed, buildjob.ReasonNotGeneratedOnly:
+	case candidate.ReasonRegenFailed, candidate.ReasonNotGeneratedOnly:
 		return core.QueueEjectConflict, string(r), true
 	default:
 		return core.QueueEjectConflict, "", true
