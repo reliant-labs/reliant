@@ -146,7 +146,7 @@ export interface ForgeConsoleComponents {
   analytics: RouteComponent
   /** Site insights: speed (web vitals per page; it was Speed insights), SEO and accessibility. */
   siteInsights?: RouteComponent
-  /** @deprecated Use siteInsights. Kept for callers supplying the legacy Speed page. */
+  /** @deprecated Use siteInsights. Renders only on the legacy /speed-insights route. */
   speedInsights?: RouteComponent
   /** Experiments: the project's Forge Changes, and one change. */
   experiments: RouteComponent
@@ -455,7 +455,7 @@ export function createForgeConsoleRoutes<TParent extends AnyRoute>(
     getParentRoute: () => consoleRoute,
     path: SITE_INSIGHTS_SEGMENT,
     validateSearch: forgeConsoleSiteInsightsSearchSchema,
-    component: components.siteInsights ?? components.speedInsights,
+    component: components.siteInsights,
   })
   // A view that is not one (a hand-edited URL) lands on the first, Speed.
   const siteInsightsViewRoute = createRoute({
@@ -466,16 +466,19 @@ export function createForgeConsoleRoutes<TParent extends AnyRoute>(
       if (isSiteInsightsView(params.view)) return
       throw redirect({ href: `${location.pathname.replace(/\/[^/]*\/?$/, '')}${location.searchStr}`, replace: true })
     }),
-    component: components.siteInsights ?? components.speedInsights,
+    component: components.siteInsights,
   })
-  // Speed insights is Site insights' Speed view now: a bookmark, a docs link
-  // or an old share keeps working, with its search (device, pct, range).
+  // Legacy callers keep their Speed page on its original route and search
+  // contract. Only hosts supplying Site insights redirect old bookmarks to it.
   const speedInsightsRoute = createRoute({
     getParentRoute: () => consoleRoute,
     path: SPEED_INSIGHTS_SEGMENT,
+    validateSearch: forgeConsoleSiteInsightsSearchSchema,
     beforeLoad: memberOnly(({ location }) => {
+      if (components.speedInsights || !components.siteInsights) return
       throw redirect({ href: `${location.pathname.replace(/\/speed-insights\/?$/, `/${SITE_INSIGHTS_SEGMENT}`)}${location.searchStr}`, replace: true })
     }),
+    component: components.speedInsights,
   })
   // Forge Changes: remote config, gradual rollouts and A/B tests
   // (components/Forge/Experiments). The nav row is behind the web config's

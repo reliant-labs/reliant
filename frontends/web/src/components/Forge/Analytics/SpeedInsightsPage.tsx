@@ -36,6 +36,7 @@ import { cn } from "@/lib/utils";
 import { RANGE_LABELS, RANGE_PRESETS, type RangePreset } from "@/services/controlPlane/observability/window";
 
 import { useForgeConsole } from "../Console/consoleContext";
+import { Page } from "../Console/consolePageFrame";
 import { ENV_ALL } from "../Console/envScope";
 import { UPlotChart } from "../Observability/charts/UPlotChart";
 import { Segmented, VariableSelect } from "../Observability/Dashboards/parts";
@@ -87,6 +88,15 @@ interface SpeedSearch {
   pct?: string;
   device?: string;
   metric?: string;
+}
+
+/** @deprecated Use SiteInsightsPage for the full set of site views. */
+export function SpeedInsightsPage() {
+  return (
+    <Page testId="console-speed-insights">
+      <SpeedInsightsView />
+    </Page>
+  );
 }
 
 /** Site insights' Speed view: its header (with the tabs) and its body; SiteInsightsPage frames it. */
