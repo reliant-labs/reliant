@@ -210,7 +210,7 @@ function applyChatPatch(
 }
 
 interface GlobalUpdatesState {
-  // Connection state
+  // User-wide feed connection and resume cursor.
   connectionStatus: ConnectionStatus;
   lastSequence: number;
   
@@ -228,8 +228,9 @@ interface GlobalUpdatesState {
   // OomKillBanner's process-kill notice.
   daemonProcessOomKills: Record<string, ProcessOomKills>;
 
-  // Currently subscribed chat ID for detail events
+  // The detail connection status belongs only to this subscription.
   subscribedChatId: string | null;
+  chatConnectionStatus: ConnectionStatus;
 
   // The user-wide stream.
   wsService: UserStreamingService | null;
@@ -269,7 +270,7 @@ interface GlobalUpdatesState {
   handleChatPaginationInfo: (chatId: string, pagination: MessagePaginationInfo) => void;
   handleChatContextUsage: (chatId: string, contextUsage: ContextUsageInfo) => void;
   handleStatusChange: (status: ConnectionStatus) => void;
-  handleChatStreamStatusChange: (status: ConnectionStatus) => void;
+  handleChatStreamStatusChange: (chatId: string, status: ConnectionStatus) => void;
   handleSync: (lastSequence: number) => void;
   handleError: (error: string) => void;
 }
@@ -281,6 +282,7 @@ export const useGlobalUpdatesStore = create<GlobalUpdatesState>((set, get) => ({
   daemonDetectedPorts: {},
   daemonProcessOomKills: {},
   subscribedChatId: null,
+  chatConnectionStatus: "disconnected",
   wsService: null,
   chatStream: null,
 
@@ -338,7 +340,13 @@ export const useGlobalUpdatesStore = create<GlobalUpdatesState>((set, get) => ({
       markChatSelectionsUnmaintained();
     }
     if (state.wsService || state.chatStream) {
-      set({ wsService: null, chatStream: null, connectionStatus: "disconnected", subscribedChatId: null });
+      set({
+        wsService: null,
+        chatStream: null,
+        connectionStatus: "disconnected",
+        subscribedChatId: null,
+        chatConnectionStatus: "disconnected",
+      });
     }
   },
 
@@ -364,13 +372,26 @@ export const useGlobalUpdatesStore = create<GlobalUpdatesState>((set, get) => ({
       serviceChatId: chatStream.getChatId()?.slice(0, 8),
       connected: chatStream.isConnected(),
     });
-    set({ chatStream, subscribedChatId: chatId });
+    // A switch cannot inherit the previous chat's status. The SDK publishes
+    // "connecting" when it actually starts an attempt; it may back off first.
+    set({
+      chatStream,
+      subscribedChatId: chatId,
+      chatConnectionStatus: state.subscribedChatId === chatId
+        ? state.chatConnectionStatus
+        : "disconnected",
+    });
     // Only the chat stream (re)connects; the user stream is untouched.
     chatStream.subscribeToChat(chatId);
     // The service declines a chat the server has already refused (see
     // ChatStreamingService.dropRefusedChat); mirror what it actually holds.
     const held = chatStream.getChatId() ?? null;
-    if (held !== chatId) set({ subscribedChatId: held });
+    if (held !== chatId) {
+      set({
+        subscribedChatId: held,
+        chatConnectionStatus: held === state.subscribedChatId ? state.chatConnectionStatus : "disconnected",
+      });
+    }
 
     // A screen can subscribe before the shell has connected the user stream.
     // connect() defers until chats have loaded, in which case the shell's
@@ -409,7 +430,7 @@ export const useGlobalUpdatesStore = create<GlobalUpdatesState>((set, get) => ({
     // cursor, so clearing here would drop every one that did not. A chat
     // switch never cleared it either; evictChat and reset still do.
 
-    set({ subscribedChatId: null });
+    set({ subscribedChatId: null, chatConnectionStatus: "disconnected" });
 
     state.chatStream?.unsubscribe();
   },
@@ -478,7 +499,9 @@ export const useGlobalUpdatesStore = create<GlobalUpdatesState>((set, get) => ({
     }
   },
 
-  handleChatStreamStatusChange: (status) => {
+  handleChatStreamStatusChange: (chatId, status) => {
+    if (get().subscribedChatId !== chatId) return;
+    set({ chatConnectionStatus: status });
     if ((status === "error" || status === "disconnected") && chatStreamDisruptedAt === null) {
       chatStreamDisruptedAt = Date.now();
     }
@@ -488,12 +511,9 @@ export const useGlobalUpdatesStore = create<GlobalUpdatesState>((set, get) => ({
       // The replay restored the transcript. The chat's own record may have
       // changed through updates the chat stream carries live only (another
       // project's), so re-read it if it was last read before the outage.
-      const chatId = get().chatStream?.getChatId();
-      if (chatId) {
-        try {
-          void queryClient.invalidateQueries({ queryKey: chatKeys.detail(chatId), predicate: stale });
-        } catch { /* bus not ready */ }
-      }
+      try {
+        void queryClient.invalidateQueries({ queryKey: chatKeys.detail(chatId), predicate: stale });
+      } catch { /* bus not ready */ }
     }
   },
 
@@ -580,17 +600,22 @@ type StoreSet = StoreApi<GlobalUpdatesState>["setState"];
 // The chat stream's callbacks. Every chat event carries the chat the stream
 // delivered it for, so a late frame can never be filed under another chat.
 function createChatStream(get: StoreGet, set: StoreSet): ChatStreamingService {
-  return new ChatStreamingService(
+  const chatStream = new ChatStreamingService(
     {
       onChatUpdate: (chatId, updates) => get().handleChatUpdate(chatId, updates),
       onChatSnapshot: (chatId, updates) => get().handleChatSnapshot(chatId, updates),
       onChatPaginationInfo: (chatId, pagination) => get().handleChatPaginationInfo(chatId, pagination),
       onChatContextUsage: (chatId, contextUsage) => get().handleChatContextUsage(chatId, contextUsage),
       onUserUpdates: (updates) => get().handleChatStreamUserUpdates(updates),
-      onStatusChange: (status) => get().handleChatStreamStatusChange(status),
+      // The SDK suppresses status from superseded attempts. Attribute the
+      // remaining events to the emitting service's chat, never the next selection.
+      onStatusChange: (status) => {
+        const chatId = chatStream.getChatId();
+        if (chatId && get().chatStream === chatStream) get().handleChatStreamStatusChange(chatId, status);
+      },
       onError: (error) => {
         logger.warn(`${LOG_PREFIX} Chat stream error: ${error}`);
-        failChatOpen(get().chatStream?.getChatId(), "stream_error");
+        if (get().chatStream === chatStream) failChatOpen(chatStream.getChatId(), "stream_error");
       },
       // Delta resume: chatStore owns each chat's cached state, so it owns the
       // cursor describing it and decides whether a reopen may replay.
@@ -602,7 +627,9 @@ function createChatStream(get: StoreGet, set: StoreSet): ChatStreamingService {
         useChatStore.getState().setChatSyncPending(chatId),
       onChatSubscriptionRejected: (chatId) => {
         failChatOpen(chatId, "rejected");
-        if (get().subscribedChatId === chatId) set({ subscribedChatId: null });
+        if (get().subscribedChatId === chatId) {
+          set({ subscribedChatId: null, chatConnectionStatus: "disconnected" });
+        }
         // A viewer who lost a shared chat (made private, deleted, removed
         // from the org) learns it here: the server re-checks the open stream
         // on an interval and refuses the resubscribe.
@@ -612,6 +639,7 @@ function createChatStream(get: StoreGet, set: StoreSet): ChatStreamingService {
     // The global user stream includes every project.
     undefined,
   );
+  return chatStream;
 }
 
 // What the app holds of an update's chat and project, for the org filter.

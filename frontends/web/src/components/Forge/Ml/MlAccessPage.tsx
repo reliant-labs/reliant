@@ -57,9 +57,15 @@ export interface MlAccessPageProps {
   view: MlView;
   /** Why the page is shown: the entitlement says so, or an ML read refused (a revocation since). */
   source: "entitlement" | "refused";
+  /** The server answered the request "already enabled": the gate opens the pages. */
+  onAlreadyEnabled?: () => void;
 }
 
-export function MlAccessPage({ orgId, entitlement, view, source }: MlAccessPageProps) {
+/**
+ * The request's state belongs to `orgId`: the gate keys this page by org, so a
+ * request made for one org never answers for the next.
+ */
+export function MlAccessPage({ orgId, entitlement, view, source, onAlreadyEnabled }: MlAccessPageProps) {
   const request = useRequestMlAccess(orgId);
   const requestedAtMs = request.data?.entitlement.requestedAtMs ?? entitlement?.requestedAtMs ?? null;
   const requested = requestedAtMs !== null;
@@ -101,7 +107,7 @@ export function MlAccessPage({ orgId, entitlement, view, source }: MlAccessPageP
         <div className="flex flex-wrap items-center gap-3">
           <Button
             variant="primary"
-            onClick={() => request.mutate(undefined)}
+            onClick={() => request.mutate(undefined, { onSuccess: (result) => result.alreadyEnabled && onAlreadyEnabled?.() })}
             loading={request.isPending}
             disabled={requested || request.data?.alreadyEnabled === true}
             data-testid="ml-access-request"

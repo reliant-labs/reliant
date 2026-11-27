@@ -16,7 +16,7 @@ import { useQueries } from "@tanstack/react-query";
 
 import { FilterBar, FilterChip } from "@/components/forge-ui/filter_bar";
 import { mlKeys } from "@/hooks/ml-queries";
-import { useObsReadApi } from "@/hooks/observability-queries";
+import { useObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
 import { MlSubjectKind, type GetMlRunResponse, type MlSeries } from "@/gen/controlplane/services/ml_early_access/v1/ml_early_access_pb";
 import { ML_STEP_KEY, subjectFilters } from "@/services/controlPlane/ml/telemetry";
 import { resolveWindow } from "@/services/controlPlane/observability/window";
@@ -47,7 +47,7 @@ const CURVES_PANEL = seriesPanel(READ_KEYS);
 /** Each run's curves and step (one QueryPanel read per run, filtered to its ml.run.id), on the time axis. */
 function useRunCurves(runIds: readonly string[]) {
   const { orgId } = useMlGate();
-  const api = useObsReadApi();
+  const api = useObservabilityApi();
   return useQueries({
     queries: runIds.map((id) => ({
       queryKey: [...mlKeys.all(orgId), "compare-curves", id] as const,

@@ -25,6 +25,9 @@
 //      one shell, Layout/shell/AppShell.tsx, with the demo's nav, demoNavConfig.ts);
 //    - the sample image's preview (Storage, staging) not rendering, or its URL
 //      not same-origin or shaped like a presigned GCS/S3 link;
+//    - Experiments listing no change, the A/B test showing no results readout,
+//      or either saying Experiments aren't available (the shop pack answers
+//      ChangesService, fixtures/shop/handlers/changes.ts).
 //    - an ML page (`/forge/ml/<view>[/<drill-down>]`, the org's ML tab,
 //      Forge/Ml/MlRoute.tsx) not showing its view: the shop pack answers the
 //      org's entitlements with `ml` enabled, so the access page ("Reach out to
@@ -96,6 +99,9 @@ const audited = [
 // SAMPLE_IMAGE_URL): same-origin, never shaped like a presigned GCS/S3 link.
 const sampleImagePage = `${home}/storage?env=staging&bucket=uploads&object=product-photo.png`;
 const PRESIGNED = /storage\.googleapis\.com|amazonaws\.com|X-Goog-|X-Amz-|Signature=|GoogleAccessId/i;
+// Experiments: the list, and the shop's A/B test (model/changes.ts), which has a readout.
+const experimentsPage = `${home}/experiments`;
+const experimentPage = `${home}/experiments/chg-express-checkout-prod`;
 // The demo's own pages, `?section=` of the demo console (demoPath.ts).
 const demoSection = (section) => `/forge/demo?section=${section}`;
 // The ML tab's views (Console/paths.ts ML_VIEWS, in nav order) and one drill-down
@@ -135,6 +141,8 @@ const pages = [
   `${home}/tests/coverage`,
   `${home}/tests/runs`,
   `${home}/tests/flaky`,
+  experimentsPage,
+  experimentPage,
   ...(auditedEnvs.length ? audited.map((surface) => `${surface.path}?env=${auditedEnvs[0]}`) : []),
   sampleImagePage,
   ...mlPages,
@@ -161,7 +169,7 @@ const tourStart = "forge:fg-intro";
 // these pages. A row is a link of its own: its label and where it goes.
 const navGroups = {
   Dashboards: [`${home}/observability/dashboards`],
-  Analytics: [`${home}/analytics`, ...["users", "product", "acquisition", "events"].map((tab) => `${home}/analytics/${tab}`)],
+  Analytics: [`${home}/analytics`, ...["users", "product", "acquisition", "events"].map((tab) => `${home}/analytics/${tab}`), experimentsPage],
   Deployments: [`${home}/services`, `${home}/releases`, `${home}/environments`],
   Tests: [`${home}/tests`, `${home}/tests/coverage`, `${home}/tests/runs`, `${home}/tests/flaky`],
   Security: [`${home}/security/vulnerabilities`, `${home}/security/sboms`],
@@ -553,6 +561,11 @@ try {
     if (!(await page.getByTestId("shell-nav").count())) problems.push("not in the app's shell (no [data-testid=shell-nav])");
     problems.push(...(await answerAudit(page, new Set())));
     if (path === sampleImagePage) problems.push(...(await checkSampleImage(page)));
+    if (path === experimentsPage || path === experimentPage) {
+      if (/Experiments aren't available/.test(text)) problems.push(`${path} says Experiments aren't available`);
+      if (path === experimentsPage && !(await page.locator("[data-testid^='change-row-']").count())) problems.push("Experiments lists no change");
+      if (path === experimentPage && !(await page.getByTestId("results-verdict").count())) problems.push("the A/B test shows no results readout");
+    }
     if (isMlPage(path)) problems.push(...(await checkMl(page)));
     if (process.env.SCREENSHOT_DIR) {
       fs.mkdirSync(process.env.SCREENSHOT_DIR, { recursive: true });

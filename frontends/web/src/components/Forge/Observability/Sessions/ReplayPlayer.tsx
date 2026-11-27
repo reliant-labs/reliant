@@ -50,7 +50,7 @@ import { AlertTriangle, EyeOff, FastForward, Pause, Play, RefreshCw, Video } fro
 import Button from "@/components/forge-ui/button";
 import Status from "@/components/forge-ui/status";
 import Tag from "@/components/forge-ui/tag";
-import { useObsReadApi } from "@/hooks/observability-queries";
+import { useObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
 import { useObsQuotaState } from "@/services/controlPlane/observability/ObsQuotaContext";
 import { quotaOf } from "@/services/controlPlane/observability/quota";
 import { ObsAsOf, ObsWillLoad } from "../ObsStates";
@@ -153,7 +153,7 @@ function clamp(value: number, min: number, max: number): number {
 
 export function ReplayPlayer(props: ReplayPlayerProps) {
   const { session, seek, markers = [] } = props;
-  const api = useObsReadApi();
+  const api = useObservabilityApi();
   const quota = useObsQuotaState();
   const mountRef = useRef<HTMLDivElement>(null);
   const frameRef = useRef<HTMLDivElement>(null);

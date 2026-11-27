@@ -1,0 +1,11 @@
+name: a_refused_sweep_says_why
+description: "With the pipeline switched off the action is refused, and the run says so instead of failing silently."
+events:
+  - node: sweep
+    output: {is_error: true, error_code: failed_precondition, content: "Reliant server actions are switched off on this server (pipeline.enabled)"}
+expect:
+  outcome: completed
+  completed: [sweep, report]
+  messages:
+    report:
+      content_contains: ["The PR sweep could not run", "pipeline.enabled"]

@@ -10,8 +10,7 @@
  *    which the other shells keep.
  *
  * A page with no tour is null: nothing shows, and an open card closes. The
- * pages the demo does not serve (DEMO_HIDDEN_PAGES) have none, and neither
- * does Experiments, which the demo's nav does not list.
+ * pages the demo does not serve (DEMO_HIDDEN_PAGES) have none.
  *
  * ML is an org page, not one of the app's: `/forge/ml/<view>[/<drill-down>…]`
  * (Console/paths.ts orgPageOf). Each view has a tip; a drill-down (a run, a
@@ -43,6 +42,7 @@ export const DEMO_TIP_KEYS = [
   "tests-flaky",
   "analytics",
   "events",
+  "experiments",
   "obs-overview",
   "dashboards",
   "errors",
@@ -151,6 +151,10 @@ export function demoTipKey(pathname: string, search: Record<string, unknown>): D
       return page.tab === "events" ? "events" : "analytics";
     case "events":
       return "events";
+    // One change is a sub-page of Experiments, under the same tip.
+    case "experiments":
+    case "experiment":
+      return "experiments";
     case "obs-overview":
       return "obs-overview";
     case "speed-insights":
@@ -191,5 +195,5 @@ export function isDemoSectionPage(pathname: string, search: Record<string, unkno
   if (org?.kind === "ml") return !org.sub?.length && !search.sel;
   const page = consolePageOf(pathname)?.page;
   if (!page) return false;
-  return !["workload", "release", "environment", "dashboard", "service", "vulnerability", "tests-run", "tests-flaky-test"].includes(page.kind);
+  return !["workload", "release", "environment", "dashboard", "service", "vulnerability", "tests-run", "tests-flaky-test", "experiment"].includes(page.kind);
 }

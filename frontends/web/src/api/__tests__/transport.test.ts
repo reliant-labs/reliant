@@ -11,7 +11,7 @@
  */
 
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
-import { createContextValues, type Interceptor } from '@connectrpc/connect'
+import { createContextValues, type ContextValues, type Interceptor } from '@connectrpc/connect'
 import type { TransportBackend } from '../transport'
 
 // Stub the lib/constants module so importing transport.ts in the test env
@@ -105,17 +105,22 @@ describe('buildInterceptors factory', () => {
     expect(buildInterceptors({})).toHaveLength(14)
   })
 
-  it('swaps two stages (client-version + daemon-last-seen) for forge-via and adds signup attribution in the control-plane chain', async () => {
-    const { buildInterceptors } = await import('../transport')
+  it('swaps two stages (client-version + daemon-last-seen) for forge-via and adds signup attribution and the observability read stage in the control-plane chain', async () => {
+    const { buildInterceptors, obsReadStage } = await import('../transport')
     const { signupAttributionInterceptor } = await import('../signupAttribution')
     const reliantApi = buildInterceptors({ withAuth: true })
     const controlPlane = buildInterceptors({ withAuth: true, backend: 'control-plane' })
-    expect(controlPlane).toHaveLength(reliantApi.length)
-    expect(controlPlane.filter((entry) => !reliantApi.includes(entry))).toHaveLength(2)
+    expect(controlPlane).toHaveLength(reliantApi.length + 1)
+    expect(controlPlane.filter((entry) => !reliantApi.includes(entry))).toHaveLength(3)
     expect(controlPlane).toContain(signupAttributionInterceptor)
     expect(reliantApi).not.toContain(signupAttributionInterceptor)
     // Only signed-in requests carry it.
     expect(buildInterceptors({ withAuth: false, backend: 'control-plane' })).not.toContain(signupAttributionInterceptor)
+    // The read stage (quota guard, read queue, Forge-Poll) sits after the org
+    // snapshot and ahead of the deadline, signed in or not, and never on the reliant API.
+    expect(controlPlane.indexOf(obsReadStage)).toBe(2)
+    expect(buildInterceptors({ withAuth: false, backend: 'control-plane' }).indexOf(obsReadStage)).toBe(1)
+    expect(reliantApi).not.toContain(obsReadStage)
   })
 })
 
@@ -127,7 +132,7 @@ describe('buildInterceptors factory', () => {
 describe('x-daemon-last-seen scoping', () => {
   type Next = Parameters<Interceptor>[0]
 
-  async function headersSent(backend: TransportBackend): Promise<Headers> {
+  async function headersSent(backend: TransportBackend, call: { service?: string; method?: string; contextValues?: ContextValues } = {}): Promise<Headers> {
     const { buildInterceptors, setDaemonLastSeen } = await import('../transport')
     const { setAuthTokenProvider } = await import('../authProvider')
     setAuthTokenProvider({
@@ -148,12 +153,12 @@ describe('x-daemon-last-seen scoping', () => {
     )
     await run({
       stream: false,
-      service: { typeName: 'test.v1.TestService' },
-      method: { name: 'Ping', input: { fields: [] } },
+      service: { typeName: call.service ?? 'test.v1.TestService' },
+      method: { name: call.method ?? 'Ping', input: { fields: [] } },
       header: new Headers(),
       signal: new AbortController().signal,
       // Every real Connect request carries context values; the org stage reads them.
-      contextValues: createContextValues(),
+      contextValues: call.contextValues ?? createContextValues(),
       message: {},
     } as unknown as Parameters<Next>[0])
 
@@ -171,6 +176,21 @@ describe('x-daemon-last-seen scoping', () => {
     const sent = await headersSent('control-plane')
     expect(sent.has('x-daemon-last-seen')).toBe(false)
     expect(sent.get('authorization')).toBe('Bearer test-token')
+  })
+
+  // A console poll of a ClickHouse read says so (obsInterceptors.ts), so the
+  // control plane can refuse polls early and keep a reserve for a person's read.
+  it('marks a control-plane observability poll with Forge-Poll, and only a poll', async () => {
+    const { obsCall } = await import('@/services/controlPlane/observability/obsInterceptors')
+    const { runAsPoll } = await import('@/services/controlPlane/observability/quotaStore')
+    const read = { service: 'controlplane.v1.ObservabilityService', method: 'QueryPanel' }
+    let poll: ContextValues | undefined
+    runAsPoll(() => void (poll = obsCall().contextValues))
+    expect((await headersSent('control-plane', { ...read, contextValues: poll })).get('Forge-Poll')).toBe('1')
+    expect((await headersSent('control-plane', { ...read, contextValues: obsCall().contextValues })).has('Forge-Poll')).toBe(false)
+    let reliantPoll: ContextValues | undefined
+    runAsPoll(() => void (reliantPoll = obsCall().contextValues))
+    expect((await headersSent('reliant-api', { ...read, contextValues: reliantPoll })).has('Forge-Poll')).toBe(false)
   })
 
   // The control plane's activity stream records how a change arrived; the

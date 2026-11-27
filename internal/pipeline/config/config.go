@@ -66,8 +66,14 @@ const (
 // Gate is the `gate` field. The string form `gate: "<cmd>"` is
 // `gate: {run: "<cmd>"}`.
 type Gate struct {
-	// Run is the gate command. Exit 0 pass, 1 fail, 2 unproven.
+	// Run is the test stage's command (the full suite): the same as
+	// `stages.test.run`, and the gate's only command before the gate had
+	// stages. Exit 0 pass, 1 fail, 2 unproven. Writing both is an error.
 	Run string `yaml:"run"`
+	// Stages overrides or turns off the gate's built-in stages, which
+	// always run in the order lint, test, build, sbom_scan. A stage not
+	// written keeps its detected default. Machine runner only.
+	Stages *Stages `yaml:"stages"`
 	// Runner defaults to machine when Run is set, and to checks when only
 	// Checks is.
 	Runner Runner `yaml:"runner"`
@@ -89,6 +95,34 @@ type Gate struct {
 	// per line (see [ParseInfraPatterns]). It is read from the same base
 	// commit as this file.
 	InfraPatternsFile string `yaml:"infra_patterns_file"`
+	// AllowUnisolated lets a batch land on a gate that ran outside an
+	// isolation boundary (plain runc), until isolated gate machines exist
+	// (owner, 2026-11-26). Default false: such a gate is unproven and never
+	// lands. A batch that lands this way is marked unisolated.
+	AllowUnisolated *bool `yaml:"allow_unisolated"`
+}
+
+// Stages is `gate.stages` (owner decision D13): one optional entry per
+// built-in stage. Its keys are the closed set [StageNames]; their order in
+// the file means nothing, because the gate always runs lint, test, build,
+// sbom_scan.
+type Stages struct {
+	Lint     *Stage `yaml:"lint"`
+	Test     *Stage `yaml:"test"`
+	Build    *Stage `yaml:"build"`
+	SBOMScan *Stage `yaml:"sbom_scan"`
+}
+
+// Stage is one `gate.stages.<name>` entry: the mapping `{run: "<cmd>"}`,
+// which replaces the stage's command, or the exact string `off`, which turns
+// the stage off. No other string is accepted, so `off` can never be read as
+// a command, nor a command as `off`.
+type Stage struct {
+	// Run replaces the stage's default. For sbom_scan it replaces the
+	// built-in scan with a repo command: exit 0 pass, 1 fail, 2 unproven.
+	Run string `yaml:"run"`
+	// Off is the string form `off`.
+	Off bool `yaml:"-"`
 }
 
 // EnvVars is gate.env: variable names to values. A value may be written as

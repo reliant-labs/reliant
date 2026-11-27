@@ -18,9 +18,9 @@ type Store interface {
 	EnqueueSpawnReport(ctx context.Context, msg *db.AgentMessage) (db.SpawnReportOutcome, error)
 }
 
-// Announcer tells a chat's open clients that its mailbox changed. *db.Repo
-// satisfies it: the announcement is a chat update, which the repository
-// publishes after commit.
+// Announcer tells a chat's open clients that its mailbox changed.
+// chatupdates.Service satisfies it: the announcement is a chat update,
+// published after commit.
 type Announcer interface {
 	EmitChatRefetch(ctx context.Context, chatID string, refetchType db.RefetchType) error
 }
