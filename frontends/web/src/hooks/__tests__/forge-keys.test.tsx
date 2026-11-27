@@ -95,7 +95,7 @@ function wrapper({ children }: { children: ReactNode }) {
 
 /** Control-plane entries a screen would hold, so their invalidation is observable. */
 function seedCloudEntries() {
-  queryClient.setQueryData(forgeCloudKeys.cloudStatus(null, "cp-staging"), { verdict: "converged" });
+  queryClient.setQueryData(deployServiceKeys.getStatus({ environmentId: "cp-staging" }), { verdict: "converged" });
   queryClient.setQueryData(forgeCloudKeys.cloudPromotions(null, "cp-staging"), []);
   queryClient.setQueryData(forgeCloudKeys.liveView(null, "hounders"), { availability: "available", envs: [], detail: "" });
   queryClient.setQueryData(deployServiceKeys.listReleases({ project: "hounders", limit: 50 }), {});
@@ -103,7 +103,7 @@ function seedCloudEntries() {
 
 function cloudInvalidated() {
   return [
-    forgeCloudKeys.cloudStatus(null, "cp-staging"),
+    deployServiceKeys.getStatus({ environmentId: "cp-staging" }),
     forgeCloudKeys.cloudPromotions(null, "cp-staging"),
     forgeCloudKeys.liveView(null, "hounders"),
     deployServiceKeys.listReleases({ project: "hounders", limit: 50 }),
