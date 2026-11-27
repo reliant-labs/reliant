@@ -78,6 +78,32 @@ describe("demoForbiddenRule", () => {
   });
 });
 
+describe("the widened public demo bundle", () => {
+  it("builds every lazy Agents page without billing or auth modules", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "demo-agents-bundle-"));
+    const report = path.join(dir, "report.json");
+    try {
+      const result = spawnSync(process.execPath, [at("node_modules/vite/bin/vite.js"), "build", "--mode", "demo", "--outDir", path.join(dir, "dist")], {
+        cwd: root,
+        env: { ...process.env, DEMO_BUNDLE_REPORT: report },
+        encoding: "utf8",
+        timeout: 120_000,
+      });
+      expect(result.error).toBeUndefined();
+      expect(result.status, result.stdout + result.stderr).toBe(0);
+      const bundle = JSON.parse(fs.readFileSync(report, "utf8")) as { chunks: { modules: string[] }[] };
+      const modules = bundle.chunks.flatMap((chunk) => chunk.modules);
+      expect(modules).toContain("src/demoAgentsRoutes.tsx");
+      expect(modules).toContain("src/components/Machines/AddMachineSheet.demo.tsx");
+      for (const file of modules) expect(demoForbiddenRule(at(file), root), file).toBeUndefined();
+      expect(modules.filter((file) => /node_modules\/(?:@stripe|@supabase)\//.test(file))).toEqual([]);
+      expect(modules).not.toContain("src/components/Machines/AddMachineSheet.tsx");
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  }, 130_000);
+});
+
 describe("demo twins", () => {
   it("resolves a module to its twin, and nothing else", () => {
     expect(twinOf(at("src/lib/connect.ts"))).toBe(at("src/lib/connect.demo.ts"));

@@ -11,9 +11,9 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { create, equals, fromBinary, isMessage, toBinary, type DescMessage, type DescMethod, type DescMethodStreaming, type DescMethodUnary, type DescService } from "@bufbuild/protobuf";
-import { timestampMs } from "@bufbuild/protobuf/wkt";
+import { MethodOptions_IdempotencyLevel, timestampMs } from "@bufbuild/protobuf/wkt";
 import { createClient, createRouterTransport, type Transport } from "@connectrpc/connect";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { BillingService } from "@/gen/controlplane/services/billing/v1/billing_pb";
 import { ObservabilityBillingService } from "@/gen/controlplane/services/observability_billing/v1/observability_billing_pb";
@@ -53,7 +53,7 @@ import stripeSdk from "../data/transcripts/stripe-sdk.json?raw";
 import subAgents from "../data/transcripts/sub-agents.json?raw";
 import taxRates from "../data/transcripts/tax-rates.json?raw";
 import { createFixtureTransport } from "../../transport";
-import { APP_LAYER_ANSWERS, appLayerScenarioHandlers, shopAppPack } from "../app";
+import { APP_LAYER_ANSWERS, appLayerScenarioHandlers, createShopAppTransport, shopAppPack } from "../app";
 import { FAKE_MCP_HEADER } from "../handlers/reliant/mcp";
 import { chatStreamEvents, streamingImpl } from "../handlers/reliant/streaming";
 import { SHOP_READ_ONLY_MESSAGE, shopScenario } from "../index";
@@ -187,6 +187,26 @@ describe("the app layer", () => {
       expectWireSafe(method.output, res.message);
     }
     await expect(createClient(ChatService, strict).deleteChat({ chatId: CHAT_IDS.cartTotals })).rejects.toThrow(SHOP_READ_ONLY_MESSAGE);
+  });
+
+  it("refuses app-layer mutations without forwarding them to real services", async () => {
+    const unary = vi.fn<Transport["unary"]>();
+    const stream = vi.fn<Transport["stream"]>();
+    const transport = createShopAppTransport({ now: FIXED_NOW, passthrough: { unary, stream } });
+    // Prove the public demo's app layer is selected, not just an unavailable service.
+    const chats = createClient(ChatService, transport);
+    expect((await chats.listMessages({ chatId: CHAT_IDS.cartTotals })).messages.length).toBeGreaterThan(0);
+    // Exercise writes across the app services, not just a hand-picked delete.
+    const mutations = SERVICES.flatMap((service) => service.methods).filter((method) =>
+      method.methodKind === "unary" && /^(Create|Update|Delete)/.test(method.name) &&
+      method.proto.options?.idempotencyLevel !== MethodOptions_IdempotencyLevel.NO_SIDE_EFFECTS,
+    );
+    expect(mutations.length).toBeGreaterThan(0);
+    for (const method of mutations) {
+      await expect(transport.unary(method as DescMethodUnary, undefined, undefined, undefined, create(method.input), undefined)).rejects.toThrow(SHOP_READ_ONLY_MESSAGE);
+    }
+    expect(unary).not.toHaveBeenCalled();
+    expect(stream).not.toHaveBeenCalled();
   });
 
   it("tells the fixture chat's story: the transcript without the client-only failed send, the stream with it", async () => {

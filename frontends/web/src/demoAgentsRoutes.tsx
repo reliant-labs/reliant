@@ -27,6 +27,7 @@
 
 import { createRoute, type AnyRoute } from '@tanstack/react-router'
 
+import { ShellPageHeader } from './components/Layout/shell/shellFrame'
 import { lazyRoute } from './lib/lazyRoute'
 import { chatViewSearchSchema, newChatSearchSchema, settingsSearchSchema } from './routeSchemas'
 import { createSandboxesAliasRoute } from './sandboxesAliasRoute'
@@ -46,9 +47,12 @@ const MachinesSection = lazyRoute(() => import('./components/Settings/cloud/mach
 /** Agent sandboxes in the frame Settings draws its sections in (SettingsContent.tsx SettingsLayout). */
 function SandboxesPage() {
   return (
-    <div className="h-full overflow-auto bg-background px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
-      <div className="mx-auto w-full max-w-4xl" data-testid="demo-sandboxes">
-        <MachinesSection />
+    <div className="flex h-full min-h-0 flex-col bg-background">
+      <ShellPageHeader>{null}</ShellPageHeader>
+      <div className="overflow-auto px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+        <div className="mx-auto w-full max-w-4xl" data-testid="demo-sandboxes">
+          <MachinesSection />
+        </div>
       </div>
     </div>
   )
