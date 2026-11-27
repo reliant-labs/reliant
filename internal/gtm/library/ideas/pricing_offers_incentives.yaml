@@ -359,3 +359,36 @@ entries:
       - At which moment are users most engaged and open to an ask?
     channel_types: [in-product, newsletter, website]
     kpis: [paying supporters, supporter revenue versus lost ad revenue, supporter churn]
+
+  - key: trial-design
+    category: pricing_offers_incentives
+    name: Design the trial deliberately
+    summary: >-
+      Choose the trial's shape on purpose instead of by default. Set its
+      length to how long a typical customer needs to reach the first real
+      result, not a round number. Decide whether to ask for a card up front:
+      it means fewer sign-ups but more of them convert. Consider a reverse
+      trial, where every new account gets the full paid plan for a set time
+      and then drops to the free plan rather than losing access. Tell users
+      clearly before any charge and make cancelling easy.
+    why_it_works: >-
+      Trial length, card policy and what happens at the end decide how many
+      people start and how many pay. A trial sized to the time-to-value
+      avoids rushing or boring users, and a reverse trial shows the paid
+      features to everyone while keeping those who do not upgrade as active
+      free users.
+    fits:
+      business_models: [subscription, freemium]
+      business_types: [b2b_saas, b2c_app, developer_tools]
+    stages: [launch, early_traction, growth]
+    objective: conversion
+    effort: medium
+    cost: free
+    signal_days: 30
+    tailor_questions:
+      - How many days does a typical new customer take to reach the first real result?
+      - Is the business better served by more trial starts (no card) or fewer, more committed ones (card up front)?
+      - Is there a free plan for a reverse trial to fall back to, and which paid features would users miss most?
+      - How will users be reminded before the trial ends or a charge is made?
+    channel_types: [website, in-product, email]
+    kpis: [trial starts, trial-to-paid conversion, paid conversion within 90 days of sign-up]

@@ -178,7 +178,8 @@ entries:
       - Which complaints can the product already solve?
     suggested_workflow: >-
       Monthly, collect new public reviews of the named alternatives from the
-      chosen review sites and forums, tag each with recurring themes, and send
+      chosen review sites and forums, where each site's terms allow it, tag
+      each with recurring themes, and send
       a short report of the top complaints with example quotes and their
       change since last month.
     channel_types: [review-site, forum]

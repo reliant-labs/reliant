@@ -36,10 +36,11 @@ entries:
     category: paid_acquisition
     name: Retargeting engaged visitors
     summary: >-
-      Show ads only to people who already took a meaningful step (visited
-      pricing, read two articles, started sign-up) with a message that
-      answers the likely next question, such as a customer story, a guarantee
-      or a demo. Cap frequency and stop after a few weeks.
+      Where tracking consent allows, show ads only to people who already took
+      a meaningful step (visited pricing, read two articles, started sign-up)
+      with a message that answers the likely next question, such as a
+      customer story, a guarantee or a demo. Cap frequency and stop after a
+      few weeks.
     why_it_works: >-
       Most visitors are not ready on the first visit. Retargeting people who
       showed intent is cheap and reminds them at a time they are still

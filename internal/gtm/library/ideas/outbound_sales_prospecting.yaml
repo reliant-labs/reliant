@@ -70,7 +70,12 @@ entries:
       Contact prospects only when a public event makes the problem urgent: a
       new hire into the buying role, a funding round, a job posting that
       mentions the problem, an expansion, or a regulatory change. Refer to
-      the trigger in the first line.
+      the trigger in the first line. Follow the law for unsolicited
+      messages. Source contacts lawfully and never buy lists. Identify the
+      sender, with a postal address where the law requires it. Include a
+      working unsubscribe in every email and honour it at once. Some
+      countries require prior consent even for business email, so check the
+      rules for each recipient's country before contacting anyone.
     why_it_works: >-
       Timing matters more than copy. A message that arrives right after a
       change, and shows the sender noticed it, is relevant in a way a generic
@@ -86,11 +91,14 @@ entries:
       - Which events have preceded the best deals so far?
       - Where can those events be observed publicly?
       - Who is the right person to contact when each trigger fires?
+      - Which countries are recipients in, and what do their rules require (prior consent, opt-out, sender identification)?
     suggested_workflow: >-
       Daily, scan the chosen public sources (job boards, funding announcements,
-      company news) for the defined triggers at companies that match the
-      target profile, and add each match with the trigger and a suggested
-      first line to a review queue for a person to approve and send.
+      company news), only where each site's terms allow it, for the defined
+      triggers at companies that match the target profile. Add each match
+      with the trigger and a suggested first line to a review queue for a
+      person to approve and send. Skip anyone who has unsubscribed or whose
+      country requires consent that has not been given.
     channel_types: [outbound, email, social]
     kpis: [reply rate on trigger messages, meetings booked, triggers acted on per week]
 
@@ -243,7 +251,12 @@ entries:
       Write a short cold email to one narrowly defined segment (one role, one
       industry, one company size) that names a specific problem they have,
       shows a result for a similar company, and asks a low-commitment
-      question. Send in small batches and rewrite based on replies.
+      question. Send in small batches and rewrite based on replies. Follow
+      the law for unsolicited email. Source contacts lawfully and never buy
+      lists. Identify the sender, with a postal address where the law
+      requires it. Include a clear unsubscribe in every email and honour it
+      at once. Some countries require prior consent even for business email;
+      in those, do not send without it.
     why_it_works: >-
       Cold email works when it is relevant, and relevance comes from
       narrowness. Small batches protect sender reputation and give fast
@@ -260,10 +273,50 @@ entries:
       - What result has the product delivered for a company like theirs?
       - What low-commitment question can the reader answer in one line?
       - What sending volume keeps the domain's reputation healthy?
+      - Which countries are recipients in, and what do their rules require (prior consent, opt-out, sender identification)?
     suggested_workflow: >-
-      For each batch of prospects in the segment, draft personalised first
-      lines from public information, hold the batch for a person to approve,
-      send in small daily volumes, stop the sequence on any reply, and report
-      reply rates per message version weekly.
+      For each batch of lawfully sourced prospects in the segment, drop
+      anyone who has unsubscribed or whose country requires consent that has
+      not been given, draft personalised first lines from public information,
+      and hold the batch for a person to approve. Send in small daily volumes
+      with the sender's identification and an unsubscribe link in every
+      email, stop the sequence on any reply or unsubscribe, and report reply
+      rates per message version weekly.
     channel_types: [email, outbound]
     kpis: [positive reply rate, meetings booked, bounce and spam complaint rate]
+
+  - key: marketplace-cold-start-one-niche
+    category: outbound_sales_prospecting
+    name: Start a marketplace in one city or niche with hand-recruited supply
+    summary: >-
+      Launch a marketplace in a single city or a single narrow niche, and
+      recruit the first sellers or providers one by one: contact them
+      personally, create their listings for them, and guarantee early
+      demand where possible (for example by bringing the first buyers
+      yourself). Open the next city or niche only once buyers there reliably
+      find what they want.
+    why_it_works: >-
+      A marketplace is only useful once each side finds enough of the other.
+      Concentrating on one place or niche reaches that density with far less
+      supply, and doing the first listings by hand removes the effort that
+      stops sellers joining an empty marketplace.
+    fits:
+      business_types: [marketplace]
+      business_models: [marketplace]
+    stages: [pre_launch, launch, early_traction]
+    objective: acquisition
+    effort: high
+    cost: low
+    signal_days: 30
+    tailor_questions:
+      - Which city or niche has buyers with the most urgent need and sellers who are easy to reach?
+      - How many active sellers does a buyer need to see for the marketplace to feel useful there?
+      - What can the team do by hand for the first sellers (listings, photos, pricing) that later becomes self-serve?
+      - Where will the first buyers come from while supply is still small?
+    suggested_workflow: >-
+      Keep a list of candidate sellers in the launch city or niche with their
+      contact status; each week, list sellers not yet contacted and follow-ups
+      that are due for a person to work through, and report listings live,
+      buyer searches with no good result, and first sales.
+    channel_types: [outbound, marketplace, email]
+    kpis: [active sellers in the launch niche, share of buyer searches with a good match, time to first sale per seller]

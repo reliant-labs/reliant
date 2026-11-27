@@ -16,8 +16,8 @@ func TestEmbeddedBankLoadsAndValidates(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load embedded bank: %v", err)
 	}
-	if n := len(es); n < 80 || n > 120 {
-		t.Errorf("bank has %d entries, want 80..120", n)
+	if n := len(es); n < 80 || n > 300 {
+		t.Errorf("bank has %d entries, want 80..300", n)
 	}
 	if err := validateBank(All()); err != nil {
 		t.Errorf("All() does not validate: %v", err)
@@ -173,6 +173,7 @@ func TestLoadRejectsInvalid(t *testing.T) {
 		{"no files", map[string]string{}, "no idea files"},
 		{"unknown file category", map[string]string{"misc.yaml": "entries:" + valid}, "file category"},
 		{"no entries", map[string]string{"launches_pr.yaml": "entries: []"}, "no entries"},
+		{"second YAML document", map[string]string{"launches_pr.yaml": "entries:" + valid + "---\nentries:" + validEntry("hidden")}, "more than one YAML document"},
 		{"unknown field", map[string]string{"launches_pr.yaml": "entries:" + valid + "    depth: deep\n"}, "field depth not found"},
 		{"category differs from file", map[string]string{"launches_pr.yaml": "entries:" + strings.Replace(valid, "category: launches_pr", "category: paid_acquisition", 1)}, "not the file's category"},
 		{"duplicate key across files", map[string]string{
@@ -290,6 +291,22 @@ func TestFilter(t *testing.T) {
 		}
 	})
 
+	t.Run("empty stages fit any stage", func(t *testing.T) {
+		anyStage := Entry{Key: "any", Category: CategoryLaunchesPR}
+		scaleOnly := Entry{Key: "scale", Category: CategoryLaunchesPR, Stages: []string{"scale"}}
+		for _, st := range stages {
+			if !(Query{Stage: st}).matches(anyStage, nil) {
+				t.Errorf("an entry with no stages does not match stage %s", st)
+			}
+		}
+		if (Query{Stage: "pre_launch"}).matches(scaleOnly, nil) {
+			t.Error("a scale-only entry matched pre_launch")
+		}
+		if !(Query{}).matches(scaleOnly, nil) {
+			t.Error("a query with no stage excluded a staged entry")
+		}
+	})
+
 	t.Run("objective effort cost", func(t *testing.T) {
 		got := Filter(Query{Objective: "research", Effort: "low", Cost: "free"})
 		if len(got) == 0 {
@@ -341,8 +358,24 @@ func TestQueryValidate(t *testing.T) {
 	if err := ValidateQuery(ok); err != nil {
 		t.Errorf("valid query: %v", err)
 	}
+	dup := Query{
+		Categories:     []string{CategoryPaidAcquisition, CategoryPaidAcquisition},
+		BusinessTypes:  []string{BusinessTypeHardware, BusinessTypeHardware},
+		BusinessModels: []string{BusinessModelOneTime, BusinessModelOneTime},
+	}
+	if err := ValidateQuery(dup); err != nil {
+		t.Errorf("repeated values: %v", err)
+	}
+	if got, want := keys(Filter(dup)), keys(Filter(Query{
+		Categories:     []string{CategoryPaidAcquisition},
+		BusinessTypes:  []string{BusinessTypeHardware},
+		BusinessModels: []string{BusinessModelOneTime},
+	})); !slices.Equal(got, want) {
+		t.Errorf("repeated values change the result: %v vs %v", got, want)
+	}
 	for _, q := range []Query{
 		{Categories: []string{"nope"}},
+		{Categories: []string{CategoryPaidAcquisition, "nope", CategoryPaidAcquisition}},
 		{BusinessTypes: []string{"nope"}},
 		{BusinessModels: []string{"nope"}},
 		{Stage: "nope"},
@@ -433,6 +466,21 @@ func TestDiverse(t *testing.T) {
 		want := Filter(Query{Categories: []string{CategoryLaunchesPR}})
 		if got[0].Key != want[0].Key || got[2].Key != want[1].Key {
 			t.Errorf("not in All order within the category: %v", keys(got))
+		}
+	})
+
+	t.Run("cap with one sparse and one dense category", func(t *testing.T) {
+		// k = 2 categories with matches, so the cap is ceil(6/2) = 3: one
+		// entry from the sparse category and three from the dense one, four
+		// in all, even though the dense category alone could fill n.
+		es := []Entry{{Key: "sparse-1", Category: CategoryPaidAcquisition}}
+		for i := 1; i <= 10; i++ {
+			es = append(es, Entry{Key: fmt.Sprintf("dense-%d", i), Category: CategoryTrustReputation})
+		}
+		got := diverse(es, 6)
+		want := []string{"sparse-1", "dense-1", "dense-2", "dense-3"}
+		if !slices.Equal(keys(got), want) {
+			t.Fatalf("diverse = %v, want %v", keys(got), want)
 		}
 	})
 

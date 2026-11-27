@@ -302,3 +302,37 @@ entries:
       - How often can the team publish without the quality dropping?
     channel_types: [video, social]
     kpis: [views per video, subscribers, sign-ups from video links]
+
+  - key: local-listings-and-map-profiles
+    category: organic_content_seo
+    name: Complete local listings and map profiles
+    summary: >-
+      Claim and fully complete the business's profile on the main map and
+      local search services and the local directories customers use: the
+      exact same name, address and phone number everywhere, accurate opening
+      hours, service areas, categories, recent photos, and a short
+      description in the words customers search with. Post updates and
+      offers there, answer questions, and reply to every review.
+    why_it_works: >-
+      People looking for a local business search with the place in mind and
+      pick from the first few listings. Complete, consistent and active
+      profiles rank higher and win the click, and they cost nothing but time.
+    fits:
+      business_types: [local_business, agency_services, ecommerce]
+    stages: [launch, early_traction, growth, scale]
+    objective: acquisition
+    effort: low
+    cost: free
+    signal_days: 30
+    tailor_questions:
+      - Which map, local search and directory listings do local customers use for this kind of business?
+      - Are the name, address, phone number and hours identical on every listing today?
+      - Which phrases do customers use when searching for this service nearby?
+      - Who will reply to reviews and questions on the listings each week?
+    suggested_workflow: >-
+      Monthly, check each listing against the business's canonical name,
+      address, phone number and hours and list any mismatch for a person to
+      correct; weekly, collect new reviews and questions from every listing
+      and draft replies for a person to approve.
+    channel_types: [directory, search, review-site]
+    kpis: [listing views, calls and direction requests from listings, listing mismatches fixed]

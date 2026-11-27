@@ -251,14 +251,16 @@ type Query struct {
 // ValidateQuery reports the first value in q that is not in its vocabulary,
 // so a caller can refuse a bad filter instead of silently matching nothing.
 // Text is free-form and never invalid.
+// A repeated value is accepted (an RPC filter can repeat one): it is
+// de-duplicated before checking, and matching ignores repeats anyway.
 func ValidateQuery(q Query) error {
-	if err := checkList("categories", q.Categories, categories); err != nil {
+	if err := checkList("categories", dedupe(q.Categories), categories); err != nil {
 		return err
 	}
-	if err := checkList("business_types", q.BusinessTypes, businessTypes); err != nil {
+	if err := checkList("business_types", dedupe(q.BusinessTypes), businessTypes); err != nil {
 		return err
 	}
-	if err := checkList("business_models", q.BusinessModels, businessModels); err != nil {
+	if err := checkList("business_models", dedupe(q.BusinessModels), businessModels); err != nil {
 		return err
 	}
 	for _, f := range []struct {
@@ -346,11 +348,17 @@ func Filter(q Query) []Entry {
 // same order. It can hold fewer than n entries when the per-category cap
 // binds.
 func Diverse(q Query, n int) []Entry {
+	return diverse(Filter(q), n)
+}
+
+// diverse is Diverse over an already-filtered list (in All order), so the
+// spreading and the cap can be tested on synthetic entries.
+func diverse(es []Entry, n int) []Entry {
 	if n <= 0 {
 		return nil
 	}
 	groups := make(map[string][]Entry)
-	for _, e := range Filter(q) {
+	for _, e := range es {
 		groups[e.Category] = append(groups[e.Category], e)
 	}
 	if len(groups) == 0 {

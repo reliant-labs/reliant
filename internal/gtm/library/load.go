@@ -68,6 +68,15 @@ func load(fsys fs.FS, dir string) ([]Entry, error) {
 		if err := dec.Decode(&f); err != nil && !errors.Is(err, io.EOF) {
 			return nil, fmt.Errorf("%s: %w", name, err)
 		}
+		// One document per file: a second one (after "---") would otherwise
+		// be silently ignored.
+		var extra yaml.Node
+		if err := dec.Decode(&extra); !errors.Is(err, io.EOF) {
+			if err != nil {
+				return nil, fmt.Errorf("%s: %w", name, err)
+			}
+			return nil, fmt.Errorf("%s: more than one YAML document", name)
+		}
 		if len(f.Entries) == 0 {
 			return nil, fmt.Errorf("%s: no entries", name)
 		}
@@ -224,6 +233,17 @@ func checkList(field string, vs, vocab []string) error {
 		return fmt.Errorf("%s: duplicate %q", field, dup)
 	}
 	return nil
+}
+
+// dedupe returns vs without repeated values, in first-seen order.
+func dedupe(vs []string) []string {
+	var out []string
+	for _, v := range vs {
+		if !slices.Contains(out, v) {
+			out = append(out, v)
+		}
+	}
+	return out
 }
 
 func firstDuplicate(vs []string) string {

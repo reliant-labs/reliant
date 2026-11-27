@@ -137,6 +137,15 @@ var wordToken = regexp.MustCompile(`[A-Za-z][A-Za-z0-9]*`)
 // capitalisedTokens returns the words in text that contain an upper-case
 // letter and are neither an allowed acronym nor a plain capitalised word at
 // the start of a sentence (start of text, or after . ! ? : or a newline).
+//
+// Known gaps, so a reviewer still reads new entries:
+//   - A plainly capitalised brand that starts a sentence ("Acme makes it
+//     easy.") passes, since it looks like any sentence-initial word. A
+//     CamelCase or all-caps brand there is still flagged.
+//   - A brand written in lower case ("post it on acme") passes unless it is
+//     in deniedNames; only the denylist catches lower-case names, and it
+//     knows only the names listed.
+//   - An all-caps name that is also in allowedCaps passes by design.
 func capitalisedTokens(text string) []string {
 	var bad []string
 	prevEnd := 0

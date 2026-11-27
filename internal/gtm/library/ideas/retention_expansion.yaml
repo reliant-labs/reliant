@@ -144,8 +144,9 @@ entries:
       - How can the reminder be useful even to someone who does not reorder?
     suggested_workflow: >-
       Each day, find customers whose last order is nearing the typical reorder
-      interval for what they bought, draft a reminder with their item and a
-      one-click reorder link, and send it after a person approves the batch.
+      interval for what they bought, skipping anyone who has unsubscribed,
+      draft a reminder with their item, a one-click reorder link and an
+      unsubscribe link, and send it after a person approves the batch.
     channel_types: [email]
     kpis: [repeat purchase rate, time to second order, accessory attach rate]
 
@@ -377,8 +378,9 @@ entries:
       - Can a returning customer pick up where they left off?
       - Is a return offer needed, or is the news enough?
     suggested_workflow: >-
-      Monthly, list customers who left three to twelve months ago, match each
-      to the improvements shipped since they left that relate to their stated
-      reason, and draft a short personal note for review before sending.
+      Monthly, list customers who left three to twelve months ago and have
+      not unsubscribed, match each to the improvements shipped since they
+      left that relate to their stated reason, and draft a short personal
+      note with an unsubscribe link for review before sending.
     channel_types: [email]
     kpis: [reactivation rate, revenue from returning customers, replies]
