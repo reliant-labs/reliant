@@ -170,11 +170,12 @@ func readMachineDir(dir *os.File, path, viewerRoot string) ([]fsMachineDirEntry,
 		var fi fs.FileInfo
 		if de.Type()&fs.ModeSymlink != 0 {
 			e.IsSymlink = true
-			// Only expose target metadata when the viewer may inspect it.
-			// Refused and dangling links remain name-only entries, so a
-			// listing of an allowed parent discloses no protected metadata.
-			if denyViewerRead(full, viewerRoot) == nil {
-				fi, _ = os.Stat(full)
+			// Stat the guarded open file, never the pathname again: a link
+			// swapped after the pathname check must not expose its new target.
+			// Refused and dangling links remain name-only entries.
+			if target, err := openForRead(full, viewerRoot); err == nil {
+				fi, _ = target.Stat()
+				_ = target.Close()
 			}
 		} else {
 			fi, _ = de.Info()

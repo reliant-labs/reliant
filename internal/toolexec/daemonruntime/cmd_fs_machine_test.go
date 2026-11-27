@@ -155,6 +155,45 @@ func TestFSListMachineDir_ProtectsSymlinkTargetMetadata(t *testing.T) {
 	}
 }
 
+func TestFSListMachineDir_RejectsSwappedSymlinkMetadata(t *testing.T) {
+	home, project := machineFixture(t)
+	link := filepath.Join(home, "link")
+	if err := os.Symlink(project, link); err != nil {
+		t.Fatal(err)
+	}
+	previous := viewerOpened
+	t.Cleanup(func() { viewerOpened = previous })
+	swapped := false
+	viewerOpened = func(path string) {
+		if path != link {
+			return
+		}
+		swapped = true
+		if err := os.Remove(link); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Symlink(filepath.Join(home, ".ssh"), link); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got, err := listMachineDir(t, home, project)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !swapped {
+		t.Fatal("symlink metadata did not pass through the guarded open")
+	}
+	for _, e := range got.Entries {
+		if e.Name == "link" {
+			if !e.IsSymlink || e.IsDir || e.Size != 0 || e.Modified != "" {
+				t.Fatalf("swapped link exposes target metadata: %+v", e)
+			}
+			return
+		}
+	}
+	t.Fatal("swapped link must remain a name-only entry")
+}
+
 // A symlink is listed as what it points at (a link to a directory expands),
 // marked as a link; a dangling one is still listed, as a file with no mtime.
 func TestFSListMachineDir_Symlinks(t *testing.T) {
