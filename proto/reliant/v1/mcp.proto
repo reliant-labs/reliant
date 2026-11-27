@@ -30,9 +30,8 @@ service MCPService {
   rpc GetServer(GetServerRequest) returns (GetServerResponse) {}
 
   // GetServerTools returns the list of tools exposed by a specific MCP server
-  rpc GetServerTools(GetServerToolsRequest) returns (GetServerToolsResponse) {
-    option idempotency_level = NO_SIDE_EFFECTS;
-  }
+  // forge:lint-disable-next-line forge-idempotency-read-undeclared: calls out: it asks the live MCP server, through the user's daemon, to list its tools
+  rpc GetServerTools(GetServerToolsRequest) returns (GetServerToolsResponse) {}
 
   // InstallServer installs a new MCP server
   rpc InstallServer(InstallServerRequest) returns (InstallServerResponse) {
