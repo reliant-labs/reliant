@@ -1267,9 +1267,13 @@ const mobileDiagnosticsRoute = createRoute({
 const mobileSettingsRoute = createRoute({
   getParentRoute: () => mobileLayoutRoute,
   path: '/m/settings',
-  validateSearch: (search: Record<string, unknown>): { section?: string; returnTo?: string } => ({
+  // `tab=hosting` opens billing on the App hosting card, and `org` is the org a
+  // hosting link was for (lib/mobileRedirect.ts mobileTwinOf).
+  validateSearch: (search: Record<string, unknown>): { section?: string; returnTo?: string; tab?: string; org?: string } => ({
     section: typeof search.section === 'string' ? search.section : undefined,
     returnTo: typeof search.returnTo === 'string' ? search.returnTo : undefined,
+    tab: typeof search.tab === 'string' ? search.tab : undefined,
+    org: typeof search.org === 'string' ? search.org : undefined,
   }),
   component: MobileSettingsScreen,
 })

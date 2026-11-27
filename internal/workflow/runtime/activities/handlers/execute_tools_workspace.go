@@ -275,8 +275,10 @@ func (a *ExecuteToolsActivity) reviveWorktree(ctx context.Context, chat *db.Chat
 	}
 	worktree.DeletedAt = nil
 	logging.InfoContext(ctx, "[ExecuteTools] Brought back the chat's archived worktree", "chatID", chat.ID, "worktreeID", worktree.ID, "path", worktree.Path)
-	if err := a.repo.EmitUserRefetch(ctx, project.UserID, db.RefetchWorktreeChanges, db.RefetchOpts{ProjectID: &project.ID, WorktreeID: &worktree.ID}); err != nil {
-		logging.WarnContext(ctx, "[ExecuteTools] Could not announce the revived worktree", "worktreeID", worktree.ID, "error", err)
+	if a.updates != nil {
+		if err := a.updates.EmitUserRefetch(ctx, project.UserID, db.RefetchWorktreeChanges, db.RefetchOpts{ProjectID: &project.ID, WorktreeID: &worktree.ID}); err != nil {
+			logging.WarnContext(ctx, "[ExecuteTools] Could not announce the revived worktree", "worktreeID", worktree.ID, "error", err)
+		}
 	}
 	return fence, true
 }

@@ -28,7 +28,8 @@ type LedgerReader interface {
 	ListRecentIntegrationWrites(ctx context.Context, integration, scope string, since time.Time, limit int) ([]*core.IntegrationWrite, error)
 }
 
-// RunLineage finds the lineage of the run that wrote. *db.Repo satisfies it.
+// RunLineage finds the lineage of the run that wrote. store.TriggerEventExtStore
+// satisfies it.
 type RunLineage interface {
 	lineage.LaunchEventReader
 }

@@ -208,6 +208,21 @@ type Commit struct {
 	Message string
 }
 
+// NewCommit is a commit object to write: POST /repos/{o}/{r}/git/commits.
+// The lander writes one per revert, whose tree is a tree the gate already
+// passed.
+type NewCommit struct {
+	Message string
+	TreeSHA string
+	Parents []string
+}
+
+// IssueComment is one comment in a PR's conversation.
+type IssueComment struct {
+	ID   int64
+	Body string
+}
+
 // Client is everything the merge queue asks of GitHub. Every method takes the
 // context first and the repository second; refs are fully qualified
 // ("refs/heads/main"). An implementation is safe for concurrent use.
@@ -238,12 +253,17 @@ type Client interface {
 	// ListCheckRuns lists the check runs on sha, newest first.
 	ListCheckRuns(ctx context.Context, repo Repo, sha string, opts ListCheckRuns) ([]CheckRun, error)
 
-	// GetContents reads one file at ref (a branch name, full ref or sha). A
-	// missing ref or path, or a path that is not a regular file, is
-	// [ErrNotFound].
-	GetContents(ctx context.Context, repo Repo, path, ref string) ([]byte, error)
 	// GetCommit reads a commit. A missing commit is [ErrNotFound].
 	GetCommit(ctx context.Context, repo Repo, sha string) (Commit, error)
+	// CreateCommit writes a commit object (no ref moves). A tree or parent
+	// that does not exist is a [ValidationError].
+	CreateCommit(ctx context.Context, repo Repo, in NewCommit) (Commit, error)
+
+	// CreateIssueComment comments on a PR's conversation.
+	CreateIssueComment(ctx context.Context, repo Repo, number int, body string) (IssueComment, error)
+	// ListIssueComments lists a PR's conversation comments, oldest first. A
+	// missing PR is [ErrNotFound].
+	ListIssueComments(ctx context.Context, repo Repo, number int) ([]IssueComment, error)
 }
 
 // DeleteBranch deletes a branch and treats a branch that is already gone as

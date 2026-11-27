@@ -12,9 +12,12 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/trace"
+	"go.temporal.io/api/enums/v1"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/analytics"
+	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/chataccess/chataccesstest"
 	"github.com/reliant-labs/reliant/internal/chatselection"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -90,6 +93,8 @@ func TestTrackMessageSentSeparatesPerChatFromFirstForUser(t *testing.T) {
 	claimed := false
 	repo := &MockRepository{
 		CountMessagesInThreadFunc: func(context.Context, string) (int, error) { return 1, nil },
+	}
+	messages := &MockMessages{
 		ClaimUserActivationFunc: func(_ context.Context, userID, chatID, messageID string) (bool, error) {
 			assert.Equal(t, "user-1", userID)
 			asked = append(asked, chatID+"/"+messageID)
@@ -100,7 +105,7 @@ func TestTrackMessageSentSeparatesPerChatFromFirstForUser(t *testing.T) {
 			return true, nil
 		},
 	}
-	svc := &Service{deps: Deps{Repo: repo, Chats: chataccesstest.For(repo), Questions: &MockQuestions{}, Spawns: &MockSpawns{}, Selections: &chatselection.MockStore{}, Mailbox: &MockMailbox{}, AgentMessages: &MockAgentMessages{}, Messages: &MockMessages{}, ToolBlocks: &MockToolBlocks{}, Senders: &MockSenders{}}}
+	svc := &Service{deps: Deps{Repo: repo, Chats: chataccesstest.For(repo), Questions: &MockQuestions{}, Spawns: &MockSpawns{}, Selections: &chatselection.MockStore{}, Mailbox: &MockMailbox{}, AgentMessages: &MockAgentMessages{}, Messages: messages, ToolBlocks: &MockToolBlocks{}, Senders: &MockSenders{}}}
 	chatA := &db.Chat{ID: "chat-a", ProjectID: "proj-1"}
 	chatB := &db.Chat{ID: "chat-b", ProjectID: "proj-1"}
 
@@ -139,6 +144,8 @@ func TestUserFirstMessageIsNotEmittedAgainOnReplay(t *testing.T) {
 	claimed := map[string]bool{}
 	repo := &MockRepository{
 		CountMessagesInThreadFunc: func(context.Context, string) (int, error) { return 1, nil },
+	}
+	messages := &MockMessages{
 		ClaimUserActivationFunc: func(_ context.Context, userID, _, _ string) (bool, error) {
 			if claimed[userID] {
 				return false, nil
@@ -147,7 +154,7 @@ func TestUserFirstMessageIsNotEmittedAgainOnReplay(t *testing.T) {
 			return true, nil
 		},
 	}
-	svc := &Service{deps: Deps{Repo: repo, Chats: chataccesstest.For(repo), Questions: &MockQuestions{}, Spawns: &MockSpawns{}, Selections: &chatselection.MockStore{}, Mailbox: &MockMailbox{}, AgentMessages: &MockAgentMessages{}, Messages: &MockMessages{}, ToolBlocks: &MockToolBlocks{}, Senders: &MockSenders{}}}
+	svc := &Service{deps: Deps{Repo: repo, Chats: chataccesstest.For(repo), Questions: &MockQuestions{}, Spawns: &MockSpawns{}, Selections: &chatselection.MockStore{}, Mailbox: &MockMailbox{}, AgentMessages: &MockAgentMessages{}, Messages: messages, ToolBlocks: &MockToolBlocks{}, Senders: &MockSenders{}}}
 	chat := &db.Chat{ID: "chat-a", ProjectID: "proj-1"}
 	for range 3 {
 		svc.trackMessageSent(context.Background(), "user-1", chat, "msg-1", "thread-a", "hello", 0)
@@ -162,9 +169,11 @@ func TestUserFirstMessageCarriesOpaqueIDsOnly(t *testing.T) {
 	name := "my secret workflow"
 	repo := &MockRepository{
 		CountMessagesInThreadFunc: func(context.Context, string) (int, error) { return 1, nil },
-		ClaimUserActivationFunc:   func(context.Context, string, string, string) (bool, error) { return true, nil },
 	}
-	svc := &Service{deps: Deps{Repo: repo, Chats: chataccesstest.For(repo), Questions: &MockQuestions{}, Spawns: &MockSpawns{}, Selections: &chatselection.MockStore{}, Mailbox: &MockMailbox{}, AgentMessages: &MockAgentMessages{}, Messages: &MockMessages{}, ToolBlocks: &MockToolBlocks{}, Senders: &MockSenders{}}}
+	messages := &MockMessages{
+		ClaimUserActivationFunc: func(context.Context, string, string, string) (bool, error) { return true, nil },
+	}
+	svc := &Service{deps: Deps{Repo: repo, Chats: chataccesstest.For(repo), Questions: &MockQuestions{}, Spawns: &MockSpawns{}, Selections: &chatselection.MockStore{}, Mailbox: &MockMailbox{}, AgentMessages: &MockAgentMessages{}, Messages: messages, ToolBlocks: &MockToolBlocks{}, Senders: &MockSenders{}}}
 	svc.trackMessageSent(context.Background(), "user-1", &db.Chat{ID: "chat-a", ProjectID: "proj-1", WorkflowName: &name},
 		"msg-1", "thread-a", "private prompt text", 0)
 
@@ -184,9 +193,11 @@ func TestUserFirstMessageNotEmittedWhenTheClaimFails(t *testing.T) {
 	out := installAnalytics(t)
 	repo := &MockRepository{
 		CountMessagesInThreadFunc: func(context.Context, string) (int, error) { return 1, nil },
-		ClaimUserActivationFunc:   func(context.Context, string, string, string) (bool, error) { return false, errors.New("db down") },
 	}
-	svc := &Service{deps: Deps{Repo: repo, Chats: chataccesstest.For(repo), Questions: &MockQuestions{}, Spawns: &MockSpawns{}, Selections: &chatselection.MockStore{}, Mailbox: &MockMailbox{}, AgentMessages: &MockAgentMessages{}, Messages: &MockMessages{}, ToolBlocks: &MockToolBlocks{}, Senders: &MockSenders{}}}
+	messages := &MockMessages{
+		ClaimUserActivationFunc: func(context.Context, string, string, string) (bool, error) { return false, errors.New("db down") },
+	}
+	svc := &Service{deps: Deps{Repo: repo, Chats: chataccesstest.For(repo), Questions: &MockQuestions{}, Spawns: &MockSpawns{}, Selections: &chatselection.MockStore{}, Mailbox: &MockMailbox{}, AgentMessages: &MockAgentMessages{}, Messages: messages, ToolBlocks: &MockToolBlocks{}, Senders: &MockSenders{}}}
 	svc.trackMessageSent(context.Background(), "user-1", &db.Chat{ID: "chat-a"}, "msg-1", "thread-a", "hi", 0)
 
 	recs := out.records(t)
@@ -206,6 +217,76 @@ func eventsForChat(recs []map[string]any, name, chatID string) []map[string]any 
 		}
 	}
 	return out
+}
+
+type sendAnalyticsRead struct {
+	err         error
+	hasDeadline bool
+	span        trace.SpanContext
+	userID      string
+}
+
+type sendAnalyticsRepo struct {
+	*db.Repo
+	requestDone <-chan struct{}
+	read        chan sendAnalyticsRead
+}
+
+func (r *sendAnalyticsRepo) CountMessagesInThread(ctx context.Context, threadID string) (int, error) {
+	// Force the analytics DB read to happen after the RPC's context is canceled.
+	<-r.requestDone
+	_, bounded := ctx.Deadline()
+	userID, _ := auth.GetUserIDFromContext(ctx)
+	r.read <- sendAnalyticsRead{err: ctx.Err(), hasDeadline: bounded, span: trace.SpanContextFromContext(ctx), userID: userID}
+	return r.Repo.CountMessagesInThread(ctx, threadID)
+}
+
+func TestSendMessageAnalyticsSurvivesRequestCancellation(t *testing.T) {
+	out := installAnalytics(t)
+	repo, cleanup := db.SetupTestDB(t)
+	t.Cleanup(cleanup)
+	ctx, fx := setupAbsorbFixture(t, repo, "test-user", db.Completed())
+	svc, _ := idempotentService(t, repo, db.Completed(), enums.WORKFLOW_EXECUTION_STATUS_COMPLETED)
+
+	span := trace.NewSpanContext(trace.SpanContextConfig{
+		TraceID: trace.TraceID{1}, SpanID: trace.SpanID{2}, TraceFlags: trace.FlagsSampled,
+	})
+	requestCtx, cancel := context.WithCancel(trace.ContextWithSpanContext(ctx, span))
+	defer cancel()
+	analyticsRepo := &sendAnalyticsRepo{
+		Repo:        repo,
+		requestDone: requestCtx.Done(),
+		read:        make(chan sendAnalyticsRead, 1),
+	}
+	svc.deps.Repo = analyticsRepo
+
+	resp, err := svc.SendMessage(requestCtx, sendMessageRequest(t, fx.chatID, "hello"))
+	cancel()
+	require.NoError(t, err)
+	require.NotEmpty(t, resp.Msg.GetMessageId())
+
+	select {
+	case read := <-analyticsRepo.read:
+		require.NoError(t, read.err, "analytics DB read must survive cancellation of the RPC")
+		assert.True(t, read.hasDeadline, "detached analytics must have its own deadline")
+		assert.Equal(t, span, read.span)
+		assert.Equal(t, "test-user", read.userID)
+	case <-time.After(5 * time.Second):
+		t.Fatal("SendMessage did not attempt the analytics DB read")
+	}
+
+	// first_message_sent is the last record, after both the read and the claim.
+	require.Eventually(t, func() bool {
+		return len(eventsForChat(out.records(t), "product.first_message_sent", fx.chatID)) == 1
+	}, 5*time.Second, 10*time.Millisecond)
+	recs := out.records(t)
+	sent := eventsForChat(recs, "product.message_sent", fx.chatID)
+	require.Len(t, sent, 1)
+	assert.Equal(t, resp.Msg.GetMessageId(), sent[0]["product.message_id"])
+	assert.Equal(t, true, sent[0]["product.is_first_in_chat"])
+	activation := eventsForChat(recs, "product.user_first_message", fx.chatID)
+	require.Len(t, activation, 1)
+	assert.Equal(t, resp.Msg.GetMessageId(), activation[0]["product.message_id"])
 }
 
 // An ordinary StartChat names no client_message_id. Its seed is stored under

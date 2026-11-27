@@ -31,7 +31,7 @@ func (s *Service) AcceptTriggerOffer(
 	if req.Msg.Rebinding == nil {
 		return nil, svcerr.InvalidArgument("rebinding is required: accepting an automation means choosing your own project, machine and connections for it")
 	}
-	t, err := s.deps.Repo.GetTrigger(ctx, offer.TriggerID)
+	t, err := s.deps.TriggerReads.GetTrigger(ctx, offer.TriggerID)
 	if err != nil && !errors.Is(err, core.ErrTriggerNotFound) {
 		return nil, dbError("get trigger", err)
 	}

@@ -12,10 +12,16 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/sdk/client"
 
+	"connectrpc.com/connect"
+	"github.com/reliant-labs/forge/pkg/svcerr"
+
 	"github.com/reliant-labs/forge/pkg/kcleval"
 	"github.com/reliant-labs/forge/pkg/testkit"
 	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
+	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/app"
+	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/handlers/pipeline"
 	"github.com/reliant-labs/reliant/internal/serveraction"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/internal/workersetup"
@@ -32,13 +38,20 @@ const (
 // RELIANT_PIPELINE_ENABLED set to value, or unset when set is false.
 func loadWorkerProcess(t *testing.T, value string, set bool) *config.ServerProcessConfig {
 	t.Helper()
+	return loadRoleProcess(t, "worker", value, set)
+}
+
+// loadRoleProcess loads `server <role>`'s ServerProcessConfig with
+// RELIANT_PIPELINE_ENABLED set to value, or unset when set is false.
+func loadRoleProcess(t *testing.T, role, value string, set bool) *config.ServerProcessConfig {
+	t.Helper()
 	isolateServerRoleEnv(t)
 	t.Setenv(pipelineSwitchEnv, "") // restores the original afterwards
 	require.NoError(t, os.Unsetenv(pipelineSwitchEnv))
 	if set {
 		t.Setenv(pipelineSwitchEnv, value)
 	}
-	process, err := config.LoadServerProcessConfig(findServerCmd(t, "worker"))
+	process, err := config.LoadServerProcessConfig(findServerCmd(t, role))
 	require.NoError(t, err)
 	return process
 }
@@ -204,4 +217,106 @@ func TestPipelineSwitchIsOffByDefault(t *testing.T) {
 	process = loadWorkerProcess(t, "true", true)
 	require.True(t, process.GetPipeline().GetEnabled())
 	assertWorkerServerActions(t, process, true)
+}
+
+// assertAPIPipelineService follows a loaded ServerProcessConfig to the
+// PipelineService the API server mounts, built as compose.go's newPipeline
+// builds it (the pipeline block of the process's ServerProcessConfig): off,
+// every rpc is FailedPrecondition naming the switch before anything is read;
+// on, a call gets past the switch (here to the caller check, as the call
+// carries no user).
+func assertAPIPipelineService(t *testing.T, process *config.ServerProcessConfig, wantOn bool) {
+	t.Helper()
+	store := &pipelineSwitchStore{}
+	svc, err := pipeline.New(pipeline.Deps{
+		Logger: testkit.DiscardLogger(), Config: &config.Config{},
+		Pipeline: process.GetPipeline(), Store: store,
+	})
+	require.NoError(t, err)
+	_, err = svc.GetPipelineState(context.Background(), connect.NewRequest(&reliantv1.GetPipelineStateRequest{RepoId: "r-1"}))
+	require.Error(t, err)
+	if wantOn {
+		require.Equal(t, connect.CodeUnauthenticated, svcerr.Code(err), "on: past the switch: %v", err)
+		return
+	}
+	require.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err), "off: refused by the switch: %v", err)
+	require.Contains(t, err.Error(), serveraction.SwitchName)
+	_, err = svc.EnrolRepository(context.Background(), connect.NewRequest(&reliantv1.EnrolRepositoryRequest{ProjectId: "p", Repository: "a/b"}))
+	require.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err), "off: enrol refused by the switch: %v", err)
+	require.Zero(t, store.calls, "off: nothing was read")
+}
+
+// pipelineSwitchStore is a PipelineService store that counts the reads it
+// gets: the switch refuses before any (any other call panics on the nil
+// embedded interface, which fails the test as loudly).
+type pipelineSwitchStore struct {
+	pipeline.Store
+	calls int
+}
+
+func (s *pipelineSwitchStore) GetPipelineRepo(context.Context, string) (*core.PipelineRepo, error) {
+	s.calls++
+	return nil, nil
+}
+
+func (s *pipelineSwitchStore) GetProject(context.Context, string) (*core.Project, error) {
+	s.calls++
+	return nil, nil
+}
+
+// TestPipelineSwitchReachesTheAPIServer is TestPipelineSwitchReachesTheWorkerDispatcher
+// for the API server (G4): an env's KCL projects RELIANT_PIPELINE_ENABLED into
+// the api root's env, `server api` loads it, and the PipelineService it
+// mounts refuses every rpc while it is off.
+func TestPipelineSwitchReachesTheAPIServer(t *testing.T) {
+	testkit.Slow(t, "evaluates deploy/kcl through `forge env kcl eval`",
+		testkit.Inputs("deploy/kcl/**"))
+
+	const fixture = "deploy/kcl/testdata/pipeline_switch.k"
+	project := kcleval.Options{ProjectDir: "../../..", Binary: pinnedForge(t)}
+	for _, tc := range []struct {
+		selector string
+		wantEnv  string
+		wantOn   bool
+	}{
+		{"switch_default_api", "false", false},
+		{"dev_api", "false", false},
+		{"demo_api", "false", false},
+		{"switch_on_api", "true", true},
+	} {
+		t.Run(tc.selector, func(t *testing.T) {
+			var env map[string]any
+			require.NoError(t, kcleval.Select(context.Background(), fixture, tc.selector, &env, project))
+			got, ok := env[pipelineSwitchEnv]
+			require.True(t, ok, "the API server's projected env has no %s: %v", pipelineSwitchEnv, env)
+			require.Equal(t, tc.wantEnv, got)
+
+			process := loadRoleProcess(t, "api", got.(string), true)
+			require.Equal(t, tc.wantOn, process.GetPipeline().GetEnabled(), "ServerProcessConfig.pipeline as loaded")
+			assertAPIPipelineService(t, process, tc.wantOn)
+		})
+	}
+}
+
+// The fast half for the API server: config_gen.k's api root carries the
+// switch, and with it unset the PipelineService refuses; set, it serves.
+func TestPipelineSwitchIsOffByDefaultOnTheAPIServer(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join("..", "..", "..", "deploy", "kcl", "config_gen.k"))
+	require.NoError(t, err)
+	kcl := string(raw)
+	start := strings.Index(kcl, `    "api" = Root {`)
+	require.GreaterOrEqual(t, start, 0, "config_gen.k's ROOTS has no api root")
+	api := kcl[start:]
+	if next := strings.Index(api[1:], "\n    \""); next >= 0 {
+		api = api[:next+1]
+	}
+	require.True(t, strings.Contains(api, `"`+pipelineSwitchEnv+`",`), "config_gen.k: the api root's env no longer carries %s", pipelineSwitchEnv)
+
+	process := loadRoleProcess(t, "api", "", false)
+	require.False(t, process.GetPipeline().GetEnabled())
+	assertAPIPipelineService(t, process, false)
+
+	process = loadRoleProcess(t, "api", "true", true)
+	require.True(t, process.GetPipeline().GetEnabled())
+	assertAPIPipelineService(t, process, true)
 }

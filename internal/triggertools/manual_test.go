@@ -12,6 +12,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/triggertools"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -96,12 +97,12 @@ func TestManualToolUsesServiceOwnershipWithoutEnabling(t *testing.T) {
 	_, err := e.svc.SetTriggerEnabled(ctx, connect.NewRequest(&reliantv1.SetTriggerEnabledRequest{Id: id, Enabled: false}))
 	require.NoError(t, err)
 	tool := tools.NewFireTriggerTool(tools.WithChats(e.repo), triggertools.New(e.svc))
-	before, err := e.repo.GetTrigger(context.Background(), id)
+	before, err := store.GetTrigger(context.Background(), e.repo.ORM(), id)
 	require.NoError(t, err)
 	resp := e.call(t, tool, tools.FireTriggerParams{TriggerID: id})
 	require.False(t, resp.IsError, resp.Content)
 	assert.Contains(t, resp.Content, "fire_workflow_id: fire")
-	after, err := e.repo.GetTrigger(context.Background(), id)
+	after, err := store.GetTrigger(context.Background(), e.repo.ORM(), id)
 	require.NoError(t, err)
 	assert.Equal(t, before, after, "manual firing cannot change activation configuration")
 	// Change the trigger's owner, not the chat: no caller-controlled owner exists.

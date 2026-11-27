@@ -88,7 +88,7 @@ func TestLiveInvalidWorkflowIsBrokenBeforeFireAndCannotResume(t *testing.T) {
 		admissionWorkflow + "invented_runtime_field: true\n",
 	} {
 		syncFile(definition)
-		row, err := env.repo.GetTrigger(env.ctx, id)
+		row, err := store.GetTrigger(env.ctx, env.repo.ORM(), id)
 		require.NoError(t, err)
 		rendered := env.svc.render(env.ctx, row)
 		assert.Equal(t, reliantv1.TriggerHealthStatus_TRIGGER_HEALTH_STATUS_BROKEN, rendered.GetHealth().GetStatus())
@@ -102,7 +102,7 @@ func TestLiveInvalidWorkflowIsBrokenBeforeFireAndCannotResume(t *testing.T) {
 		require.Error(t, err)
 	}
 	syncFile(admissionWorkflow)
-	row, err := env.repo.GetTrigger(env.ctx, id)
+	row, err := store.GetTrigger(env.ctx, env.repo.ORM(), id)
 	require.NoError(t, err)
 	assert.NotEqual(t, reliantv1.TriggerHealthStatus_TRIGGER_HEALTH_STATUS_BROKEN, env.svc.render(env.ctx, row).GetHealth().GetStatus())
 }

@@ -51,12 +51,12 @@ func (r *Repo) RecordDeliveryTriggerEvent(ctx context.Context, id, token string,
 			stored, err = r.TriggerDeliveryEvent(tx, linked, *event.TriggerID, event.UserID)
 			return err
 		}
-		if created, err = r.CreateTriggerEvent(tx, event); err != nil {
+		if created, err = store.InsertTriggerEventIfAbsent(tx, r.ORM(), event); err != nil {
 			return err
 		}
 		stored = event
 		if !created {
-			stored, err = r.GetTriggerEventByDedupe(tx, event.Kind, event.DedupeKey)
+			stored, err = store.GetTriggerEventByDedupe(tx, r.ORM(), event.Kind, event.DedupeKey)
 			if err != nil {
 				return err
 			}
