@@ -127,7 +127,7 @@ export function AskReliantNoProject({ forgeProject, onCancel, onHandoff, onRetry
                 <section className="space-y-2 border-t border-border pt-4" data-testid="ask-reliant-cloud-machine">
                   <h4 className="flex items-center gap-2 font-medium text-ink">
                     <Cloud className="h-4 w-4 text-ink-muted" aria-hidden="true" />
-                    Use a cloud machine: needs a plan
+                    Use a sandbox: needs a plan
                   </h4>
                   <p className="text-ink-muted">
                     Choose a plan in Billing, then add the sandbox from Settings › Agent sandboxes.{" "}
@@ -142,7 +142,7 @@ export function AskReliantNoProject({ forgeProject, onCancel, onHandoff, onRetry
             <div className="flex items-start gap-2" data-testid="ask-reliant-add-project-step">
               <FolderPlus className="mt-0.5 h-4 w-4 shrink-0 text-ink-muted" aria-hidden="true" />
               <p className="text-ink">
-                Add the app&apos;s code as a project: clone its repository onto a cloud machine, or open the folder it is in on your own computer. Then ask again.
+                Add the app&apos;s code as a project: clone its repository onto a sandbox, or open the folder it is in on your own computer. Then ask again.
                 {repo && (
                   <>
                     {" "}
