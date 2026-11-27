@@ -15,6 +15,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/accesstokenclient"
 	"github.com/reliant-labs/reliant/internal/credentials/connectionvault"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/dblock"
 	"github.com/reliant-labs/reliant/internal/featuregate"
 	gtmsvc "github.com/reliant-labs/reliant/internal/gtm"
 	"github.com/reliant-labs/reliant/internal/orgs"
@@ -163,4 +164,56 @@ func TestGtmConnections_State(t *testing.T) {
 			assert.Equal(t, tc.want, got)
 		})
 	}
+}
+
+// No bucket is assets off, and so no sweep; a bucket without its endpoint or
+// credentials fails boot; a whole one gives both domains the store and the
+// api its sweep.
+func TestGtmAssets(t *testing.T) {
+	off, err := NewGtmAssets(GtmAssetsDeps{Config: &config.Config{}})
+	require.NoError(t, err)
+	assert.Nil(t, off.Store)
+	sweep, err := NewGtmAssetSweep(GtmAssetSweepDeps{Assets: off})
+	require.NoError(t, err)
+	assert.Nil(t, sweep, "no sweep without a bucket")
+
+	_, err = NewGtmAssets(GtmAssetsDeps{Config: &config.Config{GtmAssets: &configv1.GtmAssetsConfig{Bucket: "gtm-assets"}}})
+	require.Error(t, err)
+
+	on, err := NewGtmAssets(GtmAssetsDeps{Config: &config.Config{GtmAssets: &configv1.GtmAssetsConfig{
+		Bucket: "gtm-assets", Endpoint: "https://s3.example.com", Region: "us-east-1", AccessKeyId: "id", SecretAccessKey: "secret",
+	}}})
+	require.NoError(t, err)
+	require.NotNil(t, on.Store)
+
+	env := storetest.New(t)
+	sweep, err = NewGtmAssetSweep(GtmAssetSweepDeps{DB: env.Repo, Assets: on})
+	require.NoError(t, err)
+	require.NotNil(t, sweep)
+}
+
+// A pass sweeps only on the replica that holds the sweep's lock.
+func TestGtmAssetSweep_OnlyTheLockHolderSweeps(t *testing.T) {
+	env := storetest.New(t)
+	on, err := NewGtmAssets(GtmAssetsDeps{Config: &config.Config{GtmAssets: &configv1.GtmAssetsConfig{
+		Bucket: "gtm-assets", Endpoint: "https://s3.example.com", Region: "us-east-1", AccessKeyId: "id", SecretAccessKey: "secret",
+	}}})
+	require.NoError(t, err)
+	sweep, err := NewGtmAssetSweep(GtmAssetSweepDeps{DB: env.Repo, Assets: on})
+	require.NoError(t, err)
+
+	var asked []dblock.Key
+	released := 0
+	for _, held := range []bool{false, true} {
+		sweep.locker = &dblock.MockService{TryLockFunc: func(_ context.Context, key dblock.Key) (func(), bool, error) {
+			asked = append(asked, key)
+			if !held {
+				return func() {}, false, nil
+			}
+			return func() { released++ }, true, nil
+		}}
+		sweep.pass(context.Background())
+	}
+	assert.Equal(t, []dblock.Key{dblock.GtmAssetSweep, dblock.GtmAssetSweep}, asked)
+	assert.Equal(t, 1, released, "the holder sweeps (no stale rows here) and releases the lock")
 }

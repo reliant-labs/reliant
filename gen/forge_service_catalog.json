@@ -51,6 +51,8 @@
         "GitHubAccess",
         "GitHubAccessLoop",
         "Gtm",
+        "GtmAssetSweep",
+        "GtmAssets",
         "HTTPRoutes",
         "Inbox",
         "InputOptions",
@@ -537,6 +539,7 @@
         "Database",
         "DebugServer",
         "FeatureGate",
+        "GtmAssets",
         "IntegrationSettings",
         "IntegrationsWriteledger",
         "LedgerRetention",
@@ -63079,6 +63082,30 @@
       "source": {
         "path": "internal/handlers/gtm/service.go",
         "symbol": "New"
+      },
+      "methods": [],
+      "implementation_candidates": []
+    },
+    {
+      "id": "GtmAssetSweep",
+      "name": "GtmAssetSweep",
+      "kind": "provider",
+      "type": "*github.com/reliant-labs/reliant/internal/app.GtmAssetSweep",
+      "source": {
+        "path": "internal/app/providers_gtm.go",
+        "symbol": "NewGtmAssetSweep"
+      },
+      "methods": [],
+      "implementation_candidates": []
+    },
+    {
+      "id": "GtmAssets",
+      "name": "GtmAssets",
+      "kind": "provider",
+      "type": "*github.com/reliant-labs/reliant/internal/app.GtmAssets",
+      "source": {
+        "path": "internal/app/providers_gtm.go",
+        "symbol": "NewGtmAssets"
       },
       "methods": [],
       "implementation_candidates": []

@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"time"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
@@ -13,12 +14,15 @@ import (
 	"github.com/reliant-labs/reliant/internal/credentials/connectionvault"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/dblock"
 	"github.com/reliant-labs/reliant/internal/featuregate"
 	gtmsvc "github.com/reliant-labs/reliant/internal/gtm"
 	"github.com/reliant-labs/reliant/internal/gtm/analytics"
+	"github.com/reliant-labs/reliant/internal/gtm/assetstore"
 	"github.com/reliant-labs/reliant/internal/gtm/email"
 	"github.com/reliant-labs/reliant/internal/integrations/httpaction"
 	"github.com/reliant-labs/reliant/internal/integrations/writeledger"
+	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/netguard"
 	"github.com/reliant-labs/reliant/internal/orgs"
 	"github.com/reliant-labs/reliant/pkg/config"
@@ -39,11 +43,15 @@ import (
 // product analytics through the control plane and sends approved emails
 // through the run owner's Gmail.
 //
-// Neither has chat attachments (gtmsvc.Deps.Attachments) or asset storage
-// (gtmsvc.Deps.Assets) yet, so attach_gtm_asset and the asset upload and
-// download rpcs answer unavailable. An attachment row names its owner but no
-// org or chat, and the domain must not copy one user's file from another
-// org's chat into this org's workspace.
+// Both hold the GTM assets bucket (GTM_ASSETS_*, GtmAssets): the api for the
+// upload and download rpcs, the worker for attach_gtm_asset. With no bucket
+// configured, assets are off and those answer unavailable. Only the api runs
+// the stale-PENDING sweep (GtmAssetSweep), on one replica at a time.
+//
+// Neither has chat attachments (gtm.Deps.Attachments): an attachment row
+// names its owner but no org or chat, and the domain must not copy one user's
+// file from another org's chat into this org's workspace. attach_gtm_asset
+// answers unavailable until that is decided.
 
 // FeatureGateDeps is the allowlist the gate reads and the membership it asks.
 type FeatureGateDeps struct {
@@ -86,6 +94,7 @@ type GtmDomainDeps struct {
 	DB              *db.Repo
 	Gate            featuregate.Gate
 	ConnectionVault connectionvault.Service
+	Assets          *GtmAssets
 }
 
 // NewGtmDomain builds the api-server's domain: no email sender and no
@@ -97,6 +106,7 @@ func NewGtmDomain(d GtmDomainDeps) (*GtmDomain, error) {
 		Store:       gtmsvc.NewStore(d.DB.ORM()),
 		Gate:        d.Gate,
 		Connections: gtmConnections{store: d.ConnectionVault},
+		Assets:      d.Assets.store(),
 	})}, nil
 }
 
@@ -121,6 +131,7 @@ type WorkerGtmDomainDeps struct {
 	ControlPlane    *configv1.ControlPlaneConfig
 	Config          *config.Config
 	Logger          *slog.Logger
+	Assets          *GtmAssets
 }
 
 // NewWorkerGtmDomain builds the worker's domain. Analytics is off without a
@@ -140,11 +151,116 @@ func NewWorkerGtmDomain(d WorkerGtmDomainDeps) (*WorkerGtmDomain, error) {
 		Analytics:   gtmAnalytics(d.ControlPlane, d.Config, log),
 		Email:       gtmEmail(d.Credentials, d.WriteLedger, log),
 		Connections: gtmConnections{store: d.ConnectionVault},
+		Assets:      d.Assets.store(),
 	})
 	return &WorkerGtmDomain{
 		Service: svc,
 		Email:   email.NewApprover(svc, email.NewConnectionAccounts(d.ConnectionVault)),
 	}, nil
+}
+
+// GtmAssets is the GTM assets bucket (internal/gtm/assetstore over forge
+// blobstore), shared by the process's GTM domain and its sweep.
+type GtmAssets struct {
+	// Store is nil when no bucket is configured: assets are off.
+	Store gtmsvc.AssetStore
+}
+
+// GtmAssetsDeps is the config the bucket is read from
+// (ReliantConfig.gtm_assets, GTM_ASSETS_*).
+type GtmAssetsDeps struct {
+	Config *config.Config
+}
+
+// NewGtmAssets opens the bucket. No GTM_ASSETS_BUCKET is assets off, never
+// an error; a bucket without its endpoint or credentials fails boot (the
+// config's own validation refuses it at load too).
+func NewGtmAssets(d GtmAssetsDeps) (*GtmAssets, error) {
+	blobs, err := assetstore.StoreFromConfig(d.Config.GetGtmAssets())
+	if err != nil {
+		return nil, err
+	}
+	if blobs == nil {
+		slog.Default().Info("gtm: assets off: GTM_ASSETS_BUCKET is not set")
+	}
+	return &GtmAssets{Store: assetstore.New(blobs)}, nil
+}
+
+// store is a's AssetStore, nil (assets off) for a nil a.
+func (a *GtmAssets) store() gtmsvc.AssetStore {
+	if a == nil {
+		return nil
+	}
+	return a.Store
+}
+
+// gtmAssetSweepInterval is how often the api looks for stale PENDING assets.
+const gtmAssetSweepInterval = time.Hour
+
+// GtmAssetSweep deletes GTM assets left PENDING past
+// assetstore.StalePendingAge, whose org never came back to finish or retry
+// the upload. It runs in the api root only, and each pass on one replica:
+// the one that holds dblock.GtmAssetSweep; the others skip theirs.
+type GtmAssetSweep struct {
+	sweeper *assetstore.Sweeper
+	locker  dblock.Service
+}
+
+// GtmAssetSweepDeps is the database the asset rows live in and the bucket
+// their objects are in.
+type GtmAssetSweepDeps struct {
+	DB     *db.Repo
+	Assets *GtmAssets
+}
+
+// NewGtmAssetSweep is the sweep, or nothing (nil) with assets off.
+//
+//forge:root-only api
+func NewGtmAssetSweep(d GtmAssetSweepDeps) (*GtmAssetSweep, error) {
+	if d.Assets.store() == nil {
+		return nil, nil
+	}
+	locker, err := dblock.NewInstrumented(dblock.Deps{Sessions: d.DB.SessionPool()})
+	if err != nil {
+		return nil, err
+	}
+	return &GtmAssetSweep{
+		sweeper: assetstore.NewSweeper(assetstore.SweeperDeps{DB: d.DB.ORM(), Assets: d.Assets.Store}),
+		locker:  locker,
+	}, nil
+}
+
+// Run sweeps hourly until ctx ends.
+func (s *GtmAssetSweep) Run(ctx context.Context) error {
+	ticker := time.NewTicker(gtmAssetSweepInterval)
+	defer ticker.Stop()
+	for {
+		s.pass(ctx)
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-ticker.C:
+		}
+	}
+}
+
+func (s *GtmAssetSweep) pass(ctx context.Context) {
+	release, ok, err := s.locker.TryLock(ctx, dblock.GtmAssetSweep)
+	if err != nil {
+		logging.WarnContext(ctx, "gtm: stale asset sweep: taking the lock failed", "error", err)
+		return
+	}
+	if !ok {
+		return
+	}
+	defer release()
+	res, err := s.sweeper.SweepStalePending(ctx, time.Now())
+	switch {
+	case err != nil && ctx.Err() == nil:
+		logging.WarnContext(ctx, "gtm: stale asset sweep pass failed", "deleted", res.Deleted, "orphaned", res.Orphaned, "error", err)
+	case res.Deleted > 0:
+		logging.InfoContext(ctx, "gtm: stale asset sweep pass", "deleted", res.Deleted, "orphaned", res.Orphaned)
+	}
 }
 
 // gtmAnalytics is the product-analytics read over the control plane's
@@ -190,7 +306,7 @@ func gtmEmail(creds *WorkerIntegrationCredentials, ledger writeledger.Service, l
 	return sender
 }
 
-// gtmConnections is gtmsvc.Connections over the saved connections: whether the
+// gtmConnections is gtm.Connections over the saved connections: whether the
 // actor has a live connection of an integration, for an INTEGRATED channel's
 // connection_state. Display only, never authorization. It reads as
 // email.NewConnectionAccounts (and connections.Resolver) do: a named

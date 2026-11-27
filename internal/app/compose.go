@@ -2142,6 +2142,24 @@ func (g *Graph) newGtmDomain() (*GtmDomain, error) {
 		DB:              g.Database(),
 		Gate:            g.FeatureGate(),
 		ConnectionVault: g.CredentialsConnectionvault(),
+		Assets:          g.GtmAssets(),
+	})
+}
+
+// newGtmAssets constructs the GtmAssets provider (NewGtmAssets,
+// internal/app/providers_gtm.go): the GTM assets bucket, or none.
+func (g *Graph) newGtmAssets() (*GtmAssets, error) {
+	return NewGtmAssets(GtmAssetsDeps{
+		Config: g.Cfg,
+	})
+}
+
+// newGtmAssetSweep constructs the GtmAssetSweep provider (NewGtmAssetSweep,
+// internal/app/providers_gtm.go).
+func (g *Graph) newGtmAssetSweep() (*GtmAssetSweep, error) {
+	return NewGtmAssetSweep(GtmAssetSweepDeps{
+		DB:     g.Database(),
+		Assets: g.GtmAssets(),
 	})
 }
 
@@ -2157,5 +2175,6 @@ func (g *Graph) newWorkerGtmDomain() (*WorkerGtmDomain, error) {
 		ControlPlane:    g.ServerProcessConfig.GetControlPlane(),
 		Config:          g.Cfg,
 		Logger:          g.Log,
+		Assets:          g.GtmAssets(),
 	})
 }
