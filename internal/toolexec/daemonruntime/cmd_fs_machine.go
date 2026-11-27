@@ -178,7 +178,11 @@ func readMachineDir(dir *os.File, path, viewerRoot string) ([]fsMachineDirEntry,
 				machineSymlinkOpened(full)
 				info, statErr := target.Stat()
 				if statErr == nil && daemonpolicy.CheckViewerFile(target, full, viewerRoot) == nil {
-					fi = info
+					// Stat the original path too: checking its resolved spelling
+					// alone does not establish that the link still names target.
+					if current, err := os.Stat(full); err == nil && os.SameFile(info, current) {
+						fi = info
+					}
 				}
 				_ = target.Close()
 			}
