@@ -34,7 +34,7 @@ import Modal from "@/components/forge-ui/modal";
 import SkeletonLoader from "@/components/forge-ui/skeleton_loader";
 import Tag from "@/components/forge-ui/tag";
 import Textarea from "@/components/forge-ui/textarea";
-import { GtmChannelMode, GtmItemFormat, GtmItemStatus, type GtmChannel, type GtmClaimFinding, type GtmItem } from "@/gen/reliant/v1/gtm_pb";
+import { GtmChannelMode, GtmChannelStatus, GtmItemFormat, GtmItemStatus, type GtmChannel, type GtmClaimFinding, type GtmItem } from "@/gen/reliant/v1/gtm_pb";
 import { useCheckClaims, useGetIdea, useListCampaigns, useListChannels, useResolveItemSend, useUpdateItem } from "@/hooks/gtm-service-hooks_gen";
 import { gtmIdeaPath } from "@/lib/paths";
 
@@ -42,7 +42,7 @@ import { AssetPanel } from "./Assets";
 import { useGtmOrgId } from "./GtmShell";
 import { canApprove, canEdit, canMarkPublished, canPause, canResume, canSchedule, editReturnsToReview, isEmailItem, isHeld, postsByHand } from "./lifecycle";
 import { EmailSendNote, PersonActionButton, PersonActionDialog, PersonOnlyTag } from "./PersonAction";
-import { Fields, formatAndChannel, formatLabel, formatWhen, ITEM_FORMATS, ItemStatusBadge } from "./ui";
+import { Fields, formatAndChannel, formatLabel, formatWhen, ITEM_FORMATS, ItemStatusBadge, OutboundLink } from "./ui";
 import { useGtmWriteError } from "./writes";
 
 export function ItemDialog({ item, onClose }: { item: GtmItem | null; onClose: () => void }) {
@@ -69,19 +69,12 @@ function OpenItemDialog({ item, onClose }: { item: GtmItem; onClose: () => void 
   const campaign = campaigns.data?.campaigns.find((c) => c.id === item.campaignId);
   const isEmail = isEmailItem(item);
   const [editing, setEditing] = useState(false);
-  const [title, setTitle] = useState(item.title);
-  const [body, setBody] = useState(item.bodyMd);
-  const [format, setFormat] = useState<GtmItemFormat>(item.format);
-  const [channelId, setChannelId] = useState(item.channelId);
-  const checked = useDebounced(editing ? body : item.bodyMd, 600);
-  const onError = useGtmWriteError();
-  const save = useUpdateItem({ onSuccess: () => setEditing(false), onError });
-  const cancelEdit = () => {
-    setTitle(item.title);
-    setBody(item.bodyMd);
-    setFormat(item.format);
-    setChannelId(item.channelId);
+  // The body being edited, for the live claim check; null when not editing.
+  const [draftBody, setDraftBody] = useState<string | null>(null);
+  const checked = useDebounced(editing && draftBody !== null ? draftBody : item.bodyMd, 600);
+  const stopEditing = () => {
     setEditing(false);
+    setDraftBody(null);
   };
 
   return (
@@ -117,10 +110,10 @@ function OpenItemDialog({ item, onClose }: { item: GtmItem; onClose: () => void 
                   {
                     label: "Went out at",
                     value: (
-                      <Link href={item.publishedUrl} className="inline-flex items-center gap-1 break-all underline underline-offset-2">
+                      <OutboundLink url={item.publishedUrl} className="inline-flex items-center gap-1 break-all underline underline-offset-2">
                         {item.publishedUrl.replace(/^https?:\/\//, "")}
                         <ExternalLink className="size-3 shrink-0" aria-hidden="true" />
-                      </Link>
+                      </OutboundLink>
                     ),
                   },
                 ]
@@ -145,56 +138,10 @@ function OpenItemDialog({ item, onClose }: { item: GtmItem; onClose: () => void 
             )}
           </div>
           {editing ? (
-            <div className="space-y-3" data-testid="gtm-item-edit">
-              {editReturnsToReview(item) && (
-                <p className="rounded-lg border border-border bg-surface-muted px-3 py-2 text-ink-muted" data-testid="gtm-item-edit-review-note">
-                  This item is approved. Saving an edit sends it back to review: it needs approving again.
-                </p>
-              )}
-              <Input aria-label="Title" value={title} onChange={(e) => setTitle(e.target.value)} />
-              <div className="grid gap-3 sm:grid-cols-2">
-                <select aria-label="Format" className={SELECT} value={format} onChange={(e) => setFormat(Number(e.target.value) as GtmItemFormat)}>
-                  {ITEM_FORMATS.map((f) => (
-                    <option key={f} value={f}>
-                      {formatLabel(f)}
-                    </option>
-                  ))}
-                </select>
-                <select aria-label="Channel" className={SELECT} value={channelId} onChange={(e) => setChannelId(e.target.value)}>
-                  <option value="">No channel yet</option>
-                  {channels.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <Textarea aria-label="Body" value={body} onChange={(e) => setBody(e.target.value)} rows={10} resize="vertical" />
-              <div className="flex justify-end gap-2">
-                <Button variant="secondary" size="sm" onClick={cancelEdit} disabled={save.isPending}>
-                  Cancel
-                </Button>
-                <Button
-                  variant="primary"
-                  size="sm"
-                  loading={save.isPending}
-                  disabled={title.trim() === ""}
-                  onClick={() =>
-                    save.mutate({
-                      orgId,
-                      id: item.id,
-                      expectedRevision: item.revision,
-                      ...(title !== item.title ? { title: title.trim() } : {}),
-                      ...(body !== item.bodyMd ? { bodyMd: body } : {}),
-                      ...(format !== item.format ? { format } : {}),
-                      ...(channelId !== item.channelId ? { channelId } : {}),
-                    })
-                  }
-                >
-                  Save
-                </Button>
-              </div>
-            </div>
+            // Keyed on the revision: when the item moves under the editor (a
+            // conflict re-reads it), the fields start again from the current
+            // version, so a second Save cannot overwrite what changed.
+            <ItemEditor key={`${item.id}@${item.revision}`} item={item} channels={channels} onBodyChange={setDraftBody} onDone={stopEditing} />
           ) : (
             <div className="max-h-72 overflow-auto whitespace-pre-wrap rounded-lg border border-border bg-surface-sunken p-3 text-sm text-ink">
               {item.bodyMd || "Empty."}
@@ -212,6 +159,90 @@ function OpenItemDialog({ item, onClose }: { item: GtmItem; onClose: () => void 
       </div>
     </Modal>
   );
+}
+
+/**
+ * The edit form, on one revision of the item: it sends only the fields that
+ * changed, against that revision. The parent remounts it when the revision
+ * moves.
+ */
+function ItemEditor({
+  item,
+  channels,
+  onBodyChange,
+  onDone,
+}: {
+  item: GtmItem;
+  channels: GtmChannel[];
+  onBodyChange: (body: string) => void;
+  onDone: () => void;
+}) {
+  const orgId = useGtmOrgId();
+  const [title, setTitle] = useState(item.title);
+  const [body, setBody] = useState(item.bodyMd);
+  const [format, setFormat] = useState<GtmItemFormat>(item.format);
+  const [channelId, setChannelId] = useState(item.channelId);
+  const onError = useGtmWriteError();
+  const save = useUpdateItem({ onSuccess: onDone, onError });
+  useEffect(() => onBodyChange(body), [body, onBodyChange]);
+
+  return (
+    <div className="space-y-3" data-testid="gtm-item-edit">
+      {editReturnsToReview(item) && (
+        <p className="rounded-lg border border-border bg-surface-muted px-3 py-2 text-ink-muted" data-testid="gtm-item-edit-review-note">
+          This item is approved. Saving an edit sends it back to review: it needs approving again.
+        </p>
+      )}
+      <Input aria-label="Title" value={title} onChange={(e) => setTitle(e.target.value)} />
+      <div className="grid gap-3 sm:grid-cols-2">
+        <select aria-label="Format" className={SELECT} value={format} onChange={(e) => setFormat(Number(e.target.value) as GtmItemFormat)}>
+          {ITEM_FORMATS.map((f) => (
+            <option key={f} value={f}>
+              {formatLabel(f)}
+            </option>
+          ))}
+        </select>
+        <select aria-label="Channel" className={SELECT} value={channelId} onChange={(e) => setChannelId(e.target.value)}>
+          <option value="">No channel yet</option>
+          {pickableChannels(channels, item.channelId).map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name}
+            </option>
+          ))}
+        </select>
+      </div>
+      <Textarea aria-label="Body" value={body} onChange={(e) => setBody(e.target.value)} rows={10} resize="vertical" />
+      <div className="flex justify-end gap-2">
+        <Button variant="secondary" size="sm" onClick={onDone} disabled={save.isPending}>
+          Cancel
+        </Button>
+        <Button
+          variant="primary"
+          size="sm"
+          loading={save.isPending}
+          disabled={title.trim() === ""}
+          onClick={() =>
+            save.mutate({
+              orgId,
+              id: item.id,
+              expectedRevision: item.revision,
+              ...(title !== item.title ? { title: title.trim() } : {}),
+              ...(body !== item.bodyMd ? { bodyMd: body } : {}),
+              ...(format !== item.format ? { format } : {}),
+              ...(channelId !== item.channelId ? { channelId } : {}),
+            })
+          }
+        >
+          Save
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+/** The channels an item may move to: none archived, except the one it is already on. */
+export function pickableChannels(channels: GtmChannel[], currentId: string): GtmChannel[] {
+  return channels.filter((c) => c.status !== GtmChannelStatus.ARCHIVED || c.id === currentId);
 }
 
 function ChannelValue({ channel }: { channel: GtmChannel }) {
