@@ -1,0 +1,119 @@
+---
+title: "Declare a status page for your app's users"
+sidebarTitle: "Status page"
+description: "forge.StatusPage turns an environment's uptime checks into public components, and forge/pkg/statuspage renders the forge.status/v1 document to HTML, an Atom feed and JSON. Opt-in; what is declared, what is never public, and what is not built yet."
+keywords: ["forge status page", "forge.StatusPage", "uptime checks", "statuspage render", "forge.status/v1"]
+---
+
+{/* verified: 2026-11-27 · sources: forge v1.12.0 kcl/schema.k (StatusPage), pkg/statuspage (doc.go, document.go, render.go, state.go), skills observability/status-page and observability/uptime; control-plane docs/observability/status-page.md (the platform's own page, cp main after v1.33.0); rendered on forge main */}
+
+A status page tells your app's users whether it works: one row per component, its current state, 90 days of daily availability, and the incidents and maintenance you have announced. Forge builds it from the [uptime checks](#where-the-checks-come-from) the platform already runs against your environment, so there is no second monitor to set up.
+
+A status page is **opt-in**. An environment that does not declare `forge.StatusPage` gets no page: nothing is rendered, recorded or published, and no scaffold adds one. It needs forge v1.12.0 or later.
+
+<Warning>
+**What exists today.** The declaration, the validation and the renderer are in forge v1.12.0. Hosting a public page for your own app on Reliant is not built yet: publishing a page, publishing incidents and maintenance, and serving it from a hostname of yours are control-plane work that has not shipped. Reliant's own page, [status.reliantlabs.io](https://status.reliantlabs.io), runs on the same document format. What you can do now is declare the components, read them from `forge env shape`, and render the page yourself from a document you fill in.
+</Warning>
+
+## Where the checks come from
+
+An uptime check is an outside-in HTTP request that the platform's prober makes on a schedule, from its own cluster, and writes into the environment's telemetry. A **hosted** environment is probed with nothing declared: forge derives one `GET /` check per hosted frontend, per hosted workload with an exposed port, and per route that names a public host. Each defaults to a 60 second interval and a 10 second timeout, and counts a 2xx or 3xx answer as up. A route's own path may legitimately answer 404 or ask for a login, so a route check counts any answer below 500 as up.
+
+You declare more checks, or replace a derived one by reusing its name, with `forge.Uptime`:
+
+```python
+uptime = forge.Uptime {
+    checks = [
+        forge.UptimeCheck {name = "checkout", url = "https://shop.example.com/healthz", expect_body = "ok"}
+        forge.UptimeCheck {name = "api-ready", target = "api", path = "/readyz"}
+    ]
+    skip = ["route-admin"]      # drop one derived check; `defaults = False` drops them all
+}
+```
+
+A check has exactly one target: a public `url`, a `route` of the same bundle, or a hosted `target` workload or frontend. The prober dials public addresses only, and a `url` that names a loopback, private, link-local or cluster-internal host is refused when you render. The environment's default alerts fire when a check fails three probes in a row, and when a certificate is within 14 days of expiring. Read the raw probes with `forge obs metrics query prod uptime.check.up --group-by check --since 3h`.
+
+## Declare the components
+
+A component is a public name for one or more of the environment's uptime checks. Add `status_page` to the environment's bundle in `deploy/kcl/<env>/main.k`:
+
+```python
+uptime = forge.Uptime {
+    checks = [forge.UptimeCheck {name = "api-ready", target = "api", path = "/readyz"}]
+}
+status_page = forge.StatusPage {
+    title = "Acme status"
+    logo_url = "https://acme.com/logo.svg"          # https only
+    accent_color = "#5b21b6"                         # decoration only, never a text colour
+    links = [forge.StatusLink {label = "Support", url = "https://acme.com/help"}]
+    components = [
+        forge.StatusComponent {name = "Website", checks = ["web"]}
+        forge.StatusComponent {name = "API", checks = ["api-ready", "route-billing"], description = "REST and webhooks"}
+    ]
+}
+```
+
+Every hosted environment is probed with no declaration: forge derives one check per hosted frontend, per hosted workload that exposes a port, and per route that names a public host. The `checks` of a component must name checks in the environment's final list, meaning the derived ones minus any you `skip`, plus the ones you declare in `forge.Uptime.checks`. Render refuses any other name and lists the checks the environment does have, so a typo fails before a deploy.
+
+The page is opt-in per component. A check that no component names never appears on it, which is how a derived check such as `route-admin` stays off a public page. A component's state is the worst state among its checks.
+
+The other rules are limits: 1 to 50 components with unique names of up to 64 characters, a description up to 200 characters, a title up to 100, at most 10 links, and `http(s)` link URLs with no credential. The logo must be `https`, and the accent color a `#rrggbb` value.
+
+Check the result with `forge env shape prod --json`. The resolved page is recorded in the release shape as `status_page`, with each component's checks sorted and the components in the order you wrote them.
+
+## Declaring a page does not publish it
+
+The declaration holds what the page says. It does not hold whether the page is public. Going public is a separate, audited step taken by a person in the control plane, like binding a domain, so rolling back a release can neither publish nor unpublish a page. Incidents, maintenance windows and their updates are live control-plane state too, written by people, which an agent may draft but not publish.
+
+## States a component can be in
+
+| State | When |
+|---|---|
+| operational | every check's newest probe passed, and none has an open run of failures |
+| degraded | a recent probe failed, but no run reached 3 failures |
+| outage | an uptime incident is open on a check, which means 3 or more failed probes in a row |
+| maintenance | a published maintenance window covering the component is active |
+| no data | the newest probe is older than 15 minutes, or there are none. This is never shown as operational |
+
+A person can override a component's state, for example to dismiss a single-region false positive, and the page then labels it "set manually". Each state appears as an icon and a word, never as a color alone.
+
+## Render a page yourself
+
+The page is one JSON document, `forge.status/v1`, and one renderer, both in the Go package `forge/pkg/statuspage` (`forge project libraries statuspage` prints its API). `statuspage.Render(doc)` validates the document and returns three files:
+
+| File | Contents |
+|---|---|
+| `index.html` | the page: no JavaScript, no third-party script, a strict content-security policy |
+| `feed.atom` | one entry per incident and per maintenance window |
+| `status.json` | the canonical document |
+
+```go
+doc := statuspage.Document{
+    Schema:      statuspage.Schema, // "forge.status/v1"
+    GeneratedAt: time.Now().UTC(),
+    Page:        statuspage.Page{Title: "Acme status"},
+    Components: []statuspage.Component{{
+        Name:  "API",
+        State: statuspage.StateOperational,
+        Days:  []statuspage.Day{{Date: "2026-11-26", Availability: &up}},
+    }},
+}
+out, err := statuspage.Render(doc)
+// out.Index, out.Feed and out.JSON hold the three files; out.Files() keys them by name.
+```
+
+The same document always produces the same bytes, so a publisher can compare digests and write only on a change. `statuspage.Decode` reads a `status.json` back and refuses an unknown schema or field. You do not need a Reliant account for any of this: fill a document from your own monitor and the same page renders. A team that wants its own design can build it from `status.json` instead of using `index.html`.
+
+## What a public page never shows
+
+The document is an allowlist, and a test pins its fields so none can become public without someone deciding it should. It carries the page's title, logo, links and accent color, the component names, descriptions and states, daily availability, and the text and times of published incidents and maintenance. It never carries check names, URLs or hostnames, HTTP statuses, error types, latency, certificate expiry, environment, organization or project ids, alert names, issue titles, who published an update, whether an agent drafted it, or any draft. Update bodies are plain text: blank lines make paragraphs, and every character is escaped, so no HTML or Markdown reaches the page.
+
+## Limits to plan around
+
+Probes run from one region, the platform's own cluster, so a check cannot tell a regional network problem from an outage. A page served by the same platform as your hosted app goes down with it if the platform's static hosting is down. Both are properties of the first version, and the second is a reason to host the page somewhere independent once publishing ships.
+
+## Related topics
+
+- [Hosted dashboards, alerts and issues](/hosting/observability/dashboards-and-alerts): where the alerts on a failing check land
+- [Limits](/hosting/limits): the live availability of Reliant's own services, on its public status page
+- [Querying with forge obs](/hosting/observability/forge-obs): read the probe results behind a component

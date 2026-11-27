@@ -1,7 +1,7 @@
 const common = require('./electron-builder.common.js');
 
 // Dev packaging should not run notarization hooks.
-// Production/alpha configs continue to use common.afterSign.
+// The production config continues to use common.afterSign.
 const { afterSign: _afterSign, ...commonWithoutAfterSign } = common;
 
 /**

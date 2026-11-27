@@ -15,7 +15,7 @@ import (
 )
 
 // forge:section MockService
-// forge:hash=3b2144afb78257560ab6974e86726ab1377ddb968ccd561377c93cc3e0902d31
+// forge:hash=9cc1ffd7a609230ad2933e72c08ecd82366f3858b911cb053789b39e5a73dcca
 
 // MockService is a test mock for the Service interface.
 //
@@ -25,7 +25,8 @@ import (
 // "MockService.<Method>Func not set" error.
 type MockService struct {
 	contractkit.Recorder
-	TryLockFunc func(context.Context, Key) (func(), bool, error)
+	TryLockFunc      func(context.Context, Key) (func(), bool, error)
+	TryLockNamedFunc func(context.Context, string) (func(), bool, error)
 }
 
 // TryLock records the call and delegates to TryLockFunc when set.
@@ -35,6 +36,15 @@ func (m *MockService) TryLock(ctx context.Context, key Key) (func(), bool, error
 		return m.TryLockFunc(ctx, key)
 	}
 	return nil, false, contractkit.MockNotSet("MockService", "TryLock")
+}
+
+// TryLockNamed records the call and delegates to TryLockNamedFunc when set.
+func (m *MockService) TryLockNamed(ctx context.Context, name string) (func(), bool, error) {
+	m.Recorder.Record("TryLockNamed", ctx, name)
+	if m.TryLockNamedFunc != nil {
+		return m.TryLockNamedFunc(ctx, name)
+	}
+	return nil, false, contractkit.MockNotSet("MockService", "TryLockNamed")
 }
 
 // Compile-time check.
