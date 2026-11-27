@@ -132,7 +132,7 @@ func (a *ExecuteToolsActivity) persistToolMedia(ctx context.Context, tec *toolEx
 		if _, ok := shown[hash]; ok {
 			continue
 		}
-		id, err := a.storeToolMedia(ctx, userID, tec.toolName, i, normalized, attType)
+		id, err := a.storeToolMedia(ctx, userID, chatOrg(tec.chat), tec.toolName, i, normalized, attType)
 		if err != nil {
 			logging.ErrorContext(ctx, "[ExecuteTools] Failed to persist tool result media; the model will not see it",
 				"chat_id", tec.getChatID(), "tool", tec.toolName, "tool_call_id", tec.toolCallID,
@@ -228,7 +228,7 @@ func bmpToPNG(data []byte) ([]byte, error) {
 // storeToolMedia writes one part as an attachment row, the substrate every
 // process can read: neither the api server nor the worker can see the
 // machine's disk the bytes came from.
-func (a *ExecuteToolsActivity) storeToolMedia(ctx context.Context, userID, toolName string, index int, part message.BinaryContent, attType attachment.AttachmentType) (string, error) {
+func (a *ExecuteToolsActivity) storeToolMedia(ctx context.Context, userID string, orgID *string, toolName string, index int, part message.BinaryContent, attType attachment.AttachmentType) (string, error) {
 	id := uuid.New().String()
 	fileHash := contentHash(part.Data)
 	filename := toolMediaFilename(part, toolName, index)
@@ -243,6 +243,7 @@ func (a *ExecuteToolsActivity) storeToolMedia(ctx context.Context, userID, toolN
 		FilePath:       filepath.Join(userID, id, filename),
 		AttachmentType: string(attType),
 		Content:        part.Data,
+		OrgID:          orgID,
 		CreatedAt:      now,
 		UpdatedAt:      now,
 	}
@@ -250,6 +251,15 @@ func (a *ExecuteToolsActivity) storeToolMedia(ctx context.Context, userID, toolN
 		return "", err
 	}
 	return id, nil
+}
+
+// chatOrg is the org a tool result's media records (attachments.org_id): the
+// chat's, or nil when the chat is in none or unknown.
+func chatOrg(chat *db.Chat) *string {
+	if org := chatOrgID(chat); org != "" {
+		return &org
+	}
+	return nil
 }
 
 // toolMediaFilename names the attachment after the file the tool read, or

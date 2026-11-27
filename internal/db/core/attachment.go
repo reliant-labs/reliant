@@ -16,6 +16,12 @@ type Attachment struct {
 	FilePath       string
 	AttachmentType string // "image" or "file_reference"
 	Content        []byte // File content bytes (nil for file_references)
-	CreatedAt      time.Time
-	UpdatedAt      time.Time
+	// OrgID is an organization the owner was a live member of when the
+	// attachment was stored (attachments.org_id), or nil: none named or
+	// verified, or stored before attachments recorded one. It does not say
+	// which chat the attachment came from. An org-scoped read
+	// (store.GetAttachmentForUserInOrg) never matches a nil one.
+	OrgID     *string
+	CreatedAt time.Time
+	UpdatedAt time.Time
 }

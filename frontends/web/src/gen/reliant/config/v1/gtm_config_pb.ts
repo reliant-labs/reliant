@@ -13,14 +13,15 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file reliant/config/v1/gtm_config.proto.
  */
 export const file_reliant_config_v1_gtm_config: GenFile = /*@__PURE__*/
-  fileDesc("CiJyZWxpYW50L2NvbmZpZy92MS9ndG1fY29uZmlnLnByb3RvEhFyZWxpYW50LmNvbmZpZy52MSK2AgoJR3RtQ29uZmlnEoUBCg9hbGxvd2VkX29yZ19pZHMYASADKAlCbILOGGgKE0dUTV9BTExPV0VEX09SR19JRFMqUUNvbW1hLXNlcGFyYXRlZCBvcmdhbml6YXRpb24gaWRzIEdUTSBpcyBlbmFibGVkIGZvciAobm9uZTogR1RNIGlzIG9mZiBldmVyeXdoZXJlKRKgAQoPYW5hbHl0aWNzX3Rva2VuGAIgASgJQoYBgs4YgQEKE0dUTV9BTkFMWVRJQ1NfVE9LRU4qZkNvbnRyb2wtcGxhbmUgYWNjZXNzIHRva2VuIChvYnM6cmVhZCwgb3JnLWJvdW5kKSBmb3IgR1RNJ3MgcHJvZHVjdC1hbmFseXRpY3MgcmVhZCAodW5zZXQ6IHVuYXZhaWxhYmxlKTABUAEiuAwKD0d0bUFzc2V0c0NvbmZpZxJ5CghlbmRwb2ludBgBIAEoCUJngs4YYwoTR1RNX0FTU0VUU19FTkRQT0lOVCpMR1RNIGFzc2V0cyBidWNrZXQ6IHRoZSBTMyBBUEkgYmFzZSBVUkwgdGhpcyBwcm9jZXNzIGRpYWxzIChmb3JnZS5idWNrZXRfZW52KRKrAQoPcHVibGljX2VuZHBvaW50GAIgASgJQpEBgs4YjAEKGkdUTV9BU1NFVFNfUFVCTElDX0VORFBPSU5UKm5HVE0gYXNzZXRzIGJ1Y2tldDogdGhlIFMzIEFQSSBiYXNlIFVSTCBhIGJyb3dzZXIgcmVhY2hlcywgd2hlbiBpdCBkaWZmZXJzIGZyb20gdGhlIGVuZHBvaW50IChmb3JnZS5idWNrZXRfZW52KRJnCgZyZWdpb24YAyABKAlCV4LOGFMKEUdUTV9BU1NFVFNfUkVHSU9OKj5HVE0gYXNzZXRzIGJ1Y2tldDogcmVnaW9uIChmb3JnZS5idWNrZXRfZW52OyB1bnNldDogdXMtZWFzdC0xKRJyCgZidWNrZXQYBCABKAlCYoLOGF4KEUdUTV9BU1NFVFNfQlVDS0VUKklHVE0gYXNzZXRzIGJ1Y2tldDogaXRzIG5hbWUgKGZvcmdlLmJ1Y2tldF9lbnY7IHVuc2V0OiBHVE0gYXNzZXRzIGFyZSBvZmYpEnEKDWFjY2Vzc19rZXlfaWQYBSABKAlCWoLOGFYKGEdUTV9BU1NFVFNfQUNDRVNTX0tFWV9JRCo2R1RNIGFzc2V0cyBidWNrZXQ6IFMzIGFjY2VzcyBrZXkgaWQgKGZvcmdlLmJ1Y2tldF9lbnYpMAFQARJ9ChFzZWNyZXRfYWNjZXNzX2tleRgGIAEoCUJigs4YXgocR1RNX0FTU0VUU19TRUNSRVRfQUNDRVNTX0tFWSo6R1RNIGFzc2V0cyBidWNrZXQ6IFMzIHNlY3JldCBhY2Nlc3Mga2V5IChmb3JnZS5idWNrZXRfZW52KTABUAESfAoKcGF0aF9zdHlsZRgHIAEoCEJogs4YZAoVR1RNX0FTU0VUU19QQVRIX1NUWUxFKktHVE0gYXNzZXRzIGJ1Y2tldDogcGF0aC1zdHlsZSBhZGRyZXNzaW5nIChmb3JnZS5idWNrZXRfZW52OyBNaW5JTyBuZWVkcyBpdCkSiAEKD21heF9hc3NldF9ieXRlcxgIIAEoA0JvukgJIgcYgICAICAAgs4YXwoUR1RNX0FTU0VUU19NQVhfQllURVMaCDI2MjE0NDAwKj1MYXJnZXN0IEdUTSBhc3NldCBhIHBlcnNvbiB1cGxvYWRzLCBpbiBieXRlcyAoYXQgbW9zdCA2NCBNaUIpEqQBChZtYXhfY29waWVkX2Fzc2V0X2J5dGVzGAkgASgDQoMBukgJIgcYgICAICAAgs4YcwobR1RNX0FTU0VUU19NQVhfQ09QSUVEX0JZVEVTGgg2NzEwODg2NCpKTGFyZ2VzdCBHVE0gYXNzZXQgY29waWVkIGZyb20gYSBjaGF0IGF0dGFjaG1lbnQsIGluIGJ5dGVzIChhdCBtb3N0IDY0IE1pQikSgwEKD29yZ19xdW90YV9ieXRlcxgKIAEoA0JqukgEIgIgAILOGF8KGkdUTV9BU1NFVFNfT1JHX1FVT1RBX0JZVEVTGgoyMTQ3NDgzNjQ4KjVCeXRlcyBvbmUgb3JnYW5pemF0aW9uJ3MgR1RNIGFzc2V0cyBtYXkgaG9sZCB0b2dldGhlcjr2AbpI8gEa7wEKGmd0bV9hc3NldHNfYnVja2V0X2NvbXBsZXRlEmlHVE1fQVNTRVRTX0JVQ0tFVCByZXF1aXJlcyBHVE1fQVNTRVRTX0VORFBPSU5ULCBHVE1fQVNTRVRTX0FDQ0VTU19LRVlfSUQgYW5kIEdUTV9BU1NFVFNfU0VDUkVUX0FDQ0VTU19LRVkaZnRoaXMuYnVja2V0ID09ICcnIHx8ICh0aGlzLmVuZHBvaW50ICE9ICcnICYmIHRoaXMuYWNjZXNzX2tleV9pZCAhPSAnJyAmJiB0aGlzLnNlY3JldF9hY2Nlc3Nfa2V5ICE9ICcnKUJAWj5naXRodWIuY29tL3JlbGlhbnQtbGFicy9yZWxpYW50L2dlbi9yZWxpYW50L2NvbmZpZy92MTtjb25maWd2MWIGcHJvdG8z", [file_buf_validate_validate, file_forge_v1_forge]);
+  fileDesc("CiJyZWxpYW50L2NvbmZpZy92MS9ndG1fY29uZmlnLnByb3RvEhFyZWxpYW50LmNvbmZpZy52MSLjAwoJR3RtQ29uZmlnEoUBCg9hbGxvd2VkX29yZ19pZHMYASADKAlCbILOGGgKE0dUTV9BTExPV0VEX09SR19JRFMqUUNvbW1hLXNlcGFyYXRlZCBvcmdhbml6YXRpb24gaWRzIEdUTSBpcyBlbmFibGVkIGZvciAobm9uZTogR1RNIGlzIG9mZiBldmVyeXdoZXJlKRKgAQoPYW5hbHl0aWNzX3Rva2VuGAIgASgJQoYBgs4YgQEKE0dUTV9BTkFMWVRJQ1NfVE9LRU4qZkNvbnRyb2wtcGxhbmUgYWNjZXNzIHRva2VuIChvYnM6cmVhZCwgb3JnLWJvdW5kKSBmb3IgR1RNJ3MgcHJvZHVjdC1hbmFseXRpY3MgcmVhZCAodW5zZXQ6IHVuYXZhaWxhYmxlKTABUAESqgEKGGF0dGFjaF9mcm9tX2NoYXRfZW5hYmxlZBgDIAEoCEKHAYLOGIIBChxHVE1fQVRUQUNIX0ZST01fQ0hBVF9FTkFCTEVEKmJMZXQgR1RNJ3MgYWdlbnQgY29weSBhbiBhdHRhY2htZW50IHN0YW1wZWQgd2l0aCB0aGUgR1RNIG9yZyBpbnRvIHRoZSBhc3NldCBsaWJyYXJ5IChkZWZhdWx0IGZhbHNlKSKACQoPR3RtQXNzZXRzQ29uZmlnEnkKCGVuZHBvaW50GAEgASgJQmeCzhhjChNHVE1fQVNTRVRTX0VORFBPSU5UKkxHVE0gYXNzZXRzIGJ1Y2tldDogdGhlIFMzIEFQSSBiYXNlIFVSTCB0aGlzIHByb2Nlc3MgZGlhbHMgKGZvcmdlLmJ1Y2tldF9lbnYpEqsBCg9wdWJsaWNfZW5kcG9pbnQYAiABKAlCkQGCzhiMAQoaR1RNX0FTU0VUU19QVUJMSUNfRU5EUE9JTlQqbkdUTSBhc3NldHMgYnVja2V0OiB0aGUgUzMgQVBJIGJhc2UgVVJMIGEgYnJvd3NlciByZWFjaGVzLCB3aGVuIGl0IGRpZmZlcnMgZnJvbSB0aGUgZW5kcG9pbnQgKGZvcmdlLmJ1Y2tldF9lbnYpEmcKBnJlZ2lvbhgDIAEoCUJXgs4YUwoRR1RNX0FTU0VUU19SRUdJT04qPkdUTSBhc3NldHMgYnVja2V0OiByZWdpb24gKGZvcmdlLmJ1Y2tldF9lbnY7IHVuc2V0OiB1cy1lYXN0LTEpEnIKBmJ1Y2tldBgEIAEoCUJigs4YXgoRR1RNX0FTU0VUU19CVUNLRVQqSUdUTSBhc3NldHMgYnVja2V0OiBpdHMgbmFtZSAoZm9yZ2UuYnVja2V0X2VudjsgdW5zZXQ6IEdUTSBhc3NldHMgYXJlIG9mZikScQoNYWNjZXNzX2tleV9pZBgFIAEoCUJags4YVgoYR1RNX0FTU0VUU19BQ0NFU1NfS0VZX0lEKjZHVE0gYXNzZXRzIGJ1Y2tldDogUzMgYWNjZXNzIGtleSBpZCAoZm9yZ2UuYnVja2V0X2VudikwAVABEn0KEXNlY3JldF9hY2Nlc3Nfa2V5GAYgASgJQmKCzhheChxHVE1fQVNTRVRTX1NFQ1JFVF9BQ0NFU1NfS0VZKjpHVE0gYXNzZXRzIGJ1Y2tldDogUzMgc2VjcmV0IGFjY2VzcyBrZXkgKGZvcmdlLmJ1Y2tldF9lbnYpMAFQARJ8CgpwYXRoX3N0eWxlGAcgASgIQmiCzhhkChVHVE1fQVNTRVRTX1BBVEhfU1RZTEUqS0dUTSBhc3NldHMgYnVja2V0OiBwYXRoLXN0eWxlIGFkZHJlc3NpbmcgKGZvcmdlLmJ1Y2tldF9lbnY7IE1pbklPIG5lZWRzIGl0KTr2AbpI8gEa7wEKGmd0bV9hc3NldHNfYnVja2V0X2NvbXBsZXRlEmlHVE1fQVNTRVRTX0JVQ0tFVCByZXF1aXJlcyBHVE1fQVNTRVRTX0VORFBPSU5ULCBHVE1fQVNTRVRTX0FDQ0VTU19LRVlfSUQgYW5kIEdUTV9BU1NFVFNfU0VDUkVUX0FDQ0VTU19LRVkaZnRoaXMuYnVja2V0ID09ICcnIHx8ICh0aGlzLmVuZHBvaW50ICE9ICcnICYmIHRoaXMuYWNjZXNzX2tleV9pZCAhPSAnJyAmJiB0aGlzLnNlY3JldF9hY2Nlc3Nfa2V5ICE9ICcnKUJAWj5naXRodWIuY29tL3JlbGlhbnQtbGFicy9yZWxpYW50L2dlbi9yZWxpYW50L2NvbmZpZy92MTtjb25maWd2MWIGcHJvdG8z", [file_buf_validate_validate, file_forge_v1_forge]);
 
 /**
  * GtmConfig is who gets GTM (the go-to-market workspace) and how its
- * product-analytics read reaches the control plane. It is on the root
- * ReliantConfig because the API server (nav, GtmService) and the worker (the
- * agent's GTM tools) must give one answer from one setting; nothing else
- * reads it. internal/featuregate turns allowed_org_ids into the Gate every
+ * product-analytics read reaches the control plane. It is on
+ * ServerProcessConfig, which every server role loads, because the API server
+ * (nav, GtmService) and the worker (the agent's GTM tools) must give one
+ * answer from one setting; nothing else reads it, so no other role's env
+ * carries it (pkg/config's gateway reach test). internal/featuregate turns allowed_org_ids into the Gate every
  * GTM surface asks. The rules every config here follows are in config.proto's
  * header.
  *
@@ -45,6 +46,18 @@ export type GtmConfig = Message<"reliant.config.v1.GtmConfig"> & {
    * @generated from field: string analytics_token = 2;
    */
   analyticsToken: string;
+
+  /**
+   * Whether GTM's agent may copy a chat attachment into the asset library
+   * (attach_gtm_asset from an attachment id). Off by default. When on, it
+   * takes only an attachment the caller owns that is stamped with the GTM org
+   * (attachments.org_id: the owner was a member of it when it was stored); an
+   * attachment stamped with none, every one uploaded before attachments
+   * recorded an org included, is never taken.
+   *
+   * @generated from field: bool attach_from_chat_enabled = 3;
+   */
+  attachFromChatEnabled: boolean;
 };
 
 /**
@@ -56,13 +69,16 @@ export const GtmConfigSchema: GenMessage<GtmConfig> = /*@__PURE__*/
 
 /**
  * GtmAssetsConfig is the bucket GTM's assets (the files attached to items and
- * campaigns) live in, and their limits. It is composed on the root
- * ReliantConfig beside GtmConfig (as gtm_assets: forge projects one level of
- * config blocks), for the same reason GtmConfig is: the API server and the
- * worker must read one setting. internal/gtm/assetstore opens it
+ * campaigns) live in. Their size and quota limits are internal/gtm's
+ * constants (MaxAssetBytes, MaxCopiedAssetBytes, MaxOrgAssetBytes), not
+ * settings. It is composed on ServerProcessConfig as gtm_assets (a block of
+ * its own: forge projects one level of config blocks), which every server
+ * role loads, but only the roles whose graph reads it (the API server and the
+ * worker) reach it, so no other role's env carries the bucket's credentials
+ * (pkg/config's gateway reach test). internal/gtm/assetstore opens it
  * (assetstore.StoreFromConfig).
  *
- * The first seven leaves are forge/pkg/blobstore's S3Config, named as
+ * Its leaves are forge/pkg/blobstore's S3Config, named as
  * `forge.bucket_env("GTM_ASSETS", "gtm-assets")` names them, so a workload
  * that binds that env reads the bucket with no other wiring: the dev MinIO,
  * or in prod an S3-compatible bucket (GCS through an HMAC key). With no
@@ -119,30 +135,6 @@ export type GtmAssetsConfig = Message<"reliant.config.v1.GtmAssetsConfig"> & {
    * @generated from field: bool path_style = 7;
    */
   pathStyle: boolean;
-
-  /**
-   * The largest asset a person uploads, in bytes. At most 64 MiB, the
-   * gtm_assets table's own ceiling.
-   *
-   * @generated from field: int64 max_asset_bytes = 8;
-   */
-  maxAssetBytes: bigint;
-
-  /**
-   * The largest asset copied from a chat attachment, in bytes. At most
-   * 64 MiB.
-   *
-   * @generated from field: int64 max_copied_asset_bytes = 9;
-   */
-  maxCopiedAssetBytes: bigint;
-
-  /**
-   * What one org's assets may hold together, in bytes (READY assets and
-   * unexpired PENDING ones).
-   *
-   * @generated from field: int64 org_quota_bytes = 10;
-   */
-  orgQuotaBytes: bigint;
 };
 
 /**

@@ -118,14 +118,12 @@ func (d *recordingDaemon) WriteBinaryFile(ctx context.Context, path string, cont
 }
 
 // fakeAttachmentRepo records attachment writes in memory. It is the store of
-// generate_image, generate_video and save_attachment. It embeds the widest of
-// their roles so a method none of these tests should reach (GetChat) need not
-// be spelled out; calling it is a bug and panics loudly rather than passing
-// silently.
+// generate_image, generate_video and save_attachment. GetChat answers chat
+// (nil: no such chat), which is where a stored attachment's org comes from.
 type fakeAttachmentRepo struct {
-	generateVideoStore
 	stored map[string]*db.Attachment
 	err    error
+	chat   *db.Chat
 }
 
 var (
@@ -149,6 +147,10 @@ func (r *fakeAttachmentRepo) CreateAttachment(ctx context.Context, att *db.Attac
 
 func (r *fakeAttachmentRepo) GetAttachment(ctx context.Context, id string) (*db.Attachment, error) {
 	return r.stored[id], nil
+}
+
+func (r *fakeAttachmentRepo) GetChat(_ context.Context, _ string) (*db.Chat, error) {
+	return r.chat, nil
 }
 
 // generateImageCtx builds a tool context carrying the caller's identity, which

@@ -31,6 +31,11 @@ type Deps struct {
 	// default, 10 MB.
 	//forge:optional-dep
 	API *config.ApiServerConfig
+	// Orgs verifies the org an upload names (org_id) before it is recorded
+	// on the attachment (internal/orgs). Nil, or a nil *orgs.Resolver, is a
+	// deployment with no orgs: every attachment records none.
+	//forge:optional-dep
+	Orgs OrgResolver
 }
 
 // validateDeps returns an error if any required Deps field is nil. The

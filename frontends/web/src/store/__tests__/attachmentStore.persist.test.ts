@@ -53,6 +53,14 @@ describe("draft attachments across a reload", () => {
     expect(isDraftAttachmentPersisted("chat-2", "a")).toBe(false);
   });
 
+  it("uploads in the org it is given, and replaces in it too", async () => {
+    api.uploadAttachment.mockResolvedValueOnce(att("a")).mockResolvedValueOnce(att("b"));
+    const file = new File(["x"], "a.txt");
+    await useAttachmentStore.getState().attachFile("chat-1", file, "org-1");
+    await useAttachmentStore.getState().replaceAttachment("chat-1", "a", file, "org-1");
+    expect(api.uploadAttachment.mock.calls.map((call) => call[1])).toEqual(["org-1", "org-1"]);
+  });
+
   it("keeps a text upload's bytes, not a blob URL, until it leaves the draft", async () => {
     api.uploadAttachment.mockResolvedValue(att("a"));
     const file = new File(["pasted"], "pasted-text.txt", { type: "text/plain" });
