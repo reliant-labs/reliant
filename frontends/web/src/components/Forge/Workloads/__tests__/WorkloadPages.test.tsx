@@ -8,9 +8,13 @@
  * a local dev and a kind this build does not know.
  */
 
+import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useQuery } from "@tanstack/react-query";
+
+import { appDatabaseServiceKeys } from "@/hooks/controlplane/app-database-service-hooks_gen";
 
 import type { LiveEnv, LiveEnvKind } from "@/services/forge/live";
 
@@ -90,13 +94,22 @@ function everywhere() {
   return { ...base, getWorkload: (req: Parameters<typeof base.getWorkload>[0]) => base.getWorkload({ ...req, envIds: ["env-prod"] }) };
 }
 
-function open(env: string, name = "admin-server", obs = everywhere()) {
+function open(env: string, name = "admin-server", obs = everywhere(), probe?: ReactNode) {
   route.params = { env, name };
   return render(
     <WorkloadsProviders obs={obs}>
-      <WorkloadPage />
+      <>
+        <WorkloadPage />
+        {probe}
+      </>
     </WorkloadsProviders>
   );
+}
+
+/** A mounted read on the panel editor's databases key (useDashboardDatabases), counting its fetches. */
+function DatabasesProbe({ onFetch }: { onFetch: () => void }) {
+  useQuery({ queryKey: appDatabaseServiceKeys.listDashboardDatabases({ environmentId: "env-prod" }), queryFn: async () => (onFetch(), null), staleTime: 60_000 });
+  return null;
 }
 
 const ready = async () => waitFor(() => expect(screen.getByTestId("workload-detail")).toHaveAttribute("data-state", "ready"));
@@ -120,6 +133,18 @@ describe("the workload page in the console", () => {
     await waitFor(() => expect(cloud.restartWorkload).toHaveBeenCalledWith("env-prod", "admin-server"));
     expect(cloud.getEnvironmentStatus).toHaveBeenCalledWith("env-prod", null);
   });
+
+  it("re-reads the panel editor's databases after a restart, as the observability reads", async () => {
+    const onFetch = vi.fn();
+    open("prod", "admin-server", everywhere(), <DatabasesProbe onFetch={onFetch} />);
+    await ready();
+    await waitFor(() => expect(onFetch).toHaveBeenCalledTimes(1), { timeout: 10_000 });
+    await userEvent.click(screen.getByTestId("workload-restart"));
+    await userEvent.click(within(screen.getByRole("dialog", { name: "Restart admin-server in prod?" })).getByRole("button", { name: "Restart in prod" }));
+    await waitFor(() => expect(cloud.restartWorkload).toHaveBeenCalledWith("env-prod", "admin-server"));
+    // The re-read follows the restart's answer: give it the time a loaded host takes, not the 1s default.
+    await waitFor(() => expect(onFetch).toHaveBeenCalledTimes(2), { timeout: 10_000 });
+  }, 30_000);
 
   it("re-reads the workload after a restart: its generated reads, not only the old observability keys", async () => {
     const obs = everywhere();

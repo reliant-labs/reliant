@@ -13,14 +13,14 @@ import { Code } from "@connectrpc/connect";
 import { createShopTransport } from "@/fixtures/shop";
 import { demoSubjects } from "@/fixtures/shop/handlers/inventory";
 import { DEMO_ORG } from "@/fixtures/shop/shopStory";
-import { installShellTransport } from "@/lib/connect";
+import { connectClient, installShellTransport } from "@/lib/connect";
 import { queryClient } from "@/lib/query-client";
+import { AppDatabaseService } from "@/gen/controlplane/services/app_database/v1/app_database_pb";
+import { createDataBrowserApi } from "@/services/controlPlane/observability/appDatabaseApi";
 import { IdentityService } from "@/gen/controlplane/services/identity/v1/identity_pb";
 import { identityServiceMutations, identityServiceQueries } from "@/hooks/controlplane/identity-service-hooks_gen";
-import { connectClient } from "@/lib/connect";
 import { listIdentityUsersRequest, toIdentityStatus, toIdentityUser, toIdentityUsersPage, type IdentityUserFilter } from "@/services/controlPlane/identity/api";
 import { currentOrgId } from "@/services/controlPlane/orgs";
-import { controlPlaneDataBrowserApi as data } from "@/services/controlPlane/observability/DataBrowserApiContext";
 import { StorageBrowserService } from "@/gen/controlplane/services/storage_browser/v1/storage_browser_pb";
 import { storageBrowserServiceMutations } from "@/hooks/controlplane/storage-browser-service-hooks_gen";
 import {
@@ -34,6 +34,9 @@ import {
 
 // The demo bundle's twin (services/controlPlane/config.demo.ts): the cloud reads are on.
 vi.mock("@/services/controlPlane/config", () => ({ CONTROL_PLANE_API_URL: "https://demo.invalid", hasControlPlane: true }));
+
+// The data browser's reads outside any scope: its mappers over the app's module client (useDataBrowser.ts).
+const data = createDataBrowserApi(connectClient(AppDatabaseService));
 
 /** The storage browser's calls as useStorageBrowser makes them, outside a scope: the reads on connectClient, the two writes through the generated calls. */
 const storage = {

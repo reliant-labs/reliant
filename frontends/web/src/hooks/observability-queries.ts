@@ -21,6 +21,8 @@ import { useCallback, useEffect } from "react";
 import { Code, ConnectError } from "@connectrpc/connect";
 import { hashKey, useInfiniteQuery, type InfiniteData, useMutation, useQueries, useQuery, useQueryClient, type QueryClient, type QueryKey } from "@tanstack/react-query";
 
+import { useListDashboardDatabases } from "@/hooks/controlplane/app-database-service-hooks_gen";
+import { toDashboardDatabases } from "@/services/controlPlane/observability/appDatabaseApi";
 import { requestKey } from "@reliantlabs/forge-web-runtime/service-hooks";
 import { scopedClient } from "@reliantlabs/forge-web-runtime/transport-scope";
 
@@ -530,18 +532,20 @@ function queryPostgresPanel(api: ObservabilityContextApi, scope: ObsScope, windo
 /**
  * The environment's databases a postgres panel may read, with the tables and
  * columns its dashboard role may SELECT: the panel editor's schema browser.
- * Postgres, not ClickHouse, so no quota guard.
+ * Postgres, not ClickHouse, so no quota guard. AppDatabaseService's generated
+ * hook, so a TransportScope's transport answers it inside one.
  */
 export function useDashboardDatabases(environmentId: string | null) {
-  const api = useObservabilityApi();
-  return useQuery({
-    queryKey: ["observability", "dashboard-databases", environmentId ?? ""] as const,
-    queryFn: ({ signal }) => api.listDashboardDatabases(environmentId as string, { signal }),
-    enabled: !!environmentId,
-    staleTime: 60_000,
-    retry: obsRetry,
-    retryDelay: obsRetryDelay,
-  });
+  return useListDashboardDatabases(
+    { environmentId: environmentId ?? "" },
+    {
+      enabled: !!environmentId,
+      staleTime: 60_000,
+      retry: obsRetry,
+      retryDelay: obsRetryDelay,
+      select: toDashboardDatabases,
+    }
+  );
 }
 
 // ── Profiles ─────────────────────────────────────────────────────────────────

@@ -1,11 +1,12 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * An in-memory DataBrowserApi: a small shop's database, answered the way
+ * An in-memory AppDatabaseService: a small shop's database, answered the way
  * control-plane's AppDatabaseService answers (filters, sort, offset paging,
  * has_more, ESTIMATED and capped EXACT counts, the audited environment's
  * confirmation), so the component tests exercise the real browser against
- * real behaviour. (The dev-only preview, /forge-data-preview, renders the
+ * real behaviour. Tests serve it on the wire, in a TransportScope
+ * (dataFixtureTransport.ts). (The dev-only preview, /forge-data-preview, renders the
  * shop fixture pack.)
  *
  *   environments  env-prod (prod, AUDITED), env-staging (staging, OPEN),
@@ -35,8 +36,8 @@ import type {
   DbDescription,
   DbForeignKey,
   DbTable,
+  DataBrowserReads,
 } from "@/services/controlPlane/observability/appDatabaseApi";
-import type { DataBrowserApi } from "@/services/controlPlane/observability/DataBrowserApiContext";
 
 export interface DataFixtureOptions {
   /** Every database's policy, per environment id (default: prod audited, the rest open). */
@@ -66,7 +67,7 @@ export interface DataFixtureOptions {
 /** A cell the server returns is cut at this many bytes, with a marker (forge pkg/dbquery MaxCellBytes). */
 export const FIXTURE_CELL_CAP = 4096;
 
-export interface DataFixtureApi extends DataBrowserApi {
+export interface DataFixtureApi extends DataBrowserReads {
   calls: { method: string; req: unknown }[];
   maxInFlight: number;
 }

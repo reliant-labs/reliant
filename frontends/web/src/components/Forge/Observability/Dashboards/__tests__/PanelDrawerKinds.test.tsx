@@ -5,8 +5,10 @@
  * with a description; the display controls offer only the styles and options
  * the kind takes; a sql or postgres statement runs on Run, with its parameters
  * shown and the server's refusal shown verbatim; a postgres panel's schema
- * browser reads ListDashboardDatabases; a text panel's Markdown is drawn as it
- * is typed.
+ * browser reads ListDashboardDatabases (AppDatabaseService's generated hook,
+ * answered on the wire by the shop pack's handler over the test's api, in the
+ * ObservabilityFixtures TransportScope renderWithApi binds the test's
+ * QueryClient to); a text panel's Markdown is drawn as it is typed.
  */
 
 import { describe, expect, it, vi } from "vitest";

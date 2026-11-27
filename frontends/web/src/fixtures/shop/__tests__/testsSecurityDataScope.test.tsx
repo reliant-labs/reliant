@@ -1,16 +1,16 @@
 // Copyright (c) 2026 Reliant Labs
 
 /**
- * The console's Tests, Security, Storage and Identity pages read from the
+ * The console's Tests, Security, Data, Storage and Identity pages read from the
  * nearest TransportScope (lib/transportScope.tsx), not the app's transport:
  * each renders the shop pack's data under a scope over `createShopTransport()`,
  * while the module transport records every call and refuses it.
  *
  * The family is these pages' reads (the TestApi and VulnerabilityApi
- * defaults, Identity's generated hooks, the storage browser's calls, which
- * resolve their client from the scope's QueryClient, and the coverage source
- * fetch), plus the observability billing panels' reads: none
- * may reach the module transport. Reads outside the family
+ * defaults, the data browser's reads, Identity's generated hooks, the storage
+ * browser's calls, which resolve their client from the scope's QueryClient,
+ * and the coverage source fetch), plus the observability billing panels'
+ * reads: none may reach the module transport. Reads outside the family
  * (forge's, the generated hooks') move onto the scope in their own PRs, and
  * P4.3's enumeration test holds the whole tour to zero; the app-wide reads a
  * page makes in any scope (the person's org list, their own user) are
@@ -40,6 +40,7 @@ vi.mock("@/components/Forge/Observability/AskReliant/AskReliant", () => ({
 }));
 
 import { setReaderPrincipal } from "@/components/Forge/AuditedAccess/readerSession";
+import { DataBrowser } from "@/components/Forge/Data/DataBrowser";
 import { IdentityTab } from "@/components/Forge/EnvPage/IdentityTab";
 import { ObsReadOnlyProvider } from "@/components/Forge/Observability/obsReadOnly";
 import { UsageView } from "@/components/Forge/Observability/UsageView";
@@ -67,6 +68,7 @@ const FAMILY = new Set([
   "controlplane.v1.TestsService",
   "controlplane.v1.VulnerabilityService",
   "controlplane.v1.StorageBrowserService",
+  "controlplane.v1.AppDatabaseService",
   "controlplane.v1.IdentityService",
   "reliant.v1.CoverageSourceService",
 ]);
@@ -198,6 +200,12 @@ describe("observability billing in a TransportScope", () => {
 });
 
 describe("the console's data and identity pages in a TransportScope", () => {
+  it("data", async () => {
+    renderScoped(<DataBrowser env={STAGING} search={{ db: "shop", table: "public.customers" }} onNavigate={() => undefined} href={() => "/data"} />);
+    expect(await screen.findByText("lena.fischer@example.com", {}, { timeout: 15_000 })).toBeInTheDocument();
+    expectFamilyOnScope("controlplane.v1.AppDatabaseService/ListBrowsableDatabases", "controlplane.v1.AppDatabaseService/DescribeDatabase", "controlplane.v1.AppDatabaseService/BrowseTable");
+  }, 30_000);
+
   it("storage", async () => {
     renderScoped(<StorageBrowser env={STAGING} search={{ bucket: "uploads" }} onNavigate={() => undefined} href={() => "/storage"} />);
     expect(await screen.findByTestId("storage-listing", {}, { timeout: 15_000 })).toBeInTheDocument();
