@@ -23,6 +23,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/daemonplacement"
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
 	"github.com/reliant-labs/reliant/internal/questions"
 
@@ -152,12 +155,12 @@ func TestGmailPollsIntoLaunchedRunsEndToEnd(t *testing.T) {
 	intake := triggers.NewIntake(triggers.NewStores(repo), temporalClient, taskQueue)
 	syncer, fires := TemporalBackend(temporalClient, triggers.NewStores(repo), taskQueue, registry.IsPolled)
 	svc := NewTestTrigger(t, WithTriggerDeps(Deps{
-		Repo: repo, Firings: extstore.NewTriggerEventExtStore(repo.ORM()), WebhookSecrets: extstore.NewTriggerExtStore(repo.ORM()), TriggerWrites: extstore.NewTriggerWritesExtStore(repo.ORM()), Triggers: extstore.NewTriggerExtStore(repo.ORM()), FiringReads: extstore.NewTriggerEventExtStore(repo.ORM()), Registrations: extstore.NewTriggerRegistrationExtStore(repo.ORM()), Projects: projectaccesstest.For(repo), Syncer: syncer, Fires: fires,
+		Repo: rowreads.WithRepo(repo), Firings: extstore.NewTriggerEventExtStore(repo.ORM()), WebhookSecrets: extstore.NewTriggerExtStore(repo.ORM()), TriggerWrites: extstore.NewTriggerWritesExtStore(repo.ORM()), Triggers: extstore.NewTriggerExtStore(repo.ORM()), FiringReads: extstore.NewTriggerEventExtStore(repo.ORM()), Registrations: extstore.NewTriggerRegistrationExtStore(repo.ORM()), Projects: projectaccesstest.For(repo), Syncer: syncer, Fires: fires,
 		Integrations: &configv1.IntegrationsConfig{PublicUrl: "https://reliant.example"}, Catalog: registry, Intake: intake,
 	}))
 
 	// --- the worker: poll workflow + activity, event fire, launcher -------
-	launcher := launch.New(launch.Deps{Store: repo, Chats: extstore.NewChatsWithActivityExtStore(repo.ORM()), Workflows: extstore.NewWorkflowExtStore(repo.ORM()), Worktrees: extstore.NewWorktreeExtStore(repo.ORM()), ProjectRows: extstore.NewProjectExtStore(repo.ORM()), TriggerEvents: extstore.NewTriggerEventExtStore(repo.ORM()), Projects: projectaccess.NewFromORM(repo.ORM()), Selections: extstore.NewChatSelectionExtStore(repo.ORM()), Threads: threads.New(threads.Deps{Repo: repo}), Temporal: temporalClient, Runs: runs.New(runs.Deps{Repo: repo, Resolver: questions.NewFromRepo(repo), Chats: extstore.NewChatsWithActivityExtStore(repo.ORM()), Workflows: extstore.NewWorkflowExtStore(repo.ORM()), Questions: extstore.NewQuestionExtStore(repo.ORM()), Temporal: temporalClient, Pause: v2workflow.NewPauseService(v2workflow.PauseServiceDeps{Temporal: temporalClient, Store: repo, Workflows: extstore.NewWorkflowExtStore(repo.ORM())})}), TaskQueue: launch.TaskQueue(taskQueue)})
+	launcher := launch.New(launch.Deps{Store: repo, Installs: daemonplacement.NewRecords(repo.ORM()), Chats: extstore.NewChatsWithActivityExtStore(repo.ORM()), Workflows: extstore.NewWorkflowExtStore(repo.ORM()), Worktrees: extstore.NewWorktreeExtStore(repo.ORM()), ProjectRows: extstore.NewProjectExtStore(repo.ORM()), TriggerEvents: extstore.NewTriggerEventExtStore(repo.ORM()), Projects: projectaccess.NewFromORM(repo.ORM()), Selections: extstore.NewChatSelectionExtStore(repo.ORM()), Threads: threads.New(threads.Deps{Repo: repo}), Temporal: temporalClient, Runs: runs.New(runs.Deps{Repo: repo, Resolver: questions.NewFromRepo(repo), Chats: extstore.NewChatsWithActivityExtStore(repo.ORM()), Workflows: extstore.NewWorkflowExtStore(repo.ORM()), Questions: extstore.NewQuestionExtStore(repo.ORM()), Temporal: temporalClient, Pause: v2workflow.NewPauseService(v2workflow.PauseServiceDeps{Temporal: temporalClient, Store: repo, Workflows: extstore.NewWorkflowExtStore(repo.ORM())})}), TaskQueue: launch.TaskQueue(taskQueue)})
 	w := worker.New(temporalClient, taskQueue, temporaltest.WorkerOptions(worker.Options{}))
 	w.RegisterWorkflowWithOptions(triggers.TriggerPollWorkflow, workflow.RegisterOptions{Name: triggers.PollWorkflowName})
 	w.RegisterActivityWithOptions(

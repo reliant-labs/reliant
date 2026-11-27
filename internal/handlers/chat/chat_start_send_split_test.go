@@ -4,6 +4,8 @@ package chat
 import (
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/stretchr/testify/assert"
@@ -45,7 +47,7 @@ func TestSendMessage_PendingChatIsRejected(t *testing.T) {
 	}
 	service := &Service{
 		deps: Deps{
-			Repo:        repo,
+			Repo:        rowreads.WithRepo(repo),
 			Workflows:   store.NewWorkflowExtStore(repo.ORM()),
 			Worktrees:   store.NewWorktreeExtStore(repo.ORM()),
 			ProjectRows: store.NewProjectExtStore(repo.ORM()), TriggerEvents: store.NewTriggerEventExtStore(repo.ORM()),
@@ -108,7 +110,7 @@ func TestChatProto_CarriesRootWorkflowState(t *testing.T) {
 			temporal := &absorbTestTemporalClient{exists: true, status: enums.WORKFLOW_EXECUTION_STATUS_RUNNING}
 			service := &Service{
 				deps: Deps{
-					Repo:        repo,
+					Repo:        rowreads.WithRepo(repo),
 					Workflows:   store.NewWorkflowExtStore(repo.ORM()),
 					Worktrees:   store.NewWorktreeExtStore(repo.ORM()),
 					ProjectRows: store.NewProjectExtStore(repo.ORM()), TriggerEvents: store.NewTriggerEventExtStore(repo.ORM()),

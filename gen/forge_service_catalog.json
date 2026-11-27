@@ -59492,9 +59492,7 @@
       "field": "Repo",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/chat.Repository",
       "methods": [],
-      "candidates": [
-        "Database"
-      ],
+      "candidates": [],
       "providers": [
         "Database"
       ],
@@ -59969,9 +59967,7 @@
       "field": "Repo",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/daemon_registry.Repository",
       "methods": [],
-      "candidates": [
-        "Database"
-      ],
+      "candidates": [],
       "providers": [
         "Database"
       ],
@@ -60045,9 +60041,7 @@
       "field": "Placement",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/file_system.Placement",
       "methods": [],
-      "candidates": [
-        "Database"
-      ],
+      "candidates": [],
       "providers": [
         "Database"
       ],
@@ -60097,9 +60091,7 @@
       "field": "Repo",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/forge.Repository",
       "methods": [],
-      "candidates": [
-        "Database"
-      ],
+      "candidates": [],
       "providers": [
         "Database"
       ],
@@ -60209,9 +60201,7 @@
       "field": "Machines",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/inbox.DaemonReader",
       "methods": [],
-      "candidates": [
-        "Database"
-      ],
+      "candidates": [],
       "providers": [
         "Database"
       ],
@@ -60527,9 +60517,7 @@
       "field": "Repo",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/mcp.Repository",
       "methods": [],
-      "candidates": [
-        "Database"
-      ],
+      "candidates": [],
       "providers": [
         "Database"
       ],
@@ -60635,9 +60623,7 @@
       "field": "Machines",
       "interface": "github.com/reliant-labs/reliant/internal/modelendpoints.Machines",
       "methods": [],
-      "candidates": [
-        "Database"
-      ],
+      "candidates": [],
       "providers": [
         "Database"
       ],
@@ -61158,9 +61144,7 @@
       "field": "Machines",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/project.DaemonReader",
       "methods": [],
-      "candidates": [
-        "Database"
-      ],
+      "candidates": [],
       "providers": [],
       "resolution": "unresolved"
     },
@@ -61255,9 +61239,7 @@
       "field": "Repo",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/project.Repository",
       "methods": [],
-      "candidates": [
-        "Database"
-      ],
+      "candidates": [],
       "providers": [
         "Database"
       ],
@@ -61617,9 +61599,7 @@
       "field": "Repo",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/repo.Repository",
       "methods": [],
-      "candidates": [
-        "Database"
-      ],
+      "candidates": [],
       "providers": [
         "Database"
       ],
@@ -61823,9 +61803,7 @@
       "field": "Repo",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/scenario.Repository",
       "methods": [],
-      "candidates": [
-        "Database"
-      ],
+      "candidates": [],
       "providers": [
         "Database"
       ],
@@ -62590,9 +62568,7 @@
       "field": "Repo",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/tools_daemon.Repository",
       "methods": [],
-      "candidates": [
-        "Database"
-      ],
+      "candidates": [],
       "providers": [
         "Database"
       ],
@@ -62849,9 +62825,7 @@
       "field": "Repo",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/trigger.Repository",
       "methods": [],
-      "candidates": [
-        "Database"
-      ],
+      "candidates": [],
       "providers": [
         "Database"
       ],
@@ -63363,9 +63337,7 @@
       "field": "Repo",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/workflow.Repository",
       "methods": [],
-      "candidates": [
-        "Database"
-      ],
+      "candidates": [],
       "providers": [
         "Database"
       ],
@@ -63468,9 +63440,7 @@
       "field": "Daemons",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/worktree.DaemonReader",
       "methods": [],
-      "candidates": [
-        "Database"
-      ],
+      "candidates": [],
       "providers": [
         "Database"
       ],
@@ -63550,9 +63520,7 @@
       "field": "Repo",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/worktree.Repository",
       "methods": [],
-      "candidates": [
-        "Database"
-      ],
+      "candidates": [],
       "providers": [
         "Database"
       ],
@@ -63625,9 +63593,7 @@
       "field": "Daemons",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/worktree_reclaim.Daemons",
       "methods": [],
-      "candidates": [
-        "Database"
-      ],
+      "candidates": [],
       "providers": [
         "Database"
       ],

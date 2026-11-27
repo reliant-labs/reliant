@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -174,7 +176,7 @@ func TestReconcileAndWatch_KillSwitchStopsTheCleanup(t *testing.T) {
 		t.Run("cleanup="+tc.setting, func(t *testing.T) {
 			f := newOrgMachinesFixture(t)
 			require.NoError(t, f.repo.UpsertProjectDaemon(f.ctx, f.acme.ID, f.globexMachine, f.path, nil))
-			svc := newTestService(f.repo)
+			svc := newTestService(rowreads.WithRepo(f.repo))
 			svc.deps.Config = &configv1.ReliantConfig{MachineOrg: &configv1.MachineOrgConfig{CrossOrgCleanup: tc.setting}}
 			conn := newTestConn(f.userID, f.globexMachine, nil)
 			conn.orgID = "globex"
@@ -193,7 +195,7 @@ func TestReconcileAndWatch_KillSwitchStopsTheCleanup(t *testing.T) {
 func TestUnresolvedMachineOrg_RunsNothingOrgSensitive(t *testing.T) {
 	f := newOrgMachinesFixture(t)
 	require.NoError(t, f.repo.UpsertProjectDaemon(f.ctx, f.acme.ID, f.globexMachine, f.path, nil))
-	svc := newTestService(f.repo)
+	svc := newTestService(rowreads.WithRepo(f.repo))
 	conn := newTestConn(f.userID, f.globexMachine, nil)
 	conn.orgUnresolved = true
 
@@ -211,7 +213,7 @@ func TestUnresolvedMachineOrg_RunsNothingOrgSensitive(t *testing.T) {
 func TestEnsureOwnedProjectForPath_ResolvesOnlyTheMachinesOrg(t *testing.T) {
 	f := newOrgMachinesFixture(t)
 	require.NoError(t, f.repo.DeleteProject(f.ctx, f.globex.ID, f.userID))
-	svc := newTestService(f.repo)
+	svc := newTestService(rowreads.WithRepo(f.repo))
 	conn := newTestConn(f.userID, f.globexMachine, nil)
 	conn.orgID = "globex"
 
@@ -230,13 +232,13 @@ func TestEnsureOwnedProjectForPath_ResolvesOnlyTheMachinesOrg(t *testing.T) {
 func TestRegisterOutboundConnection_RecordsTheSnapshotsMachineOrg(t *testing.T) {
 	f := newOrgMachinesFixture(t)
 	pod := "pod-machine-" + uuid.NewString()
-	svc := newTestService(f.repo)
+	svc := newTestService(rowreads.WithRepo(f.repo))
 
 	t.Cleanup(svc.Close)
 	out := dialInPodOfOrg(t, svc, f.userID, pod, MachineOrg{ID: "globex"})
 	t.Cleanup(out.Disconnect)
 
-	d, err := f.repo.GetDaemon(f.ctx, pod)
+	d, err := store.GetDaemon(f.ctx, f.repo.ORM(), pod)
 	require.NoError(t, err)
 	require.NotNil(t, d.OrgID)
 	assert.Equal(t, "globex", *d.OrgID, "the machine's org is recorded on its first connect")
@@ -253,7 +255,7 @@ func TestRegisterOutboundConnection_RecordsTheSnapshotsMachineOrg(t *testing.T) 
 // org. An unreadable answer is unresolved, never "none".
 func TestMachineOrgAtConnect(t *testing.T) {
 	f := newOrgMachinesFixture(t)
-	svc := newTestService(f.repo)
+	svc := newTestService(rowreads.WithRepo(f.repo))
 	at := func(daemonID string, named MachineOrg) (string, bool) {
 		return svc.machineOrgAtConnect(f.ctx, f.userID, daemonID, named)
 	}
@@ -378,7 +380,7 @@ func TestMachineOfAnOrgItsOwnerLeft_CreatesAndResolvesNothing(t *testing.T) {
 	f := newOrgMachinesFixture(t)
 	membership := &leavingMembership{defaultOrgMembership: defaultOrgMembership{def: "acme"}, org: "globex"}
 	ctx := authz.WithMembership(context.Background(), membership)
-	svc := newTestService(f.repo)
+	svc := newTestService(rowreads.WithRepo(f.repo))
 	conn := newTestConn(f.userID, f.globexMachine, nil)
 	conn.orgID = "globex"
 
@@ -432,7 +434,7 @@ func TestDiscoveredExistingProject_RecordsTheCheckoutAndStoresTheSnapshot(t *tes
 	}
 	t.Run("discovered after the reconcile", func(t *testing.T) {
 		f := newOrgMachinesFixture(t)
-		svc := newTestService(f.repo)
+		svc := newTestService(rowreads.WithRepo(f.repo))
 		conn := newTestConn(f.userID, f.globexMachine, nil)
 		conn.orgID = "globex"
 		nothingHere := func(context.Context, string) (projectPathState, error) { return projectPathState{}, nil }
@@ -451,7 +453,7 @@ func TestDiscoveredExistingProject_RecordsTheCheckoutAndStoresTheSnapshot(t *tes
 	})
 	t.Run("detached by the user", func(t *testing.T) {
 		f := newOrgMachinesFixture(t)
-		svc := newTestService(f.repo)
+		svc := newTestService(rowreads.WithRepo(f.repo))
 		conn := newTestConn(f.userID, f.globexMachine, nil)
 		conn.orgID = "globex"
 		require.NoError(t, store.DetachProjectFromDaemon(f.ctx, f.repo.ORM(), f.globex.ID, f.globexMachine, f.path, nil))

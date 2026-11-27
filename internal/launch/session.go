@@ -154,7 +154,7 @@ func (l *Launcher) GetEffectiveCheckout(ctx context.Context, chat *db.Chat) Chec
 	if chat.ActiveDaemonID != nil {
 		machine = *chat.ActiveDaemonID
 	}
-	target, err := projectcheckout.ForMachine(ctx, l.repo, nil, chat.UserID, project, machine, "run workflows in it")
+	target, err := projectcheckout.ForMachine(ctx, l.installs, nil, chat.UserID, project, machine, "run workflows in it")
 	if err != nil {
 		logging.InfoContext(ctx, "[getEffectiveWorkingPath] no checkout of the project on the chat's machine; dispatch refuses its machine calls with the way out",
 			"chatID", chat.ID, "daemonID", machine, "error", err)

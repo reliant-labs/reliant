@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"github.com/google/uuid"
 	natstest "github.com/nats-io/nats-server/v2/test"
 	"github.com/nats-io/nats.go"
@@ -16,7 +18,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/daemonquery"
 	"github.com/reliant-labs/reliant/internal/db"
-	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/models/message"
 	"github.com/reliant-labs/reliant/internal/rctx"
 	"github.com/reliant-labs/reliant/internal/store"
@@ -132,7 +133,7 @@ func (f *chatMachineRecovery) count(id string) int {
 
 func (f *chatMachineRecovery) run(selector *activitytypes.DaemonSelector, executor toolexec.ToolExecutor) (ExecuteRunStepOutput, error) {
 	var out ExecuteRunStepOutput
-	act := NewExecuteRunStepActivity(f.h.Repo(), workspaceRowsOf(f.h.Repo()), executor, nil)
+	act := NewExecuteRunStepActivity(rowreads.WithRepo(f.h.Repo()), workspaceRowsOf(f.h.Repo()), executor, nil)
 	act.machineWait = f.wait
 	err := f.h.ExecuteActivity(act.Execute, ExecuteRunStepInput{
 		ChatID: f.chat, WorkflowID: "live-workflow", StepID: "run", Command: "pwd", Timeout: 5000,
@@ -215,7 +216,7 @@ func TestRunStep_DurableMachineAcrossRegistrationOfflineAndReconnect(t *testing.
 	mcp := bound.MCP.EnsureProjectServersLoaded(toolCtx, f.path)
 	require.NotEmpty(t, mcp.Errors)
 	var toolsOut ExecuteToolsOutput
-	err = f.h.ExecuteActivity(NewExecuteToolsActivity(ExecuteToolsDeps{Store: tools.WithChats(f.h.Repo()), Rows: workspaceRowsOf(f.h.Repo()), ToolCalls: toolCallsOf(f.h.Repo()), ToolExecutor: f.remote, Preemption: store.NewAgentMessageExtStore(f.h.Repo().ORM())}).Execute, ExecuteToolsInput{
+	err = f.h.ExecuteActivity(NewExecuteToolsActivity(ExecuteToolsDeps{Store: rowreads.WithRepo(f.h.Repo()), Rows: workspaceRowsOf(f.h.Repo()), ToolCalls: toolCallsOf(f.h.Repo()), ToolExecutor: f.remote, Preemption: store.NewAgentMessageExtStore(f.h.Repo().ORM())}).Execute, ExecuteToolsInput{
 		ChatID: f.chat, Thread: f.chat, ProjectPath: f.path,
 		ToolCalls: []message.ToolCall{{ID: uuid.NewString(), Name: "shell", Input: `{"command":"pwd"}`}},
 	}, &toolsOut)

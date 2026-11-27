@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -42,7 +44,7 @@ func TestRunStep_SelectorAwayFromTheBranchWorkspaceExplainsTheFailure(t *testing
 	run := func(t *testing.T, selector string, workDir string, resp mockRunResponse) ExecuteRunStepOutput {
 		t.Helper()
 		executor := &mockRunExecutor{responses: []mockRunResponse{resp}}
-		act := NewExecuteRunStepActivity(f.h.Repo(), workspaceRowsOf(f.h.Repo()), nil, executor)
+		act := NewExecuteRunStepActivity(rowreads.WithRepo(f.h.Repo()), workspaceRowsOf(f.h.Repo()), nil, executor)
 		env := (&temporaltest.WorkflowTestSuite{}).NewTestActivityEnvironment()
 		env.RegisterActivity(act.Execute)
 		val, err := env.ExecuteActivity(act.Execute, ExecuteRunStepInput{

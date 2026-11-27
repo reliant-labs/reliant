@@ -24,5 +24,5 @@ func TestNewRefusesAStoreWithoutTheLedger(t *testing.T) {
 			t.Error("New(Deps{Store: s}) without TriggerEvents did not panic")
 		}
 	}()
-	New(Deps{Store: &MockStore{}})
+	New(Deps{Store: &MockStore{}, Installs: nil})
 }

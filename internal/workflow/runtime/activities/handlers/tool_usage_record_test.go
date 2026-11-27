@@ -21,6 +21,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/models/message"
+	"github.com/reliant-labs/reliant/internal/rowreads"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/telemetry"
 	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
@@ -95,7 +96,7 @@ func TestExecuteTools_RecordsEachCallsOutcomeAndClassPerToolKind(t *testing.T) {
 	executor.results[offline] = &toolexec.ToolResult{Success: false, IsError: true, Content: "Error: " + daemonoffline.ErrorSubstring}
 	executor.errors[cancelled] = context.Canceled
 	usage := &captureToolUsage{}
-	activity := NewExecuteToolsActivity(tools.WithChats(h.Repo()), workspaceRowsOf(h.Repo()), toolCallsOf(h.Repo()), executor).WithToolUsage(usage)
+	activity := NewExecuteToolsActivity(rowreads.WithRepo(h.Repo()), workspaceRowsOf(h.Repo()), toolCallsOf(h.Repo()), executor).WithToolUsage(usage)
 
 	var output ExecuteToolsOutput
 	require.NoError(t, h.ExecuteActivity(activity.Execute, ExecuteToolsInput{
@@ -171,7 +172,7 @@ func TestExecuteTools_AReplayedCallIsNotRecordedAgain(t *testing.T) {
 	recordHandlerSpans(t)
 	h, chatID := newValidationChat(t)
 	usage := &captureToolUsage{}
-	activity := NewExecuteToolsActivity(tools.WithChats(h.Repo()), workspaceRowsOf(h.Repo()), toolCallsOf(h.Repo()), newMockToolExecutor()).WithToolUsage(usage)
+	activity := NewExecuteToolsActivity(rowreads.WithRepo(h.Repo()), workspaceRowsOf(h.Repo()), toolCallsOf(h.Repo()), newMockToolExecutor()).WithToolUsage(usage)
 	call := message.ToolCall{ID: "toolu_replay_" + uuid.NewString()[:8], Name: tools.ToolView, Input: `{"file_path":"/tmp/x"}`}
 	in := ExecuteToolsInput{
 		ChatID: chatID, Thread: chatID, ToolCalls: []message.ToolCall{call},
@@ -190,7 +191,7 @@ func TestExecuteTools_AReplayedCallIsNotRecordedAgain(t *testing.T) {
 func TestInvokeTool_RecordsTheCall(t *testing.T) {
 	h, chatID := newValidationChat(t)
 	usage := &captureToolUsage{}
-	activity := NewInvokeToolActivity(tools.WithChats(h.Repo()), workspaceRowsOf(h.Repo()), toolCallsOf(h.Repo()), newMockToolExecutor()).WithToolUsage(usage)
+	activity := NewInvokeToolActivity(rowreads.WithRepo(h.Repo()), workspaceRowsOf(h.Repo()), toolCallsOf(h.Repo()), newMockToolExecutor()).WithToolUsage(usage)
 
 	var out reliantv1.InvokeToolOutput
 	require.NoError(t, h.ExecuteActivity(activity.Execute, ActivityInput{

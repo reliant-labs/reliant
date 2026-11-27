@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
@@ -22,7 +24,7 @@ import (
 
 func machineLabels(t *testing.T, repo *db.Repo, daemonID string) map[string]string {
 	t.Helper()
-	d, err := repo.GetDaemon(context.Background(), daemonID)
+	d, err := store.GetDaemon(context.Background(), repo.ORM(), daemonID)
 	require.NoError(t, err)
 	return d.Labels
 }
@@ -34,7 +36,7 @@ func labelledRegister(daemonID string, labels map[string]string) *reliantv1.Daem
 func TestConnectDaemonMergesDeclaredMachineLabels(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
-	svc := newTestService(repo)
+	svc := newTestService(rowreads.WithRepo(repo))
 	t.Cleanup(svc.Close)
 	ctx := context.Background()
 	box := uuid.NewString()
@@ -71,7 +73,7 @@ func TestConnectDaemonMergesDeclaredMachineLabels(t *testing.T) {
 func TestConnectDaemonDeclaredLabelsTouchOnlyTheConnectingMachine(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
-	svc := newTestService(repo)
+	svc := newTestService(rowreads.WithRepo(repo))
 	t.Cleanup(svc.Close)
 	boxA, boxB := uuid.NewString(), uuid.NewString()
 
@@ -104,7 +106,7 @@ func TestConnectDaemonDeclaredLabelsTouchOnlyTheConnectingMachine(t *testing.T) 
 func TestConnectDaemonSkipsADeclaredMergePastTheLabelLimit(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
-	svc := newTestService(repo)
+	svc := newTestService(rowreads.WithRepo(repo))
 	t.Cleanup(svc.Close)
 	box := uuid.NewString()
 
@@ -127,7 +129,7 @@ func TestConnectDaemonSkipsADeclaredMergePastTheLabelLimit(t *testing.T) {
 func TestRegisterOutboundConnectionMergesDeclaredMachineLabels(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
-	svc := newTestService(repo)
+	svc := newTestService(rowreads.WithRepo(repo))
 	t.Cleanup(svc.Close)
 	pod := uuid.NewString()
 

@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -72,7 +74,7 @@ func TestRunStep_LogFile_WritesOutput(t *testing.T) {
 		},
 	}
 
-	activity := NewExecuteRunStepActivity(repo, workspaceRowsOf(repo), nil, mock)
+	activity := NewExecuteRunStepActivity(rowreads.WithRepo(repo), workspaceRowsOf(repo), nil, mock)
 
 	suite := &temporaltest.WorkflowTestSuite{}
 	env := suite.NewTestActivityEnvironment()
@@ -123,7 +125,7 @@ func TestRunStep_LogFile_Empty_NoFileWrite(t *testing.T) {
 		},
 	}
 
-	activity := NewExecuteRunStepActivity(repo, workspaceRowsOf(repo), nil, mock)
+	activity := NewExecuteRunStepActivity(rowreads.WithRepo(repo), workspaceRowsOf(repo), nil, mock)
 
 	suite := &temporaltest.WorkflowTestSuite{}
 	env := suite.NewTestActivityEnvironment()
@@ -161,7 +163,7 @@ func TestRunStep_LogFile_ExitCodePreserved(t *testing.T) {
 		},
 	}
 
-	activity := NewExecuteRunStepActivity(repo, workspaceRowsOf(repo), nil, mock)
+	activity := NewExecuteRunStepActivity(rowreads.WithRepo(repo), workspaceRowsOf(repo), nil, mock)
 
 	suite := &temporaltest.WorkflowTestSuite{}
 	env := suite.NewTestActivityEnvironment()
@@ -199,7 +201,7 @@ func TestRunStep_LogFile_RelativePath(t *testing.T) {
 		},
 	}
 
-	activity := NewExecuteRunStepActivity(repo, workspaceRowsOf(repo), nil, mock)
+	activity := NewExecuteRunStepActivity(rowreads.WithRepo(repo), workspaceRowsOf(repo), nil, mock)
 
 	suite := &temporaltest.WorkflowTestSuite{}
 	env := suite.NewTestActivityEnvironment()
@@ -241,7 +243,7 @@ func TestRunStep_LogFile_WriteFailure_GracefulDegradation(t *testing.T) {
 	// so the activity won't consider it a failure. The file write via executor.ExecuteCommand
 	// only reports a Go error for transport-level failures. For this test we verify
 	// that the overall step still succeeds.
-	activity := NewExecuteRunStepActivity(repo, workspaceRowsOf(repo), nil, mock)
+	activity := NewExecuteRunStepActivity(rowreads.WithRepo(repo), workspaceRowsOf(repo), nil, mock)
 
 	suite := &temporaltest.WorkflowTestSuite{}
 	env := suite.NewTestActivityEnvironment()

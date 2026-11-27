@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/testkit"
@@ -15,6 +17,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -125,7 +128,7 @@ func TestCreateWorktreeReturnsBeforeDaemonWorkFinishes(t *testing.T) {
 
 	repo := db.NewTestRepo(t)
 	router := &blockingWorktreeDaemonRouter{release: make(chan struct{})}
-	svc := newWorktreeService(t, repo, router)
+	svc := newWorktreeService(t, rowreads.WithRepo(repo), router)
 
 	userID := uuid.New().String()
 	projectID := seedWorktreeProject(t, repo, userID)
@@ -147,7 +150,7 @@ func TestCreateWorktreeReturnsBeforeDaemonWorkFinishes(t *testing.T) {
 	assert.Equal(t, int32(reliantv1.WorktreeStatus_WORKTREE_STATUS_CREATING), stored.Status)
 
 	close(router.release)
-	settled := awaitWorktreeStatus(t, repo, resp.Msg.Worktree.Id, reliantv1.WorktreeStatus_WORKTREE_STATUS_ACTIVE)
+	settled := awaitWorktreeStatus(t, rowreads.WithRepo(repo), resp.Msg.Worktree.Id, reliantv1.WorktreeStatus_WORKTREE_STATUS_ACTIVE)
 	// The workspace ROOT, not the per-repo checkout: the handler strips the
 	// repo's relative path off what the daemon reported. What matters here is
 	// that the CREATING row's empty path got replaced at all.
@@ -167,7 +170,7 @@ func TestCreateWorktreeSurvivesClientDisconnect(t *testing.T) {
 
 	repo := db.NewTestRepo(t)
 	router := &blockingWorktreeDaemonRouter{release: make(chan struct{})}
-	svc := newWorktreeService(t, repo, router)
+	svc := newWorktreeService(t, rowreads.WithRepo(repo), router)
 
 	userID := uuid.New().String()
 	projectID := seedWorktreeProject(t, repo, userID)
@@ -190,7 +193,7 @@ func TestCreateWorktreeSurvivesClientDisconnect(t *testing.T) {
 	cancel()
 	close(router.release)
 
-	settled := awaitWorktreeStatus(t, repo, resp.Msg.Worktree.Id, reliantv1.WorktreeStatus_WORKTREE_STATUS_ACTIVE)
+	settled := awaitWorktreeStatus(t, rowreads.WithRepo(repo), resp.Msg.Worktree.Id, reliantv1.WorktreeStatus_WORKTREE_STATUS_ACTIVE)
 	assert.NotEmpty(t, settled.Path,
 		"work must complete, and record its path, after the caller disconnects")
 }
@@ -204,7 +207,7 @@ func TestCreateWorktreeMarksFailedRatherThanVanishing(t *testing.T) {
 
 	repo := db.NewTestRepo(t)
 	router := &blockingWorktreeDaemonRouter{failCreate: true}
-	svc := newWorktreeService(t, repo, router)
+	svc := newWorktreeService(t, rowreads.WithRepo(repo), router)
 
 	userID := uuid.New().String()
 	projectID := seedWorktreeProject(t, repo, userID)
@@ -218,7 +221,7 @@ func TestCreateWorktreeMarksFailedRatherThanVanishing(t *testing.T) {
 	}))
 	require.NoError(t, err, "the failure happens after the response, so the RPC still succeeds")
 
-	awaitWorktreeStatus(t, repo, resp.Msg.Worktree.Id, reliantv1.WorktreeStatus_WORKTREE_STATUS_FAILED)
+	awaitWorktreeStatus(t, rowreads.WithRepo(repo), resp.Msg.Worktree.Id, reliantv1.WorktreeStatus_WORKTREE_STATUS_FAILED)
 }
 
 // TestCreateWorktreeFailureReasonReachesTheClient: creation settles after the
@@ -240,7 +243,7 @@ func TestCreateWorktreeFailureReasonReachesTheClient(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			repo := db.NewTestRepo(t)
 			router := &blockingWorktreeDaemonRouter{failCreate: true, undiagnosed: tc.undiagnosed}
-			svc := newWorktreeService(t, repo, router)
+			svc := newWorktreeService(t, rowreads.WithRepo(repo), router)
 
 			userID := uuid.New().String()
 			projectID := seedWorktreeProject(t, repo, userID)
@@ -253,7 +256,7 @@ func TestCreateWorktreeFailureReasonReachesTheClient(t *testing.T) {
 				BaseBranch: stringPtr("nonexistent-base"),
 			}))
 			require.NoError(t, err)
-			awaitWorktreeStatus(t, repo, resp.Msg.Worktree.Id, reliantv1.WorktreeStatus_WORKTREE_STATUS_FAILED)
+			awaitWorktreeStatus(t, rowreads.WithRepo(repo), resp.Msg.Worktree.Id, reliantv1.WorktreeStatus_WORKTREE_STATUS_FAILED)
 
 			list, err := svc.ListWorktrees(ctx, connect.NewRequest(&reliantv1.ListWorktreesRequest{ProjectId: projectID}))
 			require.NoError(t, err)
@@ -281,7 +284,7 @@ func TestCreateWorktreeRefusesAnInvalidBranchNameUpFront(t *testing.T) {
 
 	repo := db.NewTestRepo(t)
 	router := &blockingWorktreeDaemonRouter{}
-	svc := newWorktreeService(t, repo, router)
+	svc := newWorktreeService(t, rowreads.WithRepo(repo), router)
 
 	userID := uuid.New().String()
 	projectID := seedWorktreeProject(t, repo, userID)
@@ -314,7 +317,7 @@ func TestCreateWorktreeIdempotencyKeyPreventsDuplicates(t *testing.T) {
 
 	repo := db.NewTestRepo(t)
 	router := &blockingWorktreeDaemonRouter{}
-	svc := newWorktreeService(t, repo, router)
+	svc := newWorktreeService(t, rowreads.WithRepo(repo), router)
 
 	userID := uuid.New().String()
 	projectID := seedWorktreeProject(t, repo, userID)
@@ -328,7 +331,7 @@ func TestCreateWorktreeIdempotencyKeyPreventsDuplicates(t *testing.T) {
 		IdempotencyKey: &key,
 	}))
 	require.NoError(t, err)
-	awaitWorktreeStatus(t, repo, first.Msg.Worktree.Id, reliantv1.WorktreeStatus_WORKTREE_STATUS_ACTIVE)
+	awaitWorktreeStatus(t, rowreads.WithRepo(repo), first.Msg.Worktree.Id, reliantv1.WorktreeStatus_WORKTREE_STATUS_ACTIVE)
 
 	second, err := svc.CreateWorktree(ctx, connect.NewRequest(&reliantv1.CreateWorktreeRequest{
 		ProjectId:      projectID,
@@ -353,7 +356,7 @@ func TestCreateWorktreeWithoutIdempotencyKeyStillCreates(t *testing.T) {
 
 	repo := db.NewTestRepo(t)
 	router := &blockingWorktreeDaemonRouter{}
-	svc := newWorktreeService(t, repo, router)
+	svc := newWorktreeService(t, rowreads.WithRepo(repo), router)
 
 	userID := uuid.New().String()
 	projectID := seedWorktreeProject(t, repo, userID)
@@ -366,7 +369,7 @@ func TestCreateWorktreeWithoutIdempotencyKeyStillCreates(t *testing.T) {
 			Branch:    name,
 		}))
 		require.NoError(t, err)
-		awaitWorktreeStatus(t, repo, resp.Msg.Worktree.Id, reliantv1.WorktreeStatus_WORKTREE_STATUS_ACTIVE)
+		awaitWorktreeStatus(t, rowreads.WithRepo(repo), resp.Msg.Worktree.Id, reliantv1.WorktreeStatus_WORKTREE_STATUS_ACTIVE)
 	}
 
 	worktrees, err := repo.ListWorktrees(ctx, core.WorktreeFilters{ProjectID: &projectID})

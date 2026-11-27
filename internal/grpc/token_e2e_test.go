@@ -19,6 +19,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
 	"github.com/reliant-labs/reliant/internal/chatupdates"
 
@@ -342,7 +344,7 @@ func serveGateway(t *testing.T, authority tokenauthority.Authority) string {
 	t.Helper()
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
-	gateway, err := tools_daemon.New(tools_daemon.Deps{Refetch: chatupdates.NewFromORM(repo.ORM(), repo, nil), Logger: slog.Default(), Config: &config.Config{}, Projects: store.NewProjectExtStore(repo.ORM()), Installs: store.NewProjectDaemonExtStore(repo.ORM()), Attachments: store.NewDaemonAttachmentExtStore(repo.ORM()), LocalModels: store.NewDaemonExtStore(repo.ORM()), Repo: repo, Checkouts: store.NewProjectDaemonDetachmentExtStore(repo.ORM()), Pools: store.NewMachinePoolExtStore(repo.ORM())})
+	gateway, err := tools_daemon.New(tools_daemon.Deps{Refetch: chatupdates.NewFromORM(repo.ORM(), repo, nil), Logger: slog.Default(), Config: &config.Config{}, Projects: store.NewProjectExtStore(repo.ORM()), Installs: store.NewProjectDaemonExtStore(repo.ORM()), Attachments: store.NewDaemonAttachmentExtStore(repo.ORM()), LocalModels: store.NewDaemonExtStore(repo.ORM()), Repo: rowreads.WithRepo(repo), Checkouts: store.NewProjectDaemonDetachmentExtStore(repo.ORM()), Pools: store.NewMachinePoolExtStore(repo.ORM())})
 	require.NoError(t, err)
 	return serveDaemonListener(t, newTestDaemonListener(t, authority, gateway))
 }

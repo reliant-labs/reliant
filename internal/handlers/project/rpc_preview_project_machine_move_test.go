@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -54,7 +56,7 @@ func newPreviewFixture(t *testing.T) *previewFixture {
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 	router := &unmovedRouter{}
-	svc := NewTestProject(t, WithProjectDeps(withStores(Deps{Repo: repo, Projects: projectaccesstest.For(repo), Router: router})))
+	svc := NewTestProject(t, WithProjectDeps(withStores(Deps{Repo: rowreads.WithRepo(repo), Projects: projectaccesstest.For(repo), Router: router})))
 	ctx, userID := fromRepoCtx()
 	machine := "laptop-" + uuid.NewString()[:8]
 	require.NoError(t, repo.UpsertDaemon(ctx, &db.Daemon{ID: machine, UserID: userID, Hostname: ptrStr("laptop")}))

@@ -17,8 +17,8 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/attachment"
 	"github.com/reliant-labs/reliant/internal/db"
-	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/models/message"
+	"github.com/reliant-labs/reliant/internal/rowreads"
 	dbstore "github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/threads"
 	"github.com/reliant-labs/reliant/internal/toolexec"
@@ -211,7 +211,7 @@ func TestToolResultImageReachesTheNextPrompt(t *testing.T) {
 	thread := chatID
 	h.CreateTestUserMessage(ctx, chatID, thread)
 
-	save := NewSaveMessageActivity(SaveMessageDeps{Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: dbstore.NewMessageExtStore(h.Repo().ORM()), Senders: dbstore.NewThreadExtStore(h.Repo().ORM())})})
+	save := NewSaveMessageActivity(SaveMessageDeps{Store: rowreads.WithRepo(h.Repo()), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: dbstore.NewMessageExtStore(h.Repo().ORM()), Senders: dbstore.NewThreadExtStore(h.Repo().ORM())})})
 	const callID = "toolu_view_1"
 	var assistantOut SaveMessageOutput
 	require.NoError(t, h.ExecuteActivity(save.Execute, &SaveMessageInput{
@@ -229,7 +229,7 @@ func TestToolResultImageReachesTheNextPrompt(t *testing.T) {
 		}},
 	}
 	var execOut ExecuteToolsOutput
-	require.NoError(t, h.ExecuteActivity(NewExecuteToolsActivity(ExecuteToolsDeps{Store: tools.WithChats(h.Repo()), Rows: workspaceRowsOf(h.Repo()), ToolCalls: toolCallsOf(h.Repo()), ToolExecutor: executor, Preemption: dbstore.NewAgentMessageExtStore(h.Repo().ORM())}).Execute, ExecuteToolsInput{
+	require.NoError(t, h.ExecuteActivity(NewExecuteToolsActivity(ExecuteToolsDeps{Store: rowreads.WithRepo(h.Repo()), Rows: workspaceRowsOf(h.Repo()), ToolCalls: toolCallsOf(h.Repo()), ToolExecutor: executor, Preemption: dbstore.NewAgentMessageExtStore(h.Repo().ORM())}).Execute, ExecuteToolsInput{
 		ChatID: chatID, Thread: thread,
 		ToolCalls: []ToolCall{{ID: callID, Name: "view", Input: `{"file_path":"x"}`}},
 	}, &execOut))

@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -19,7 +20,10 @@ import (
 // dropped it said daemon_id="", so none could be tied to a pod.
 //
 // Not parallel: it swaps the process's default slog handler to read the
-// report, which with Sentry off (as in tests) is filed to the log.
+// report, which with Sentry off (as in tests) is filed to the log. Each run
+// files from a chat of its own: report_bug answers a repeat in the same chat
+// with the first report's id and logs nothing, so a fixed chat id fails every
+// run after the first in one process (-count=3, the flake gate).
 func TestServerTools_SeeTheWorktreesMachine(t *testing.T) {
 	var logs bytes.Buffer
 	previous := slog.Default()
@@ -36,7 +40,7 @@ func TestServerTools_SeeTheWorktreesMachine(t *testing.T) {
 			`"actual":"ls: /home/workspace: No such file or directory"}`,
 		ToolCallID:       "call-1",
 		UserID:           "user-1",
-		ChatID:           "chat-worktree-daemon",
+		ChatID:           "chat-worktree-daemon-" + uuid.NewString(),
 		ProjectID:        "project-1",
 		ProjectPath:      "/home/workspace/projects/reliant",
 		WorktreeID:       "wt-1",

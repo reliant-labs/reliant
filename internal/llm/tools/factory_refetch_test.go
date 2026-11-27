@@ -6,6 +6,8 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -108,7 +110,7 @@ func TestFactoryWorktreeTool_AnnouncesToTheUserThroughTheInjectedRefetcher(t *te
 	rec := &recordingRefetcher{}
 	factory := NewToolsFactory(&ToolsOptions{
 		Repo:            f.repo,
-		Placement:       f.repo,
+		Placement:       rowreads.WithRepo(f.repo),
 		WorktreeChats:   store.NewChatExtStore(f.repo.ORM()),
 		RunMachine:      f.machine,
 		WorktreeSettler: f.settler,

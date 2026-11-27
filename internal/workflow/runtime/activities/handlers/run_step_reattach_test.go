@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/api/serviceerror"
@@ -150,7 +152,7 @@ func runStepAttempt(t *testing.T, act *ExecuteRunStepActivity, chatID string, at
 func newRunStepOn(t *testing.T, executor RunExecutor) (*ExecuteRunStepActivity, string) {
 	t.Helper()
 	repo := setupTestRepo(t)
-	return NewExecuteRunStepActivity(repo, workspaceRowsOf(repo), nil, executor), createTestChat(t, repo)
+	return NewExecuteRunStepActivity(rowreads.WithRepo(repo), workspaceRowsOf(repo), nil, executor), createTestChat(t, repo)
 }
 
 const stepRequestID = "runstep-00112233445566778899aabbccddeeff"
@@ -226,7 +228,7 @@ func TestRunStep_RetryWithoutReattachIsRefused(t *testing.T) {
 		t.Parallel()
 		tools := &recordingToolExecutor{}
 		repo := setupTestRepo(t)
-		act := NewExecuteRunStepActivity(repo, workspaceRowsOf(repo), tools, nil)
+		act := NewExecuteRunStepActivity(rowreads.WithRepo(repo), workspaceRowsOf(repo), tools, nil)
 		_, err := runStepAttempt(t, act, createTestChat(t, repo), 2, stepRequestID)
 		requireNonRetryable(t, err, runStepRetryRefusedErrType)
 		assert.Empty(t, tools.requests(), "nothing is sent to the machine")
@@ -256,7 +258,7 @@ func TestRunStep_ReattachToADaemonRestartResultIsOutcomeUnknown(t *testing.T) {
 	tools := &reattachingToolExecutor{attached: true, result: &toolexec.ToolResult{IsError: true,
 		ErrorCode: toolexec.ErrorCodeDaemonRestarted, Content: "interrupted by a daemon restart"}}
 	repo := setupTestRepo(t)
-	act := NewExecuteRunStepActivity(repo, workspaceRowsOf(repo), tools, nil)
+	act := NewExecuteRunStepActivity(rowreads.WithRepo(repo), workspaceRowsOf(repo), tools, nil)
 
 	out, err := runStepAttempt(t, act, createTestChat(t, repo), 2, stepRequestID)
 	requireNonRetryable(t, err, runStepOutcomeUnknownErrType)
@@ -429,7 +431,7 @@ func TestRunStep_CommandCarriesTheStepsRequestID(t *testing.T) {
 	t.Parallel()
 	ids := &requestIDRecorder{}
 	repo := setupTestRepo(t)
-	act := NewExecuteRunStepActivity(repo, workspaceRowsOf(repo), nil, ids)
+	act := NewExecuteRunStepActivity(rowreads.WithRepo(repo), workspaceRowsOf(repo), nil, ids)
 	env := (&temporaltest.WorkflowTestSuite{}).NewTestActivityEnvironment()
 	env.RegisterActivityWithOptions(func(ctx context.Context, in ExecuteRunStepInput) (ExecuteRunStepOutput, error) {
 		return act.execute(ctx, in, 1, stepRequestID)

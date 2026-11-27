@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"connectrpc.com/connect"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -38,7 +40,7 @@ func TestDiskReport_HeartbeatToRegistryAndKeptWhileOffline(t *testing.T) {
 	defer cleanup()
 	seedDaemon(t, repo, "user-1", "daemon-1", true)
 
-	gw := newTestService(repo)
+	gw := newTestService(rowreads.WithRepo(repo))
 	t.Cleanup(gw.Close)
 	conn := newTestConn("user-1", "daemon-1", newParkedStream())
 	gw.recordDiskReport(context.Background(), conn, &reliantv1.DiskReport{Volumes: []*reliantv1.DiskVolume{
@@ -46,7 +48,7 @@ func TestDiskReport_HeartbeatToRegistryAndKeptWhileOffline(t *testing.T) {
 		{Label: "home", Paths: []string{"/home/workspace"}, TotalBytes: 157 << 30, FreeBytes: 124 << 30},
 	}})
 
-	reg := newDaemonRegistry(t, repo, nil)
+	reg := newDaemonRegistry(t, rowreads.WithRepo(repo), nil)
 	list, err := reg.ListDaemons(userCtx("user-1"), connect.NewRequest(&reliantv1.ListDaemonsRequest{}))
 	require.NoError(t, err)
 	require.Len(t, list.Msg.Daemons, 1)
@@ -77,7 +79,7 @@ func TestClearMachineCaches_RelaysToTheMachine(t *testing.T) {
 		Started: []string{diskwatch.KindGoBuildCache},
 		Skipped: []diskwatch.ClearSkip{{Kind: diskwatch.KindDockerVolumes, Reason: "not clearable"}},
 	}}
-	reg := newDaemonRegistry(t, repo, router)
+	reg := newDaemonRegistry(t, rowreads.WithRepo(repo), router)
 
 	resp, err := reg.ClearMachineCaches(userCtx("user-1"), connect.NewRequest(&reliantv1.ClearMachineCachesRequest{
 		DaemonId: "daemon-1", Kinds: []string{diskwatch.KindGoBuildCache, diskwatch.KindDockerVolumes},

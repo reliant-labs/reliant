@@ -9,6 +9,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+	"github.com/reliant-labs/reliant/internal/store"
+
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -131,7 +134,7 @@ func newUnregisteredActivityPlacementFixture(t *testing.T) *activityPlacementFix
 func (f *activityPlacementFixture) installOn(t *testing.T, daemonID, path string) {
 	t.Helper()
 	ctx := context.Background()
-	if d, err := f.repo.GetDaemon(ctx, daemonID); err != nil || d == nil {
+	if d, err := store.GetDaemon(ctx, f.repo.ORM(), daemonID); err != nil || d == nil {
 		require.NoError(t, f.repo.UpsertDaemon(ctx, &db.Daemon{ID: daemonID, UserID: f.userID}))
 	}
 	require.NoError(t, f.repo.UpsertProjectDaemon(ctx, f.projectID, daemonID, path, nil))
@@ -168,7 +171,7 @@ func (f *activityPlacementFixture) chat(t *testing.T, worktreeID string) string 
 
 func (f *activityPlacementFixture) createWorktree(t *testing.T, chatID string, selector *types.DaemonSelector) *db.Worktree {
 	t.Helper()
-	activity := NewCreateWorktreeActivity(f.repo, workspaceRowsOf(f.repo), f.router)
+	activity := NewCreateWorktreeActivity(rowreads.WithRepo(f.repo), workspaceRowsOf(f.repo), f.router)
 	out, err := activity.Execute(context.Background(), ActivityInput{
 		Runtime: types.RuntimeContext{ChatID: chatID, DaemonSelector: selector},
 		Node: &reliantv1.Node{
@@ -268,7 +271,7 @@ func TestDeleteWorktreeActivity_RoutesToOwningDaemon(t *testing.T) {
 	f.worktree(t, "doomed", "daemon-b")
 	chatID := f.chat(t, "")
 
-	activity := NewDeleteWorktreeActivity(f.repo, workspaceRowsOf(f.repo), f.router)
+	activity := NewDeleteWorktreeActivity(rowreads.WithRepo(f.repo), workspaceRowsOf(f.repo), f.router)
 	_, err := activity.Execute(context.Background(), DeleteWorktreeInput{ChatID: chatID, Name: "doomed"})
 	require.NoError(t, err)
 

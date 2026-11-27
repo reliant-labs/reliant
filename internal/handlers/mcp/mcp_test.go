@@ -9,6 +9,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -119,7 +121,7 @@ func setupMCPServiceToggleTest(t *testing.T) (context.Context, *Service, *fakeMC
 	manager := newFakeMCPManagerRuntime()
 	router := newFakeMCPDaemonRouter(manager)
 
-	svc := newMCPService(t, repo, router)
+	svc := newMCPService(t, rowreads.WithRepo(repo), router)
 
 	projectPath := filepath.Join(t.TempDir(), "project")
 	require.NoError(t, os.MkdirAll(projectPath, 0o755))
@@ -295,7 +297,7 @@ func TestMCPService_ListServers_PrefersStoredConfigSnapshotOverFilesystem(t *tes
 		PushedAt:   now,
 	}))
 
-	svc := newMCPService(t, repo, newFakeMCPDaemonRouter(newFakeMCPManagerRuntime()))
+	svc := newMCPService(t, rowreads.WithRepo(repo), newFakeMCPDaemonRouter(newFakeMCPManagerRuntime()))
 
 	server := getServerFromList(t, svc, ctx, projectID, "toggle-server")
 	require.False(t, server.Enabled, "stored config should override filesystem fallback")
@@ -512,7 +514,7 @@ func TestMCPService_SetServerEnabled_GlobalScopePropagatesStoredSnapshotAcrossPr
 	require.NoError(t, os.MkdirAll(filepath.Dir(globalPath), 0o755))
 	require.NoError(t, os.WriteFile(globalPath, []byte(`{"mcpServers":{"shared-global":{"command":"go","args":["version"],"enabled":true}}}`), 0o644))
 
-	svc := newMCPService(t, repo, newFakeMCPDaemonRouter(newFakeMCPManagerRuntime()))
+	svc := newMCPService(t, rowreads.WithRepo(repo), newFakeMCPDaemonRouter(newFakeMCPManagerRuntime()))
 	_, err := svc.SetServerEnabled(ctx, connect.NewRequest(&reliantv1.SetServerEnabledRequest{
 		ProjectId: projectA,
 		Name:      "shared-global",

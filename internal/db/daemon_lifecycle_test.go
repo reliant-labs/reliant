@@ -5,6 +5,8 @@ import (
 	"context"
 	"testing"
 	"time"
+
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // These tests run the real SQL, not a fake. The ordering guard in
@@ -81,7 +83,7 @@ func TestApplyDaemonLifecycle_StoresAndRoundTrips(t *testing.T) {
 		}
 	}
 
-	got, err := repo.GetDaemon(ctx, daemonID)
+	got, err := store.GetDaemon(ctx, repo.ORM(), daemonID)
 	if err != nil {
 		t.Fatalf("GetDaemon: %v", err)
 	}
@@ -134,7 +136,7 @@ func TestApplyDaemonLifecycle_RejectsStaleEvents(t *testing.T) {
 		t.Error("a stale lifecycle event reported itself as applied")
 	}
 
-	got, err := repo.GetDaemon(ctx, daemonID)
+	got, err := store.GetDaemon(ctx, repo.ORM(), daemonID)
 	if err != nil {
 		t.Fatalf("GetDaemon: %v", err)
 	}
@@ -188,7 +190,7 @@ func TestApplyDaemonLifecycle_PreservesSizeAndOOMOnPhaseChange(t *testing.T) {
 		t.Fatalf("apply transition: %v", err)
 	}
 
-	got, err := repo.GetDaemon(ctx, daemonID)
+	got, err := store.GetDaemon(ctx, repo.ORM(), daemonID)
 	if err != nil {
 		t.Fatalf("GetDaemon: %v", err)
 	}
@@ -230,7 +232,7 @@ func TestApplyDaemonLifecycle_UnregisteredDaemonIsNoOp(t *testing.T) {
 	if updated {
 		t.Fatal("ApplyDaemonLifecycle created a row for a daemon that never registered")
 	}
-	if _, err := repo.GetDaemon(ctx, "lifecycle-never-registered"); err == nil {
+	if _, err := store.GetDaemon(ctx, repo.ORM(), "lifecycle-never-registered"); err == nil {
 		t.Fatal("a daemons row exists for a daemon that only ever had a lifecycle event")
 	}
 }
@@ -287,7 +289,7 @@ func TestApplyDaemonLifecycle_WritesWhenPhaseNullRegardlessOfTimestamp(t *testin
 	if !updated {
 		t.Fatal("event was dropped although lifecycle_phase is NULL")
 	}
-	got, err := repo.GetDaemon(ctx, daemonID)
+	got, err := store.GetDaemon(ctx, repo.ORM(), daemonID)
 	if err != nil || got.LifecyclePhase == nil || *got.LifecyclePhase != "suspended" {
 		t.Fatalf("lifecycle_phase not written: %v %v", got, err)
 	}

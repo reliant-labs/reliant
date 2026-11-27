@@ -6,12 +6,13 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 )
@@ -93,7 +94,7 @@ func TestExecuteTools_ReconnectWaitShowsWaitingForDaemon(t *testing.T) {
 	defer f.h.Cleanup()
 	ctx := context.Background()
 	f.h.CreateTestWorkflow(ctx, f.chatID, f.chatID)
-	a := NewExecuteToolsActivity(ExecuteToolsDeps{Store: tools.WithChats(f.h.Repo()), Rows: workspaceRowsOf(f.h.Repo()), ToolCalls: toolCallsOf(f.h.Repo()), ToolExecutor: newMockToolExecutor(), Preemption: store.NewAgentMessageExtStore(f.h.Repo().ORM())})
+	a := NewExecuteToolsActivity(ExecuteToolsDeps{Store: rowreads.WithRepo(f.h.Repo()), Rows: workspaceRowsOf(f.h.Repo()), ToolCalls: toolCallsOf(f.h.Repo()), ToolExecutor: newMockToolExecutor(), Preemption: store.NewAgentMessageExtStore(f.h.Repo().ORM())})
 	observe := a.daemonWaitObserver(ctx, f.chatID)
 	require.NotNil(t, observe)
 

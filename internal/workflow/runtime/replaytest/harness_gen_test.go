@@ -54,6 +54,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/mcp"
 	"github.com/reliant-labs/reliant/internal/providerbackoff/providerbackofftest"
 	"github.com/reliant-labs/reliant/internal/questions"
+	"github.com/reliant-labs/reliant/internal/rowreads"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/streaming"
 	"github.com/reliant-labs/reliant/internal/temporal"
@@ -360,7 +361,7 @@ func newHarnessWith(t *testing.T, llmScript *ScriptedLLM, executor toolexec.Tool
 	chatSvc, err := chat.New(chat.Deps{
 		Logger:           slog.Default(),
 		Config:           &typedconfig.Config{},
-		Repo:             s.Repo,
+		Repo:             rowreads.WithRepo(s.Repo),
 		TriggerReads:     store.NewTriggerEventExtStore(s.Repo.ORM()),
 		Chats:            chataccess.NewFromORM(s.Repo.ORM()),
 		ChatRows:         store.NewChatExtStore(s.Repo.ORM()),

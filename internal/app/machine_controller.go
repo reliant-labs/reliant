@@ -9,6 +9,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/handlers/daemon_registry"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/machinetools"
+	"github.com/reliant-labs/reliant/internal/rowreads"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/pkg/config"
 )
@@ -43,7 +44,7 @@ func NewMachineController(d MachineControllerDeps) (tools.MachineController, err
 	// The registry service is a library here, not a mount: the label and
 	// pool tools call its rpcs in-process, as the run's owner. Its
 	// IdleTimeouts is the worker's control plane (nil when self-hosted).
-	registryDeps := daemon_registry.Deps{Logger: d.Logger, Config: d.Config, Repo: repo, Pools: store.NewMachinePoolExtStore(repo.ORM()), Mirror: d.Mirror}
+	registryDeps := daemon_registry.Deps{Logger: d.Logger, Config: d.Config, Repo: rowreads.WithRepo(repo), Pools: store.NewMachinePoolExtStore(repo.ORM()), Mirror: d.Mirror}
 	if d.Router != nil && d.Router.ControlPlane != nil {
 		registryDeps.IdleTimeouts = d.Router.ControlPlane
 	}

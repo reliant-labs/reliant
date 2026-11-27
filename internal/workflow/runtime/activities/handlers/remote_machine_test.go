@@ -5,6 +5,8 @@ import (
 	"context"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/stretchr/testify/assert"
@@ -101,7 +103,7 @@ func TestExecuteTools_OfflineResultGetsWaitHintOnlyWhenOffered(t *testing.T) {
 		executor.SetResult(id, result)
 
 		var output ExecuteToolsOutput
-		require.NoError(t, f.h.ExecuteActivity(NewExecuteToolsActivity(ExecuteToolsDeps{Store: tools.WithChats(f.h.Repo()), Rows: workspaceRowsOf(f.h.Repo()), ToolCalls: toolCallsOf(f.h.Repo()), ToolExecutor: executor, Preemption: store.NewAgentMessageExtStore(f.h.Repo().ORM())}).Execute, ExecuteToolsInput{
+		require.NoError(t, f.h.ExecuteActivity(NewExecuteToolsActivity(ExecuteToolsDeps{Store: rowreads.WithRepo(f.h.Repo()), Rows: workspaceRowsOf(f.h.Repo()), ToolCalls: toolCallsOf(f.h.Repo()), ToolExecutor: executor, Preemption: store.NewAgentMessageExtStore(f.h.Repo().ORM())}).Execute, ExecuteToolsInput{
 			ChatID:       f.chatID,
 			Thread:       f.chatID,
 			Capabilities: caps,

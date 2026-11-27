@@ -9,6 +9,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/svcerr"
@@ -154,7 +156,7 @@ func newMachinesFixture(t *testing.T) *machinesFixture {
 	}
 	require.NoError(t, repo.UpsertDaemon(f.ctx, &db.Daemon{ID: f.foreign, UserID: "someone-else"}))
 	f.disk = newMachinesDisk(f.laptop)
-	f.svc = newProjectService(t, repo, f.disk)
+	f.svc = newProjectService(t, rowreads.WithRepo(repo), f.disk)
 	return f
 }
 
@@ -627,7 +629,7 @@ func TestDetachProjectFromDaemon_RefusesACheckoutMovedUnderIt(t *testing.T) {
 	p := f.project(t, "m", "/home/workspace/m-"+uuid.NewString(), f.cloud, nil)
 	oldPath, newPath := "/Users/me/m-"+uuid.NewString(), "/Users/me/moved-"+uuid.NewString()
 	require.NoError(t, f.repo.UpsertProjectDaemon(f.ctx, p.ID, f.laptop, oldPath, nil))
-	svc := NewTestProject(t, WithProjectDeps(withStores(Deps{Repo: f.repo, Projects: projectaccesstest.For(f.repo), Router: f.disk, Detachments: moveBeforeDetach{Detachments: store.NewProjectDaemonDetachmentExtStore(f.repo.ORM()), move: func(ctx context.Context) {
+	svc := NewTestProject(t, WithProjectDeps(withStores(Deps{Repo: rowreads.WithRepo(f.repo), Projects: projectaccesstest.For(f.repo), Router: f.disk, Detachments: moveBeforeDetach{Detachments: store.NewProjectDaemonDetachmentExtStore(f.repo.ORM()), move: func(ctx context.Context) {
 		require.NoError(t, f.repo.UpsertProjectDaemon(ctx, p.ID, f.laptop, newPath, nil))
 	}}})))
 

@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -57,7 +59,7 @@ func newDetachedFixture(t *testing.T) *detachedFixture {
 func TestEnsureOwnedProjectForPath_ResolvesTheMachinesOwnCheckoutPath(t *testing.T) {
 	f := newDetachedFixture(t)
 	require.NoError(t, f.repo.UpsertProjectDaemon(f.ctx, f.project.ID, f.laptop, f.localPath, nil))
-	svc := newTestService(f.repo)
+	svc := newTestService(rowreads.WithRepo(f.repo))
 
 	got, err := svc.ensureOwnedProjectForPath(f.ctx, newTestConn(f.userID, f.laptop, nil), f.localPath, nil)
 	require.NoError(t, err)
@@ -80,7 +82,7 @@ func TestEnsureOwnedProjectForPath_AnotherUsersCheckoutRowIsNeverResolved(t *tes
 		Path: "/home/them/theirs-" + uuid.NewString(), CreatedAt: now, UpdatedAt: now, LastActive: now}
 	require.NoError(t, f.repo.CreateProject(f.ctx, foreign))
 	require.NoError(t, f.repo.UpsertProjectDaemon(f.ctx, foreign.ID, f.laptop, f.localPath, nil))
-	svc := newTestService(f.repo)
+	svc := newTestService(rowreads.WithRepo(f.repo))
 
 	got, err := svc.ensureOwnedProjectForPath(f.ctx, newTestConn(f.userID, f.laptop, nil), f.localPath, nil)
 	require.NoError(t, err)
@@ -100,7 +102,7 @@ func TestDetachedProject_StaysOffTheMachine(t *testing.T) {
 	f := newDetachedFixture(t)
 	require.NoError(t, f.repo.UpsertProjectDaemon(f.ctx, f.project.ID, f.laptop, f.project.Path, nil))
 	require.NoError(t, store.DetachProjectFromDaemon(f.ctx, f.repo.ORM(), f.project.ID, f.laptop, f.project.Path, nil))
-	svc := newTestService(f.repo)
+	svc := newTestService(rowreads.WithRepo(f.repo))
 	conn := newTestConn(f.userID, f.laptop, nil)
 
 	_, err := svc.ensureOwnedProjectForPath(f.ctx, conn, f.project.Path, nil)
@@ -132,7 +134,7 @@ func TestDetachedProject_ItsOtherPathIsNotANewProject(t *testing.T) {
 	f := newDetachedFixture(t)
 	require.NoError(t, f.repo.UpsertProjectDaemon(f.ctx, f.project.ID, f.laptop, f.localPath, nil))
 	require.NoError(t, store.DetachProjectFromDaemon(f.ctx, f.repo.ORM(), f.project.ID, f.laptop, f.localPath, nil))
-	svc := newTestService(f.repo)
+	svc := newTestService(rowreads.WithRepo(f.repo))
 
 	_, err := svc.ensureOwnedProjectForPath(f.ctx, newTestConn(f.userID, f.laptop, nil), f.localPath, nil)
 	assert.True(t, errors.Is(err, errProjectDetached), "got %v", err)
@@ -154,7 +156,7 @@ func TestDetachedProject_AnotherProjectAttachedAtItsPathSyncs(t *testing.T) {
 		Path: "/home/workspace/other-" + uuid.NewString(), CreatedAt: now, UpdatedAt: now, LastActive: now}
 	require.NoError(t, f.repo.CreateProject(f.ctx, other))
 	require.NoError(t, f.repo.UpsertProjectDaemon(f.ctx, other.ID, f.laptop, f.localPath, nil))
-	svc := newTestService(f.repo)
+	svc := newTestService(rowreads.WithRepo(f.repo))
 
 	got, err := svc.ensureOwnedProjectForPath(f.ctx, newTestConn(f.userID, f.laptop, nil), f.localPath, nil)
 	require.NoError(t, err)
@@ -223,7 +225,7 @@ func TestEnsureOwnedProjectForPath_DetachBetweenItsReadsCreatesNoProject(t *test
 			time.Sleep(5 * time.Millisecond)
 		}
 	}
-	svc := newTestService(f.repo, repo)
+	svc := newTestService(rowreads.WithRepo(f.repo), repo)
 	conn := newTestConn(f.userID, f.laptop, nil)
 
 	got, err := svc.ensureOwnedProjectForPath(f.ctx, conn, f.localPath, nil)

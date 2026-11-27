@@ -20,6 +20,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/daemonplacement"
+
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -53,6 +55,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/providerbackoff/providerbackofftest"
 	"github.com/reliant-labs/reliant/internal/questions"
 	"github.com/reliant-labs/reliant/internal/rctx"
+	"github.com/reliant-labs/reliant/internal/rowreads"
 	"github.com/reliant-labs/reliant/internal/runs"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/streaming"
@@ -375,7 +378,7 @@ func newHarness(t *testing.T, llmScript *ScriptedLLM, opts ...HarnessOption) *Ha
 	// builds it (internal/app NewRunLauncher). nil prober: triggers never ask for a
 	// greenfield probe.
 	pause := workflow.NewPauseService(workflow.PauseServiceDeps{Temporal: s.Temporal, Store: s.Repo, Workflows: store.NewWorkflowExtStore(s.Repo.ORM())})
-	triggerLauncher := launch.New(launch.Deps{Store: s.Repo, Chats: store.NewChatsWithActivityExtStore(s.Repo.ORM()), Workflows: store.NewWorkflowExtStore(s.Repo.ORM()), Worktrees: store.NewWorktreeExtStore(s.Repo.ORM()), ProjectRows: store.NewProjectExtStore(s.Repo.ORM()), TriggerEvents: store.NewTriggerEventExtStore(s.Repo.ORM()), Projects: projectaccess.NewFromORM(s.Repo.ORM()), Selections: store.NewChatSelectionExtStore(s.Repo.ORM()), Threads: threads.New(threads.Deps{Repo: s.Repo, Chats: chataccess.NewFromORM(s.Repo.ORM()), Messages: store.NewMessageExtStore(s.Repo.ORM()), Senders: store.NewThreadExtStore(s.Repo.ORM())}), Temporal: s.Temporal, Runs: runs.New(runs.Deps{Repo: s.Repo, Resolver: questions.NewFromRepo(s.Repo), Chats: store.NewChatsWithActivityExtStore(s.Repo.ORM()), Workflows: store.NewWorkflowExtStore(s.Repo.ORM()), Questions: store.NewQuestionExtStore(s.Repo.ORM()), Temporal: s.Temporal, Pause: pause}), TaskQueue: launch.TaskQueue(taskQueue)})
+	triggerLauncher := launch.New(launch.Deps{Store: s.Repo, Chats: store.NewChatsWithActivityExtStore(s.Repo.ORM()), Workflows: store.NewWorkflowExtStore(s.Repo.ORM()), Worktrees: store.NewWorktreeExtStore(s.Repo.ORM()), Installs: daemonplacement.NewRecords(s.Repo.ORM()), ProjectRows: store.NewProjectExtStore(s.Repo.ORM()), TriggerEvents: store.NewTriggerEventExtStore(s.Repo.ORM()), Projects: projectaccess.NewFromORM(s.Repo.ORM()), Selections: store.NewChatSelectionExtStore(s.Repo.ORM()), Threads: threads.New(threads.Deps{Repo: s.Repo, Chats: chataccess.NewFromORM(s.Repo.ORM()), Messages: store.NewMessageExtStore(s.Repo.ORM()), Senders: store.NewThreadExtStore(s.Repo.ORM())}), Temporal: s.Temporal, Runs: runs.New(runs.Deps{Repo: s.Repo, Resolver: questions.NewFromRepo(s.Repo), Chats: store.NewChatsWithActivityExtStore(s.Repo.ORM()), Workflows: store.NewWorkflowExtStore(s.Repo.ORM()), Questions: store.NewQuestionExtStore(s.Repo.ORM()), Temporal: s.Temporal, Pause: pause}), TaskQueue: launch.TaskQueue(taskQueue)})
 
 	progress := &atomic.Int64{}
 	temporalWorker, _, err := workersetup.NewWorker(&workersetup.Config{
@@ -421,7 +424,7 @@ func newHarness(t *testing.T, llmScript *ScriptedLLM, opts ...HarnessOption) *Ha
 	chatSvc, err := chat.New(chat.Deps{
 		Logger:           slog.Default(),
 		Config:           &typedconfig.Config{},
-		Repo:             s.Repo,
+		Repo:             rowreads.WithRepo(s.Repo),
 		TriggerReads:     store.NewTriggerEventExtStore(s.Repo.ORM()),
 		Chats:            chataccess.NewFromORM(s.Repo.ORM()),
 		ChatRows:         store.NewChatExtStore(s.Repo.ORM()),
@@ -468,7 +471,7 @@ func newHarness(t *testing.T, llmScript *ScriptedLLM, opts ...HarnessOption) *Ha
 	triggerSvc, err := trigger.New(trigger.Deps{
 		Logger:         slog.Default(),
 		Config:         &typedconfig.Config{},
-		Repo:           s.Repo,
+		Repo:           rowreads.WithRepo(s.Repo),
 		Chats:          store.NewChatExtStore(s.Repo.ORM()),
 		Owners:         triggerOwners(t, s.Repo),
 		Firings:        store.NewTriggerEventExtStore(s.Repo.ORM()),

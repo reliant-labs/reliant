@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -14,7 +16,6 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
-	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/models/message"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
@@ -216,7 +217,7 @@ func TestLoadWorktreeInfo_ThreadBoundRoutesToWorktreeOwner(t *testing.T) {
 	require.NoError(t, err)
 	project, err := f.repo.GetProject(ctx, f.projectID)
 	require.NoError(t, err)
-	a := &ExecuteToolsActivity{repo: tools.WithChats(f.repo), rows: workspaceRowsOf(f.repo)}
+	a := &ExecuteToolsActivity{repo: rowreads.WithRepo(f.repo), rows: workspaceRowsOf(f.repo)}
 
 	spawned := f.spawn(t, "feature-x", "")
 	info, _, err := a.loadWorktreeInfo(ctx, chat, project, spawned.ThreadID)
@@ -278,7 +279,7 @@ func TestSpawnWorktree_ChildToolsRunInWorktreeDespiteInheritedOverrides(t *testi
 
 	run := func(thread string, override string, sel *types.DaemonSelector) *toolexec.ToolRequest {
 		exec := &capturingExecutor{mockToolExecutor: *newMockToolExecutor()}
-		act := NewExecuteToolsActivity(ExecuteToolsDeps{Store: tools.WithChats(f.repo), Rows: workspaceRowsOf(f.repo), ToolCalls: toolCallsOf(f.repo), ToolExecutor: exec, Preemption: store.NewAgentMessageExtStore(f.repo.ORM())})
+		act := NewExecuteToolsActivity(ExecuteToolsDeps{Store: rowreads.WithRepo(f.repo), Rows: workspaceRowsOf(f.repo), ToolCalls: toolCallsOf(f.repo), ToolExecutor: exec, Preemption: store.NewAgentMessageExtStore(f.repo.ORM())})
 		fn := func(ctx context.Context) (message.ToolResult, error) {
 			return act.executeSingleTool(ctx, nil, f.chatID, thread, "shell", `{"command":"pwd"}`,
 				"tc-"+uuid.NewString(), "act", "run", 1, override, sel), nil
@@ -406,7 +407,7 @@ func TestEnsureBatchWorkspace_ThreadBoundWorktree(t *testing.T) {
 	wt := mustWorktree(t, f, wtID)
 
 	executor := &daemonLikeExecutor{}
-	a := NewExecuteToolsActivity(ExecuteToolsDeps{Store: tools.WithChats(f.repo), Rows: workspaceRowsOf(f.repo), ToolCalls: toolCallsOf(f.repo), ToolExecutor: executor, Preemption: store.NewAgentMessageExtStore(f.repo.ORM())})
+	a := NewExecuteToolsActivity(ExecuteToolsDeps{Store: rowreads.WithRepo(f.repo), Rows: workspaceRowsOf(f.repo), ToolCalls: toolCallsOf(f.repo), ToolExecutor: executor, Preemption: store.NewAgentMessageExtStore(f.repo.ORM())})
 	rtx := &types.RuntimeContext{
 		ChatID: f.chatID, Thread: spawned.ThreadID,
 		ProjectPath:    "/home/u/projects/p",

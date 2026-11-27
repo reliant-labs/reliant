@@ -9,6 +9,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/orm"
@@ -106,7 +108,7 @@ func TestToolsDaemonServiceCloseIsIdempotent(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	defer cleanup()
 
-	svc := newTestService(repo)
+	svc := newTestService(rowreads.WithRepo(repo))
 	svc.Close()
 	svc.Close()
 }
@@ -115,7 +117,7 @@ func TestSendDaemonCommandCancelsInFlightCommandWhenCallerContextEnds(t *testing
 	repo, cleanup := db.SetupTestDB(t)
 	defer cleanup()
 
-	svc := newTestService(repo)
+	svc := newTestService(rowreads.WithRepo(repo))
 	defer svc.Close()
 
 	conn := &daemonConnection{
@@ -162,7 +164,7 @@ func TestSendDaemonCommandCancelsInFlightCommandWhenCallerContextEnds(t *testing
 func TestSendDaemonCommandToDaemon_ReachesTheNamedDaemonNotTheDefault(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	defer cleanup()
-	svc := newTestService(repo)
+	svc := newTestService(rowreads.WithRepo(repo))
 	defer svc.Close()
 
 	newConn := func(daemonType string) *daemonConnection {
@@ -403,7 +405,7 @@ func TestHandleProjectDiscoveryCreatesProjectAndRequestsConfig(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	defer cleanup()
 
-	svc := newTestService(repo)
+	svc := newTestService(rowreads.WithRepo(repo))
 	defer svc.Close()
 
 	daemonID := uuid.New().String()
@@ -455,7 +457,7 @@ func TestHandleProjectDiscoveryCreatesProjectAndRequestsConfig(t *testing.T) {
 	require.True(t, sawLoad)
 	require.True(t, sawWatch)
 
-	reloadedDaemon, err := repo.GetDaemon(context.Background(), daemonID)
+	reloadedDaemon, err := store.GetDaemon(context.Background(), repo.ORM(), daemonID)
 	require.NoError(t, err)
 	require.NotNil(t, reloadedDaemon.ProjectPaths)
 
@@ -468,7 +470,7 @@ func TestHandleLoadProjectConfigsResponsePersistsSnapshotAndTracksState(t *testi
 	repo, cleanup := db.SetupTestDB(t)
 	defer cleanup()
 
-	svc := newTestService(repo)
+	svc := newTestService(rowreads.WithRepo(repo))
 	defer svc.Close()
 
 	daemonID := uuid.New().String()
@@ -536,7 +538,7 @@ func TestHandleProjectConfigDeltaStaleGuardAndReloadRequest(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	defer cleanup()
 
-	svc := newTestService(repo)
+	svc := newTestService(rowreads.WithRepo(repo))
 	defer svc.Close()
 
 	now := time.Now().UTC()
@@ -613,7 +615,7 @@ func TestPR5Smoke_ConfigSyncCancelDisconnectReconnect(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	defer cleanup()
 
-	svc := newTestService(repo)
+	svc := newTestService(rowreads.WithRepo(repo))
 	defer svc.Close()
 
 	ctx := context.Background()
@@ -714,7 +716,7 @@ func TestHandleFileSystemChanged(t *testing.T) {
 		repo, cleanup := db.SetupTestDB(t)
 		defer cleanup()
 
-		svc := newTestService(repo)
+		svc := newTestService(rowreads.WithRepo(repo))
 		defer svc.Close()
 
 		conn := &daemonConnection{userID: "test-user", daemonID: uuid.New().String(), done: make(chan struct{})}
@@ -729,7 +731,7 @@ func TestHandleFileSystemChanged(t *testing.T) {
 		repo, cleanup := db.SetupTestDB(t)
 		defer cleanup()
 
-		svc := newTestService(repo)
+		svc := newTestService(rowreads.WithRepo(repo))
 		defer svc.Close()
 
 		conn := &daemonConnection{userID: "test-user", daemonID: uuid.New().String(), done: make(chan struct{})}
@@ -746,7 +748,7 @@ func TestHandleFileSystemChanged(t *testing.T) {
 		repo, cleanup := db.SetupTestDB(t)
 		defer cleanup()
 
-		svc := newTestService(repo)
+		svc := newTestService(rowreads.WithRepo(repo))
 		defer svc.Close()
 
 		conn := &daemonConnection{userID: "test-user", daemonID: uuid.New().String(), done: make(chan struct{})}
@@ -763,7 +765,7 @@ func TestHandleFileSystemChanged(t *testing.T) {
 		repo, cleanup := db.SetupTestDB(t)
 		defer cleanup()
 
-		svc := newTestService(repo)
+		svc := newTestService(rowreads.WithRepo(repo))
 		defer svc.Close()
 
 		ctx := context.Background()
@@ -835,7 +837,7 @@ func TestHandleDaemonCommandFailed(t *testing.T) {
 		repo, cleanup := db.SetupTestDB(t)
 		defer cleanup()
 
-		svc := newTestService(repo)
+		svc := newTestService(rowreads.WithRepo(repo))
 		defer svc.Close()
 
 		conn := &daemonConnection{userID: "test-user", daemonID: uuid.New().String(), done: make(chan struct{})}
@@ -850,7 +852,7 @@ func TestHandleDaemonCommandFailed(t *testing.T) {
 		repo, cleanup := db.SetupTestDB(t)
 		defer cleanup()
 
-		svc := newTestService(repo)
+		svc := newTestService(rowreads.WithRepo(repo))
 		defer svc.Close()
 
 		ctx := context.Background()
@@ -898,7 +900,7 @@ func TestHasConnectedDaemonsForUser(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	defer cleanup()
 
-	svc := newTestService(repo)
+	svc := newTestService(rowreads.WithRepo(repo))
 	defer svc.Close()
 
 	const userID = "user-x"
@@ -942,7 +944,7 @@ func TestSweepStaleConnectionsRemovesHalfOpenAndFiresListeners(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	defer cleanup()
 
-	svc := newTestService(repo)
+	svc := newTestService(rowreads.WithRepo(repo))
 	defer svc.Close()
 
 	// Inject a controllable clock so we can age connections without sleeping.
@@ -1032,7 +1034,7 @@ func TestSweepStaleConnectionsSkipsRecentlyRegistered(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	defer cleanup()
 
-	svc := newTestService(repo)
+	svc := newTestService(rowreads.WithRepo(repo))
 	defer svc.Close()
 
 	baseTime := time.Date(2026, 5, 30, 12, 0, 0, 0, time.UTC)
@@ -1063,7 +1065,7 @@ func TestTouchDaemonsForUserBumpsOnlyMatchingUser(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	defer cleanup()
 
-	svc := newTestService(repo)
+	svc := newTestService(rowreads.WithRepo(repo))
 	defer svc.Close()
 
 	stale := time.Now().Add(-1 * time.Hour).UTC()

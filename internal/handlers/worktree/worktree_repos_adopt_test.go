@@ -8,12 +8,15 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
+
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/machinewake"
 	"github.com/reliant-labs/reliant/internal/projectcheckout"
@@ -102,7 +105,7 @@ func TestListProjectReposAdoptsUnregisteredRepos(t *testing.T) {
 	router := &adoptTestDaemonRouter{
 		discovered: []map[string]any{{"relative_path": "", "name": "adopt-test"}},
 	}
-	s := newWorktreeService(t, repo, router)
+	s := newWorktreeService(t, rowreads.WithRepo(repo), router)
 
 	repos, err := s.listProjectRepos(ctx, project.UserID, project, placeOn("test-daemon-id"))
 	require.NoError(t, err)
@@ -135,7 +138,7 @@ func TestListProjectReposStillFailsWhenNothingOnDisk(t *testing.T) {
 
 	project := newAdoptTestProject(t, repo)
 	router := &adoptTestDaemonRouter{discovered: nil}
-	s := newWorktreeService(t, repo, router)
+	s := newWorktreeService(t, rowreads.WithRepo(repo), router)
 
 	_, err := s.listProjectRepos(ctx, project.UserID, project, placeOn("test-daemon-id"))
 	require.Error(t, err)
@@ -160,7 +163,7 @@ func TestListProjectReposAdoptsFromThePlacementMachine(t *testing.T) {
 	router := &adoptTestDaemonRouter{
 		discovered: []map[string]any{{"relative_path": "", "name": "adopt-test"}},
 	}
-	s := newWorktreeService(t, repo, router)
+	s := newWorktreeService(t, rowreads.WithRepo(repo), router)
 
 	repos, err := s.listProjectRepos(ctx, project.UserID, project, placeOn("cloud-machine"))
 	require.NoError(t, err)
@@ -182,7 +185,7 @@ func TestListProjectReposPlacesOnlyWhenTheRegistryIsEmpty(t *testing.T) {
 	router := &adoptTestDaemonRouter{
 		discovered: []map[string]any{{"relative_path": "", "name": "adopt-test"}},
 	}
-	s := newWorktreeService(t, repo, router)
+	s := newWorktreeService(t, rowreads.WithRepo(repo), router)
 	_, err := s.listProjectRepos(ctx, project.UserID, project, placeOn("m"))
 	require.NoError(t, err)
 
@@ -229,7 +232,7 @@ func TestListProjectReposNeverBlamesTheProjectForAnUnreachableMachine(t *testing
 
 			project := newAdoptTestProject(t, repo)
 			router := &adoptTestDaemonRouter{discoverErr: tc.err}
-			s := newWorktreeService(t, repo, router)
+			s := newWorktreeService(t, rowreads.WithRepo(repo), router)
 
 			_, err := s.listProjectRepos(context.Background(), project.UserID, project, placeOn("m"))
 			require.Error(t, err)

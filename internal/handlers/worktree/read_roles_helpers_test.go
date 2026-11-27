@@ -3,7 +3,8 @@ package worktree
 import (
 	"context"
 
-	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/forge/pkg/orm"
+
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
 	"github.com/reliant-labs/reliant/internal/store"
@@ -17,7 +18,7 @@ import (
 // a test that reprograms the repository after building the service still
 // reaches the handler.
 func WithReadRoles(d Deps) Deps {
-	if r, ok := d.Repo.(*db.Repo); ok && r != nil {
+	if r, ok := d.Repo.(interface{ ORM() *orm.Client }); ok {
 		o := r.ORM()
 		if d.Rows == nil {
 			d.Rows = store.NewWorktreeExtStore(o)

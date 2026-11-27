@@ -5,6 +5,8 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/stretchr/testify/assert"
@@ -25,6 +27,7 @@ import (
 // which one attempt stands for.
 type createRaceRepo struct {
 	*db.Repo
+	rowreads.Reads
 	once   sync.Once
 	winner func()
 }
@@ -60,7 +63,7 @@ func TestDiscoveryThatLosesTheCreateRace_RecordsItsCheckoutAndStoresTheSnapshot(
 	path := "/home/workspace/projects/race-" + uuid.NewString()
 
 	var winnerID string
-	racing := &createRaceRepo{Repo: repo, winner: func() {
+	racing := &createRaceRepo{Repo: repo, Reads: rowreads.Of(repo), winner: func() {
 		// The winning machine's discovery, whole: its project, and its own
 		// checkout of it.
 		winnerID = uuid.NewString()

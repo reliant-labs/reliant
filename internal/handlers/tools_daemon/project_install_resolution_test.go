@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -45,7 +47,7 @@ func TestQueuedClone_FailureMarksTheProjectFailedWithAReason(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	defer cleanup()
 
-	svc := newTestService(repo)
+	svc := newTestService(rowreads.WithRepo(repo))
 	defer svc.Close()
 
 	userID := "user-install-" + uuid.NewString()
@@ -73,7 +75,7 @@ func TestQueuedClone_FailureWithNoMessageStillReadsAsFailed(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	defer cleanup()
 
-	svc := newTestService(repo)
+	svc := newTestService(rowreads.WithRepo(repo))
 	defer svc.Close()
 
 	userID := "user-install-" + uuid.NewString()
@@ -101,7 +103,7 @@ func TestQueuedClone_FilesystemAnnouncementSettlesTheInstall(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	defer cleanup()
 
-	svc := newTestService(repo)
+	svc := newTestService(rowreads.WithRepo(repo))
 	defer svc.Close()
 
 	userID := "user-install-" + uuid.NewString()
@@ -126,7 +128,7 @@ func TestQueuedClone_UnrelatedCommandFailureLeavesTheInstallAlone(t *testing.T) 
 	repo, cleanup := db.SetupTestDB(t)
 	defer cleanup()
 
-	svc := newTestService(repo)
+	svc := newTestService(rowreads.WithRepo(repo))
 	defer svc.Close()
 
 	userID := "user-install-" + uuid.NewString()
@@ -155,7 +157,7 @@ func TestQueuedClone_UnrelatedCommandFailureLeavesTheInstallAlone(t *testing.T) 
 func TestQueuedClone_RootAnnouncementClonesTheNestedReposBeforeSettling(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	defer cleanup()
-	svc := newTestService(repo)
+	svc := newTestService(rowreads.WithRepo(repo))
 	defer svc.Close()
 	ctx := context.Background()
 

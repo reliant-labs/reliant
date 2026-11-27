@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/rowreads"
 	"github.com/reliant-labs/reliant/internal/store"
 )
 
@@ -37,7 +38,7 @@ func TestThreadStatus_StartedEmitsRunningForTheUI(t *testing.T) {
 	h.CreateTestChat(ctx, chatID, projectID, userID)
 	h.CreateTestThread(ctx, chatID, threadID)
 
-	activityInstance := NewThreadStatusActivity(ThreadStatusDeps{Store: h.Repo(), Mailbox: store.NewAgentMessageExtStore(h.Repo().ORM())})
+	activityInstance := NewThreadStatusActivity(ThreadStatusDeps{Store: rowreads.WithRepo(h.Repo()), Mailbox: store.NewAgentMessageExtStore(h.Repo().ORM())})
 	var out ThreadStatusOutput
 	require.NoError(t, h.ExecuteActivity(activityInstance.Execute, ThreadStatusInput{
 		ChatID:      chatID,
@@ -78,7 +79,7 @@ func TestThreadStatus_TerminalVerbsPassThrough(t *testing.T) {
 			h.CreateTestChat(ctx, chatID, projectID, userID)
 			h.CreateTestThread(ctx, chatID, threadID)
 
-			activityInstance := NewThreadStatusActivity(ThreadStatusDeps{Store: h.Repo(), Mailbox: store.NewAgentMessageExtStore(h.Repo().ORM())})
+			activityInstance := NewThreadStatusActivity(ThreadStatusDeps{Store: rowreads.WithRepo(h.Repo()), Mailbox: store.NewAgentMessageExtStore(h.Repo().ORM())})
 			var out ThreadStatusOutput
 			require.NoError(t, h.ExecuteActivity(activityInstance.Execute, ThreadStatusInput{
 				ChatID:     chatID,
@@ -127,7 +128,7 @@ func TestThreadStatus_UpdateCarriesPersistedMetadata(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	activityInstance := NewThreadStatusActivity(ThreadStatusDeps{Store: h.Repo(), Mailbox: store.NewAgentMessageExtStore(h.Repo().ORM())})
+	activityInstance := NewThreadStatusActivity(ThreadStatusDeps{Store: rowreads.WithRepo(h.Repo()), Mailbox: store.NewAgentMessageExtStore(h.Repo().ORM())})
 	var out ThreadStatusOutput
 	// Identity fields deliberately left empty: this is what the inline executor
 	// sends for many spawned sub-agent lifecycle updates.
@@ -174,7 +175,7 @@ func TestThreadStatus_ExplicitOriginWins(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	activityInstance := NewThreadStatusActivity(ThreadStatusDeps{Store: h.Repo(), Mailbox: store.NewAgentMessageExtStore(h.Repo().ORM())})
+	activityInstance := NewThreadStatusActivity(ThreadStatusDeps{Store: rowreads.WithRepo(h.Repo()), Mailbox: store.NewAgentMessageExtStore(h.Repo().ORM())})
 	var out ThreadStatusOutput
 	require.NoError(t, h.ExecuteActivity(activityInstance.Execute, ThreadStatusInput{
 		ChatID:     chatID,

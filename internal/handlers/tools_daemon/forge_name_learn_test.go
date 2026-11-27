@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
@@ -104,7 +106,7 @@ func TestSettledClone_LearnsTheForgeNameWithoutTheForgeTab(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	defer cleanup()
 
-	svc := newTestService(repo)
+	svc := newTestService(rowreads.WithRepo(repo))
 	defer svc.Close()
 
 	userID := "user-forgename-" + uuid.NewString()

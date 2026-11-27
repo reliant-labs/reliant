@@ -12,8 +12,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
+	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/reliant-labs/forge/pkg/testkit"
 
@@ -46,7 +49,10 @@ func newWorktreeService(t testing.TB, repo Repository, router Router, settler ..
 	if len(settler) > 0 {
 		deps.Settler = settler[0]
 	}
-	if r, ok := repo.(*db.Repo); ok {
+	if r, ok := repo.(interface {
+		ORM() *orm.Client
+		chatupdates.Tx
+	}); ok {
 		deps.Rows = store.NewWorktreeExtStore(r.ORM())
 		deps.Refetch = chatupdates.NewFromORM(r.ORM(), r, nil)
 	} else {
@@ -185,7 +191,7 @@ func TestCreateWorktreeUsesExtendedDaemonTimeout(t *testing.T) {
 	repo := db.NewTestRepo(t)
 
 	router := &recordingWorktreeDaemonRouter{}
-	svc := newWorktreeService(t, repo, router)
+	svc := newWorktreeService(t, rowreads.WithRepo(repo), router)
 
 	userID := uuid.New().String()
 	projectID := uuid.New().String()
@@ -223,7 +229,7 @@ func TestCreateWorktreeUsesExtendedDaemonTimeout(t *testing.T) {
 
 	// The daemon command runs on the detached goroutine, so wait for creation
 	// to settle before reading what timeout it used.
-	awaitWorktreeStatus(t, repo, resp.Msg.Worktree.Id, reliantv1.WorktreeStatus_WORKTREE_STATUS_ACTIVE)
+	awaitWorktreeStatus(t, rowreads.WithRepo(repo), resp.Msg.Worktree.Id, reliantv1.WorktreeStatus_WORKTREE_STATUS_ACTIVE)
 
 	assert.Equal(t, worktreeDaemonCommandTimeoutMs, router.timeoutFor("worktree.create"))
 	assert.Greater(t, router.timeoutFor("worktree.create"), int32(30_000))
@@ -238,7 +244,7 @@ func TestCreateWorktreePersistsOwningDaemon(t *testing.T) {
 	repo := db.NewTestRepo(t)
 
 	router := &recordingWorktreeDaemonRouter{}
-	svc := newWorktreeService(t, repo, router)
+	svc := newWorktreeService(t, rowreads.WithRepo(repo), router)
 
 	userID := uuid.New().String()
 	projectID := uuid.New().String()
@@ -275,7 +281,7 @@ func TestCreateWorktreePersistsOwningDaemon(t *testing.T) {
 
 	// Assert against the settled row rather than the CREATING one: the owning
 	// daemon must survive the async completion, not just the initial insert.
-	stored := awaitWorktreeStatus(t, repo, resp.Msg.Worktree.Id, reliantv1.WorktreeStatus_WORKTREE_STATUS_ACTIVE)
+	stored := awaitWorktreeStatus(t, rowreads.WithRepo(repo), resp.Msg.Worktree.Id, reliantv1.WorktreeStatus_WORKTREE_STATUS_ACTIVE)
 	// The mock router's ResolveDaemonID returns "test-daemon-id".
 	require.NotNil(t, stored.DaemonID, "worktree must record its owning daemon")
 	assert.Equal(t, "test-daemon-id", *stored.DaemonID)
@@ -285,7 +291,7 @@ func setupTestWorktreeServiceForRevert(t *testing.T) (*Service, string, string) 
 	t.Helper()
 
 	repo := db.NewTestRepo(t)
-	svc := newWorktreeService(t, repo, &toolexectest.Stub{})
+	svc := newWorktreeService(t, rowreads.WithRepo(repo), &toolexectest.Stub{})
 
 	userID := uuid.New().String()
 	projectID := uuid.New().String()

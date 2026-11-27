@@ -13,8 +13,8 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
-	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/models/message"
+	"github.com/reliant-labs/reliant/internal/rowreads"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/threads"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
@@ -124,7 +124,7 @@ func TestCompactionAtomicSeams_SaveReloadThenSecondCompaction(t *testing.T) {
 			input.Node.GetCompact().Force = &reliantv1.CelBool{Value: &reliantv1.CelBool_Literal{Literal: true}}
 			for pass := range 2 {
 				d := &fitSummarizer{limit: 9000}
-				compact := NewCompactActivity(CompactDeps{ToolResults: toolCallsOf(h.Repo()), Store: tools.WithChats(h.Repo()), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())}), DriverResolver: d.resolver()})
+				compact := NewCompactActivity(CompactDeps{ToolResults: toolCallsOf(h.Repo()), Store: rowreads.WithRepo(h.Repo()), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())}), DriverResolver: d.resolver()})
 				var out CompactOutput
 				require.NoError(t, h.ExecuteActivity(compact.Execute, input, &out))
 				after, err := LoadMessagesForLLM(ctx, h.Repo(), toolCallsOf(h.Repo()), chatID, thread, nil)

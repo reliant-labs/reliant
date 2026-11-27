@@ -9,6 +9,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/daemonplacement"
+
 	"github.com/reliant-labs/reliant/internal/projectaccess"
 
 	"github.com/reliant-labs/forge/pkg/orm"
@@ -199,7 +201,7 @@ func newTestLauncher(t *testing.T, repo launchTestStore, starter *fakeStarter) (
 	}
 	recorder := &recordingRunRecorder{repo: repo, chats: chats}
 	projects := projectsOf(repo)
-	return New(Deps{Store: repo, Chats: chats, Workflows: store.NewWorkflowExtStore(repo.ORM()), Worktrees: store.NewWorktreeExtStore(repo.ORM()), ProjectRows: store.NewProjectExtStore(repo.ORM()), TriggerEvents: store.NewTriggerEventExtStore(repo.ORM()), Projects: projects, Selections: store.NewChatSelectionExtStore(repo.ORM()), Threads: threads.New(threads.Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())}), Temporal: starter, Runs: recorder, TaskQueue: "test-task-queue"}), recorder
+	return New(Deps{Store: repo, Chats: chats, Workflows: store.NewWorkflowExtStore(repo.ORM()), Worktrees: store.NewWorktreeExtStore(repo.ORM()), Installs: daemonplacement.NewRecords(repo.ORM()), ProjectRows: store.NewProjectExtStore(repo.ORM()), TriggerEvents: store.NewTriggerEventExtStore(repo.ORM()), Projects: projects, Selections: store.NewChatSelectionExtStore(repo.ORM()), Threads: threads.New(threads.Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())}), Temporal: starter, Runs: recorder, TaskQueue: "test-task-queue"}), recorder
 }
 
 // chatStartEvent is what an interactive first send produces.

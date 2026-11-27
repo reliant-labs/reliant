@@ -9,6 +9,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/testkit"
@@ -16,6 +18,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -73,7 +76,7 @@ func newDiscoverTestFixture(t *testing.T, relPaths ...string) *discoverFixture {
 	t.Helper()
 	repo := db.NewTestRepo(t)
 	router := &discoverRouter{}
-	f := &discoverFixture{repo: repo, router: router, svc: newWorktreeService(t, repo, router),
+	f := &discoverFixture{repo: repo, router: router, svc: newWorktreeService(t, rowreads.WithRepo(repo), router),
 		userID: uuid.NewString(), projectID: uuid.NewString()}
 	f.ctx = context.WithValue(context.Background(), auth.UserIDContextKey, f.userID)
 	now := time.Now().UTC()

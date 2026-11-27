@@ -7,13 +7,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
-	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/models/message"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/toolexec"
@@ -83,7 +84,7 @@ func TestInterruptedTurn_AnswersEveryCallWithoutRunningAny(t *testing.T) {
 	input.Runtime.InterruptedTurn = true
 
 	var output ExecuteToolsOutput
-	require.NoError(t, f.h.ExecuteActivity(NewExecuteToolsActivity(ExecuteToolsDeps{Store: tools.WithChats(f.h.Repo()), Rows: workspaceRowsOf(f.h.Repo()), ToolCalls: toolCallsOf(f.h.Repo()), ToolExecutor: executor, Preemption: store.NewAgentMessageExtStore(f.h.Repo().ORM())}).Execute, input, &output))
+	require.NoError(t, f.h.ExecuteActivity(NewExecuteToolsActivity(ExecuteToolsDeps{Store: rowreads.WithRepo(f.h.Repo()), Rows: workspaceRowsOf(f.h.Repo()), ToolCalls: toolCallsOf(f.h.Repo()), ToolExecutor: executor, Preemption: store.NewAgentMessageExtStore(f.h.Repo().ORM())}).Execute, input, &output))
 
 	for _, callID := range []string{finished, running, background, neverStarted, response} {
 		assert.Zero(t, executor.GetExecutionCount(callID), "an interrupted turn runs nothing: %s", callID)
@@ -169,7 +170,7 @@ func TestInterruptedTurn_AnUnreadableRowIsOfUnknownEffect(t *testing.T) {
 
 	var output ExecuteToolsOutput
 	store := unreadableToolCallStore{ToolCalls: toolCallsOf(f.h.Repo())}
-	require.NoError(t, f.h.ExecuteActivity(NewExecuteToolsActivity(ExecuteToolsDeps{Store: tools.WithChats(f.h.Repo()), Rows: workspaceRowsOf(f.h.Repo()), ToolCalls: store, ToolExecutor: executor}).Execute, input, &output))
+	require.NoError(t, f.h.ExecuteActivity(NewExecuteToolsActivity(ExecuteToolsDeps{Store: rowreads.WithRepo(f.h.Repo()), Rows: workspaceRowsOf(f.h.Repo()), ToolCalls: store, ToolExecutor: executor}).Execute, input, &output))
 
 	assert.Zero(t, executor.GetExecutionCount(running), "an interrupted turn runs nothing")
 	require.Len(t, output.ToolResults, 1)

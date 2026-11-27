@@ -10,6 +10,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
 	"github.com/reliant-labs/reliant/internal/workflowdraftstest"
 
@@ -37,6 +39,7 @@ import (
 // used.
 type wholeConfigRowReads struct {
 	*db.Repo
+	rowreads.Reads
 
 	mu      sync.Mutex
 	callers []string
@@ -67,7 +70,7 @@ func bigSkillsJSON() *string {
 // config record. List, export and run each used to read the whole record.
 func TestScenarioRPCs_ReadOnlyTheScenariosColumn(t *testing.T) {
 	repo := db.NewTestRepo(t)
-	spy := &wholeConfigRowReads{Repo: repo}
+	spy := &wholeConfigRowReads{Repo: repo, Reads: rowreads.Of(repo)}
 	service := NewTestScenario(t, WithScenarioDeps(Deps{Repo: spy, ProjectRows: store.NewProjectExtStore(repo.ORM()), Drafts: workflowdraftstest.New(t, repo), Projects: projectaccesstest.For(spy), ProjectConfigs: store.NewProjectConfigExtStore(repo.ORM())}))
 
 	userID := uuid.NewString()

@@ -17,6 +17,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/chataccess/chataccesstest"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/rowreads"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/threads"
 )
@@ -96,7 +97,7 @@ func TestBranchChat_ConcurrentUserStreamWriteDoesNotAbortTheBranch(t *testing.T)
 	projectID := setupBranchProject(t, repo, ctx)
 	sourceChatID, msgID := setupBranchAtomicitySource(t, repo, ctx, projectID)
 
-	racing := &userStreamRaceRepo{Repository: repo, real: repo}
+	racing := &userStreamRaceRepo{Repository: rowreads.WithRepo(repo), real: repo}
 	service := newBranchTestService(repo, racing)
 
 	resp, err := service.BranchChat(ctx, connect.NewRequest(&reliantv1.BranchChatRequest{
@@ -134,7 +135,7 @@ func TestBranchChat_CopiesPlansAndTasksPending(t *testing.T) {
 	require.NoError(t, repo.CreateTask(ctx, &db.Task{ID: uuid.NewString(), PlanID: newer.ID, ParentTaskID: &parent.ID, Title: "child", Description: &desc, Status: int32(db.TaskStatusInProgress), Position: 1}))
 	require.NoError(t, repo.CreateTask(ctx, &db.Task{ID: uuid.NewString(), PlanID: older.ID, Title: "lone", Status: int32(db.TaskStatusCompleted), Position: 0}))
 
-	service := newBranchTestService(repo, repo)
+	service := newBranchTestService(repo, rowreads.WithRepo(repo))
 	resp, err := service.BranchChat(ctx, connect.NewRequest(&reliantv1.BranchChatRequest{
 		ChatId:    sourceChatID,
 		MessageId: msgID,

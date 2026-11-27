@@ -8,11 +8,14 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"connectrpc.com/connect"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
+
 	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -32,7 +35,7 @@ func newModelEndpoint(t *testing.T, repo *db.Repo, allowPrivateEgress bool) *mod
 		Logger:    slog.New(slog.DiscardHandler),
 		Config:    &typedconfig.Config{},
 		Endpoints: store.NewModelEndpointExtStore(repo.ORM()),
-		Machines:  repo,
+		Machines:  rowreads.WithRepo(repo),
 		Network:   &configv1.NetworkConfig{AllowPrivateEgress: allowPrivateEgress},
 	})
 	require.NoError(t, err)

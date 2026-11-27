@@ -6,6 +6,8 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"connectrpc.com/connect"
 	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/sdk/client"
@@ -105,7 +107,7 @@ func TestSendMessage_RejectedParamsPersistNothing(t *testing.T) {
 			}
 			service := &Service{
 				deps: Deps{
-					Repo:        repo,
+					Repo:        rowreads.WithRepo(repo),
 					Workflows:   store.NewWorkflowExtStore(repo.ORM()),
 					Worktrees:   store.NewWorktreeExtStore(repo.ORM()),
 					ProjectRows: store.NewProjectExtStore(repo.ORM()), TriggerEvents: store.NewTriggerEventExtStore(repo.ORM()),

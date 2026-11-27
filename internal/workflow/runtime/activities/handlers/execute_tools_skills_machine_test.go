@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
@@ -62,7 +64,7 @@ func TestSkillToolReadsTheSkillsOfTheMachineTheCallRunsOn(t *testing.T) {
 
 	provider := cfgpkg.NewCachedStoredConfigProvider(configadapter.NewRepoConfigStore(configadapter.NewORMRecordReader(repo.ORM())), store.NewProjectConfigExtStore(repo.ORM()), cfgpkg.DefaultParsedConfigCacheBytes)
 	router := toolexec.NewNATSDaemonRouter(nil, toolexec.WithDatabase(repo))
-	activity := NewExecuteToolsActivity(ExecuteToolsDeps{Store: tools.WithChats(repo), Rows: workspaceRowsOf(repo), ToolCalls: toolCallsOf(repo), ToolExecutor: serverToolExecutor(repo), Preemption: store.NewAgentMessageExtStore(repo.ORM())}).WithConfigProvider(provider).WithDaemonRouter(router)
+	activity := NewExecuteToolsActivity(ExecuteToolsDeps{Store: rowreads.WithRepo(repo), Rows: workspaceRowsOf(repo), ToolCalls: toolCallsOf(repo), ToolExecutor: serverToolExecutor(repo), Preemption: store.NewAgentMessageExtStore(repo.ORM())}).WithConfigProvider(provider).WithDaemonRouter(router)
 	load := func(thread string, selector *activitytypes.DaemonSelector) string {
 		t.Helper()
 		callID := "call-" + uuid.NewString()

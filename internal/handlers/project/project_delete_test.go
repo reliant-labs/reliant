@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
 
 	"connectrpc.com/connect"
@@ -117,7 +119,7 @@ func newDeleteAuthFixture(t *testing.T) *deleteAuthFixture {
 func (f *deleteAuthFixture) service() (*Service, *orgs.Resolver) {
 	m := orgs.New(f.members)
 	clock := func() time.Time { return deleteNow }
-	return NewTestProject(f.t, WithProjectDeps(withStores(Deps{Repo: f.repo, Projects: projectaccesstest.For(f.repo), Purges: f.purges, Orgs: m, Schedules: f.schedules, Now: clock}))), m
+	return NewTestProject(f.t, WithProjectDeps(withStores(Deps{Repo: rowreads.WithRepo(f.repo), Projects: projectaccesstest.For(f.repo), Purges: f.purges, Orgs: m, Schedules: f.schedules, Now: clock}))), m
 }
 
 // as is a request as userID through credential c; a machine token is also
@@ -335,7 +337,7 @@ func TestPurgeProjectNowAnswersBeforeItsBatchesRun(t *testing.T) {
 			m := orgs.New(f.members)
 			clock := func() time.Time { return deleteNow }
 			held := heldPurge{Service: f.purges, started: make(chan struct{}), release: make(chan struct{}), fail: c.fail}
-			svc := NewTestProject(t, WithProjectDeps(withStores(Deps{Repo: f.repo, Projects: projectaccesstest.For(f.repo), Purges: held, Orgs: m, Schedules: f.schedules, Now: clock})))
+			svc := NewTestProject(t, WithProjectDeps(withStores(Deps{Repo: rowreads.WithRepo(f.repo), Projects: projectaccesstest.For(f.repo), Purges: held, Orgs: m, Schedules: f.schedules, Now: clock})))
 			owner := as(m, f.owner, auth.CredentialSession, "")
 
 			_, err := svc.PurgeProjectNow(owner, connect.NewRequest(&reliantv1.PurgeProjectNowRequest{ProjectId: f.project, ConfirmName: "doomed"}))
@@ -410,7 +412,7 @@ func TestAnAdminsDeleteAndRestoreRefuseAProjectThatMovedOrg(t *testing.T) {
 	f.members.left[f.owner] = true
 	m := orgs.New(f.members)
 	clock := func() time.Time { return deleteNow }
-	moving := NewTestProject(t, WithProjectDeps(withStores(Deps{Repo: f.repo, Projects: projectaccesstest.For(f.repo), Purges: movesBeforeWrite{Service: f.purges, repo: f.repo, to: "globex"}, Orgs: m, Schedules: f.schedules, Now: clock})))
+	moving := NewTestProject(t, WithProjectDeps(withStores(Deps{Repo: rowreads.WithRepo(f.repo), Projects: projectaccesstest.For(f.repo), Purges: movesBeforeWrite{Service: f.purges, repo: f.repo, to: "globex"}, Orgs: m, Schedules: f.schedules, Now: clock})))
 	admin := as(m, f.admin, auth.CredentialSession, "")
 
 	_, err := f.delete(moving, admin, false)

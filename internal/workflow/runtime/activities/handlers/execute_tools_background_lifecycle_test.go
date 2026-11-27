@@ -6,12 +6,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
-	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/models/message"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/toolexec"
@@ -60,7 +61,7 @@ func TestDurableStatus_BackgroundedToolRecordsWhereItRuns(t *testing.T) {
 // activity, so the activity logger and context it relies on are real.
 func executeSingleToolAsRetry(t *testing.T, f *durableStatusFixture, executor *mockToolExecutor, toolCallID, toolName, toolInput string) message.ToolResult {
 	t.Helper()
-	activityInstance := NewExecuteToolsActivity(ExecuteToolsDeps{Store: tools.WithChats(f.h.Repo()), Rows: workspaceRowsOf(f.h.Repo()), ToolCalls: toolCallsOf(f.h.Repo()), ToolExecutor: executor, Preemption: store.NewAgentMessageExtStore(f.h.Repo().ORM())})
+	activityInstance := NewExecuteToolsActivity(ExecuteToolsDeps{Store: rowreads.WithRepo(f.h.Repo()), Rows: workspaceRowsOf(f.h.Repo()), ToolCalls: toolCallsOf(f.h.Repo()), ToolExecutor: executor, Preemption: store.NewAgentMessageExtStore(f.h.Repo().ORM())})
 
 	runRetry := func(ctx context.Context) (message.ToolResult, error) {
 		return activityInstance.executeSingleTool(ctx, nil, f.chatID, f.chatID, toolName, toolInput, toolCallID,

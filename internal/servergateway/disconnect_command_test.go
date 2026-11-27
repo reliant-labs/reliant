@@ -11,6 +11,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/nats-io/nats-server/v2/server"
@@ -48,7 +50,7 @@ func startDisconnectGateway(t *testing.T) *disconnectGateway {
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 	authority := tokenauthority.NewMemory()
-	svc, err := tools_daemon.New(tools_daemon.Deps{Refetch: chatupdates.NewFromORM(repo.ORM(), repo, nil), Logger: slog.Default(), Config: &config.Config{}, Projects: store.NewProjectExtStore(repo.ORM()), Installs: store.NewProjectDaemonExtStore(repo.ORM()), Attachments: store.NewDaemonAttachmentExtStore(repo.ORM()), LocalModels: store.NewDaemonExtStore(repo.ORM()), Repo: repo, Checkouts: store.NewProjectDaemonDetachmentExtStore(repo.ORM()), Pools: store.NewMachinePoolExtStore(repo.ORM())})
+	svc, err := tools_daemon.New(tools_daemon.Deps{Refetch: chatupdates.NewFromORM(repo.ORM(), repo, nil), Logger: slog.Default(), Config: &config.Config{}, Projects: store.NewProjectExtStore(repo.ORM()), Installs: store.NewProjectDaemonExtStore(repo.ORM()), Attachments: store.NewDaemonAttachmentExtStore(repo.ORM()), LocalModels: store.NewDaemonExtStore(repo.ORM()), Repo: rowreads.WithRepo(repo), Checkouts: store.NewProjectDaemonDetachmentExtStore(repo.ORM()), Pools: store.NewMachinePoolExtStore(repo.ORM())})
 	require.NoError(t, err)
 
 	daemonAuth, err := grpcserver.NewDaemonAuth(authority)

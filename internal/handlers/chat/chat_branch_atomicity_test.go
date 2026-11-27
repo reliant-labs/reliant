@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -117,7 +119,7 @@ func TestBranchChat_AtomicOnMidTransactionFailure(t *testing.T) {
 
 	sourceChatID, msgID := setupBranchAtomicitySource(t, repo, ctx, projectID)
 
-	failingRepo := &branchAtomicityRepo{Repository: repo, shouldFail: true}
+	failingRepo := &branchAtomicityRepo{Repository: rowreads.WithRepo(repo), shouldFail: true}
 	service := &Service{
 		deps: Deps{
 			Repo: failingRepo, Chats: chataccesstest.For(failingRepo),
@@ -180,7 +182,7 @@ func TestBranchChat_SucceedsWithoutInjectedFailure(t *testing.T) {
 
 	sourceChatID, msgID := setupBranchAtomicitySource(t, repo, ctx, projectID)
 
-	failingRepo := &branchAtomicityRepo{Repository: repo, shouldFail: false}
+	failingRepo := &branchAtomicityRepo{Repository: rowreads.WithRepo(repo), shouldFail: false}
 	service := &Service{
 		deps: Deps{
 			Repo: failingRepo, Chats: chataccesstest.For(failingRepo),

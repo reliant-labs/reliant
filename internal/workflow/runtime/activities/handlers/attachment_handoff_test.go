@@ -5,11 +5,12 @@ import (
 	"context"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/reliant/internal/db"
-	"github.com/reliant-labs/reliant/internal/llm/tools"
 )
 
 // A user's attached image reaches only the agent of the thread it was sent in.
@@ -22,7 +23,7 @@ func TestSpawnToolSaysSubAgentsCannotSeeAttachments(t *testing.T) {
 	t.Parallel()
 
 	repo := db.NewTestRepo(t)
-	spawn := (&CallLLMActivity{repo: tools.WithChats(repo)}).getSpawnTool(context.Background(), spawnPresetSource{}, &SpawnConfig{Presets: []string{"general"}})
+	spawn := (&CallLLMActivity{repo: rowreads.WithRepo(repo)}).getSpawnTool(context.Background(), spawnPresetSource{}, &SpawnConfig{Presets: []string{"general"}})
 	require.NotNil(t, spawn)
 	description := spawn.Description()
 	assert.Contains(t, description, "not the images or files the user attached")

@@ -9,6 +9,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
@@ -29,6 +31,7 @@ import (
 // back.
 type wholeConfigRowReads struct {
 	*db.Repo
+	rowreads.Reads
 
 	mu      sync.Mutex
 	callers []string
@@ -60,7 +63,7 @@ func bigSkillsJSON() *string {
 // the whole record to get it.
 func TestDaemonConfigSync_StalenessCheckReadsOnlyPushedAt(t *testing.T) {
 	repo := db.NewTestRepo(t)
-	spy := &wholeConfigRowReads{Repo: repo}
+	spy := &wholeConfigRowReads{Repo: repo, Reads: rowreads.Of(repo)}
 	svc := newTestService(spy)
 	defer svc.Close()
 	ctx := context.Background()
@@ -140,7 +143,7 @@ func TestDaemonConfigSync_StalenessCheckReadsOnlyPushedAt(t *testing.T) {
 // vanish.
 func TestDaemonConfigSync_SecondMachineDoesNotEraseTheFirstsWorkflows(t *testing.T) {
 	repo := db.NewTestRepo(t)
-	svc := newTestService(repo)
+	svc := newTestService(rowreads.WithRepo(repo))
 	defer svc.Close()
 	ctx := context.Background()
 

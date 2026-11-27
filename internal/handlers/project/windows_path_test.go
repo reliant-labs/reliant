@@ -5,6 +5,8 @@ import (
 	"context"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"connectrpc.com/connect"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -40,7 +42,7 @@ func TestCreateProject_AcceptsWindowsDaemonPaths(t *testing.T) {
 
 			userID := "user-windows-project"
 			ctx := context.WithValue(context.Background(), auth.UserIDContextKey, userID)
-			s := newProjectService(t, repo, &createProjectDaemonRouter{})
+			s := newProjectService(t, rowreads.WithRepo(repo), &createProjectDaemonRouter{})
 
 			resp, err := s.CreateProject(ctx, connect.NewRequest(&reliantv1.CreateProjectRequest{
 				Name: "proj",
@@ -60,7 +62,7 @@ func TestCreateProject_StillRejectsNonAbsolutePaths(t *testing.T) {
 	defer cleanup()
 
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, "user-windows-project-neg")
-	s := newProjectService(t, repo, &createProjectDaemonRouter{})
+	s := newProjectService(t, rowreads.WithRepo(repo), &createProjectDaemonRouter{})
 
 	for _, path := range []string{
 		"relative/path",

@@ -3,6 +3,8 @@ package forge
 import (
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
 
 	"github.com/reliant-labs/reliant/internal/db"
@@ -16,6 +18,6 @@ func TestForgeServiceViewerMatrix(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 	f := viewertest.New(t, repo)
-	svc := NewTestForge(t, WithForgeDeps(Deps{Repo: repo, Projects: projectaccesstest.For(repo)}))
+	svc := NewTestForge(t, WithForgeDeps(Deps{Repo: rowreads.WithRepo(repo), Projects: projectaccesstest.For(repo)}))
 	viewertest.RunService(t, f, svc, "reliant.v1.ForgeService", nil)
 }

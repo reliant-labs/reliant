@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -50,7 +52,7 @@ func TestResolveRunExecutorContext_PinsWorktreeDaemon(t *testing.T) {
 		CreatedAt: now, UpdatedAt: now, LastActive: now,
 	}))
 
-	execCtx, err := resolveRunExecutorContext(ctx, repo, workspaceRowsOf(repo), chatID)
+	execCtx, err := resolveRunExecutorContext(ctx, rowreads.WithRepo(repo), workspaceRowsOf(repo), chatID)
 	require.NoError(t, err)
 
 	assert.Equal(t, worktreeID, execCtx.WorktreeID)
@@ -63,14 +65,14 @@ func TestResolveRunExecutorContext_PinsWorktreeDaemon(t *testing.T) {
 	// SetChatDaemon and UpdateChat refuse it; worktree_owner_backfill moves
 	// it): the branch checkout exists on its owner alone, so the owner wins.
 	require.NoError(t, repo.UpdateChatActiveDaemon(ctx, chatID, &daemonID))
-	execCtx, err = resolveRunExecutorContext(ctx, repo, workspaceRowsOf(repo), chatID)
+	execCtx, err = resolveRunExecutorContext(ctx, rowreads.WithRepo(repo), workspaceRowsOf(repo), chatID)
 	require.NoError(t, err)
 	require.NotNil(t, execCtx.DaemonSelector)
 	assert.Equal(t, daemonID, execCtx.DaemonSelector.ID)
 
 	stale := "chat-pin"
 	require.NoError(t, repo.UpdateChatActiveDaemon(ctx, chatID, &stale))
-	execCtx, err = resolveRunExecutorContext(ctx, repo, workspaceRowsOf(repo), chatID)
+	execCtx, err = resolveRunExecutorContext(ctx, rowreads.WithRepo(repo), workspaceRowsOf(repo), chatID)
 	require.NoError(t, err)
 	require.NotNil(t, execCtx.DaemonSelector)
 	assert.Equal(t, daemonID, execCtx.DaemonSelector.ID, "a pin to a machine without the checkout yields to its owner")
@@ -99,7 +101,7 @@ func TestResolveRunExecutorContext_NoWorktreeNoDaemonSelector(t *testing.T) {
 		CreatedAt: now, UpdatedAt: now, LastActive: now,
 	}))
 
-	execCtx, err := resolveRunExecutorContext(ctx, repo, workspaceRowsOf(repo), chatID)
+	execCtx, err := resolveRunExecutorContext(ctx, rowreads.WithRepo(repo), workspaceRowsOf(repo), chatID)
 	require.NoError(t, err)
 
 	assert.Empty(t, execCtx.WorktreeID)
@@ -109,7 +111,7 @@ func TestResolveRunExecutorContext_NoWorktreeNoDaemonSelector(t *testing.T) {
 	// resolveRunCheckout: the project's machine and its own checkout, with
 	// the command pinned there so the two agree.
 	installTestCheckout(t, repo, projectID, userID, "/srv/checkouts/p")
-	require.NoError(t, resolveRunCheckout(ctx, repo, nil, &execCtx))
+	require.NoError(t, resolveRunCheckout(ctx, rowreads.WithRepo(repo), nil, &execCtx))
 	assert.Equal(t, "/srv/checkouts/p", execCtx.ProjectPath, "never projects.path")
 	require.NotNil(t, execCtx.DaemonSelector)
 	assert.Equal(t, testMachine, execCtx.DaemonSelector.ID)
@@ -145,7 +147,7 @@ func TestResolveRunExecutorContext_WorktreeWithoutDaemon(t *testing.T) {
 		CreatedAt: now, UpdatedAt: now, LastActive: now,
 	}))
 
-	execCtx, err := resolveRunExecutorContext(ctx, repo, workspaceRowsOf(repo), chatID)
+	execCtx, err := resolveRunExecutorContext(ctx, rowreads.WithRepo(repo), workspaceRowsOf(repo), chatID)
 	require.NoError(t, err)
 
 	assert.Equal(t, worktreeID, execCtx.WorktreeID)
@@ -223,7 +225,7 @@ func TestExecuteRunStep_AStaleSessionPinRunsOnTheWorkspaceOwner(t *testing.T) {
 			require.NoError(t, json.Unmarshal(raw, &input))
 
 			executor := &selectorRecordingExecutor{}
-			act := NewExecuteRunStepActivity(repo, workspaceRowsOf(repo), executor, nil)
+			act := NewExecuteRunStepActivity(rowreads.WithRepo(repo), workspaceRowsOf(repo), executor, nil)
 			env := (&temporaltest.WorkflowTestSuite{}).NewTestActivityEnvironment()
 			env.RegisterActivity(act.Execute)
 			_, err = env.ExecuteActivity(act.Execute, input)

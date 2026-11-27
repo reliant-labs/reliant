@@ -8,7 +8,9 @@ import (
 	"testing"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
+
 	"github.com/reliant-labs/reliant/internal/daemonmirror/daemonmirrortest"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // defaultDaemonIDs returns the user's daemons that carry is_default, read
@@ -189,7 +191,7 @@ func TestDefaultDaemon_SurvivesTheRegistryRecreatingItsRow(t *testing.T) {
 	if got := defaultDaemonIDs(t, repo, userID); len(got) != 1 || got[0] != "recreated-a" {
 		t.Fatalf("default after the row was recreated = %v, want [recreated-a]", got)
 	}
-	if d, err := repo.GetDaemon(ctx, "recreated-a"); err != nil || !d.IsDefault {
+	if d, err := store.GetDaemon(ctx, repo.ORM(), "recreated-a"); err != nil || !d.IsDefault {
 		t.Fatalf("GetDaemon(recreated-a) = %+v, %v; want the default", d, err)
 	}
 	// Re-registering a row that exists (every connect) changes nothing.

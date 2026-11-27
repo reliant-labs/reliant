@@ -43,7 +43,7 @@ func TestMachinePoolQueries(t *testing.T) {
 	if err := env.Repo.UpsertDaemon(ctx, &db.Daemon{ID: "mp-a", UserID: storetest.SeedUserID, Hostname: &host}); err != nil {
 		t.Fatal(err)
 	}
-	if d, err := env.Repo.GetDaemon(ctx, "mp-a"); err != nil || d.Labels["pool"] != "cicd" {
+	if d, err := store.GetDaemon(ctx, env.Repo.ORM(), "mp-a"); err != nil || d.Labels["pool"] != "cicd" {
 		t.Fatalf("labels after re-registration = %v, %v", d, err)
 	}
 
@@ -211,7 +211,7 @@ func TestMergeDeclaredDaemonLabels(t *testing.T) {
 	}
 	labels := func(id string) map[string]string {
 		t.Helper()
-		d, err := env.Repo.GetDaemon(ctx, id)
+		d, err := store.GetDaemon(ctx, env.Repo.ORM(), id)
 		if err != nil {
 			t.Fatalf("GetDaemon %s: %v", id, err)
 		}

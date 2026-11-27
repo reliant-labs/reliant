@@ -13,6 +13,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -136,7 +138,7 @@ func TestHeartbeatOnALiveStreamRecreatesAReapedLease(t *testing.T) {
 
 	leases, _ := realLeases(repo)
 	probe := newLeaseProbe(leases)
-	svc := newTestServiceWithLeases(repo, probe, nil)
+	svc := newTestServiceWithLeases(rowreads.WithRepo(repo), probe, nil)
 	hub := &recordingUserHub{}
 	svc.deps.UserUpdateHub = hub
 	stream := newParkedStream()
@@ -445,7 +447,7 @@ func leaseFixture(t *testing.T) (repo *db.Repo, rawDB *sql.DB, registry *daemon_
 	t.Helper()
 	repo, rawDB, cleanup := db.SetupTestDBWithRawDB(t)
 	t.Cleanup(cleanup)
-	return repo, rawDB, newDaemonRegistry(t, repo, nil), "lease-user-" + uuid.NewString()[:8], uuid.NewString()
+	return repo, rawDB, newDaemonRegistry(t, rowreads.WithRepo(repo), nil), "lease-user-" + uuid.NewString()[:8], uuid.NewString()
 }
 
 // The old replica tearing down its half of the stream after the daemon has
@@ -458,9 +460,9 @@ func TestDaemonStaysActiveWhenTheOldReplicaTearsDownAfterAReconnect(t *testing.T
 	repo, _, registry, userID, daemonID := leaseFixture(t)
 
 	leases, models := realLeases(repo)
-	replicaA := newTestServiceWithLeases(repo, leases, models)
+	replicaA := newTestServiceWithLeases(rowreads.WithRepo(repo), leases, models)
 	t.Cleanup(replicaA.Close)
-	replicaB := newTestServiceWithLeases(repo, leases, models)
+	replicaB := newTestServiceWithLeases(rowreads.WithRepo(repo), leases, models)
 	t.Cleanup(replicaB.Close)
 
 	dialDaemon(t, replicaA, userID, daemonID)
@@ -488,7 +490,7 @@ func TestHeartbeatRestoresAMissingLeaseAndDisconnectIsStillPrompt(t *testing.T) 
 	repo, rawDB, registry, userID, daemonID := leaseFixture(t)
 
 	leases, models := realLeases(repo)
-	gateway := newTestServiceWithLeases(repo, leases, models)
+	gateway := newTestServiceWithLeases(rowreads.WithRepo(repo), leases, models)
 	t.Cleanup(gateway.Close)
 	stream := dialDaemon(t, gateway, userID, daemonID)
 	require.Equal(t, reliantv1.DaemonStatus_DAEMON_STATUS_ACTIVE, registryStatus(t, registry, userID, daemonID))

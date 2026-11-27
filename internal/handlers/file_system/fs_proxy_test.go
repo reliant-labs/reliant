@@ -13,14 +13,15 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
-	"github.com/reliant-labs/reliant/internal/llm/tools"
+	"github.com/reliant-labs/reliant/internal/rowreads"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/internal/toolexec/toolexectest"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 // recordingFSDaemonRouter records the last daemon command it received so tests
@@ -51,7 +52,7 @@ func newProxy(t *testing.T, router Router, repo any) *Service {
 	t.Helper()
 	deps := Deps{Router: router}
 	if r, ok := repo.(*db.Repo); ok && r != nil {
-		repo = tools.WithChats(r)
+		repo = rowreads.WithRepo(r)
 	}
 	if r, ok := repo.(Repository); ok {
 		deps.Repo = r

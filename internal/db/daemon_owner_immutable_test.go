@@ -7,6 +7,8 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // Ownership of a daemon row is immutable: a second user upserting the same id
@@ -34,7 +36,7 @@ func TestUpsertDaemonNeverChangesOwner(t *testing.T) {
 		t.Fatalf("foreign upsert err = %v, want ErrDaemonOwnedByAnotherUser", err)
 	}
 
-	got, err := repo.GetDaemon(ctx, id)
+	got, err := store.GetDaemon(ctx, repo.ORM(), id)
 	if err != nil {
 		t.Fatalf("GetDaemon: %v", err)
 	}

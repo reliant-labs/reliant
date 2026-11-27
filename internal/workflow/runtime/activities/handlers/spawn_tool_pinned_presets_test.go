@@ -6,13 +6,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/db"
-	"github.com/reliant-labs/reliant/internal/llm/tools"
 )
 
 // The spawn tool describes the presets a run will spawn with: those of the
@@ -53,7 +54,7 @@ func TestSpawnToolDescribesThePresetsOfTheRunsCatalog(t *testing.T) {
 	push(cicd, now, "Reviews v2")
 	push(laptop, now.Add(time.Minute), "Reviews from the laptop")
 
-	activity := &CallLLMActivity{repo: tools.WithChats(repo)}
+	activity := &CallLLMActivity{repo: rowreads.WithRepo(repo)}
 	describe := func(source spawnPresetSource) string {
 		t.Helper()
 		spawn := activity.getSpawnTool(ctx, source, &SpawnConfig{Presets: []string{"reviewer"}})

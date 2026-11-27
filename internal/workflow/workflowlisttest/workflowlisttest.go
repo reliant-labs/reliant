@@ -21,9 +21,11 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
+
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/rowreads"
 	"github.com/reliant-labs/reliant/internal/workflowdrafts"
 )
 
@@ -36,6 +38,9 @@ import (
 // each one declares.
 type Repo struct {
 	*db.Repo
+	// Reads are the by-id reads the facade no longer carries; the zero value
+	// fails every one, as the nil *db.Repo above panics.
+	rowreads.Reads
 
 	Project          *db.Project
 	projectWorkflows *string

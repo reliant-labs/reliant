@@ -8,6 +8,7 @@ import (
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/reliant-labs/reliant/internal/config"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/workflow/workflowref"
 )
 
@@ -127,7 +128,7 @@ func (r *Repo) machineName(ctx context.Context, known map[string]string, daemonI
 	if n := known[daemonID]; n != "" {
 		return n
 	}
-	daemon, err := r.GetDaemon(ctx, daemonID)
+	daemon, err := store.GetDaemon(ctx, r.ORM(), daemonID)
 	if err != nil || daemon == nil {
 		if err != nil && !svcerr.IsNotFound(err) {
 			return daemonID

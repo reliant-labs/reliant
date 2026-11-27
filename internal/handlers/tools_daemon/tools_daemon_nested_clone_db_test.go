@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -84,7 +86,7 @@ func TestNestedClonePass_AuthorizesTheProjectAgainstTheMachine(t *testing.T) {
 	f := newOrgMachinesFixture(t)
 	membership := &leavingMembership{defaultOrgMembership: defaultOrgMembership{def: "acme"}, org: "globex"}
 	ctx := authz.WithMembership(context.Background(), membership)
-	svc := newTestService(f.repo)
+	svc := newTestService(rowreads.WithRepo(f.repo))
 	conn := newTestConn(f.userID, f.globexMachine, nil)
 	conn.orgID = "globex"
 	f.nestedSetUp(t, ctx, f.acme, f.globexMachine) // retained from before machines kept to their org
@@ -128,7 +130,7 @@ func TestNestedClonePass_AuthorizesTheProjectAgainstTheMachine(t *testing.T) {
 func TestNestedFailure_NeverReadsInstalled(t *testing.T) {
 	t.Run("repeated announcements", func(t *testing.T) {
 		f := newOrgMachinesFixture(t)
-		svc := newTestService(f.repo)
+		svc := newTestService(rowreads.WithRepo(f.repo))
 		conn := newTestConn(f.userID, f.globexMachine, nil)
 		conn.orgID = "globex"
 		f.nestedSetUp(t, f.ctx, f.globex, f.globexMachine)
@@ -163,7 +165,7 @@ func TestNestedFailure_NeverReadsInstalled(t *testing.T) {
 // failed with the reason, not installed.
 func TestNestedFailure_FailsAnInstalledRoot(t *testing.T) {
 	f := newOrgMachinesFixture(t)
-	svc := newTestService(f.repo)
+	svc := newTestService(rowreads.WithRepo(f.repo))
 	conn := newTestConn(f.userID, f.globexMachine, nil)
 	conn.orgID = "globex"
 	f.nestedSetUp(t, f.ctx, f.globex, f.globexMachine)
@@ -195,7 +197,7 @@ func TestNestedClone_AReplanDuringARunningCloneNeverDispatchesItTwice(t *testing
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			f := newOrgMachinesFixture(t)
-			svc := newTestService(f.repo)
+			svc := newTestService(rowreads.WithRepo(f.repo))
 			connA := newTestConn(f.userID, f.globexMachine, nil)
 			connA.orgID = "globex"
 			connB := newTestConn(f.userID, f.globexMachine, nil)

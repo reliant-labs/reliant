@@ -5,8 +5,6 @@ import (
 
 	"github.com/reliant-labs/forge/pkg/orm"
 
-	"github.com/reliant-labs/reliant/internal/db"
-
 	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
 	"github.com/reliant-labs/reliant/internal/store"
 )
@@ -20,7 +18,7 @@ func newMCPService(t *testing.T, repo Repository, router Router) *Service {
 	t.Helper()
 	configs, ok := repo.(ProjectConfigs)
 	if !ok {
-		configs = store.NewProjectConfigExtStore(repo.(*db.Repo).ORM())
+		configs = store.NewProjectConfigExtStore(repo.(interface{ ORM() *orm.Client }).ORM())
 	}
 	var rows ProjectReader
 	if r, ok := repo.(interface{ ORM() *orm.Client }); ok {

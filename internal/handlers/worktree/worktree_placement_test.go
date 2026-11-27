@@ -10,12 +10,16 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+	"github.com/reliant-labs/reliant/internal/store"
+
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -144,7 +148,7 @@ func installProject(t testing.TB, repo *db.Repo, projectID, userID, path string,
 	t.Helper()
 	ctx := context.Background()
 	for _, id := range daemonIDs {
-		if d, err := repo.GetDaemon(ctx, id); err != nil || d == nil {
+		if d, err := store.GetDaemon(ctx, repo.ORM(), id); err != nil || d == nil {
 			require.NoError(t, repo.UpsertDaemon(ctx, &db.Daemon{ID: id, UserID: userID}))
 		}
 		require.NoError(t, repo.UpsertProjectDaemon(ctx, projectID, id, path, nil))
@@ -160,7 +164,7 @@ func newUninstalledPlacementFixture(t *testing.T) *placementFixture {
 	f := &placementFixture{
 		repo:        repo,
 		router:      router,
-		svc:         newWorktreeService(t, repo, router),
+		svc:         newWorktreeService(t, rowreads.WithRepo(repo), router),
 		userID:      uuid.NewString(),
 		projectID:   uuid.NewString(),
 		projectPath: t.TempDir(),
@@ -224,7 +228,7 @@ func (f *placementFixture) createWorktree(t *testing.T, req *reliantv1.CreateWor
 	if err != nil {
 		return nil, err
 	}
-	return awaitWorktreeStatus(t, f.repo, resp.Msg.Worktree.Id, reliantv1.WorktreeStatus_WORKTREE_STATUS_ACTIVE), nil
+	return awaitWorktreeStatus(t, rowreads.WithRepo(f.repo), resp.Msg.Worktree.Id, reliantv1.WorktreeStatus_WORKTREE_STATUS_ACTIVE), nil
 }
 
 // assertPlacedOn checks the row records daemonID as its owner AND that every

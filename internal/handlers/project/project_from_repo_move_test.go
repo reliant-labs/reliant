@@ -145,7 +145,7 @@ func TestMachineProjectsDir_ADaemonStartedInsideACheckoutUsesItsParent(t *testin
 	p := seedMultiRepoProject(t, ctx, repo, userID, "https://github.com/acme/"+uuid.NewString())
 	require.NoError(t, repo.UpsertProjectDaemon(ctx, p.ID, laptop, "/Users/me/src/reliant", nil))
 
-	machine, err := repo.GetDaemon(ctx, laptop)
+	machine, err := store.GetDaemon(ctx, repo.ORM(), laptop)
 	require.NoError(t, err)
 	assert.Equal(t, "/Users/me/src/new", svc.defaultClonePath(ctx, machine, "new"),
 		"a daemon running inside a checkout must not clone into it")
@@ -200,7 +200,7 @@ func TestMachineProjectsDir_StaleCheckoutAtTheWorkingDirectoryDoesNotDecide(t *t
 			seedCheckout(t, ctx, repo, userID, box, "/home/workspace/projects/a", false)
 			seedCheckout(t, ctx, repo, userID, box, "/home/workspace/projects/b", false)
 
-			machine, err := repo.GetDaemon(ctx, box)
+			machine, err := store.GetDaemon(ctx, repo.ORM(), box)
 			require.NoError(t, err)
 			assert.Equal(t, "/home/workspace/projects/reliant", svc.defaultClonePath(ctx, machine, "reliant"),
 				"the clone goes beside the machine's live checkouts, never above its working directory")
@@ -225,7 +225,7 @@ func TestMachineProjectsDir_AFailedCloneIsNoEvidence(t *testing.T) {
 		require.NoError(t, err)
 		require.True(t, recorded)
 	}
-	machine, err := repo.GetDaemon(ctx, box)
+	machine, err := store.GetDaemon(ctx, repo.ORM(), box)
 	require.NoError(t, err)
 	assert.Equal(t, "/home/workspace/new", svc.defaultClonePath(ctx, machine, "new"),
 		"with no live checkout the working directory decides, not failed clones")

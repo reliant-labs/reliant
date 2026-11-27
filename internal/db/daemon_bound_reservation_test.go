@@ -9,14 +9,16 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
+
 	"github.com/reliant-labs/reliant/internal/daemonmirror/daemonmirrortest"
 	"github.com/reliant-labs/reliant/internal/db/core"
-	"github.com/stretchr/testify/require"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 func reserved(t *testing.T, repo *Repo, id string) bool {
 	t.Helper()
-	d, err := repo.GetDaemon(context.Background(), id)
+	d, err := store.GetDaemon(context.Background(), repo.ORM(), id)
 	require.NoError(t, err)
 	return d.RequiresBoundToken
 }
@@ -38,7 +40,7 @@ func TestUpsertDaemonReservationForBoundCredentials(t *testing.T) {
 	err := repo.UpsertDaemon(ctx, &Daemon{ID: id, UserID: "user-A", Hostname: &laptopHost})
 	require.True(t, errors.Is(err, ErrDaemonRequiresBoundToken), "unbound write on a reserved id: %v", err)
 	require.False(t, errors.Is(err, ErrDaemonOwnedByAnotherUser), "the caller owns the row; it is not foreign")
-	got, err := repo.GetDaemon(ctx, id)
+	got, err := store.GetDaemon(ctx, repo.ORM(), id)
 	require.NoError(t, err)
 	require.Equal(t, cloudHost, *got.Hostname, "a refused write changes nothing")
 	require.True(t, got.RequiresBoundToken)
