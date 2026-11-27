@@ -576,16 +576,13 @@ export function boundsOf(window: ObsWindow): TimeWindow {
 }
 
 /**
- * The `select` of a QueryPanel read over `window`: the answer, with the
- * window it covers. QueryPanel's response names none, so a relative window
- * is resolved when the answer is mapped (when it arrives), which is when the
- * server resolved it, give or take the round trip.
+ * Cache a panel's bounds with its samples, never resolve them in select:
+ * observers may re-select a retained response long after it was fetched.
+ * QueryPanel names no effective range, so use the clock at answer time.
  */
-export function usePanelSelect(window: ObsWindow) {
-  const id = hashKey([window]);
-  // By value: a new object naming the same window is the same select.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  return useCallback((res: QueryPanelResponse) => toPanelResult(res, boundsOf(window)), [id]);
+export async function readPanelWithWindow(read: () => Promise<QueryPanelResponse>, window: ObsWindow): Promise<PanelResult> {
+  const response = await read();
+  return toPanelResult(response, boundsOf(window));
 }
 
 /**
@@ -635,11 +632,9 @@ export function usePanelQuery(
   // A postgres panel reads the environment's own database (AppDatabaseService), not ClickHouse: the telemetry quota does not apply to it.
   const postgres = panel.kind === "postgres";
   const request = panelRequest(scope, range, panel, services, groupBy, options.offset);
-  const select = usePanelSelect(window);
   const headers = panelHeaders(options.dashboardId, panel.id);
   // One query either way, so a panel is one cache entry: QueryPanel's generated read, or the postgres read.
   const telemetryRead = observabilityServiceQueries.queryPanel(request, {
-    select,
     staleTime: 30_000,
     retry: obsRetry,
     retryDelay: obsRetryDelay,
@@ -652,7 +647,14 @@ export function usePanelQuery(
     retry: obsRetry,
     retryDelay: obsRetryDelay,
   };
-  const read = (postgres ? databaseRead : { ...telemetryRead, queryKey: attributedPanelKey(telemetryRead.queryKey, headers) }) as UseQueryOptions<unknown, Error, PanelResult, QueryKey>;
+  const read = (postgres ? databaseRead : {
+    ...telemetryRead,
+    queryKey: attributedPanelKey(telemetryRead.queryKey, headers),
+    queryFn: (context: { client: QueryClient; signal: AbortSignal }) => readPanelWithWindow(
+      () => observabilityClient(context).queryPanel(request, obsCall({ headers, signal: context.signal })),
+      window,
+    ),
+  }) as UseQueryOptions<unknown, Error, PanelResult, QueryKey>;
   const query = useQuery({ ...read, enabled });
   // Nor does the quota slow or stop a postgres panel's refresh.
   usePolled(read.queryKey, options.refetchInterval ?? false, enabled, !postgres);
