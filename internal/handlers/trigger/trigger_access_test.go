@@ -19,6 +19,7 @@ import (
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // fakeAccess stands in for the GitHub access refresher: it records whose
@@ -82,7 +83,7 @@ func TestAccessGatedTriggerNeedsNoConnectionAndRefreshesAccess(t *testing.T) {
 	assert.Empty(t, created.GetConnectionId(), "delegated: no connection row")
 	assert.Equal(t, []string{env.userID}, access.users(), "the OWNER's access, refreshed at activation")
 
-	stored, err := env.repo.GetTrigger(context.Background(), created.GetId())
+	stored, err := store.GetTrigger(context.Background(), env.repo.ORM(), created.GetId())
 	require.NoError(t, err)
 	assert.Nil(t, stored.ConnectionID)
 }

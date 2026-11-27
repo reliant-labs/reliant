@@ -1,0 +1,53 @@
+# The Reliant pipeline's configuration for control-plane: pipeline.yaml
+# version 1 (reliant internal/pipeline/config; pipeline redesign §10.2). The
+# pipeline reads it only from main, never from a pull request's head, and
+# nothing reads it until the repository is enrolled, in shadow first.
+version: 1
+
+# The fast tier on each PR head: the affected-only merge gate (docs/local-gate.md).
+check: "task ci"
+
+# The full suite every batch candidate must pass before it lands. The stages
+# always run lint, test, build, sbom_scan, in that order; a failed stage stops
+# the later ones. Exit 0 pass, 1 fail, 2 unproven, per stage. task reports a
+# failing command as 201, so the test stage passes --exit-code: ci:full's own
+# exit status (its exit 3, gate health, is matched as infra by infra.txt).
+gate:
+  runner: machine # an isolated gate machine (the sysbox backend): ci:full needs its nested docker engine
+  pool: gate
+  timeout: 60m # ci:full is ~17 min at p50 and ~39 at p90; an exceeded timeout is unproven, never red
+  infra_patterns_file: .reliant/infra.txt
+  stages:
+    # Off: the test stage's `task ci:full` already runs the whole-project
+    # forge lint (its forge-lint step) beside golangci-lint, buf lint and the
+    # rest of ci:checks. A separate lint stage would run it twice.
+    lint: off
+    # The release gate: every step of ci:checks, test and test:integration
+    # but the nightly lane's.
+    test: {run: "task --exit-code ci:full"}
+    build: {run: "go build ./..."}
+    # Owner decision (2026-11-26): off, explicitly, until forge's
+    # `forge vuln gate` (forge#3001) has merged and every gate machine holds a
+    # grype database. Until then a scan could only be unproven, and the queue
+    # lands nothing unproven. The stage shows as off on every report, never as
+    # passed; turning it on is a recorded setting change.
+    sbom_scan: off
+
+# Generated output (.gitattributes' linguist-generated set and forge's merge
+# driver routes): a candidate whose conflicts touch only these is regenerated,
+# not sent back for a fix.
+generated:
+  - "gen/**"
+  - "frontends/*/src/gen/**"
+  - "**/*_gen.*"
+  - "**/*_gen_test.*"
+  - "**/*.pb.go"
+  - "**/*_pb.ts"
+  - "**/*_connect.ts"
+  - "**/forge_service_catalog.json"
+  - ".forge/scaffolded/**"
+  - ".forge/hashes/**"
+  - ".forge/disowned.json"
+regen: "reliant forge generate"
+
+queue: {batch_max: 6}

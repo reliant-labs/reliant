@@ -68,6 +68,25 @@ unguarded optional dep) and #2662 (three log calls without their context) turned
 main red on findings the scoped lint names in about two minutes
 (`/home/workspace/designs/reverse-walk-backtest-2026-11-13.md`, "fast lints").
 
+**go test's own vet** (`GO_TEST_VET`, `Taskfile.yml`). `go test` runs a vet
+subset over each package it tests and, for printf facts, over every
+dependency, under action IDs no `go vet` run shares: cold, that is ~70s of the
+~90s `go test` spends before running `./cmd/reliant/cmd`'s tests. A gate whose
+own vet covers the packages it tests turns it off for its test step: the merge
+gate's default tier (its vet phase vets `go.build` + `go.packages`, test files
+included, and gate-verify fails the gate when that phase is missing) and the
+release gate's `test-go` (beside `vet.sh ./...`; a hotfix gate's merge step).
+Everywhere else it stays on: `--queue` and `--skip-lint` leave vet to the
+release gate, so go test's vet is the only one they run, as it is for the SDK
+module's step, `test:integration`, `test:e2e`, the flake gate and every plain
+`task test` / `task test:short`. `-vet` is not in Go's test-result cache key,
+so the gates still replay your `task test:short` results. An exported
+`GO_TEST_VET` (empty included) wins over a gate's default; `task test
+GO_TEST_VET=-vet=off` sets it for one run. There is no `-ldflags=-w` lane flag:
+`go test` already links every test binary it runs with `-s -w`; only `-c`, `-o`
+and the profile flags keep DWARF, and `task build:packages`' one `-c` link
+passes `-w` itself.
+
 It holds **one** host heavy slot for the whole run (`forge machine slot run`), and every
 phase nests inside that slot, within a CPU budget (below). It prints one row per phase:
 
@@ -604,8 +623,8 @@ the commit's `Release gate` job on Actions (the train's fallback, ci.yml
 dispatched at the RC branch, which publishes no note off main).
 
 The RC tag is `rc/…`, **not** `vX.Y.Z-rc.N`. A `v*.*.*` tag push runs
-`Release Electron App` (publishing to the alpha channel, a GitHub Release
-and a Homebrew tap dispatch) and `Build & Push Image`, for a commit nobody has
+`Release Electron App` (which now refuses a prerelease tag: the alpha
+channel is retired) and `Build & Push Image`, for a commit nobody has
 gated yet. Two `v*` tags on one commit would also make
 `scripts/release-identity.sh`'s `describe --exact-match` ambiguous. The
 `release/` branch and the `rc/` tag trigger no workflow.

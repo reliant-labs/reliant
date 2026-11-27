@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// The gtm_* tables (20261126173100_create_gtm) hold their invariants
+// The gtm_* tables (20261127160000_create_gtm) hold their invariants
 // themselves: a row links only rows of its own org, a verified claim carries
 // its evidence, a sent item is email-type with its send record, an email-type
 // item is never SCHEDULED or PUBLISHED, a channel's mode matches its
@@ -45,7 +45,6 @@ func TestMigrate_GtmTablesHoldTheirInvariants(t *testing.T) {
 		refused(t, "gtm_channels_org_id_check", `INSERT INTO gtm_channels (id, org_id, key, name, created_by, mode) VALUES ('h0', '', 'blog', 'Blog', 'u1', 'GTM_CHANNEL_MODE_MANUAL')`)
 		refused(t, "gtm_campaigns_org_id_check", `INSERT INTO gtm_campaigns (id, org_id, name, strategy_id) VALUES ('c0', '', 'Launch', 's1')`)
 		refused(t, "gtm_assets_org_id_check", `INSERT INTO gtm_assets (id, org_id, campaign_id, object_key, content_type, size_bytes, uploaded_by, source) VALUES ('a0', '', 'c1', 'gtm//a0', 'image/png', 1, 'u1', 'GTM_ASSET_SOURCE_PERSON')`)
-		refused(t, "gtm_strategy_library_org_id_check", `INSERT INTO gtm_strategy_library (id, org_id, key, category, depth, name, source_revision, imported_by) VALUES ('l0', '', 'x', 'GTM_STRATEGY_CATEGORY_LAUNCHES_PR', 'GTM_LIBRARY_DEPTH_TACTIC', 'X', 'rev', 'u1')`)
 		refused(t, "gtm_ideas_org_id_check", `INSERT INTO gtm_ideas (id, org_id, title, created_by) VALUES ('i0', '', 'Idea', 'u1')`)
 		refused(t, "gtm_items_org_id_check", `INSERT INTO gtm_items (id, org_id, title) VALUES ('t0', '', 'Post')`)
 		refused(t, "gtm_positioning_org_id_check", `INSERT INTO gtm_positioning (org_id, updated_by) VALUES ('', 'u1')`)
@@ -121,7 +120,7 @@ func TestMigrate_GtmTablesHoldTheirInvariants(t *testing.T) {
 		refused(t, "gtm_strategies_period_order", `INSERT INTO gtm_strategies (id, org_id, name, created_by, updated_by, period_start, period_end) VALUES ('s2', 'org-a', 'Q', 'u1', 'u1', '2026-12-31', '2026-12-01')`)
 		refused(t, "gtm_strategies_status_check", `UPDATE gtm_strategies SET status = 'GTM_STRATEGY_STATUS_UNSPECIFIED' WHERE id = 's1'`)
 		refused(t, "gtm_strategies_category_known", `UPDATE gtm_strategies SET category = 'GTM_STRATEGY_CATEGORY_UNSPECIFIED' WHERE id = 's1'`)
-		require.NoError(t, exec(`UPDATE gtm_strategies SET category = 'GTM_STRATEGY_CATEGORY_LAUNCHES_PR', library_key = 'made-up-play' WHERE id = 's1'`))
+		require.NoError(t, exec(`UPDATE gtm_strategies SET category = 'GTM_STRATEGY_CATEGORY_LAUNCHES_PR', library_key = 'sample-idea' WHERE id = 's1'`))
 		refused(t, "gtm_campaigns_strategy_same_org_fkey", `INSERT INTO gtm_campaigns (id, org_id, name, strategy_id) VALUES ('c8', 'org-a', 'Launch', 's9')`)
 		refused(t, "gtm_campaigns_strategy_same_org_fkey", `DELETE FROM gtm_strategies WHERE id = 's1'`)
 		refused(t, "gtm_campaigns_planned_formats_known", `UPDATE gtm_campaigns SET planned_formats = '{GTM_ITEM_FORMAT_BILLBOARD}' WHERE id = 'c1'`)
@@ -184,48 +183,36 @@ func TestMigrate_GtmTablesHoldTheirInvariants(t *testing.T) {
 		require.NoError(t, exec(`UPDATE gtm_assets SET status = 'GTM_ASSET_STATUS_READY', size_bytes = 10, sha256 = repeat('ab', 32) WHERE id = 'a3'`))
 	})
 
-	t.Run("an org's library holds each key once", func(t *testing.T) {
-		// Made-up entries: Reliant carries no catalog content.
-		const cols = `(id, org_id, key, category, depth, name, source_revision, imported_by`
-		require.NoError(t, exec(`INSERT INTO gtm_strategy_library `+cols+`, stage, hours, expected_delta, fits, steps) VALUES ('l1', 'org-a', 'sample-play', 'GTM_STRATEGY_CATEGORY_COMMUNITY_EVENTS', 'GTM_LIBRARY_DEPTH_PLAY', 'Sample play', 'rev1', 'u1', 'signup', 4, 0.5, '{saas}', '[{"who": "agent", "title": "Step one"}]')`))
-		require.NoError(t, exec(`INSERT INTO gtm_strategy_library `+cols+`) VALUES ('l2', 'org-a', 'sample-tactic', 'GTM_STRATEGY_CATEGORY_TRUST_REPUTATION', 'GTM_LIBRARY_DEPTH_TACTIC', 'Sample tactic', 'rev1', 'u1')`))
-		refused(t, "gtm_strategy_library_org_id_key_key", `INSERT INTO gtm_strategy_library `+cols+`) VALUES ('l3', 'org-a', 'sample-play', 'GTM_STRATEGY_CATEGORY_LAUNCHES_PR', 'GTM_LIBRARY_DEPTH_TACTIC', 'Again', 'rev1', 'u1')`)
-		require.NoError(t, exec(`INSERT INTO gtm_strategy_library `+cols+`) VALUES ('l4', 'org-b', 'sample-play', 'GTM_STRATEGY_CATEGORY_LAUNCHES_PR', 'GTM_LIBRARY_DEPTH_TACTIC', 'Other org', 'rev1', 'u1')`))
-		refused(t, "gtm_strategy_library_key_slug", `INSERT INTO gtm_strategy_library `+cols+`) VALUES ('l5', 'org-a', 'Not A Slug', 'GTM_STRATEGY_CATEGORY_LAUNCHES_PR', 'GTM_LIBRARY_DEPTH_TACTIC', 'X', 'rev1', 'u1')`)
-		refused(t, "gtm_strategy_library_category_check", `INSERT INTO gtm_strategy_library `+cols+`) VALUES ('l5', 'org-a', 'x', 'GTM_STRATEGY_CATEGORY_UNSPECIFIED', 'GTM_LIBRARY_DEPTH_TACTIC', 'X', 'rev1', 'u1')`)
-		refused(t, "gtm_strategy_library_depth_check", `INSERT INTO gtm_strategy_library `+cols+`) VALUES ('l5', 'org-a', 'x', 'GTM_STRATEGY_CATEGORY_LAUNCHES_PR', 'GTM_LIBRARY_DEPTH_UNSPECIFIED', 'X', 'rev1', 'u1')`)
-		refused(t, "gtm_strategy_library_steps_check", `UPDATE gtm_strategy_library SET steps = '{"who": "agent"}' WHERE id = 'l1'`)
-		refused(t, "gtm_strategy_library_source_revision_check", `UPDATE gtm_strategy_library SET source_revision = '' WHERE id = 'l1'`)
-		// The import's upsert.
-		require.NoError(t, exec(`INSERT INTO gtm_strategy_library `+cols+`) VALUES ('l6', 'org-a', 'sample-play', 'GTM_STRATEGY_CATEGORY_COMMUNITY_EVENTS', 'GTM_LIBRARY_DEPTH_PLAY', 'Sample play v2', 'rev2', 'u1') ON CONFLICT (org_id, key) DO UPDATE SET name = EXCLUDED.name, source_revision = EXCLUDED.source_revision`))
-		var name, id string
-		require.NoError(t, raw.QueryRow(`SELECT id, name FROM gtm_strategy_library WHERE org_id = 'org-a' AND key = 'sample-play'`).Scan(&id, &name))
-		require.Equal(t, "l1", id)
-		require.Equal(t, "Sample play v2", name)
+	t.Run("an idea names an idea bank key and carries its tailor answers", func(t *testing.T) {
+		// Made-up keys: the bank's content is not the schema's concern.
+		require.NoError(t, exec(`UPDATE gtm_ideas SET library_key = 'sample-idea', tailor_answers = '[{"question": "Who is it for?", "answer": "Small teams"}]', suggested_workflow_md = 'Each week, draft a post.' WHERE id = 'i1'`))
+		refused(t, "gtm_ideas_library_key_slug", `UPDATE gtm_ideas SET library_key = 'Not A Key' WHERE id = 'i1'`)
+		refused(t, "gtm_ideas_library_key_slug", `UPDATE gtm_ideas SET library_key = '' WHERE id = 'i1'`)
+		refused(t, "gtm_ideas_tailor_answers_array", `UPDATE gtm_ideas SET tailor_answers = '{"question": "q"}' WHERE id = 'i1'`)
+		// Every element is an object with a string question and answer.
+		refused(t, "gtm_ideas_tailor_answers_shape", `UPDATE gtm_ideas SET tailor_answers = '["just text"]' WHERE id = 'i1'`)
+		refused(t, "gtm_ideas_tailor_answers_shape", `UPDATE gtm_ideas SET tailor_answers = '[{"question": "q"}]' WHERE id = 'i1'`)
+		refused(t, "gtm_ideas_tailor_answers_shape", `UPDATE gtm_ideas SET tailor_answers = '[{"question": "q", "answer": 3}]' WHERE id = 'i1'`)
+		refused(t, "gtm_ideas_tailor_answers_shape", `UPDATE gtm_ideas SET tailor_answers = '[{"question": "q", "answer": "a"}, {"answer": "a"}]' WHERE id = 'i1'`)
+		// A nested array is not an object, though the lax path unwraps it.
+		refused(t, "gtm_ideas_tailor_answers_shape", `UPDATE gtm_ideas SET tailor_answers = '[[{"question": "q", "answer": "a"}]]' WHERE id = 'i1'`)
+		refused(t, "gtm_ideas_tailor_answers_shape", `UPDATE gtm_ideas SET tailor_answers = '[[]]' WHERE id = 'i1'`)
+		require.NoError(t, exec(`UPDATE gtm_ideas SET tailor_answers = '[]' WHERE id = 'i1'`), "an empty list is still accepted")
+		refused(t, "gtm_ideas_tailor_answers_array", `UPDATE gtm_ideas SET tailor_answers = (SELECT jsonb_agg(jsonb_build_object('question', 'q', 'answer', 'a')) FROM generate_series(1, 21)) WHERE id = 'i1'`)
+		require.NoError(t, exec(`UPDATE gtm_ideas SET tailor_answers = (SELECT jsonb_agg(jsonb_build_object('question', 'q', 'answer', 'a')) FROM generate_series(1, 20)) WHERE id = 'i1'`))
+		var answers int
+		var workflow string
+		require.NoError(t, raw.QueryRow(`SELECT jsonb_array_length(tailor_answers), suggested_workflow_md FROM gtm_ideas WHERE id = 'i1'`).Scan(&answers, &workflow))
+		require.Equal(t, 20, answers)
+		require.Equal(t, "Each week, draft a post.", workflow)
+		refused(t, "gtm_strategies_library_key_slug", `UPDATE gtm_strategies SET library_key = 'Bad Key' WHERE id = 's1'`)
 	})
 
-	t.Run("a token's import never prunes; its prune waits for a person", func(t *testing.T) {
-		const req = `(id, org_id, requested_by, credential_kind, source_revision, remove_keys)`
-		require.NoError(t, exec(`INSERT INTO gtm_library_prune_requests `+req+` VALUES ('r1', 'org-a', 'u1', 'GTM_CREDENTIAL_KIND_TOKEN', 'rev2', '{sample-tactic}')`))
-		require.NoError(t, exec(`INSERT INTO gtm_library_prune_requests `+req+` VALUES ('r9', 'org-b', 'u1', 'GTM_CREDENTIAL_KIND_TOKEN', 'rev2', '{x}')`))
-		refused(t, "gtm_library_prune_requests_remove_keys_check", `INSERT INTO gtm_library_prune_requests `+req+` VALUES ('r2', 'org-a', 'u1', 'GTM_CREDENTIAL_KIND_TOKEN', 'rev2', '{}')`)
-		refused(t, "gtm_library_prune_requests_credential_kind_check", `INSERT INTO gtm_library_prune_requests `+req+` VALUES ('r2', 'org-a', 'u1', 'GTM_CREDENTIAL_KIND_UNSPECIFIED', 'rev2', '{x}')`)
-		// A decision is a person's, with its time; PENDING and EXPIRED carry none.
-		refused(t, "gtm_library_prune_requests_decision", `UPDATE gtm_library_prune_requests SET status = 'GTM_PRUNE_REQUEST_STATUS_CONFIRMED' WHERE id = 'r1'`)
-		refused(t, "gtm_library_prune_requests_decided_together", `UPDATE gtm_library_prune_requests SET status = 'GTM_PRUNE_REQUEST_STATUS_CONFIRMED', decided_by = 'u2' WHERE id = 'r1'`)
-		refused(t, "gtm_library_prune_requests_decision", `UPDATE gtm_library_prune_requests SET decided_by = 'u2', decided_at = now() WHERE id = 'r1'`)
-		require.NoError(t, exec(`UPDATE gtm_library_prune_requests SET status = 'GTM_PRUNE_REQUEST_STATUS_EXPIRED' WHERE id = 'r9'`))
-		refused(t, "gtm_library_prune_requests_decision", `UPDATE gtm_library_prune_requests SET decided_by = 'u2', decided_at = now() WHERE id = 'r9'`)
-
-		const imp = `(id, org_id, actor_user_id, credential_kind, source_revision, created, updated, unchanged, pruned, prune_request_id)`
-		require.NoError(t, exec(`INSERT INTO gtm_library_imports `+imp+` VALUES ('m1', 'org-a', 'u1', 'GTM_CREDENTIAL_KIND_TOKEN', 'rev2', 0, 1, 1, 0, 'r1')`))
-		refused(t, "gtm_library_imports_token_never_prunes", `INSERT INTO gtm_library_imports `+imp+` VALUES ('m2', 'org-a', 'u1', 'GTM_CREDENTIAL_KIND_TOKEN', 'rev2', 0, 0, 0, 1, NULL)`)
-		refused(t, "gtm_library_imports_request_is_token", `INSERT INTO gtm_library_imports `+imp+` VALUES ('m2', 'org-a', 'u1', 'GTM_CREDENTIAL_KIND_PERSON', 'rev2', 0, 0, 0, 0, 'r1')`)
-		refused(t, "gtm_library_imports_prune_request_same_org_fkey", `INSERT INTO gtm_library_imports `+imp+` VALUES ('m2', 'org-a', 'u1', 'GTM_CREDENTIAL_KIND_TOKEN', 'rev2', 0, 0, 0, 0, 'r9')`)
-		refused(t, "gtm_library_imports_created_check", `INSERT INTO gtm_library_imports `+imp+` VALUES ('m2', 'org-a', 'u1', 'GTM_CREDENTIAL_KIND_PERSON', 'rev2', -1, 0, 0, 0, NULL)`)
-		// A person-class import prunes at once.
-		require.NoError(t, exec(`INSERT INTO gtm_library_imports `+imp+` VALUES ('m3', 'org-a', 'u2', 'GTM_CREDENTIAL_KIND_PERSON', 'rev3', 0, 0, 2, 1, NULL)`))
-		require.NoError(t, exec(`UPDATE gtm_library_prune_requests SET status = 'GTM_PRUNE_REQUEST_STATUS_CONFIRMED', decided_by = 'u2', decided_at = now() WHERE id = 'r1'`))
+	t.Run("the pending-asset sweep has its partial index", func(t *testing.T) {
+		var def string
+		require.NoError(t, raw.QueryRow(`SELECT pg_get_indexdef('public.gtm_assets_pending_created_at_idx'::regclass)`).Scan(&def))
+		require.Contains(t, def, "(created_at)")
+		require.Contains(t, def, "WHERE (status = 'GTM_ASSET_STATUS_PENDING'::text)")
 	})
 
 	t.Run("a verified claim carries its evidence", func(t *testing.T) {
@@ -256,6 +243,18 @@ func TestMigrate_GtmTablesHoldTheirInvariants(t *testing.T) {
 		refused(t, "gtm_positioning_pkey", `INSERT INTO gtm_positioning (org_id, updated_by) VALUES ('org-a', 'u2')`)
 		refused(t, "gtm_positioning_updated_by_check", `INSERT INTO gtm_positioning (org_id, updated_by) VALUES ('org-b', '')`)
 		refused(t, "gtm_positioning_revision_check", `UPDATE gtm_positioning SET revision = 0 WHERE org_id = 'org-a'`)
+
+		// The business profile the idea bank's "fits my business" reads.
+		var businessType string
+		var models int
+		require.NoError(t, raw.QueryRow(`SELECT business_type, cardinality(business_models) FROM gtm_positioning WHERE org_id = 'org-a'`).Scan(&businessType, &models))
+		require.Equal(t, "", businessType, "not said by default")
+		require.Equal(t, 0, models)
+		require.NoError(t, exec(`UPDATE gtm_positioning SET business_type = 'GTM_BUSINESS_TYPE_DEVELOPER_TOOLS', business_models = '{GTM_BUSINESS_MODEL_FREEMIUM,GTM_BUSINESS_MODEL_SUBSCRIPTION}' WHERE org_id = 'org-a'`))
+		refused(t, "gtm_positioning_business_type_known", `UPDATE gtm_positioning SET business_type = 'GTM_BUSINESS_TYPE_UNSPECIFIED' WHERE org_id = 'org-a'`)
+		refused(t, "gtm_positioning_business_type_known", `UPDATE gtm_positioning SET business_type = 'developer_tools' WHERE org_id = 'org-a'`)
+		refused(t, "gtm_positioning_business_models_known", `UPDATE gtm_positioning SET business_models = '{GTM_BUSINESS_MODEL_FREEMIUM,GTM_BUSINESS_MODEL_BARTER}' WHERE org_id = 'org-a'`)
+		require.NoError(t, exec(`UPDATE gtm_positioning SET business_type = '', business_models = '{}' WHERE org_id = 'org-a'`))
 	})
 
 	t.Run("deleting an idea unlinks its items and keeps their org", func(t *testing.T) {

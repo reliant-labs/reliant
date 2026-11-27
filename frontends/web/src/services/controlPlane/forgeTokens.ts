@@ -117,6 +117,14 @@ export const FORGE_TOKEN_SCOPE_GROUPS: readonly ForgeTokenScopeGroup[] = [
     scopes: [{ scope: "vuln:read", label: "Read vulnerability findings of releases and environments" }],
   },
   {
+    id: "sbom",
+    title: "SBOMs",
+    // forge pkg/accesstoken/scope.go ScopeSBOMWrite: write-once, so CI mints
+    // it only for a protected ref (FederationProtectedRef).
+    description: "Narrow upload scope for CI. It implies nothing and nothing implies it, not even vuln:read.",
+    scopes: [{ scope: "sbom:write", label: "Record a release's SBOM, and nothing else (it reads nothing back; the first one recorded stands)" }],
+  },
+  {
     id: "tests",
     title: "Tests",
     description:

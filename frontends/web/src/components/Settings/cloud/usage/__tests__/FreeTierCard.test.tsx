@@ -2,14 +2,15 @@ import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Code, ConnectError } from "@connectrpc/connect";
 import { timestampFromDate } from "@bufbuild/protobuf/wkt";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+import { setTransport } from "@/lib/connect";
+import { mockTransport } from "@/lib/test-utils";
 
 import { FreeTierCard, FreeTierView } from "../FreeTierCard";
 import type { FreeHostingStatus, MoveFreeHostingDesignationResponse } from "../hostingBillingQueries";
 
-// The generated client lacks the pending method: the card must say "not
-// available", never claim the org has no allowance.
-vi.mock("@/services/controlPlane/client", () => ({ getControlPlaneClient: () => ({}) }));
+afterEach(() => setTransport(null));
 
 const ts = (iso: string) => timestampFromDate(new Date(iso));
 const GiB = 2n ** 30n;
@@ -225,7 +226,8 @@ describe("FreeTierView", () => {
 });
 
 describe("FreeTierCard", () => {
-  it("says free tier status is not available when this build's client lacks the RPC", async () => {
+  it("says free tier status is not available when the server lacks the RPC", async () => {
+    setTransport(mockTransport());
     const cache = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     render(
       <QueryClientProvider client={cache}>

@@ -6,9 +6,11 @@
  * each renders the shop pack's data under a scope over `createShopTransport()`,
  * while the module transport records every call and refuses it.
  *
- * The family is these pages' reads (the TestApi, VulnerabilityApi,
- * StorageBrowserApi and IdentityApi defaults, and the coverage source
- * fetch): none may reach the module transport. Reads outside the family
+ * The family is these pages' reads (the TestApi and VulnerabilityApi
+ * defaults, Identity's generated hooks, the storage browser's calls, which
+ * resolve their client from the scope's QueryClient, and the coverage source
+ * fetch), plus the observability billing panels' reads: none
+ * may reach the module transport. Reads outside the family
  * (forge's, the generated hooks') move onto the scope in their own PRs, and
  * P4.3's enumeration test holds the whole tour to zero; the app-wide reads a
  * page makes in any scope (the person's org list, their own user) are
@@ -17,7 +19,7 @@
 
 import type { ReactNode } from "react";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import { Code, ConnectError, type Transport } from "@connectrpc/connect";
 
 vi.mock("@/services/controlPlane/config", async (importOriginal) => ({
@@ -40,6 +42,7 @@ vi.mock("@/components/Forge/Observability/AskReliant/AskReliant", () => ({
 import { setReaderPrincipal } from "@/components/Forge/AuditedAccess/readerSession";
 import { IdentityTab } from "@/components/Forge/EnvPage/IdentityTab";
 import { ObsReadOnlyProvider } from "@/components/Forge/Observability/obsReadOnly";
+import { UsageView } from "@/components/Forge/Observability/UsageView";
 import { SbomsView } from "@/components/Forge/Security/SbomsPage";
 import { VulnerabilitiesView } from "@/components/Forge/Security/VulnerabilitiesPage";
 import { StorageBrowser } from "@/components/Forge/Storage/StorageBrowser";
@@ -50,8 +53,6 @@ import { setTransport, transport as appTransport } from "@/lib/connect";
 import { queryClient as appQueryClient } from "@/lib/query-client";
 import { createTransportScope, TransportScopeProvider } from "@/lib/transportScope";
 import type { LiveEnv } from "@/services/forge/live";
-import { controlPlaneIdentityApi, identityApiOf } from "@/services/controlPlane/identity/IdentityApiContext";
-import { controlPlaneStorageBrowserApi, storageBrowserApiOf } from "@/services/controlPlane/storageBrowser/StorageBrowserApiContext";
 import { controlPlaneTestApi, testApiOf } from "@/services/controlPlane/tests/TestApiContext";
 import { controlPlaneVulnerabilityApi, vulnerabilityApiOf } from "@/services/controlPlane/vulnerabilities/VulnerabilityApiContext";
 import { coverageSourceFetchOf } from "@/services/coverageSource/CoverageSourceContext";
@@ -182,6 +183,20 @@ describe("the console's Security pages in a TransportScope", () => {
   }, 30_000);
 });
 
+describe("observability billing in a TransportScope", () => {
+  const BILLING = "observability_billing.v1.ObservabilityBillingService";
+  const billingCalls = (calls: string[]) => calls.filter((key) => key.startsWith(`${BILLING}/`));
+
+  it("usage, storage, limits and daily rows", async () => {
+    renderScoped(<UsageView orgId="org-shop" />);
+    expect(await screen.findByTestId("obs-billing-charged", {}, { timeout: 15_000 })).toBeInTheDocument();
+    await waitFor(() => {
+      for (const rpc of ["GetObservabilityUsage", "GetObservabilityStorage", "GetObservabilityLimits", "ListObservabilityUsage"]) expect(scoped.calls).toContain(`${BILLING}/${rpc}`);
+    }, { timeout: 15_000 });
+    expect(billingCalls(live.calls)).toEqual([]);
+  }, 30_000);
+});
+
 describe("the console's data and identity pages in a TransportScope", () => {
   it("storage", async () => {
     renderScoped(<StorageBrowser env={STAGING} search={{ bucket: "uploads" }} onNavigate={() => undefined} href={() => "/storage"} />);
@@ -202,15 +217,11 @@ describe("the scoped context defaults", () => {
   it("are the app's constants on the app's transport, and one api per scope transport", () => {
     expect(testApiOf(appTransport)).toBe(controlPlaneTestApi);
     expect(vulnerabilityApiOf(appTransport)).toBe(controlPlaneVulnerabilityApi);
-    expect(storageBrowserApiOf(appTransport)).toBe(controlPlaneStorageBrowserApi);
-    expect(identityApiOf(appTransport)).toBe(controlPlaneIdentityApi);
     expect(coverageSourceFetchOf(appTransport)).toBe(fetchCoverageSource);
     const shop = createShopTransport();
     for (const [of, app] of [
       [testApiOf, controlPlaneTestApi],
       [vulnerabilityApiOf, controlPlaneVulnerabilityApi],
-      [storageBrowserApiOf, controlPlaneStorageBrowserApi],
-      [identityApiOf, controlPlaneIdentityApi],
     ] as const) {
       const api = (of as (t: Transport) => object)(shop);
       expect((of as (t: Transport) => object)(shop)).toBe(api);

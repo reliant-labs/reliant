@@ -5,7 +5,6 @@ package reliant.v1;
 
 import "buf/validate/validate.proto";
 import "forge/v1/forge.proto";
-import "google/protobuf/struct.proto";
 import "google/protobuf/timestamp.proto";
 
 option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
@@ -35,6 +34,10 @@ option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
 // Writes are optimistic: an update names the revision it read
 // (expected_revision), and a row that moved since is Aborted with a
 // GtmRevisionConflict detail carrying the current revision.
+//
+// A person is a caller with a person-class credential (a signed-in session,
+// a shared key, a browser session). Every other credential, access tokens and
+// the CLI login an agent's shell inherits included, acts as an agent.
 //
 // Only a person may accept or reject an idea, approve an item, or verify a
 // claim; an agent proposes ideas, drafts items (and dates them while they are
@@ -114,10 +117,14 @@ service GtmService {
   // ListChannels lists the org's channels by key. An allowlisted org with no
   // channel yet is given the default set on its first List or Get (blog,
   // email, hacker-news, reddit, linkedin, x, youtube), each with a small
-  // generic channel_types set: a write, so the rpc is IDEMPOTENT rather than
-  // side-effect free. connection_state is computed per caller.
+  // generic channel_types set. Declared NO_SIDE_EFFECTS though that first
+  // read seeds the defaults: the seed is idempotent (ON CONFLICT DO NOTHING)
+  // and no reliant client enables Connect's useHttpGet, so nothing caches or
+  // replays it. connection_state is computed per caller (whether that
+  // caller can reach the integration), so one caller's answer is not
+  // another's.
   rpc ListChannels(ListChannelsRequest) returns (ListChannelsResponse) {
-    option idempotency_level = IDEMPOTENT;
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {
       auth_required: true
       activity: {none: "read-only (the first read seeds the default channels, idempotently)"}
@@ -126,7 +133,7 @@ service GtmService {
 
   // GetChannel returns one channel (seeding the defaults as ListChannels does).
   rpc GetChannel(GetChannelRequest) returns (GetChannelResponse) {
-    option idempotency_level = IDEMPOTENT;
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {
       auth_required: true
       activity: {none: "read-only (the first read seeds the default channels, idempotently)"}
@@ -264,17 +271,20 @@ service GtmService {
   // GetAssetDownload returns a short-lived URL for a READY asset's bytes:
   // either a presigned GET on the bucket or the gated proxy handler
   // (/api/gtm/assets/{id}/content), whichever the storage work (PR-13)
-  // settles on. A PENDING asset is FailedPrecondition.
+  // settles on. A PENDING asset is FailedPrecondition. Not a cacheable
+  // read: every call mints a new URL, a bearer secret until it expires.
+  // forge:mutation: mints a short-lived download URL on every call
   rpc GetAssetDownload(GetAssetDownloadRequest) returns (GetAssetDownloadResponse) {
-    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {
       auth_required: true
-      activity: {none: "read-only: a short-lived download URL"}
+      activity: {none: "mints a short-lived download URL; changes no stored state"}
     };
   }
 
-  // ListStrategyLibrary lists the org's strategy library (the plays and
-  // tactics it imported), by category then name.
+  // ListStrategyLibrary lists the strategy library: the generic idea bank
+  // embedded in Reliant, read-only and the same for every allowlisted org (an
+  // org's own strategies and ideas are its rows). By category then name, paged;
+  // with diverse, a spread across categories instead (see the request).
   rpc ListStrategyLibrary(ListStrategyLibraryRequest) returns (ListStrategyLibraryResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {
@@ -283,7 +293,8 @@ service GtmService {
     };
   }
 
-  // GetStrategyLibraryEntry returns one library entry by key.
+  // GetStrategyLibraryEntry returns one entry of the embedded idea bank by key
+  // (NotFound for a key the bank does not hold).
   rpc GetStrategyLibraryEntry(GetStrategyLibraryEntryRequest) returns (GetStrategyLibraryEntryResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {
@@ -292,105 +303,9 @@ service GtmService {
     };
   }
 
-  // ImportStrategyLibrary upserts a batch of library entries by key, at most
-  // 500 per call: a new key is created, a changed entry updated, an equal one
-  // left alone (each counted). A library larger than one batch is imported in
-  // several calls. With prune, all_keys must list the library's COMPLETE key
-  // set (every batch's keys, and every key of this batch: InvalidArgument
-  // otherwise), and the org's entries whose key is not in it are the ones a
-  // prune removes; without prune, all_keys is ignored. Strategies made from a
-  // removed entry keep their library_key. Every call is recorded
-  // (ListLibraryImports).
-  //
-  // Credentials. Only a person-class credential (a signed-in session, a
-  // shared key, a browser session) acts as a person; every other credential,
-  // the CLI login an agent's shell inherits included, acts as an agent and is
-  // PermissionDenied here. The one exception is this rpc: an access token may
-  // call it, acting as a person through a token, and a token only UPSERTS.
-  //   - prune over a person-class credential removes the entries at once
-  //     (pruned).
-  //   - prune over a token removes nothing: it stages a prune request
-  //     (prune_request_id, with the keys it would remove in would_remove) for
-  //     a person to confirm with ConfirmLibraryPrune or cancel with
-  //     CancelLibraryPrune, in the web app. Nothing to remove: no request.
-  rpc ImportStrategyLibrary(ImportStrategyLibraryRequest) returns (ImportStrategyLibraryResponse) {
-    option (forge.v1.method) = {
-      auth_required: true
-      activity: {
-        verb: "import"
-        target: {
-          kind: "gtm_strategy_library"
-          id: "org_id"
-        }
-        scope: "org_id"
-        detail: ["source_revision"]
-      }
-    };
-  }
-
-  // ListLibraryImports lists the org's ImportStrategyLibrary calls, newest
-  // first: who, through which credential, from which source revision, and
-  // what each changed. The web's import history.
-  rpc ListLibraryImports(ListLibraryImportsRequest) returns (ListLibraryImportsResponse) {
-    option idempotency_level = NO_SIDE_EFFECTS;
-    option (forge.v1.method) = {
-      auth_required: true
-      activity: {none: "read-only"}
-    };
-  }
-
-  // ListLibraryPruneRequests lists the org's prune requests, newest first. A
-  // PENDING request older than 7 days is answered as EXPIRED.
-  rpc ListLibraryPruneRequests(ListLibraryPruneRequestsRequest) returns (ListLibraryPruneRequestsResponse) {
-    option idempotency_level = NO_SIDE_EFFECTS;
-    option (forge.v1.method) = {
-      auth_required: true
-      activity: {none: "read-only"}
-    };
-  }
-
-  // ConfirmLibraryPrune carries out a PENDING prune request. It needs a
-  // person-class credential (a token, even one that may import, is
-  // PermissionDenied). It removes only the request's keys that are still in
-  // the library AND were not imported again since the request was made (an
-  // entry whose imported_at is after the request's created_at is kept), and
-  // answers how many it removed. A request that is not PENDING, or is older
-  // than 7 days (EXPIRED), is FailedPrecondition.
-  rpc ConfirmLibraryPrune(ConfirmLibraryPruneRequest) returns (ConfirmLibraryPruneResponse) {
-    option (forge.v1.method) = {
-      auth_required: true
-      activity: {
-        verb: "confirm_prune"
-        target: {
-          kind: "gtm_library_prune_request"
-          id: "request_id"
-        }
-        scope: "org_id"
-        detail: ["response.removed"]
-      }
-    };
-  }
-
-  // CancelLibraryPrune cancels a PENDING prune request; nothing is removed. A
-  // person's act (PermissionDenied for an agent). A request that is not
-  // PENDING is FailedPrecondition.
-  rpc CancelLibraryPrune(CancelLibraryPruneRequest) returns (CancelLibraryPruneResponse) {
-    option (forge.v1.method) = {
-      auth_required: true
-      activity: {
-        verb: "cancel_prune"
-        target: {
-          kind: "gtm_library_prune_request"
-          id: "request_id"
-        }
-        scope: "org_id"
-      }
-    };
-  }
-
-  // UseLibraryStrategy makes a DRAFT strategy from a library entry: name,
-  // goal (from north_star and objective), target metric (from kpis),
-  // category and library_key. With create_first_campaign it also makes a
+  // UseLibraryStrategy makes a DRAFT strategy from an entry of the embedded
+  // idea bank: name, goal (from its summary_md and objective), target metric
+  // (from its kpis), category and library_key. With create_first_campaign it also makes a
   // first DRAFT campaign under it (campaign_name, or the entry's name), whose
   // planned_channel_ids are the org's ACTIVE channels that fit the entry: a
   // channel whose channel_types share a type with the entry's channel_types,
@@ -430,7 +345,9 @@ service GtmService {
   }
 
   // CreateIdea adds a PROPOSED idea. Its source (AGENT or HUMAN) and creator
-  // are the caller's.
+  // are the caller's. An idea drawn from the idea bank names its entry
+  // (library_key) and answers that entry's tailor_questions
+  // (tailor_answers).
   rpc CreateIdea(CreateIdeaRequest) returns (CreateIdeaResponse) {
     option (forge.v1.method) = {
       auth_required: true
@@ -867,35 +784,36 @@ enum GtmStrategyCategory {
   GTM_STRATEGY_CATEGORY_MARKET_RESEARCH_POSITIONING = 13;
 }
 
-// GtmCredentialKind is the class of credential a library import came
-// through.
-enum GtmCredentialKind {
-  GTM_CREDENTIAL_KIND_UNSPECIFIED = 0;
-  // A person-class credential: a signed-in session, a shared key, a browser
-  // session.
-  GTM_CREDENTIAL_KIND_PERSON = 1;
-  // An access token (the import rpc only): it upserts, never removes.
-  GTM_CREDENTIAL_KIND_TOKEN = 2;
+// GtmBusinessType is what kind of business an org is (its positioning), and
+// which kinds a library entry fits.
+enum GtmBusinessType {
+  GTM_BUSINESS_TYPE_UNSPECIFIED = 0;
+  GTM_BUSINESS_TYPE_B2B_SAAS = 1;
+  GTM_BUSINESS_TYPE_B2C_APP = 2;
+  GTM_BUSINESS_TYPE_DEVELOPER_TOOLS = 3;
+  GTM_BUSINESS_TYPE_ECOMMERCE = 4;
+  GTM_BUSINESS_TYPE_MARKETPLACE = 5;
+  GTM_BUSINESS_TYPE_AGENCY_SERVICES = 6;
+  GTM_BUSINESS_TYPE_CREATOR_MEDIA = 7;
+  GTM_BUSINESS_TYPE_LOCAL_BUSINESS = 8;
+  GTM_BUSINESS_TYPE_OPEN_SOURCE = 9;
+  GTM_BUSINESS_TYPE_HARDWARE = 10;
 }
 
-// GtmPruneRequestStatus is a staged prune's lifecycle.
-enum GtmPruneRequestStatus {
-  GTM_PRUNE_REQUEST_STATUS_UNSPECIFIED = 0;
-  // Waiting for a person (ConfirmLibraryPrune / CancelLibraryPrune).
-  GTM_PRUNE_REQUEST_STATUS_PENDING = 1;
-  GTM_PRUNE_REQUEST_STATUS_CONFIRMED = 2;
-  GTM_PRUNE_REQUEST_STATUS_CANCELLED = 3;
-  // Not decided within 7 days; it can no longer be confirmed.
-  GTM_PRUNE_REQUEST_STATUS_EXPIRED = 4;
-}
-
-// GtmLibraryDepth is how much a library entry holds.
-enum GtmLibraryDepth {
-  GTM_LIBRARY_DEPTH_UNSPECIFIED = 0;
-  // A full play: stage, cost, steps, KPIs, experiments, stop rules.
-  GTM_LIBRARY_DEPTH_PLAY = 1;
-  // A light tactic: a name, a pitch, its level and fits.
-  GTM_LIBRARY_DEPTH_TACTIC = 2;
+// GtmBusinessModel is how an org makes money (its positioning; it may have
+// several), and which models a library entry fits.
+enum GtmBusinessModel {
+  GTM_BUSINESS_MODEL_UNSPECIFIED = 0;
+  GTM_BUSINESS_MODEL_SUBSCRIPTION = 1;
+  GTM_BUSINESS_MODEL_USAGE_BASED = 2;
+  GTM_BUSINESS_MODEL_ONE_TIME = 3;
+  GTM_BUSINESS_MODEL_FREEMIUM = 4;
+  // Free, open source.
+  GTM_BUSINESS_MODEL_FREE_OSS = 5;
+  // Takes a cut of transactions between others.
+  GTM_BUSINESS_MODEL_MARKETPLACE = 6;
+  GTM_BUSINESS_MODEL_SERVICES = 7;
+  GTM_BUSINESS_MODEL_AD_SUPPORTED = 8;
 }
 
 // GtmAssetSource is where an asset came from.
@@ -1038,8 +956,8 @@ message GtmStrategy {
   google.protobuf.Timestamp created_at = 12;
   google.protobuf.Timestamp updated_at = 13;
   GtmStrategyCategory category = 14;
-  // The library entry it was made from (UseLibraryStrategy); empty for none.
-  // A reference, not a link: a re-import may remove the entry.
+  // The idea bank entry it was made from (UseLibraryStrategy); empty for
+  // none. A reference, not a link: a later release may drop the entry.
   string library_key = 15;
 }
 
@@ -1085,110 +1003,65 @@ message GtmChannel {
 message GtmChannelTypeList {
   repeated string types = 1 [(buf.validate.field).repeated = {
     max_items: 32
-    items: {string: {pattern: "^[a-z0-9-]{1,32}$"}}
+    items: {
+      string: {pattern: "^[a-z0-9-]{1,32}$"}
+    }
   }];
 }
 
-// GtmLibraryImport is one ImportStrategyLibrary call (gtm_library_imports),
-// for the audit history.
-message GtmLibraryImport {
-  string id = 1;
-  string org_id = 2;
-  // The user it acted as.
-  string actor_user_id = 3;
-  GtmCredentialKind credential_kind = 4;
-  string source_revision = 5;
-  int32 created = 6;
-  int32 updated = 7;
-  int32 unchanged = 8;
-  int32 pruned = 9;
-  // The prune request it staged, if any.
-  string prune_request_id = 10;
-  google.protobuf.Timestamp created_at = 11;
-}
-
-// GtmLibraryPruneRequest is a prune an import over a token staged
-// (gtm_library_prune_requests): the keys it would remove, waiting for a
-// person.
-message GtmLibraryPruneRequest {
-  string id = 1;
-  string org_id = 2;
-  // The user the staging import acted as.
-  string requested_by = 3;
-  GtmCredentialKind credential_kind = 4;
-  string source_revision = 5;
-  repeated string remove_keys = 6;
-  // PENDING past 7 days is answered as EXPIRED.
-  GtmPruneRequestStatus status = 7;
-  // Who confirmed or cancelled it, and when.
-  string decided_by = 8;
-  google.protobuf.Timestamp decided_at = 9;
-  google.protobuf.Timestamp created_at = 10;
-  // When a PENDING request expires (created_at + 7 days).
-  google.protobuf.Timestamp expires_at = 11;
-}
-
-// GtmLibraryStep is one step of a play and who does it.
-message GtmLibraryStep {
-  // Who does it, as the catalog says ("agent", "you", ...).
-  string who = 1;
-  string title = 2;
-}
-
-// GtmStrategyLibraryEntry is one play or tactic of the org's strategy library
-// (gtm_strategy_library), as imported. The org's own import is the only
-// source of entries: Reliant ships none.
+// GtmStrategyLibraryEntry is one idea of the strategy library: the generic
+// idea bank embedded in Reliant (internal/gtm/library), the same, read-only,
+// for every allowlisted org. An entry is a jumping-off point an agent tailors
+// to the business (tailor_questions), not a script.
 message GtmStrategyLibraryEntry {
-  // A slug, unique in the org: what an import upserts by
-  // (^[a-z0-9][a-z0-9_-]{0,127}$). A catalog entry without a key of its own
-  // (a tactic) gets one derived by the importer: its category's slug and its
-  // name's, lower-cased, every run of other characters turned into one "-",
-  // trimmed of "-" and cut to 128 characters ("<category>-<name>"), so the
-  // same entry gets the same key on every import.
+  // A slug, unique across the bank (^[a-z0-9][a-z0-9_-]{0,127}$).
   string key = 1;
   GtmStrategyCategory category = 2;
-  GtmLibraryDepth depth = 3;
-  string name = 4;
-  // The one-paragraph pitch, in markdown.
-  string summary_md = 5;
-  string icon = 6;
-  // The play's free vocabularies, stored as given: the funnel stage, the
-  // cost band, the difficulty, the level, the objective.
-  string stage = 7;
-  string cost = 8;
-  string cost_note = 9;
-  string difficulty = 10;
-  string level = 11;
-  string objective = 12;
-  string north_star = 13;
-  string hypothesis_md = 14;
-  // Hours of work, days to a signal, the experiment window, days to launch;
-  // 0 when the entry does not say.
-  int32 hours = 15;
-  int32 signal_days = 16;
-  int32 window_days = 17;
-  int32 launch_days = 18;
-  // The expected change of the north star, as the catalog gives it.
-  double expected_delta = 19;
-  repeated string lifecycle = 20;
-  repeated string channel_types = 21;
-  repeated string integrations = 22;
-  repeated string fits = 23;
-  repeated string prerequisites = 24;
-  repeated string kpis = 25;
-  repeated string tactics = 26;
-  repeated string automates = 27;
-  repeated string experiments = 28;
-  repeated string stop_when = 29;
-  repeated GtmLibraryStep steps = 30;
-  // Any field of the entry this message has no field for, kept whole.
-  google.protobuf.Struct extra = 31;
-  // Set by the import; ignored on the way in. imported_at moves on every
-  // import that names the key, changed or not: a prune request skips an entry
-  // imported again after it was made.
-  string source_revision = 32;
-  google.protobuf.Timestamp imported_at = 33;
-  string imported_by = 34;
+  string name = 3;
+  // What it is, in markdown.
+  string summary_md = 4;
+  // Why it works, in markdown.
+  string why_it_works_md = 5;
+  // The businesses it fits; empty means any.
+  repeated GtmBusinessType business_types = 6;
+  repeated GtmBusinessModel business_models = 7;
+  // The stages it fits, each one of pre_launch, launch, early_traction, growth, scale; empty means any.
+  repeated string stages = 8;
+  // One of awareness, acquisition, activation, conversion, retention, expansion, referral, research.
+  string objective = 9;
+  // low, medium or high.
+  string effort = 10;
+  // free, low, medium or high.
+  string cost = 11;
+  // Days to a first signal; 0 when the entry does not say.
+  int32 signal_days = 12;
+  // The 2 to 5 questions an agent answers for this business before proposing
+  // the idea (GtmIdea.tailor_answers).
+  repeated string tailor_questions = 13;
+  // A tool-agnostic description of an automation that carries the idea out,
+  // in markdown; empty for none.
+  string suggested_workflow_md = 14;
+  // The kinds of channel it runs on (the GtmChannel.channel_types
+  // vocabulary): what UseLibraryStrategy maps to the org's channels.
+  repeated string channel_types = 15;
+  // What to measure.
+  repeated string kpis = 16;
+}
+
+// GtmTailorAnswer is an agent's answer to one of a library entry's
+// tailor_questions, for this business.
+message GtmTailorAnswer {
+  string question = 1 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 2000
+  }];
+  string answer = 2 [(buf.validate.field).string.max_len = 2000];
+}
+
+// GtmTailorAnswerList is a whole tailor_answers list, so an update can tell
+// "replace with this list" (set, possibly empty) from "leave alone" (unset).
+message GtmTailorAnswerList {
+  repeated GtmTailorAnswer answers = 1 [(buf.validate.field).repeated.max_items = 20];
 }
 
 // GtmAsset is one file attached to an item or a campaign (gtm_assets):
@@ -1255,6 +1128,14 @@ message GtmIdea {
   int32 revision = 12;
   google.protobuf.Timestamp created_at = 13;
   google.protobuf.Timestamp updated_at = 14;
+  // The idea bank entry it came from (GtmStrategyLibraryEntry.key); empty for
+  // none.
+  string library_key = 15;
+  // The entry's tailor_questions, answered for this business.
+  repeated GtmTailorAnswer tailor_answers = 16;
+  // A tool-agnostic description of an automation that carries it out, in
+  // markdown (the entry's, tailored); empty for none.
+  string suggested_workflow_md = 17;
 }
 
 // GtmCampaign is one campaign (gtm_campaigns).
@@ -1365,6 +1246,10 @@ message GtmPositioning {
   // 0: the org has none yet.
   int32 revision = 5;
   google.protobuf.Timestamp updated_at = 6;
+  // What kind of business it is; UNSPECIFIED for not said.
+  GtmBusinessType business_type = 7;
+  // How it makes money (may be several); empty for not said.
+  repeated GtmBusinessModel business_models = 8;
 }
 
 // GtmClaim is one fact an item may state (gtm_claims). text_norm is the
@@ -1574,7 +1459,9 @@ message CreateChannelRequest {
   }];
   repeated string channel_types = 9 [(buf.validate.field).repeated = {
     max_items: 32
-    items: {string: {pattern: "^[a-z0-9-]{1,32}$"}}
+    items: {
+      string: {pattern: "^[a-z0-9-]{1,32}$"}
+    }
   }];
 }
 
@@ -1702,7 +1589,9 @@ message GetAssetDownloadRequest {
 }
 
 message GetAssetDownloadResponse {
-  string url = 1;
+  // Grants the asset's bytes to whoever holds it, until expires_at: a
+  // secret; never log or store it.
+  string download_url = 1;
   google.protobuf.Timestamp expires_at = 2;
 }
 
@@ -1719,21 +1608,90 @@ message DeleteAssetResponse {}
 
 message ListStrategyLibraryRequest {
   string org_id = 1 [(buf.validate.field).required = true];
-  optional GtmStrategyCategory category = 2;
-  optional GtmLibraryDepth depth = 3;
-  optional string stage = 4;
-  optional string cost = 5;
-  optional string difficulty = 6;
-  // Entries whose fits include it.
-  optional string fit = 7;
+  // Entries in any of these categories; empty means all.
+  repeated GtmStrategyCategory categories = 2 [(buf.validate.field).repeated = {
+    max_items: 13
+    items: {
+      enum: {
+        defined_only: true
+        not_in: [0]
+      }
+    }
+  }];
+  // Entries that fit any of these (an entry with none fits all); empty means
+  // no filter.
+  repeated GtmBusinessType business_types = 3 [(buf.validate.field).repeated = {
+    max_items: 10
+    items: {
+      enum: {
+        defined_only: true
+        not_in: [0]
+      }
+    }
+  }];
+  repeated GtmBusinessModel business_models = 4 [(buf.validate.field).repeated = {
+    max_items: 8
+    items: {
+      enum: {
+        defined_only: true
+        not_in: [0]
+      }
+    }
+  }];
+  optional string stage = 5 [(buf.validate.field).string = {
+    in: [
+      "pre_launch",
+      "launch",
+      "early_traction",
+      "growth",
+      "scale"
+    ]
+  }];
+  optional string objective = 6 [(buf.validate.field).string = {
+    in: [
+      "awareness",
+      "acquisition",
+      "activation",
+      "conversion",
+      "retention",
+      "expansion",
+      "referral",
+      "research"
+    ]
+  }];
+  optional string effort = 7 [(buf.validate.field).string = {
+    in: [
+      "low",
+      "medium",
+      "high"
+    ]
+  }];
+  optional string cost = 8 [(buf.validate.field).string = {
+    in: [
+      "free",
+      "low",
+      "medium",
+      "high"
+    ]
+  }];
   // Matches name and summary_md (case-insensitive substring).
-  optional string query = 8 [(buf.validate.field).string.max_len = 200];
+  optional string query = 9 [(buf.validate.field).string.max_len = 200];
+  // Only entries that fit the org's positioning: (the entry names no
+  // business model, OR the org has none, OR they share one) AND (the entry
+  // names no business type, OR the org has none, OR the entry's include the
+  // org's). Combines with the filters above.
+  optional bool fits_my_business = 10;
+  // A spread instead of a page: up to page_size entries (0 is 50), taken
+  // round-robin across the matching categories in a stable order, so no
+  // category dominates. Deterministic; page_token is ignored and
+  // next_page_token is empty.
+  optional bool diverse = 11;
   // page_size is at most 200; 0 is 50.
-  int32 page_size = 9 [(buf.validate.field).int32 = {
+  int32 page_size = 12 [(buf.validate.field).int32 = {
     gte: 0
     lte: 200
   }];
-  string page_token = 10;
+  string page_token = 13;
 }
 
 message ListStrategyLibraryResponse {
@@ -1748,109 +1706,6 @@ message GetStrategyLibraryEntryRequest {
 
 message GetStrategyLibraryEntryResponse {
   GtmStrategyLibraryEntry entry = 1;
-}
-
-message ImportStrategyLibraryRequest {
-  option (buf.validate.message).cel = {
-    id: "prune_needs_all_keys"
-    message: "prune needs all_keys: the complete key set of the library"
-    expression: "!this.prune || size(this.all_keys) > 0"
-  };
-  option (buf.validate.message).cel = {
-    id: "prune_all_keys_cover_entries"
-    message: "with prune, every entry's key must be in all_keys"
-    expression: "!this.prune || this.entries.all(e, e.key in this.all_keys)"
-  };
-  string org_id = 1 [(buf.validate.field).required = true];
-  // At most 500 per call; every key once.
-  repeated GtmStrategyLibraryEntry entries = 2 [(buf.validate.field).repeated = {
-    min_items: 1
-    max_items: 500
-  }];
-  // What the entries were exported from, e.g. the source commit SHA.
-  string source_revision = 3 [(buf.validate.field).string = {
-    min_len: 1
-    max_len: 200
-  }];
-  // Remove the org's entries whose key is not in all_keys (over a token:
-  // stage a prune request instead).
-  bool prune = 4;
-  // With prune (required then): the complete key set of the library being
-  // imported, across all batches, at most 5000; every key of entries must be
-  // in it (InvalidArgument otherwise). Ignored without prune.
-  repeated string all_keys = 5 [(buf.validate.field).repeated = {
-    max_items: 5000
-    items: {string: {pattern: "^[a-z0-9][a-z0-9_-]{0,127}$"}}
-  }];
-}
-
-message ImportStrategyLibraryResponse {
-  int32 created = 1;
-  int32 updated = 2;
-  int32 unchanged = 3;
-  // Entries removed now (prune over a person-class credential); 0 over a
-  // token.
-  int32 pruned = 4;
-  // Over a token with prune: the staged request a person confirms; empty
-  // when none was staged (no prune, a person-class credential, or nothing to
-  // remove).
-  string prune_request_id = 5;
-  // The keys that request would remove.
-  repeated string would_remove = 6;
-}
-
-message ListLibraryImportsRequest {
-  string org_id = 1 [(buf.validate.field).required = true];
-  // page_size is at most 200; 0 is 50.
-  int32 page_size = 2 [(buf.validate.field).int32 = {
-    gte: 0
-    lte: 200
-  }];
-  string page_token = 3;
-}
-
-message ListLibraryImportsResponse {
-  repeated GtmLibraryImport imports = 1;
-  string next_page_token = 2;
-}
-
-message ListLibraryPruneRequestsRequest {
-  string org_id = 1 [(buf.validate.field).required = true];
-  optional GtmPruneRequestStatus status = 2;
-  // page_size is at most 200; 0 is 50.
-  int32 page_size = 3 [(buf.validate.field).int32 = {
-    gte: 0
-    lte: 200
-  }];
-  string page_token = 4;
-}
-
-message ListLibraryPruneRequestsResponse {
-  repeated GtmLibraryPruneRequest requests = 1;
-  string next_page_token = 2;
-}
-
-message ConfirmLibraryPruneRequest {
-  string org_id = 1 [(buf.validate.field).required = true];
-  string request_id = 2 [(buf.validate.field).required = true];
-}
-
-message ConfirmLibraryPruneResponse {
-  // How many entries it removed (the request's keys still present and not
-  // imported again since).
-  int32 removed = 1;
-  // The request, now CONFIRMED.
-  GtmLibraryPruneRequest request = 2;
-}
-
-message CancelLibraryPruneRequest {
-  string org_id = 1 [(buf.validate.field).required = true];
-  string request_id = 2 [(buf.validate.field).required = true];
-}
-
-message CancelLibraryPruneResponse {
-  // The request, now CANCELLED.
-  GtmLibraryPruneRequest request = 1;
 }
 
 message UseLibraryStrategyRequest {
@@ -1920,6 +1775,12 @@ message CreateIdeaRequest {
   string source_chat_id = 6;
   // The campaign it belongs to; empty for none.
   string campaign_id = 7;
+  // The idea bank entry it comes from; empty for none. A key the bank does
+  // not hold is InvalidArgument.
+  string library_key = 8 [(buf.validate.field).string.pattern = "^([a-z0-9][a-z0-9_-]{0,127})?$"];
+  // At most 20.
+  repeated GtmTailorAnswer tailor_answers = 9 [(buf.validate.field).repeated.max_items = 20];
+  string suggested_workflow_md = 10 [(buf.validate.field).string.max_len = 20000];
 }
 
 message CreateIdeaResponse {
@@ -1944,6 +1805,12 @@ message UpdateIdeaRequest {
   GtmEvidenceList evidence = 7;
   // Set: links the campaign; empty unlinks it.
   optional string campaign_id = 8;
+  // Set: the idea bank entry it comes from (a key the bank does not hold is
+  // InvalidArgument); empty clears it.
+  optional string library_key = 9 [(buf.validate.field).string.pattern = "^([a-z0-9][a-z0-9_-]{0,127})?$"];
+  // Set: replaces the whole list (empty clears it).
+  GtmTailorAnswerList tailor_answers = 10;
+  optional string suggested_workflow_md = 11 [(buf.validate.field).string.max_len = 20000];
 }
 
 message UpdateIdeaResponse {
@@ -2219,6 +2086,19 @@ message UpdatePositioningRequest {
   int32 expected_revision = 2 [(buf.validate.field).int32.gte = 0];
   string positioning_md = 3;
   repeated string audiences = 4;
+  // UNSPECIFIED: not said.
+  GtmBusinessType business_type = 5 [(buf.validate.field).enum.defined_only = true];
+  // Each at most once; empty: not said.
+  repeated GtmBusinessModel business_models = 6 [(buf.validate.field).repeated = {
+    max_items: 8
+    unique: true
+    items: {
+      enum: {
+        defined_only: true
+        not_in: [0]
+      }
+    }
+  }];
 }
 
 message UpdatePositioningResponse {

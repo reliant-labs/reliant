@@ -145,6 +145,7 @@ service TokenService {
   //
   // auth_required: false for the same reason as ExchangeToken: the handler,
   // not the interceptor, authenticates the caller.
+  // forge:mutation: mints a new short-lived git credential for the provider connection on every call
   rpc GetGitToken(GetGitTokenRequest) returns (GetGitTokenResponse) {
     option (forge.v1.method) = {auth_required: false};
   }
@@ -176,6 +177,7 @@ service TokenService {
   //     `git_credential_not_connected`, `git_credential_needs_reconnect`.
   //   - PERMISSION_DENIED, reason `github_owner_cannot_push`.
   //   - UNAVAILABLE: the control plane or GitHub could not be reached; retry.
+  // forge:mutation: mints a new GitHub App installation token on every call
   rpc GetGitHubBotToken(GetGitHubBotTokenRequest) returns (GetGitHubBotTokenResponse) {
     option (forge.v1.method) = {auth_required: false};
   }

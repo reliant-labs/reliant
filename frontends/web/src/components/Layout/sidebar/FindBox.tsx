@@ -45,7 +45,7 @@ export function FindBox() {
         aria-label="Find"
         aria-keyshortcuts={paletteShortcut ? `F ${paletteShortcut}` : "F"}
         title={paletteShortcut ? `Find (F, or ${paletteShortcut})` : "Find (F)"}
-        className="flex h-8 w-full items-center gap-2 rounded-md border border-border bg-background px-2 text-left text-ui text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className="flex h-[var(--row-h)] w-full items-center gap-2 rounded-md border border-border bg-background px-2 text-left text-ui text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         <Search className="size-4 shrink-0" aria-hidden="true" />
         <span className="min-w-0 flex-1 truncate">Find…</span>

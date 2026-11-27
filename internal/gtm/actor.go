@@ -37,26 +37,10 @@ type Actor struct {
 	Kind  ActorKind
 	// ChatID is the agent's chat, recorded as an agent idea's source chat.
 	ChatID string
-	// ViaToken marks a Person acting through an access token rather than a
-	// person-class credential. The handler sets it only for
-	// ImportStrategyLibrary, the one call a token may make as a person, and
-	// there a token only upserts: its prune is staged for a person to
-	// confirm. Everywhere else a ViaToken actor is not a Person.
-	ViaToken bool
 }
 
-// Person reports whether a person acts through a person-class credential:
-// every person-only rule asks this, so a ViaToken actor never passes one.
-func (a Actor) Person() bool { return a.Kind == ActorPerson && !a.ViaToken }
-
-// credentialKind is the class of credential a person-kind actor came
-// through, for the library audit.
-func (a Actor) credentialKind() CredentialKind {
-	if a.ViaToken {
-		return CredentialToken
-	}
-	return CredentialPerson
-}
+// Person reports whether a person acts.
+func (a Actor) Person() bool { return a.Kind == ActorPerson }
 
 func (a Actor) validate() error {
 	switch {
@@ -66,8 +50,6 @@ func (a Actor) validate() error {
 		return errors.New("gtm: actor has no org")
 	case a.Kind != ActorPerson && a.Kind != ActorAgent:
 		return errors.New("gtm: actor has no kind")
-	case a.ViaToken && a.Kind != ActorPerson:
-		return errors.New("gtm: only a person acts through a token")
 	}
 	return nil
 }

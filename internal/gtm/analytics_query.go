@@ -58,6 +58,9 @@ var analyticsName = regexp.MustCompile(`^[A-Za-z0-9_.:-]{1,64}$`)
 // ValidAnalyticsName reports whether s may name an event or a property.
 func ValidAnalyticsName(s string) bool { return analyticsName.MatchString(s) }
 
+// analyticsID is what a project id may be.
+var analyticsID = regexp.MustCompile(`^[A-Za-z0-9_.:-]{1,128}$`)
+
 // AnalyticsQuery is one template with its parameters.
 type AnalyticsQuery struct {
 	Template AnalyticsTemplate
@@ -77,6 +80,16 @@ type AnalyticsQuery struct {
 	// Limit caps the rows; 0 is DefaultAnalyticsRows, at most
 	// MaxAnalyticsRows.
 	Limit int
+	// Environment names the deploy environment to read ("prod", ...): the
+	// Analytics implementation resolves the name to every live environment
+	// of the org that carries it (narrowed by ProjectID when set) and reads
+	// only their events; a name it cannot resolve is a *ValidationError
+	// naming the environments there are. Empty reads every environment of
+	// the org, events with no environment included.
+	Environment string
+	// ProjectID narrows Environment to one project's environments, or,
+	// alone, the read to one project. Empty: every project.
+	ProjectID string
 }
 
 // Resolve fills the zero window and limit from now, as the Service does
@@ -136,6 +149,12 @@ func (q AnalyticsQuery) Validate() error {
 			return invalid("events", fmt.Sprintf("%q must match %s", e, analyticsName.String()))
 		}
 	}
+	if q.Environment != "" && !ValidAnalyticsName(q.Environment) {
+		return invalid("environment", "must match "+analyticsName.String())
+	}
+	if q.ProjectID != "" && !analyticsID.MatchString(q.ProjectID) {
+		return invalid("project_id", "must match "+analyticsID.String())
+	}
 	if !q.From.Before(q.To) {
 		return invalid("window", "from must be before to")
 	}
@@ -184,6 +203,13 @@ type AnalyticsResult struct {
 	// people were in them (k-anonymity, k=3). Analytics fills it in; the
 	// Service's re-cap of Rows keeps it as is.
 	HiddenGroups int
+	// Environment and ProjectID label the result with the scope read, as
+	// the query named it (the Service sets them): "" is every environment
+	// (or project). EnvironmentIDs are the environments Environment
+	// resolved to, as Analytics fills them in; empty when unrestricted.
+	Environment    string
+	ProjectID      string
+	EnvironmentIDs []string
 }
 
 // passesThrough reports whether an Analytics error reaches the caller as it
@@ -222,6 +248,7 @@ func (s *service) ReadProductAnalytics(ctx context.Context, actor Actor, q Analy
 	}
 	// The domain holds the caps, whatever the client returned.
 	res.Template, res.From, res.To = q.Template, q.From, q.To
+	res.Environment, res.ProjectID = q.Environment, q.ProjectID
 	if len(res.Rows) > q.Limit {
 		res.Rows = res.Rows[:q.Limit]
 		res.Truncated = true

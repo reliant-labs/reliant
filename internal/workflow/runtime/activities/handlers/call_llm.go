@@ -149,6 +149,10 @@ type SpawnTree interface {
 type CallLLMDeps struct {
 	// Store is what the activity reads and writes.
 	Store CallLLMStore
+	// Triggers reads the trigger side of the attendance rule (chatAttendance):
+	// NewTriggerReads. Nil decides nothing, so the run is unattended and
+	// spends the org's sources only.
+	Triggers AttendanceTriggers
 	// Spawns reads the thread's spawn tree for the turn's grants.
 	Spawns SpawnTree
 	// Threads saves the turn's messages and the notices it posts.
@@ -175,6 +179,7 @@ type CallLLMDeps struct {
 // This activity streams LLM response by content blocks and is separate from message saving
 type CallLLMActivity struct {
 	repo           CallLLMStore
+	triggers       AttendanceTriggers
 	spawns         SpawnTree
 	threads        MessageSaver
 	mailbox        MailboxQueue
@@ -309,6 +314,7 @@ func (a *CallLLMActivity) localModelSpec(preferDaemonID string, noMachine bool) 
 func NewCallLLMActivity(deps CallLLMDeps) *CallLLMActivity {
 	return &CallLLMActivity{
 		repo:           deps.Store,
+		triggers:       deps.Triggers,
 		spawns:         deps.Spawns,
 		threads:        deps.Threads,
 		mailbox:        deps.Mailbox,
@@ -1533,7 +1539,7 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 	// Resolve model and driver through the shared request-construction path.
 	// When a custom driver resolver is injected (e.g., in tests), it skips
 	// registry resolution and probes the resolver for its model.
-	who := chatAttendance(ctx, a.repo, chat)
+	who := chatAttendance(ctx, a.repo, a.triggers, chat)
 	resolved, err := resolveLLMCall(ctx, a.driverResolver, llmCallSpec{
 		UserID:              chat.UserID,
 		OrgID:               chatOrgID(chat),

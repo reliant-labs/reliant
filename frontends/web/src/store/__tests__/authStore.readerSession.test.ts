@@ -1,7 +1,7 @@
 import { beforeEach, expect, it, vi } from "vitest";
 import { act, fireEvent, screen } from "@testing-library/react";
 import { renderBrowser, PROD, callsOf } from "@/components/Forge/Storage/__tests__/storageTestUtils";
-import { createStorageFixtureApi } from "@/components/Forge/Storage/__fixtures__/fixtureStorageApi";
+import { createStorageFixture } from "@/components/Forge/Storage/__fixtures__/fixtureStorageService";
 import { renderBrowser as renderDataBrowser } from "@/components/Forge/Data/__tests__/dataTestUtils";
 import { createDataFixtureApi } from "@/components/Forge/Data/__fixtures__/fixtureDataApi";
 vi.mock("@tanstack/react-router", async (original) => ({ ...(await original<typeof import("@tanstack/react-router")>()), useNavigate: () => vi.fn() }));
@@ -54,7 +54,7 @@ it("synchronously isolates explicit signOut then B, and adoptSession without sig
 it.each(["signOut", "adoptSession", "authEvent"])("real auth boundary resets mounted Storage for %s", async (path) => {
   if (path === "authEvent") await useAuthStore.getState().initialize();
   useAuthStore.setState({ user: user("A"), session: { user: user("A"), access_token: "A-token" } as Session });
-  const api = createStorageFixtureApi();
+  const api = createStorageFixture();
   renderBrowser(api, { bucket: "uploads", object: "docs/readme.txt" }, PROD);
   await screen.findByRole("dialog");
   fireEvent.change(screen.getByTestId("storage-access-reason"), { target: { value: "A reason" } });

@@ -79,21 +79,6 @@ const (
 	// GtmServiceGetStrategyLibraryEntryProcedure is the fully-qualified name of the GtmService's
 	// GetStrategyLibraryEntry RPC.
 	GtmServiceGetStrategyLibraryEntryProcedure = "/reliant.v1.GtmService/GetStrategyLibraryEntry"
-	// GtmServiceImportStrategyLibraryProcedure is the fully-qualified name of the GtmService's
-	// ImportStrategyLibrary RPC.
-	GtmServiceImportStrategyLibraryProcedure = "/reliant.v1.GtmService/ImportStrategyLibrary"
-	// GtmServiceListLibraryImportsProcedure is the fully-qualified name of the GtmService's
-	// ListLibraryImports RPC.
-	GtmServiceListLibraryImportsProcedure = "/reliant.v1.GtmService/ListLibraryImports"
-	// GtmServiceListLibraryPruneRequestsProcedure is the fully-qualified name of the GtmService's
-	// ListLibraryPruneRequests RPC.
-	GtmServiceListLibraryPruneRequestsProcedure = "/reliant.v1.GtmService/ListLibraryPruneRequests"
-	// GtmServiceConfirmLibraryPruneProcedure is the fully-qualified name of the GtmService's
-	// ConfirmLibraryPrune RPC.
-	GtmServiceConfirmLibraryPruneProcedure = "/reliant.v1.GtmService/ConfirmLibraryPrune"
-	// GtmServiceCancelLibraryPruneProcedure is the fully-qualified name of the GtmService's
-	// CancelLibraryPrune RPC.
-	GtmServiceCancelLibraryPruneProcedure = "/reliant.v1.GtmService/CancelLibraryPrune"
 	// GtmServiceUseLibraryStrategyProcedure is the fully-qualified name of the GtmService's
 	// UseLibraryStrategy RPC.
 	GtmServiceUseLibraryStrategyProcedure = "/reliant.v1.GtmService/UseLibraryStrategy"
@@ -168,8 +153,12 @@ type GtmServiceClient interface {
 	// ListChannels lists the org's channels by key. An allowlisted org with no
 	// channel yet is given the default set on its first List or Get (blog,
 	// email, hacker-news, reddit, linkedin, x, youtube), each with a small
-	// generic channel_types set: a write, so the rpc is IDEMPOTENT rather than
-	// side-effect free. connection_state is computed per caller.
+	// generic channel_types set. Declared NO_SIDE_EFFECTS though that first
+	// read seeds the defaults: the seed is idempotent (ON CONFLICT DO NOTHING)
+	// and no reliant client enables Connect's useHttpGet, so nothing caches or
+	// replays it. connection_state is computed per caller (whether that
+	// caller can reach the integration), so one caller's answer is not
+	// another's.
 	ListChannels(context.Context, *connect.Request[v1.ListChannelsRequest]) (*connect.Response[v1.ListChannelsResponse], error)
 	// GetChannel returns one channel (seeding the defaults as ListChannels does).
 	GetChannel(context.Context, *connect.Request[v1.GetChannelRequest]) (*connect.Response[v1.GetChannelResponse], error)
@@ -220,57 +209,21 @@ type GtmServiceClient interface {
 	// GetAssetDownload returns a short-lived URL for a READY asset's bytes:
 	// either a presigned GET on the bucket or the gated proxy handler
 	// (/api/gtm/assets/{id}/content), whichever the storage work (PR-13)
-	// settles on. A PENDING asset is FailedPrecondition.
+	// settles on. A PENDING asset is FailedPrecondition. Not a cacheable
+	// read: every call mints a new URL, a bearer secret until it expires.
+	// forge:mutation: mints a short-lived download URL on every call
 	GetAssetDownload(context.Context, *connect.Request[v1.GetAssetDownloadRequest]) (*connect.Response[v1.GetAssetDownloadResponse], error)
-	// ListStrategyLibrary lists the org's strategy library (the plays and
-	// tactics it imported), by category then name.
+	// ListStrategyLibrary lists the strategy library: the generic idea bank
+	// embedded in Reliant, read-only and the same for every allowlisted org (an
+	// org's own strategies and ideas are its rows). By category then name, paged;
+	// with diverse, a spread across categories instead (see the request).
 	ListStrategyLibrary(context.Context, *connect.Request[v1.ListStrategyLibraryRequest]) (*connect.Response[v1.ListStrategyLibraryResponse], error)
-	// GetStrategyLibraryEntry returns one library entry by key.
+	// GetStrategyLibraryEntry returns one entry of the embedded idea bank by key
+	// (NotFound for a key the bank does not hold).
 	GetStrategyLibraryEntry(context.Context, *connect.Request[v1.GetStrategyLibraryEntryRequest]) (*connect.Response[v1.GetStrategyLibraryEntryResponse], error)
-	// ImportStrategyLibrary upserts a batch of library entries by key, at most
-	// 500 per call: a new key is created, a changed entry updated, an equal one
-	// left alone (each counted). A library larger than one batch is imported in
-	// several calls. With prune, all_keys must list the library's COMPLETE key
-	// set (every batch's keys, and every key of this batch: InvalidArgument
-	// otherwise), and the org's entries whose key is not in it are the ones a
-	// prune removes; without prune, all_keys is ignored. Strategies made from a
-	// removed entry keep their library_key. Every call is recorded
-	// (ListLibraryImports).
-	//
-	// Credentials. Only a person-class credential (a signed-in session, a
-	// shared key, a browser session) acts as a person; every other credential,
-	// the CLI login an agent's shell inherits included, acts as an agent and is
-	// PermissionDenied here. The one exception is this rpc: an access token may
-	// call it, acting as a person through a token, and a token only UPSERTS.
-	//   - prune over a person-class credential removes the entries at once
-	//     (pruned).
-	//   - prune over a token removes nothing: it stages a prune request
-	//     (prune_request_id, with the keys it would remove in would_remove) for
-	//     a person to confirm with ConfirmLibraryPrune or cancel with
-	//     CancelLibraryPrune, in the web app. Nothing to remove: no request.
-	ImportStrategyLibrary(context.Context, *connect.Request[v1.ImportStrategyLibraryRequest]) (*connect.Response[v1.ImportStrategyLibraryResponse], error)
-	// ListLibraryImports lists the org's ImportStrategyLibrary calls, newest
-	// first: who, through which credential, from which source revision, and
-	// what each changed. The web's import history.
-	ListLibraryImports(context.Context, *connect.Request[v1.ListLibraryImportsRequest]) (*connect.Response[v1.ListLibraryImportsResponse], error)
-	// ListLibraryPruneRequests lists the org's prune requests, newest first. A
-	// PENDING request older than 7 days is answered as EXPIRED.
-	ListLibraryPruneRequests(context.Context, *connect.Request[v1.ListLibraryPruneRequestsRequest]) (*connect.Response[v1.ListLibraryPruneRequestsResponse], error)
-	// ConfirmLibraryPrune carries out a PENDING prune request. It needs a
-	// person-class credential (a token, even one that may import, is
-	// PermissionDenied). It removes only the request's keys that are still in
-	// the library AND were not imported again since the request was made (an
-	// entry whose imported_at is after the request's created_at is kept), and
-	// answers how many it removed. A request that is not PENDING, or is older
-	// than 7 days (EXPIRED), is FailedPrecondition.
-	ConfirmLibraryPrune(context.Context, *connect.Request[v1.ConfirmLibraryPruneRequest]) (*connect.Response[v1.ConfirmLibraryPruneResponse], error)
-	// CancelLibraryPrune cancels a PENDING prune request; nothing is removed. A
-	// person's act (PermissionDenied for an agent). A request that is not
-	// PENDING is FailedPrecondition.
-	CancelLibraryPrune(context.Context, *connect.Request[v1.CancelLibraryPruneRequest]) (*connect.Response[v1.CancelLibraryPruneResponse], error)
-	// UseLibraryStrategy makes a DRAFT strategy from a library entry: name,
-	// goal (from north_star and objective), target metric (from kpis),
-	// category and library_key. With create_first_campaign it also makes a
+	// UseLibraryStrategy makes a DRAFT strategy from an entry of the embedded
+	// idea bank: name, goal (from its summary_md and objective), target metric
+	// (from its kpis), category and library_key. With create_first_campaign it also makes a
 	// first DRAFT campaign under it (campaign_name, or the entry's name), whose
 	// planned_channel_ids are the org's ACTIVE channels that fit the entry: a
 	// channel whose channel_types share a type with the entry's channel_types,
@@ -281,7 +234,9 @@ type GtmServiceClient interface {
 	// GetIdea returns one idea.
 	GetIdea(context.Context, *connect.Request[v1.GetIdeaRequest]) (*connect.Response[v1.GetIdeaResponse], error)
 	// CreateIdea adds a PROPOSED idea. Its source (AGENT or HUMAN) and creator
-	// are the caller's.
+	// are the caller's. An idea drawn from the idea bank names its entry
+	// (library_key) and answers that entry's tailor_questions
+	// (tailor_answers).
 	CreateIdea(context.Context, *connect.Request[v1.CreateIdeaRequest]) (*connect.Response[v1.CreateIdeaResponse], error)
 	// UpdateIdea edits an idea's content and campaign link. Unset fields are
 	// left alone. Its status moves only through SetIdeaStatus.
@@ -416,14 +371,14 @@ func NewGtmServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...
 			httpClient,
 			baseURL+GtmServiceListChannelsProcedure,
 			connect.WithSchema(gtmServiceMethods.ByName("ListChannels")),
-			connect.WithIdempotency(connect.IdempotencyIdempotent),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getChannel: connect.NewClient[v1.GetChannelRequest, v1.GetChannelResponse](
 			httpClient,
 			baseURL+GtmServiceGetChannelProcedure,
 			connect.WithSchema(gtmServiceMethods.ByName("GetChannel")),
-			connect.WithIdempotency(connect.IdempotencyIdempotent),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		createChannel: connect.NewClient[v1.CreateChannelRequest, v1.CreateChannelResponse](
@@ -474,7 +429,6 @@ func NewGtmServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...
 			httpClient,
 			baseURL+GtmServiceGetAssetDownloadProcedure,
 			connect.WithSchema(gtmServiceMethods.ByName("GetAssetDownload")),
-			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		listStrategyLibrary: connect.NewClient[v1.ListStrategyLibraryRequest, v1.ListStrategyLibraryResponse](
@@ -489,38 +443,6 @@ func NewGtmServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...
 			baseURL+GtmServiceGetStrategyLibraryEntryProcedure,
 			connect.WithSchema(gtmServiceMethods.ByName("GetStrategyLibraryEntry")),
 			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-			connect.WithClientOptions(opts...),
-		),
-		importStrategyLibrary: connect.NewClient[v1.ImportStrategyLibraryRequest, v1.ImportStrategyLibraryResponse](
-			httpClient,
-			baseURL+GtmServiceImportStrategyLibraryProcedure,
-			connect.WithSchema(gtmServiceMethods.ByName("ImportStrategyLibrary")),
-			connect.WithClientOptions(opts...),
-		),
-		listLibraryImports: connect.NewClient[v1.ListLibraryImportsRequest, v1.ListLibraryImportsResponse](
-			httpClient,
-			baseURL+GtmServiceListLibraryImportsProcedure,
-			connect.WithSchema(gtmServiceMethods.ByName("ListLibraryImports")),
-			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-			connect.WithClientOptions(opts...),
-		),
-		listLibraryPruneRequests: connect.NewClient[v1.ListLibraryPruneRequestsRequest, v1.ListLibraryPruneRequestsResponse](
-			httpClient,
-			baseURL+GtmServiceListLibraryPruneRequestsProcedure,
-			connect.WithSchema(gtmServiceMethods.ByName("ListLibraryPruneRequests")),
-			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-			connect.WithClientOptions(opts...),
-		),
-		confirmLibraryPrune: connect.NewClient[v1.ConfirmLibraryPruneRequest, v1.ConfirmLibraryPruneResponse](
-			httpClient,
-			baseURL+GtmServiceConfirmLibraryPruneProcedure,
-			connect.WithSchema(gtmServiceMethods.ByName("ConfirmLibraryPrune")),
-			connect.WithClientOptions(opts...),
-		),
-		cancelLibraryPrune: connect.NewClient[v1.CancelLibraryPruneRequest, v1.CancelLibraryPruneResponse](
-			httpClient,
-			baseURL+GtmServiceCancelLibraryPruneProcedure,
-			connect.WithSchema(gtmServiceMethods.ByName("CancelLibraryPrune")),
 			connect.WithClientOptions(opts...),
 		),
 		useLibraryStrategy: connect.NewClient[v1.UseLibraryStrategyRequest, v1.UseLibraryStrategyResponse](
@@ -657,48 +579,43 @@ func NewGtmServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...
 
 // gtmServiceClient implements GtmServiceClient.
 type gtmServiceClient struct {
-	getGtmAccess             *connect.Client[v1.GetGtmAccessRequest, v1.GetGtmAccessResponse]
-	listStrategies           *connect.Client[v1.ListStrategiesRequest, v1.ListStrategiesResponse]
-	getStrategy              *connect.Client[v1.GetStrategyRequest, v1.GetStrategyResponse]
-	createStrategy           *connect.Client[v1.CreateStrategyRequest, v1.CreateStrategyResponse]
-	updateStrategy           *connect.Client[v1.UpdateStrategyRequest, v1.UpdateStrategyResponse]
-	listChannels             *connect.Client[v1.ListChannelsRequest, v1.ListChannelsResponse]
-	getChannel               *connect.Client[v1.GetChannelRequest, v1.GetChannelResponse]
-	createChannel            *connect.Client[v1.CreateChannelRequest, v1.CreateChannelResponse]
-	updateChannel            *connect.Client[v1.UpdateChannelRequest, v1.UpdateChannelResponse]
-	listAssets               *connect.Client[v1.ListAssetsRequest, v1.ListAssetsResponse]
-	getAsset                 *connect.Client[v1.GetAssetRequest, v1.GetAssetResponse]
-	createAssetUpload        *connect.Client[v1.CreateAssetUploadRequest, v1.CreateAssetUploadResponse]
-	confirmAssetUpload       *connect.Client[v1.ConfirmAssetUploadRequest, v1.ConfirmAssetUploadResponse]
-	deleteAsset              *connect.Client[v1.DeleteAssetRequest, v1.DeleteAssetResponse]
-	getAssetDownload         *connect.Client[v1.GetAssetDownloadRequest, v1.GetAssetDownloadResponse]
-	listStrategyLibrary      *connect.Client[v1.ListStrategyLibraryRequest, v1.ListStrategyLibraryResponse]
-	getStrategyLibraryEntry  *connect.Client[v1.GetStrategyLibraryEntryRequest, v1.GetStrategyLibraryEntryResponse]
-	importStrategyLibrary    *connect.Client[v1.ImportStrategyLibraryRequest, v1.ImportStrategyLibraryResponse]
-	listLibraryImports       *connect.Client[v1.ListLibraryImportsRequest, v1.ListLibraryImportsResponse]
-	listLibraryPruneRequests *connect.Client[v1.ListLibraryPruneRequestsRequest, v1.ListLibraryPruneRequestsResponse]
-	confirmLibraryPrune      *connect.Client[v1.ConfirmLibraryPruneRequest, v1.ConfirmLibraryPruneResponse]
-	cancelLibraryPrune       *connect.Client[v1.CancelLibraryPruneRequest, v1.CancelLibraryPruneResponse]
-	useLibraryStrategy       *connect.Client[v1.UseLibraryStrategyRequest, v1.UseLibraryStrategyResponse]
-	listIdeas                *connect.Client[v1.ListIdeasRequest, v1.ListIdeasResponse]
-	getIdea                  *connect.Client[v1.GetIdeaRequest, v1.GetIdeaResponse]
-	createIdea               *connect.Client[v1.CreateIdeaRequest, v1.CreateIdeaResponse]
-	updateIdea               *connect.Client[v1.UpdateIdeaRequest, v1.UpdateIdeaResponse]
-	setIdeaStatus            *connect.Client[v1.SetIdeaStatusRequest, v1.SetIdeaStatusResponse]
-	listCampaigns            *connect.Client[v1.ListCampaignsRequest, v1.ListCampaignsResponse]
-	getCampaign              *connect.Client[v1.GetCampaignRequest, v1.GetCampaignResponse]
-	createCampaign           *connect.Client[v1.CreateCampaignRequest, v1.CreateCampaignResponse]
-	updateCampaign           *connect.Client[v1.UpdateCampaignRequest, v1.UpdateCampaignResponse]
-	listItems                *connect.Client[v1.ListItemsRequest, v1.ListItemsResponse]
-	getItem                  *connect.Client[v1.GetItemRequest, v1.GetItemResponse]
-	createItem               *connect.Client[v1.CreateItemRequest, v1.CreateItemResponse]
-	updateItem               *connect.Client[v1.UpdateItemRequest, v1.UpdateItemResponse]
-	resolveItemSend          *connect.Client[v1.ResolveItemSendRequest, v1.ResolveItemSendResponse]
-	getPositioning           *connect.Client[v1.GetPositioningRequest, v1.GetPositioningResponse]
-	updatePositioning        *connect.Client[v1.UpdatePositioningRequest, v1.UpdatePositioningResponse]
-	listClaims               *connect.Client[v1.ListClaimsRequest, v1.ListClaimsResponse]
-	upsertClaim              *connect.Client[v1.UpsertClaimRequest, v1.UpsertClaimResponse]
-	checkClaims              *connect.Client[v1.CheckClaimsRequest, v1.CheckClaimsResponse]
+	getGtmAccess            *connect.Client[v1.GetGtmAccessRequest, v1.GetGtmAccessResponse]
+	listStrategies          *connect.Client[v1.ListStrategiesRequest, v1.ListStrategiesResponse]
+	getStrategy             *connect.Client[v1.GetStrategyRequest, v1.GetStrategyResponse]
+	createStrategy          *connect.Client[v1.CreateStrategyRequest, v1.CreateStrategyResponse]
+	updateStrategy          *connect.Client[v1.UpdateStrategyRequest, v1.UpdateStrategyResponse]
+	listChannels            *connect.Client[v1.ListChannelsRequest, v1.ListChannelsResponse]
+	getChannel              *connect.Client[v1.GetChannelRequest, v1.GetChannelResponse]
+	createChannel           *connect.Client[v1.CreateChannelRequest, v1.CreateChannelResponse]
+	updateChannel           *connect.Client[v1.UpdateChannelRequest, v1.UpdateChannelResponse]
+	listAssets              *connect.Client[v1.ListAssetsRequest, v1.ListAssetsResponse]
+	getAsset                *connect.Client[v1.GetAssetRequest, v1.GetAssetResponse]
+	createAssetUpload       *connect.Client[v1.CreateAssetUploadRequest, v1.CreateAssetUploadResponse]
+	confirmAssetUpload      *connect.Client[v1.ConfirmAssetUploadRequest, v1.ConfirmAssetUploadResponse]
+	deleteAsset             *connect.Client[v1.DeleteAssetRequest, v1.DeleteAssetResponse]
+	getAssetDownload        *connect.Client[v1.GetAssetDownloadRequest, v1.GetAssetDownloadResponse]
+	listStrategyLibrary     *connect.Client[v1.ListStrategyLibraryRequest, v1.ListStrategyLibraryResponse]
+	getStrategyLibraryEntry *connect.Client[v1.GetStrategyLibraryEntryRequest, v1.GetStrategyLibraryEntryResponse]
+	useLibraryStrategy      *connect.Client[v1.UseLibraryStrategyRequest, v1.UseLibraryStrategyResponse]
+	listIdeas               *connect.Client[v1.ListIdeasRequest, v1.ListIdeasResponse]
+	getIdea                 *connect.Client[v1.GetIdeaRequest, v1.GetIdeaResponse]
+	createIdea              *connect.Client[v1.CreateIdeaRequest, v1.CreateIdeaResponse]
+	updateIdea              *connect.Client[v1.UpdateIdeaRequest, v1.UpdateIdeaResponse]
+	setIdeaStatus           *connect.Client[v1.SetIdeaStatusRequest, v1.SetIdeaStatusResponse]
+	listCampaigns           *connect.Client[v1.ListCampaignsRequest, v1.ListCampaignsResponse]
+	getCampaign             *connect.Client[v1.GetCampaignRequest, v1.GetCampaignResponse]
+	createCampaign          *connect.Client[v1.CreateCampaignRequest, v1.CreateCampaignResponse]
+	updateCampaign          *connect.Client[v1.UpdateCampaignRequest, v1.UpdateCampaignResponse]
+	listItems               *connect.Client[v1.ListItemsRequest, v1.ListItemsResponse]
+	getItem                 *connect.Client[v1.GetItemRequest, v1.GetItemResponse]
+	createItem              *connect.Client[v1.CreateItemRequest, v1.CreateItemResponse]
+	updateItem              *connect.Client[v1.UpdateItemRequest, v1.UpdateItemResponse]
+	resolveItemSend         *connect.Client[v1.ResolveItemSendRequest, v1.ResolveItemSendResponse]
+	getPositioning          *connect.Client[v1.GetPositioningRequest, v1.GetPositioningResponse]
+	updatePositioning       *connect.Client[v1.UpdatePositioningRequest, v1.UpdatePositioningResponse]
+	listClaims              *connect.Client[v1.ListClaimsRequest, v1.ListClaimsResponse]
+	upsertClaim             *connect.Client[v1.UpsertClaimRequest, v1.UpsertClaimResponse]
+	checkClaims             *connect.Client[v1.CheckClaimsRequest, v1.CheckClaimsResponse]
 }
 
 // GetGtmAccess calls reliant.v1.GtmService.GetGtmAccess.
@@ -784,31 +701,6 @@ func (c *gtmServiceClient) ListStrategyLibrary(ctx context.Context, req *connect
 // GetStrategyLibraryEntry calls reliant.v1.GtmService.GetStrategyLibraryEntry.
 func (c *gtmServiceClient) GetStrategyLibraryEntry(ctx context.Context, req *connect.Request[v1.GetStrategyLibraryEntryRequest]) (*connect.Response[v1.GetStrategyLibraryEntryResponse], error) {
 	return c.getStrategyLibraryEntry.CallUnary(ctx, req)
-}
-
-// ImportStrategyLibrary calls reliant.v1.GtmService.ImportStrategyLibrary.
-func (c *gtmServiceClient) ImportStrategyLibrary(ctx context.Context, req *connect.Request[v1.ImportStrategyLibraryRequest]) (*connect.Response[v1.ImportStrategyLibraryResponse], error) {
-	return c.importStrategyLibrary.CallUnary(ctx, req)
-}
-
-// ListLibraryImports calls reliant.v1.GtmService.ListLibraryImports.
-func (c *gtmServiceClient) ListLibraryImports(ctx context.Context, req *connect.Request[v1.ListLibraryImportsRequest]) (*connect.Response[v1.ListLibraryImportsResponse], error) {
-	return c.listLibraryImports.CallUnary(ctx, req)
-}
-
-// ListLibraryPruneRequests calls reliant.v1.GtmService.ListLibraryPruneRequests.
-func (c *gtmServiceClient) ListLibraryPruneRequests(ctx context.Context, req *connect.Request[v1.ListLibraryPruneRequestsRequest]) (*connect.Response[v1.ListLibraryPruneRequestsResponse], error) {
-	return c.listLibraryPruneRequests.CallUnary(ctx, req)
-}
-
-// ConfirmLibraryPrune calls reliant.v1.GtmService.ConfirmLibraryPrune.
-func (c *gtmServiceClient) ConfirmLibraryPrune(ctx context.Context, req *connect.Request[v1.ConfirmLibraryPruneRequest]) (*connect.Response[v1.ConfirmLibraryPruneResponse], error) {
-	return c.confirmLibraryPrune.CallUnary(ctx, req)
-}
-
-// CancelLibraryPrune calls reliant.v1.GtmService.CancelLibraryPrune.
-func (c *gtmServiceClient) CancelLibraryPrune(ctx context.Context, req *connect.Request[v1.CancelLibraryPruneRequest]) (*connect.Response[v1.CancelLibraryPruneResponse], error) {
-	return c.cancelLibraryPrune.CallUnary(ctx, req)
 }
 
 // UseLibraryStrategy calls reliant.v1.GtmService.UseLibraryStrategy.
@@ -935,8 +827,12 @@ type GtmServiceHandler interface {
 	// ListChannels lists the org's channels by key. An allowlisted org with no
 	// channel yet is given the default set on its first List or Get (blog,
 	// email, hacker-news, reddit, linkedin, x, youtube), each with a small
-	// generic channel_types set: a write, so the rpc is IDEMPOTENT rather than
-	// side-effect free. connection_state is computed per caller.
+	// generic channel_types set. Declared NO_SIDE_EFFECTS though that first
+	// read seeds the defaults: the seed is idempotent (ON CONFLICT DO NOTHING)
+	// and no reliant client enables Connect's useHttpGet, so nothing caches or
+	// replays it. connection_state is computed per caller (whether that
+	// caller can reach the integration), so one caller's answer is not
+	// another's.
 	ListChannels(context.Context, *connect.Request[v1.ListChannelsRequest]) (*connect.Response[v1.ListChannelsResponse], error)
 	// GetChannel returns one channel (seeding the defaults as ListChannels does).
 	GetChannel(context.Context, *connect.Request[v1.GetChannelRequest]) (*connect.Response[v1.GetChannelResponse], error)
@@ -987,57 +883,21 @@ type GtmServiceHandler interface {
 	// GetAssetDownload returns a short-lived URL for a READY asset's bytes:
 	// either a presigned GET on the bucket or the gated proxy handler
 	// (/api/gtm/assets/{id}/content), whichever the storage work (PR-13)
-	// settles on. A PENDING asset is FailedPrecondition.
+	// settles on. A PENDING asset is FailedPrecondition. Not a cacheable
+	// read: every call mints a new URL, a bearer secret until it expires.
+	// forge:mutation: mints a short-lived download URL on every call
 	GetAssetDownload(context.Context, *connect.Request[v1.GetAssetDownloadRequest]) (*connect.Response[v1.GetAssetDownloadResponse], error)
-	// ListStrategyLibrary lists the org's strategy library (the plays and
-	// tactics it imported), by category then name.
+	// ListStrategyLibrary lists the strategy library: the generic idea bank
+	// embedded in Reliant, read-only and the same for every allowlisted org (an
+	// org's own strategies and ideas are its rows). By category then name, paged;
+	// with diverse, a spread across categories instead (see the request).
 	ListStrategyLibrary(context.Context, *connect.Request[v1.ListStrategyLibraryRequest]) (*connect.Response[v1.ListStrategyLibraryResponse], error)
-	// GetStrategyLibraryEntry returns one library entry by key.
+	// GetStrategyLibraryEntry returns one entry of the embedded idea bank by key
+	// (NotFound for a key the bank does not hold).
 	GetStrategyLibraryEntry(context.Context, *connect.Request[v1.GetStrategyLibraryEntryRequest]) (*connect.Response[v1.GetStrategyLibraryEntryResponse], error)
-	// ImportStrategyLibrary upserts a batch of library entries by key, at most
-	// 500 per call: a new key is created, a changed entry updated, an equal one
-	// left alone (each counted). A library larger than one batch is imported in
-	// several calls. With prune, all_keys must list the library's COMPLETE key
-	// set (every batch's keys, and every key of this batch: InvalidArgument
-	// otherwise), and the org's entries whose key is not in it are the ones a
-	// prune removes; without prune, all_keys is ignored. Strategies made from a
-	// removed entry keep their library_key. Every call is recorded
-	// (ListLibraryImports).
-	//
-	// Credentials. Only a person-class credential (a signed-in session, a
-	// shared key, a browser session) acts as a person; every other credential,
-	// the CLI login an agent's shell inherits included, acts as an agent and is
-	// PermissionDenied here. The one exception is this rpc: an access token may
-	// call it, acting as a person through a token, and a token only UPSERTS.
-	//   - prune over a person-class credential removes the entries at once
-	//     (pruned).
-	//   - prune over a token removes nothing: it stages a prune request
-	//     (prune_request_id, with the keys it would remove in would_remove) for
-	//     a person to confirm with ConfirmLibraryPrune or cancel with
-	//     CancelLibraryPrune, in the web app. Nothing to remove: no request.
-	ImportStrategyLibrary(context.Context, *connect.Request[v1.ImportStrategyLibraryRequest]) (*connect.Response[v1.ImportStrategyLibraryResponse], error)
-	// ListLibraryImports lists the org's ImportStrategyLibrary calls, newest
-	// first: who, through which credential, from which source revision, and
-	// what each changed. The web's import history.
-	ListLibraryImports(context.Context, *connect.Request[v1.ListLibraryImportsRequest]) (*connect.Response[v1.ListLibraryImportsResponse], error)
-	// ListLibraryPruneRequests lists the org's prune requests, newest first. A
-	// PENDING request older than 7 days is answered as EXPIRED.
-	ListLibraryPruneRequests(context.Context, *connect.Request[v1.ListLibraryPruneRequestsRequest]) (*connect.Response[v1.ListLibraryPruneRequestsResponse], error)
-	// ConfirmLibraryPrune carries out a PENDING prune request. It needs a
-	// person-class credential (a token, even one that may import, is
-	// PermissionDenied). It removes only the request's keys that are still in
-	// the library AND were not imported again since the request was made (an
-	// entry whose imported_at is after the request's created_at is kept), and
-	// answers how many it removed. A request that is not PENDING, or is older
-	// than 7 days (EXPIRED), is FailedPrecondition.
-	ConfirmLibraryPrune(context.Context, *connect.Request[v1.ConfirmLibraryPruneRequest]) (*connect.Response[v1.ConfirmLibraryPruneResponse], error)
-	// CancelLibraryPrune cancels a PENDING prune request; nothing is removed. A
-	// person's act (PermissionDenied for an agent). A request that is not
-	// PENDING is FailedPrecondition.
-	CancelLibraryPrune(context.Context, *connect.Request[v1.CancelLibraryPruneRequest]) (*connect.Response[v1.CancelLibraryPruneResponse], error)
-	// UseLibraryStrategy makes a DRAFT strategy from a library entry: name,
-	// goal (from north_star and objective), target metric (from kpis),
-	// category and library_key. With create_first_campaign it also makes a
+	// UseLibraryStrategy makes a DRAFT strategy from an entry of the embedded
+	// idea bank: name, goal (from its summary_md and objective), target metric
+	// (from its kpis), category and library_key. With create_first_campaign it also makes a
 	// first DRAFT campaign under it (campaign_name, or the entry's name), whose
 	// planned_channel_ids are the org's ACTIVE channels that fit the entry: a
 	// channel whose channel_types share a type with the entry's channel_types,
@@ -1048,7 +908,9 @@ type GtmServiceHandler interface {
 	// GetIdea returns one idea.
 	GetIdea(context.Context, *connect.Request[v1.GetIdeaRequest]) (*connect.Response[v1.GetIdeaResponse], error)
 	// CreateIdea adds a PROPOSED idea. Its source (AGENT or HUMAN) and creator
-	// are the caller's.
+	// are the caller's. An idea drawn from the idea bank names its entry
+	// (library_key) and answers that entry's tailor_questions
+	// (tailor_answers).
 	CreateIdea(context.Context, *connect.Request[v1.CreateIdeaRequest]) (*connect.Response[v1.CreateIdeaResponse], error)
 	// UpdateIdea edits an idea's content and campaign link. Unset fields are
 	// left alone. Its status moves only through SetIdeaStatus.
@@ -1179,14 +1041,14 @@ func NewGtmServiceHandler(svc GtmServiceHandler, opts ...connect.HandlerOption) 
 		GtmServiceListChannelsProcedure,
 		svc.ListChannels,
 		connect.WithSchema(gtmServiceMethods.ByName("ListChannels")),
-		connect.WithIdempotency(connect.IdempotencyIdempotent),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	gtmServiceGetChannelHandler := connect.NewUnaryHandler(
 		GtmServiceGetChannelProcedure,
 		svc.GetChannel,
 		connect.WithSchema(gtmServiceMethods.ByName("GetChannel")),
-		connect.WithIdempotency(connect.IdempotencyIdempotent),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	gtmServiceCreateChannelHandler := connect.NewUnaryHandler(
@@ -1237,7 +1099,6 @@ func NewGtmServiceHandler(svc GtmServiceHandler, opts ...connect.HandlerOption) 
 		GtmServiceGetAssetDownloadProcedure,
 		svc.GetAssetDownload,
 		connect.WithSchema(gtmServiceMethods.ByName("GetAssetDownload")),
-		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	gtmServiceListStrategyLibraryHandler := connect.NewUnaryHandler(
@@ -1252,38 +1113,6 @@ func NewGtmServiceHandler(svc GtmServiceHandler, opts ...connect.HandlerOption) 
 		svc.GetStrategyLibraryEntry,
 		connect.WithSchema(gtmServiceMethods.ByName("GetStrategyLibraryEntry")),
 		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-		connect.WithHandlerOptions(opts...),
-	)
-	gtmServiceImportStrategyLibraryHandler := connect.NewUnaryHandler(
-		GtmServiceImportStrategyLibraryProcedure,
-		svc.ImportStrategyLibrary,
-		connect.WithSchema(gtmServiceMethods.ByName("ImportStrategyLibrary")),
-		connect.WithHandlerOptions(opts...),
-	)
-	gtmServiceListLibraryImportsHandler := connect.NewUnaryHandler(
-		GtmServiceListLibraryImportsProcedure,
-		svc.ListLibraryImports,
-		connect.WithSchema(gtmServiceMethods.ByName("ListLibraryImports")),
-		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-		connect.WithHandlerOptions(opts...),
-	)
-	gtmServiceListLibraryPruneRequestsHandler := connect.NewUnaryHandler(
-		GtmServiceListLibraryPruneRequestsProcedure,
-		svc.ListLibraryPruneRequests,
-		connect.WithSchema(gtmServiceMethods.ByName("ListLibraryPruneRequests")),
-		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-		connect.WithHandlerOptions(opts...),
-	)
-	gtmServiceConfirmLibraryPruneHandler := connect.NewUnaryHandler(
-		GtmServiceConfirmLibraryPruneProcedure,
-		svc.ConfirmLibraryPrune,
-		connect.WithSchema(gtmServiceMethods.ByName("ConfirmLibraryPrune")),
-		connect.WithHandlerOptions(opts...),
-	)
-	gtmServiceCancelLibraryPruneHandler := connect.NewUnaryHandler(
-		GtmServiceCancelLibraryPruneProcedure,
-		svc.CancelLibraryPrune,
-		connect.WithSchema(gtmServiceMethods.ByName("CancelLibraryPrune")),
 		connect.WithHandlerOptions(opts...),
 	)
 	gtmServiceUseLibraryStrategyHandler := connect.NewUnaryHandler(
@@ -1451,16 +1280,6 @@ func NewGtmServiceHandler(svc GtmServiceHandler, opts ...connect.HandlerOption) 
 			gtmServiceListStrategyLibraryHandler.ServeHTTP(w, r)
 		case GtmServiceGetStrategyLibraryEntryProcedure:
 			gtmServiceGetStrategyLibraryEntryHandler.ServeHTTP(w, r)
-		case GtmServiceImportStrategyLibraryProcedure:
-			gtmServiceImportStrategyLibraryHandler.ServeHTTP(w, r)
-		case GtmServiceListLibraryImportsProcedure:
-			gtmServiceListLibraryImportsHandler.ServeHTTP(w, r)
-		case GtmServiceListLibraryPruneRequestsProcedure:
-			gtmServiceListLibraryPruneRequestsHandler.ServeHTTP(w, r)
-		case GtmServiceConfirmLibraryPruneProcedure:
-			gtmServiceConfirmLibraryPruneHandler.ServeHTTP(w, r)
-		case GtmServiceCancelLibraryPruneProcedure:
-			gtmServiceCancelLibraryPruneHandler.ServeHTTP(w, r)
 		case GtmServiceUseLibraryStrategyProcedure:
 			gtmServiceUseLibraryStrategyHandler.ServeHTTP(w, r)
 		case GtmServiceListIdeasProcedure:
@@ -1576,26 +1395,6 @@ func (UnimplementedGtmServiceHandler) ListStrategyLibrary(context.Context, *conn
 
 func (UnimplementedGtmServiceHandler) GetStrategyLibraryEntry(context.Context, *connect.Request[v1.GetStrategyLibraryEntryRequest]) (*connect.Response[v1.GetStrategyLibraryEntryResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.GtmService.GetStrategyLibraryEntry is not implemented"))
-}
-
-func (UnimplementedGtmServiceHandler) ImportStrategyLibrary(context.Context, *connect.Request[v1.ImportStrategyLibraryRequest]) (*connect.Response[v1.ImportStrategyLibraryResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.GtmService.ImportStrategyLibrary is not implemented"))
-}
-
-func (UnimplementedGtmServiceHandler) ListLibraryImports(context.Context, *connect.Request[v1.ListLibraryImportsRequest]) (*connect.Response[v1.ListLibraryImportsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.GtmService.ListLibraryImports is not implemented"))
-}
-
-func (UnimplementedGtmServiceHandler) ListLibraryPruneRequests(context.Context, *connect.Request[v1.ListLibraryPruneRequestsRequest]) (*connect.Response[v1.ListLibraryPruneRequestsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.GtmService.ListLibraryPruneRequests is not implemented"))
-}
-
-func (UnimplementedGtmServiceHandler) ConfirmLibraryPrune(context.Context, *connect.Request[v1.ConfirmLibraryPruneRequest]) (*connect.Response[v1.ConfirmLibraryPruneResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.GtmService.ConfirmLibraryPrune is not implemented"))
-}
-
-func (UnimplementedGtmServiceHandler) CancelLibraryPrune(context.Context, *connect.Request[v1.CancelLibraryPruneRequest]) (*connect.Response[v1.CancelLibraryPruneResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.GtmService.CancelLibraryPrune is not implemented"))
 }
 
 func (UnimplementedGtmServiceHandler) UseLibraryStrategy(context.Context, *connect.Request[v1.UseLibraryStrategyRequest]) (*connect.Response[v1.UseLibraryStrategyResponse], error) {

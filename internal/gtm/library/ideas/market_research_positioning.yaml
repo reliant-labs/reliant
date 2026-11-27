@@ -1,0 +1,212 @@
+# Market research and positioning: learning who buys, why, and against what,
+# then saying it clearly.
+entries:
+  - key: customer-discovery-interviews
+    category: market_research_positioning
+    name: Customer discovery interviews
+    summary: >-
+      Talk to 15 to 30 people with the problem, asking about the last time it
+      happened, what they did, what it cost and what they tried, never about
+      whether they would buy the idea. Record the exact words they use.
+    why_it_works: >-
+      Past behaviour predicts buying; opinions about a hypothetical product do
+      not. Interviews done this way reveal whether the problem is real and
+      urgent, and the words people use become the marketing copy.
+    stages: [pre_launch, launch, early_traction]
+    objective: research
+    effort: medium
+    cost: free
+    signal_days: 14
+    tailor_questions:
+      - Who exactly has the problem, by role, situation and company type?
+      - Where can the team find 20 such people to talk to this month?
+      - Which assumption, if wrong, would kill the business?
+    suggested_workflow: >-
+      After each interview, turn the notes or transcript into a structured
+      summary (situation, last occurrence, current workaround, cost, exact
+      quotes), and after every five interviews compile the patterns and
+      contradicting evidence for the team.
+    channel_types: [outbound]
+    kpis: [interviews completed, share reporting the problem as urgent, quotes collected]
+
+  - key: win-loss-interviews
+    category: market_research_positioning
+    name: Win and loss interviews
+    summary: >-
+      Within a few weeks of each significant deal closing or being lost,
+      interview the buyer about how they decided: the alternatives considered,
+      what nearly stopped them, and what tipped the decision.
+    why_it_works: >-
+      Sales teams guess why they win and lose; buyers know. A steady habit of
+      asking turns individual deals into a clear picture of strengths,
+      weaknesses and the real competition.
+    fits:
+      business_types: [b2b_saas, developer_tools, agency_services, hardware]
+    stages: [early_traction, growth, scale]
+    objective: research
+    effort: low
+    cost: free
+    signal_days: 30
+    tailor_questions:
+      - Who should conduct the interviews so buyers speak openly?
+      - Which deals in the last quarter were most surprising?
+      - What will the team change if a pattern shows up?
+    suggested_workflow: >-
+      When a deal is marked won or lost, wait a week, draft an interview
+      request to the main contact for a person to send, and after each
+      interview add the reasons to a running tally reported monthly.
+    channel_types: [outbound, email]
+    kpis: [interviews per closed deal, recurring win reasons, recurring loss reasons]
+
+  - key: competitive-alternatives-positioning
+    category: market_research_positioning
+    name: Position against the real alternatives
+    summary: >-
+      List what customers would do if the product did not exist (a
+      spreadsheet, an agency, a competitor, doing nothing), the unique
+      capabilities the product has against those, the value they enable, and
+      the customers who care most. Rewrite the homepage around the result.
+    why_it_works: >-
+      Customers judge a product against their alternatives, not against an
+      abstract category. Positioning built from those alternatives makes the
+      value obvious to the right buyers.
+    stages: [pre_launch, launch, early_traction, growth]
+    objective: research
+    effort: medium
+    cost: free
+    signal_days: 21
+    tailor_questions:
+      - What would the best customers use if this product disappeared tomorrow?
+      - Which capabilities does the product have that those alternatives lack?
+      - Which customers care most about those capabilities, and why?
+    channel_types: [website]
+    kpis: [homepage conversion before and after, sales cycle length, qualified share of inbound]
+
+  - key: smoke-test-landing-page
+    category: market_research_positioning
+    name: Smoke-test demand with a landing page
+    summary: >-
+      Before building, publish a landing page for the offer with a clear
+      promise and price, drive a small amount of targeted traffic to it, and
+      measure sign-ups or pre-orders. Tell visitors honestly that it is coming
+      soon.
+    why_it_works: >-
+      A landing page test measures what people do, not what they say, for a
+      few days of work. Testing several promises or prices side by side shows
+      which one the market wants.
+    stages: [pre_launch]
+    objective: research
+    effort: low
+    cost: low
+    signal_days: 14
+    tailor_questions:
+      - What promise and price will the page test?
+      - Where will a few hundred targeted visitors come from?
+      - What sign-up rate would justify building the offer?
+    channel_types: [website, paid-ads]
+    kpis: [visitor-to-sign-up rate, pre-orders, cost per sign-up]
+
+  - key: best-customer-survey
+    category: market_research_positioning
+    name: Survey the best customers
+    summary: >-
+      Send a short survey to the most engaged customers: how disappointed
+      they would be without the product, the main benefit they get, what they
+      would use instead, and who they think it is for. Focus on answers from
+      those who would be very disappointed.
+    why_it_works: >-
+      The customers who would miss the product most define where it fits
+      best. Their answers sharpen positioning and show which segment to focus
+      on.
+    stages: [early_traction, growth]
+    objective: research
+    effort: low
+    cost: free
+    signal_days: 14
+    tailor_questions:
+      - Who counts as an engaged customer for this survey?
+      - What share of customers would be very disappointed without the product today?
+      - Which answers would change the focus of the business?
+    channel_types: [email, in-product]
+    kpis: [responses, share very disappointed, main benefit themes]
+
+  - key: fake-door-test
+    category: market_research_positioning
+    name: A fake-door test for a new offer
+    summary: >-
+      Add a button, plan or menu item for a feature or offer that does not
+      exist yet; when users click, explain it is being considered and invite
+      them to join an early list or a short call.
+    why_it_works: >-
+      Clicks inside the product are a cheap, honest measure of interest from
+      real users. The follow-up calls with clickers give the details needed to
+      build the right thing.
+    fits:
+      business_types: [b2b_saas, b2c_app, developer_tools, ecommerce, marketplace]
+    stages: [early_traction, growth, scale]
+    objective: research
+    effort: low
+    cost: free
+    signal_days: 14
+    tailor_questions:
+      - Which new offer or feature is the team debating?
+      - How many clicks over what period would justify building it?
+      - How will the message to clickers stay honest and respectful?
+    channel_types: [in-product]
+    kpis: [click-through rate on the fake door, early-list sign-ups, calls with clickers]
+
+  - key: mine-reviews-of-alternatives
+    category: market_research_positioning
+    name: Mine reviews of the alternatives
+    summary: >-
+      Read the public reviews, forum complaints and support threads of the
+      main alternatives, and tag every recurring complaint and praise. The
+      complaints become positioning and roadmap input; the praise shows what
+      the market takes for granted.
+    why_it_works: >-
+      Unhappy users of alternatives say exactly what they wish existed, in
+      their own words, for free. Patterns across hundreds of reviews are more
+      reliable than a handful of interviews.
+    stages: [pre_launch, launch, early_traction, growth]
+    objective: research
+    effort: low
+    cost: free
+    signal_days: 7
+    tailor_questions:
+      - Which alternatives do prospects compare the product with?
+      - Where are honest reviews of those alternatives published?
+      - Which complaints can the product already solve?
+    suggested_workflow: >-
+      Monthly, collect new public reviews of the named alternatives from the
+      chosen review sites and forums, where each site's terms allow it, tag
+      each with recurring themes, and send
+      a short report of the top complaints with example quotes and their
+      change since last month.
+    channel_types: [review-site, forum]
+    kpis: [reviews analysed, recurring complaint themes, themes used in messaging]
+
+  - key: customer-advisory-board
+    category: market_research_positioning
+    name: A customer advisory board
+    summary: >-
+      Invite six to ten respected customers to a small advisory board that
+      meets quarterly, in person when possible, to review the roadmap, test
+      messaging and discuss industry changes, with real follow-through on what
+      they say.
+    why_it_works: >-
+      An advisory board gives the business a recurring, honest read from its
+      most valuable customers, and members become deeply invested champions
+      who renew, expand and refer.
+    fits:
+      business_types: [b2b_saas, developer_tools, agency_services, hardware]
+    stages: [growth, scale]
+    objective: research
+    effort: medium
+    cost: low
+    signal_days: 90
+    tailor_questions:
+      - Which customers are respected by their peers and candid with the team?
+      - What decisions in the next year would benefit from their input?
+      - How will the team show members what changed because of them?
+    channel_types: [events, outbound]
+    kpis: [members retained, decisions informed by the board, expansion and referrals from members]
