@@ -12,7 +12,7 @@ import { create } from "@bufbuild/protobuf";
 import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { GtmIdeaKind, GtmIdeaSchema, GtmIdeaSource, GtmIdeaStatus } from "@/gen/reliant/v1/gtm_pb";
+import { GtmEvidenceSchema, GtmIdeaKind, GtmIdeaSchema, GtmIdeaSource, GtmIdeaStatus } from "@/gen/reliant/v1/gtm_pb";
 
 import { renderGtm, TEST_ORG } from "../../shared/__tests__/gtmHarness";
 import { IdeaDetailView } from "../IdeaDetailPage";
@@ -123,6 +123,45 @@ describe("IdeaDetailView", () => {
     expect(update).toHaveBeenCalledWith(
       expect.objectContaining({ orgId: TEST_ORG, id: "idea-1", expectedRevision: 2, bodyMd: "Docs views are high but few create a flow.\n\nA new draft." }),
     );
+  });
+
+  it("marks an accepted idea done", async () => {
+    const setStatus = vi.fn(() => ({ idea: { ...accepted, status: GtmIdeaStatus.DONE } }));
+    renderGtm(<IdeaDetailView />, { ...lists, "GtmService.GetIdea": { response: { idea: accepted } }, "GtmService.SetIdeaStatus": setStatus }, at);
+    fireEvent.click(await screen.findByRole("button", { name: "Mark done" }));
+    await waitFor(() => expect(setStatus).toHaveBeenCalledWith(expect.objectContaining({ id: "idea-2", expectedRevision: 2, status: GtmIdeaStatus.DONE })));
+  });
+
+  it("shows evidence's markdown as text with emphasis, never raw markers or markup, and links only http(s)", async () => {
+    const withEvidence = create(GtmIdeaSchema, {
+      ...proposed,
+      evidence: [
+        create(GtmEvidenceSchema, { title: "Signups (sample)", summaryMd: "**1 in 5** came from _search_ <img src=x>", url: "https://analytics.example/r/1" }),
+        create(GtmEvidenceSchema, { title: "A note", summaryMd: "unpaired ** stays", url: "javascript:alert(1)" }),
+      ],
+    });
+    renderGtm(<IdeaDetailView />, { ...lists, "GtmService.GetIdea": { response: { idea: withEvidence } } }, at);
+    const bold = await screen.findByText("1 in 5");
+    expect(bold.tagName).toBe("STRONG");
+    expect(screen.getByText("search").tagName).toBe("EM");
+    expect(screen.queryByText(/\*\*1 in 5/)).not.toBeInTheDocument();
+    expect(document.querySelector("img[src='x']")).toBeNull();
+    expect(screen.getByText(/came from/).textContent).toContain("<img src=x>");
+    expect(screen.getByText("unpaired ** stays")).toBeInTheDocument();
+    const link = screen.getByRole("link", { name: "Signups (sample)" });
+    expect(link).toHaveAttribute("href", "https://analytics.example/r/1");
+    expect(link).toHaveAttribute("target", "_blank");
+    expect(link).toHaveAttribute("rel", "noopener noreferrer");
+    expect(screen.queryByRole("link", { name: "A note" })).not.toBeInTheDocument();
+  });
+
+  it("says when the items it looked through were only the newest page", async () => {
+    renderGtm(
+      <IdeaDetailView />,
+      { ...lists, "GtmService.ListItems": { response: { items: [], nextPageToken: "more" } }, "GtmService.GetIdea": { response: { idea: accepted } } },
+      at,
+    );
+    expect(await screen.findByTestId("gtm-idea-items-truncated")).toHaveTextContent("newest 500");
   });
 
   it("says when the idea is not there", async () => {
