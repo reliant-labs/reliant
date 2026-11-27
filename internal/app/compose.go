@@ -1132,6 +1132,7 @@ func (g *Graph) newAttachment() (*attachment.Service, error) {
 		Attachments: store.NewAttachmentExtStore(g.Database().ORM()),
 		API:         g.ApiServerConfig,
 		DB:          g.ORM(),
+		Orgs:        g.OrgResolver(),
 	})
 }
 

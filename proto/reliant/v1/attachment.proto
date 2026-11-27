@@ -51,6 +51,12 @@ message UploadAttachmentRequest {
   bytes content = 2;
   // MIME type of the file
   string mime_type = 3;
+  // The organization the attachment is made in: the chat's org, or the org
+  // the app is scoped to when there is no chat yet. The caller must be a
+  // live member of it (NotFound otherwise); it is recorded on the
+  // attachment, and an org-scoped read (GTM's attach-from-chat) takes only
+  // an attachment made in its org. Unset records none.
+  optional string org_id = 4;
 }
 
 message UploadAttachmentResponse {
@@ -96,6 +102,9 @@ message CreateFileReferenceRequest {
   string filename = 2;
   // File content as bytes — captured at attach time so the server doesn't need filesystem access
   bytes content = 3;
+  // The organization the reference is made in, as
+  // UploadAttachmentRequest.org_id.
+  optional string org_id = 4;
 }
 
 message CreateFileReferenceResponse {

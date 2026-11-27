@@ -578,13 +578,15 @@ schema ReliantConfigIdleReclaim:
         worktree_node_modules_idle != "", "worktree_node_modules_idle = \"\" cannot reach the process: an empty RELIANT_IDLE_RECLAIM_WORKTREE_NODE_MODULES_IDLE counts as unset, so it would load the default \"72h\" — set a value, or change its default in the proto"
 
 # forge:section schema ReliantConfigGtm
-# forge:hash=488029212d5e51891630b5e60ce5d87b41df2009121c20325b06cc6f3c8b2c85
+# forge:hash=42dff3ea8bd471e16cf946ebdac56f02c1a371d4a8707ad7ecafec0c942347db
 # ReliantConfigGtm is the gtm block (GtmConfig) — author its values in config.k as `gtm.<field> = ...`.
 schema ReliantConfigGtm:
     # Comma-separated organization ids GTM is enabled for (none: GTM is off everywhere)
     allowed_org_ids: str = ""
     # Control-plane access token (obs:read, org-bound) for GTM's product-analytics read (unset: unavailable)
     analytics_token: ConfigSecretRef = ConfigSecretRef { name = "reliant-secrets", key = "gtm_analytics_token" }
+    # Let GTM's agent copy a chat attachment made in the GTM org into the asset library (default false)
+    attach_from_chat_enabled: bool = False
 
 # forge:section schema ReliantConfig
 # forge:hash=cbc7d7c9461d88d7d1271dbdf0f86aa9f5ba8b5f57d0bf5315f9b935e427d998
@@ -702,8 +704,9 @@ reliantConfigEnvMap = lambda c: ReliantConfig, config_secrets: [str] -> {str: st
         "RELIANT_IDLE_RECLAIM_WORKTREE_NODE_MODULES_IDLE" = c.idle_reclaim.worktree_node_modules_idle
 
         # forge:section reliantConfigEnvMap values gtm
-        # forge:hash=f05da31ddc209262d8412a08fce809785b5a6991c94ba6c78cd8db631b45a7c0
+        # forge:hash=d917b9c5822ade8e7f80b284ebb0bfef19035dfaf00d8b1fe69d5a90a328760b
         "GTM_ALLOWED_ORG_IDS" = c.gtm.allowed_org_ids
+        "GTM_ATTACH_FROM_CHAT_ENABLED" = "true" if c.gtm.attach_from_chat_enabled else "false"
 
         # forge:section reliantConfigEnvMap values (end)
         # forge:hash=e1769827ac16f2cb38e2dd9a87b234861e5af33f295889268d5884a88256e96c
@@ -2220,8 +2223,9 @@ ROOTS: {str: Root} = {
             "RELIANT_IDLE_RECLAIM_WORKTREE_NODE_MODULES_IDLE",
 
             # forge:section root api env gtm
-            # forge:hash=316b3f8012cd90daf74f920b0cb091dee0dadf10f1475c436de68374a1b8ff9b
+            # forge:hash=e73e25f525253ee9106ecc1d45b85a87c36f950631e1c93c1e7f9550dea129ca
             "GTM_ALLOWED_ORG_IDS",
+            "GTM_ATTACH_FROM_CHAT_ENABLED",
 
             # forge:section root api env (root)
             # forge:hash=5305b56f25d75cda0413c1c63d9abe6b9b80e689bc28041cc9fcd22b02b3dd2e
@@ -2488,8 +2492,9 @@ ROOTS: {str: Root} = {
             "RELIANT_IDLE_RECLAIM_WORKTREE_NODE_MODULES_IDLE",
 
             # forge:section root gateway env gtm
-            # forge:hash=946f5fbbf68b59491a382d360ccea79461e3c5937422daa5970cbaeb70ed32e2
+            # forge:hash=16b7083a4f93727b06785ce522a7e23aff44b4637c720221c8dcb819fd291b42
             "GTM_ALLOWED_ORG_IDS",
+            "GTM_ATTACH_FROM_CHAT_ENABLED",
 
             # forge:section root gateway env (root)
             # forge:hash=751acacff603d412b87b85659d2724d1b9ea693dd4d7863993d4f5276f14383d
@@ -2649,8 +2654,9 @@ ROOTS: {str: Root} = {
             "RELIANT_IDLE_RECLAIM_WORKTREE_NODE_MODULES_IDLE",
 
             # forge:section root worker env gtm
-            # forge:hash=9fb051addcb3b354dc69e34bdfc5f80bd1c1b046327cb96f1f29b3991f7960f7
+            # forge:hash=76a9836847f07f4d43f10039c7fa6e61c996bdb3bcd6fc0c113314320971aba2
             "GTM_ALLOWED_ORG_IDS",
+            "GTM_ATTACH_FROM_CHAT_ENABLED",
 
             # forge:section root worker env (root)
             # forge:hash=84aaf81e7e16a419f918f4ddcce4e4a5c2fb7ca9a2e408ffd246c84e9dc5f6f3

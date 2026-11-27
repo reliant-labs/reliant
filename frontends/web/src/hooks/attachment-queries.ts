@@ -43,12 +43,18 @@ function attachmentFromProto(proto: AttachmentMessage): Attachment {
   };
 }
 
-/** Upload a file's bytes (images, text files and documents alike). */
-export async function uploadAttachment(file: File): Promise<Attachment> {
+/**
+ * Upload a file's bytes (images, text files and documents alike). `orgId` is
+ * the org the attachment is made in (the chat's, or the org scope's for a new
+ * chat); the server records it once it verifies the caller is a member. None
+ * records no org, and such an attachment never reaches an org-scoped read.
+ */
+export async function uploadAttachment(file: File, orgId?: string | null): Promise<Attachment> {
   const response = await client.uploadAttachment({
     filename: file.name,
     content: new Uint8Array(await file.arrayBuffer()),
     mimeType: file.type || "application/octet-stream",
+    ...(orgId ? { orgId } : {}),
   });
   if (!response.attachment) {
     throw new Error("Upload failed: no attachment returned");

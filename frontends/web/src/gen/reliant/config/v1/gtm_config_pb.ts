@@ -12,7 +12,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file reliant/config/v1/gtm_config.proto.
  */
 export const file_reliant_config_v1_gtm_config: GenFile = /*@__PURE__*/
-  fileDesc("CiJyZWxpYW50L2NvbmZpZy92MS9ndG1fY29uZmlnLnByb3RvEhFyZWxpYW50LmNvbmZpZy52MSK2AgoJR3RtQ29uZmlnEoUBCg9hbGxvd2VkX29yZ19pZHMYASADKAlCbILOGGgKE0dUTV9BTExPV0VEX09SR19JRFMqUUNvbW1hLXNlcGFyYXRlZCBvcmdhbml6YXRpb24gaWRzIEdUTSBpcyBlbmFibGVkIGZvciAobm9uZTogR1RNIGlzIG9mZiBldmVyeXdoZXJlKRKgAQoPYW5hbHl0aWNzX3Rva2VuGAIgASgJQoYBgs4YgQEKE0dUTV9BTkFMWVRJQ1NfVE9LRU4qZkNvbnRyb2wtcGxhbmUgYWNjZXNzIHRva2VuIChvYnM6cmVhZCwgb3JnLWJvdW5kKSBmb3IgR1RNJ3MgcHJvZHVjdC1hbmFseXRpY3MgcmVhZCAodW5zZXQ6IHVuYXZhaWxhYmxlKTABUAFCQFo+Z2l0aHViLmNvbS9yZWxpYW50LWxhYnMvcmVsaWFudC9nZW4vcmVsaWFudC9jb25maWcvdjE7Y29uZmlndjFiBnByb3RvMw", [file_forge_v1_forge]);
+  fileDesc("CiJyZWxpYW50L2NvbmZpZy92MS9ndG1fY29uZmlnLnByb3RvEhFyZWxpYW50LmNvbmZpZy52MSLiAwoJR3RtQ29uZmlnEoUBCg9hbGxvd2VkX29yZ19pZHMYASADKAlCbILOGGgKE0dUTV9BTExPV0VEX09SR19JRFMqUUNvbW1hLXNlcGFyYXRlZCBvcmdhbml6YXRpb24gaWRzIEdUTSBpcyBlbmFibGVkIGZvciAobm9uZTogR1RNIGlzIG9mZiBldmVyeXdoZXJlKRKgAQoPYW5hbHl0aWNzX3Rva2VuGAIgASgJQoYBgs4YgQEKE0dUTV9BTkFMWVRJQ1NfVE9LRU4qZkNvbnRyb2wtcGxhbmUgYWNjZXNzIHRva2VuIChvYnM6cmVhZCwgb3JnLWJvdW5kKSBmb3IgR1RNJ3MgcHJvZHVjdC1hbmFseXRpY3MgcmVhZCAodW5zZXQ6IHVuYXZhaWxhYmxlKTABUAESqQEKGGF0dGFjaF9mcm9tX2NoYXRfZW5hYmxlZBgDIAEoCEKGAYLOGIEBChxHVE1fQVRUQUNIX0ZST01fQ0hBVF9FTkFCTEVEKmFMZXQgR1RNJ3MgYWdlbnQgY29weSBhIGNoYXQgYXR0YWNobWVudCBtYWRlIGluIHRoZSBHVE0gb3JnIGludG8gdGhlIGFzc2V0IGxpYnJhcnkgKGRlZmF1bHQgZmFsc2UpQkBaPmdpdGh1Yi5jb20vcmVsaWFudC1sYWJzL3JlbGlhbnQvZ2VuL3JlbGlhbnQvY29uZmlnL3YxO2NvbmZpZ3YxYgZwcm90bzM", [file_forge_v1_forge]);
 
 /**
  * GtmConfig is who gets GTM (the go-to-market workspace) and how its
@@ -44,6 +44,17 @@ export type GtmConfig = Message<"reliant.config.v1.GtmConfig"> & {
    * @generated from field: string analytics_token = 2;
    */
   analyticsToken: string;
+
+  /**
+   * Whether GTM's agent may copy a chat attachment into the asset library
+   * (attach_gtm_asset from an attachment id). Off by default. When on, it
+   * takes only an attachment the caller owns that was made in the GTM org
+   * (attachments.org_id); an attachment made in no org, every one uploaded
+   * before attachments recorded an org included, is never taken.
+   *
+   * @generated from field: bool attach_from_chat_enabled = 3;
+   */
+  attachFromChatEnabled: boolean;
 };
 
 /**

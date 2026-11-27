@@ -16,6 +16,10 @@ type Attachment struct {
 	FilePath       string
 	AttachmentType string // "image" or "file_reference"
 	Content        []byte // File content bytes (nil for file_references)
-	CreatedAt      time.Time
-	UpdatedAt      time.Time
+	// OrgID is the organization the attachment was made in, or nil: made in
+	// no org, or before attachments recorded one. An org-scoped read
+	// (store.GetAttachmentForUserInOrg) never matches a nil one.
+	OrgID     *string
+	CreatedAt time.Time
+	UpdatedAt time.Time
 }
