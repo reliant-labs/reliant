@@ -9,7 +9,7 @@
 import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { AUTOMATE_GUIDE_URL, SuggestedWorkflow, WORKFLOW_COPIED } from "../SuggestedWorkflow";
+import { AUTOMATE_GUIDE_URL, SuggestedWorkflow, WORKFLOW_COPIED, WORKFLOW_COPY_FAILED } from "../SuggestedWorkflow";
 import { renderGtm } from "./gtmHarness";
 
 const toasts = vi.hoisted(() => ({ success: vi.fn(), warning: vi.fn(), error: vi.fn() }));
@@ -30,6 +30,19 @@ describe("SuggestedWorkflow", () => {
     await waitFor(() => expect(writeText).toHaveBeenCalledWith("Every Monday, draft a recap of last week's posts."));
     expect(toasts.success).toHaveBeenCalledWith(WORKFLOW_COPIED);
     await waitFor(() => expect(router.state.location.pathname).toBe("/workflow/new"));
+  });
+
+  it("stays when the copy fails: the text is selected, with a link to New workflow", async () => {
+    writeText.mockRejectedValueOnce(new Error("denied"));
+    const { router } = renderGtm(<SuggestedWorkflow text="Draft a weekly recap." />, {}, { path: "/gtm/ideas/i-1", routePath: "/gtm/ideas/$ideaId" });
+    fireEvent.click(await screen.findByRole("button", { name: "Create this workflow" }));
+    await waitFor(() => expect(toasts.warning).toHaveBeenCalledWith(WORKFLOW_COPY_FAILED));
+    expect(toasts.success).not.toHaveBeenCalled();
+    expect(router.state.location.pathname).toBe("/gtm/ideas/i-1");
+    // The text is selected (its whole node) and focused, ready to copy by hand.
+    expect(window.getSelection()?.getRangeAt(0).toString()).toBe("Draft a weekly recap.");
+    expect(screen.getByTestId("gtm-suggested-workflow-text")).toHaveFocus();
+    expect(screen.getByRole("link", { name: "Open New workflow" })).toHaveAttribute("href", "/workflow/new");
   });
 
   it("links the guide in a new tab, without an opener", async () => {

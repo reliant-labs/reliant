@@ -143,11 +143,8 @@ service WorktreeService {
     };
   }
   // forge:custom — authorizes through the project, and creates its main worktree when none exists
-  // Declared NO_SIDE_EFFECTS though it creates the project's main worktree when it has none (an idempotent repair): the repair is idempotent and
-  // no reliant client enables Connect's useHttpGet, so nothing caches or replays it.
-  rpc ListWorktrees(ListWorktreesRequest) returns (ListWorktreesResponse) {
-    option idempotency_level = NO_SIDE_EFFECTS;
-  }
+  // forge:lint-disable-next-line forge-idempotency-read-undeclared: writes as it reads: it creates the project's main worktree row when it has none
+  rpc ListWorktrees(ListWorktreesRequest) returns (ListWorktreesResponse) {}
   // ListArchivedWorktrees pages through the project's archived workspaces,
   // most recently archived first. Archived workspaces are never part of
   // ListWorktrees: only the archived view asks for them.
@@ -263,22 +260,18 @@ service WorktreeService {
   }
 
   // Git Read Operations
-  rpc GetWorktreeChanges(GetWorktreeChangesRequest) returns (GetWorktreeChangesResponse) {
-    option idempotency_level = NO_SIDE_EFFECTS;
-  }
-  rpc GetWorktreeGitStatus(GetWorktreeGitStatusRequest) returns (GetWorktreeGitStatusResponse) {
-    option idempotency_level = NO_SIDE_EFFECTS;
-  }
-  rpc GetWorktreeCommits(GetWorktreeCommitsRequest) returns (GetWorktreeCommitsResponse) {
-    option idempotency_level = NO_SIDE_EFFECTS;
-  }
+  // forge:lint-disable-next-line forge-idempotency-read-undeclared: machine-waking read: it dispatches a daemon command that wakes the user's machine, so the demo rule (frontends/web/src/fixtures/shop/index.ts) keeps it off the read-only fixture transport
+  rpc GetWorktreeChanges(GetWorktreeChangesRequest) returns (GetWorktreeChangesResponse) {}
+  // forge:lint-disable-next-line forge-idempotency-read-undeclared: machine-waking read: it dispatches a daemon command that wakes the user's machine, so the demo rule (frontends/web/src/fixtures/shop/index.ts) keeps it off the read-only fixture transport
+  rpc GetWorktreeGitStatus(GetWorktreeGitStatusRequest) returns (GetWorktreeGitStatusResponse) {}
+  // forge:lint-disable-next-line forge-idempotency-read-undeclared: machine-waking read: it dispatches a daemon command that wakes the user's machine, so the demo rule (frontends/web/src/fixtures/shop/index.ts) keeps it off the read-only fixture transport
+  rpc GetWorktreeCommits(GetWorktreeCommitsRequest) returns (GetWorktreeCommitsResponse) {}
   // ListWorktreeRepoStatuses returns per-repo git status for every nested
   // repo in the worktree's project. Drives the right-sidebar grouped view.
   // Single-repo and zero-repo projects collapse to a single-element (or empty)
   // response so callers don't need a special case.
-  rpc ListWorktreeRepoStatuses(ListWorktreeRepoStatusesRequest) returns (ListWorktreeRepoStatusesResponse) {
-    option idempotency_level = NO_SIDE_EFFECTS;
-  }
+  // forge:lint-disable-next-line forge-idempotency-read-undeclared: machine-waking read: it dispatches a daemon command that wakes the user's machine, so the demo rule (frontends/web/src/fixtures/shop/index.ts) keeps it off the read-only fixture transport
+  rpc ListWorktreeRepoStatuses(ListWorktreeRepoStatusesRequest) returns (ListWorktreeRepoStatusesResponse) {}
 
   // Git Write Operations
   rpc StageFiles(StageFilesRequest) returns (StageFilesResponse) {
@@ -339,9 +332,8 @@ service WorktreeService {
       }
     };
   }
-  rpc GetWorktreePR(GetWorktreePRRequest) returns (GetWorktreePRResponse) {
-    option idempotency_level = NO_SIDE_EFFECTS;
-  }
+  // forge:lint-disable-next-line forge-idempotency-read-undeclared: machine-waking read that also calls GitHub: it dispatches worktree.get_pr to the user's machine, so the demo rule (frontends/web/src/fixtures/shop/index.ts) keeps it off the read-only fixture transport
+  rpc GetWorktreePR(GetWorktreePRRequest) returns (GetWorktreePRResponse) {}
   rpc CreateWorktreePR(CreateWorktreePRRequest) returns (CreateWorktreePRResponse) {
     option (forge.v1.method) = {
       activity: {
