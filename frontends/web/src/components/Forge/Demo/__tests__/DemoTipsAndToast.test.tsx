@@ -12,9 +12,9 @@ import { DEMO_TRACE_ID } from "@/components/Onboarding/journeys/forge";
 import { isLegacyDemoTourLink } from "@/components/Onboarding/legacyDemoTour";
 import { useNavDrawer } from "@/components/Layout/shell/navDrawer";
 
-function renderDemo(path: string) {
+function renderDemo(path: string, pageBar = "forge-console-header") {
   const root = createRootRoute({ component: () => <><Outlet /><DemoTips /><JourneyTour /></> });
-  const any = createRoute({ getParentRoute: () => root, path: "$", component: () => <div data-testid="page"><header data-testid="forge-console-header" /><main data-testid="forge-console-page"><h1>Console page</h1><div data-testid="obs-log-row" /><div data-testid="obs-trace-row" /><div data-testid="obs-alerts-firing" /><div data-testid="obs-issue-iss-orders-deadline" /></main></div>, validateSearch: (s: Record<string, unknown>) => s });
+  const any = createRoute({ getParentRoute: () => root, path: "$", component: () => <div data-testid="page"><header data-testid={pageBar} /><main data-testid="forge-console-page"><h1>Console page</h1><div data-testid="obs-log-row" /><div data-testid="obs-trace-row" /><div data-testid="obs-alerts-firing" /><div data-testid="obs-issue-iss-orders-deadline" /></main></div>, validateSearch: (s: Record<string, unknown>) => s });
   const router = createRouter({ routeTree: root.addChildren([any]), history: createMemoryHistory({ initialEntries: [path] }) });
   render(<RouterProvider router={router} />);
   return { router, go: (to: string) => act(async () => { await router.navigate({ href: to }); }) };
@@ -188,6 +188,15 @@ it.each(["/forge/p/shop", "/forge/demo?view=overview&tour=forge:fg-intro", "/for
   expect(row.querySelector('[data-testid="forge-demo-telemetry-notice"] a')).toHaveTextContent("Privacy");
   // The legacy yellow banner is not drawn on the demo host: this row replaces it.
   expect(screen.queryByTestId("forge-demo-banner")).toBeNull();
+});
+it("an ML page, under the org console's bar, has the row, its notice and its own tip", async () => {
+  renderDemo("/forge/ml/overview", "forge-org-header");
+  const row = await screen.findByTestId("demo-screen-actions");
+  // Its slot is the row right under the page's bar.
+  expect(row.parentElement!.previousElementSibling).toBe(screen.getByTestId("page").querySelector('[data-testid="forge-org-header"]'));
+  expect(row).toHaveTextContent("Sample app · read-only data");
+  expect(row.querySelector('[data-testid="forge-demo-telemetry-notice"] a')).toHaveTextContent("Privacy");
+  expect(await screen.findByTestId("tour-callout")).toHaveTextContent(DEMO_TIPS["ml-overview"].body);
 });
 it("hides Take the tour while a tour is open", async()=>{
   renderDemo("/forge/p/shop?tour=forge:fg-intro");
