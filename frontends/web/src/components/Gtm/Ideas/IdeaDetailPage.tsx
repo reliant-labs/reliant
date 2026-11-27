@@ -1,8 +1,9 @@
 // Copyright (c) 2026 Reliant Labs
 
 /**
- * One idea: why it was proposed, its evidence, its draft, and what has come
- * of it (the posts and emails made from it). A person accepts or rejects it
+ * One idea: why it was proposed, its evidence, its draft, the library entry
+ * it started from and how it was tailored, and what has come of it (the
+ * posts and emails made from it). A person accepts or rejects it
  * here, and may edit the draft. Every write names the revision on screen
  * (expected_revision); a conflict says so and shows the latest
  * (shared/writes.ts).
@@ -18,16 +19,18 @@ import Card, { CardBody, CardHeader } from "@/components/forge-ui/card";
 import EmptyState from "@/components/forge-ui/empty_state";
 import Link from "@/components/forge-ui/link";
 import Modal from "@/components/forge-ui/modal";
+import Mono from "@/components/forge-ui/mono";
 import PageHeader from "@/components/forge-ui/page_header";
 import SkeletonLoader from "@/components/forge-ui/skeleton_loader";
 import Textarea from "@/components/forge-ui/textarea";
 import { GtmIdeaStatus, type GtmIdea, type GtmItem } from "@/gen/reliant/v1/gtm_pb";
-import { useGetIdea, useListCampaigns, useListItems, useSetIdeaStatus, useUpdateIdea } from "@/hooks/gtm-service-hooks_gen";
-import { chatPath, gtmPath } from "@/lib/paths";
+import { useGetIdea, useGetStrategyLibraryEntry, useListCampaigns, useListItems, useSetIdeaStatus, useUpdateIdea } from "@/hooks/gtm-service-hooks_gen";
+import { chatPath, gtmLibraryPath, gtmPath } from "@/lib/paths";
 
 import { GtmShell, useGtmOrgId } from "../shared/GtmShell";
 import { ItemDialog } from "../shared/ItemDialog";
 import { PersonOnlyTag } from "../shared/PersonAction";
+import { SuggestedWorkflow } from "../shared/SuggestedWorkflow";
 import { useGtmChannels } from "../shared/ItemDialog";
 import { Fields, formatAndChannel, formatDay, formatWhen, IDEA_KIND, IdeaStatusBadge, ItemStatusBadge, OutboundLink, SourceTag } from "../shared/ui";
 import { useGtmWriteError } from "../shared/writes";
@@ -96,6 +99,7 @@ export function IdeaDetailView() {
             </CardBody>
           </Card>
           <DraftCard key={`${idea.id}@${idea.revision}`} idea={idea} />
+          <LibraryCard idea={idea} />
         </div>
         <div className="space-y-6">
           <Card>
@@ -169,6 +173,59 @@ function MadeItem({ item, onOpen }: { item: GtmItem; onOpen: () => void }) {
         </span>
       </button>
     </li>
+  );
+}
+
+/**
+ * Where the idea came from in the strategy library and how it was tailored:
+ * the cited entry (linked into the library; the raw key when the bank no
+ * longer has it), the agent's answers to that entry's tailor questions, and
+ * the suggested workflow with Create this workflow.
+ */
+function LibraryCard({ idea }: { idea: GtmIdea }) {
+  const orgId = useGtmOrgId();
+  const entryQ = useGetStrategyLibraryEntry({ orgId, key: idea.libraryKey }, { enabled: !!orgId && idea.libraryKey !== "", retry: false });
+  if (!idea.libraryKey && idea.tailorAnswers.length === 0 && !idea.suggestedWorkflowMd.trim()) return null;
+  const entry = entryQ.data?.entry;
+  return (
+    <Card>
+      <CardHeader title="From the library" />
+      <CardBody>
+        <div className="space-y-5 text-sm" data-testid="gtm-idea-library">
+          {idea.libraryKey && (
+            <p className="flex flex-wrap items-center gap-2" data-testid="gtm-idea-library-entry">
+              <span className="text-ink-muted">Starting point</span>
+              {entry ? (
+                <Link href={gtmLibraryPath(entry.key)} className="font-medium text-ink underline underline-offset-2">
+                  {entry.name}
+                </Link>
+              ) : entryQ.isPending ? (
+                <span className="text-ink-muted">…</span>
+              ) : (
+                <>
+                  <Mono value={idea.libraryKey} copy={false} className="text-xs text-ink" />
+                  {entryQ.isError && entryQ.error.code === Code.NotFound && <span className="text-xs text-ink-muted">(no longer in the library)</span>}
+                </>
+              )}
+            </p>
+          )}
+          {idea.tailorAnswers.length > 0 && (
+            <section aria-label="Tailored to this business" className="space-y-2">
+              <h3 className="font-medium text-ink">Tailored to this business</h3>
+              <dl className="space-y-3">
+                {idea.tailorAnswers.map((a, i) => (
+                  <div key={`${a.question}-${i}`}>
+                    <dt className="text-ink-muted">{a.question}</dt>
+                    <dd className="mt-0.5 whitespace-pre-wrap text-ink">{a.answer || "Not answered."}</dd>
+                  </div>
+                ))}
+              </dl>
+            </section>
+          )}
+          <SuggestedWorkflow text={idea.suggestedWorkflowMd} />
+        </div>
+      </CardBody>
+    </Card>
   );
 }
 

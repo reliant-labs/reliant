@@ -9,10 +9,10 @@
  */
 
 import { create } from "@bufbuild/protobuf";
-import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { GtmEvidenceSchema, GtmIdeaKind, GtmIdeaSchema, GtmIdeaSource, GtmIdeaStatus } from "@/gen/reliant/v1/gtm_pb";
+import { GtmEvidenceSchema, GtmIdeaKind, GtmIdeaSchema, GtmIdeaSource, GtmIdeaStatus, GtmStrategyLibraryEntrySchema, GtmTailorAnswerSchema } from "@/gen/reliant/v1/gtm_pb";
 
 import { renderGtm, TEST_ORG } from "../../shared/__tests__/gtmHarness";
 import { IdeaDetailView } from "../IdeaDetailPage";
@@ -162,6 +162,47 @@ describe("IdeaDetailView", () => {
       at,
     );
     expect(await screen.findByTestId("gtm-idea-items-truncated")).toHaveTextContent("newest 500");
+  });
+
+  it("shows the library entry it started from, the tailor answers, and the suggested workflow", async () => {
+    const fromBank = create(GtmIdeaSchema, {
+      ...accepted,
+      libraryKey: "sample-local-meetup",
+      tailorAnswers: [create(GtmTailorAnswerSchema, { question: "Where do your users gather?", answer: "Two coworking spaces downtown." })],
+      suggestedWorkflowMd: "Each month, draft the meetup invitation for a person to approve.",
+    });
+    const entry = create(GtmStrategyLibraryEntrySchema, { key: "sample-local-meetup", name: "Host a local meetup" });
+    renderGtm(
+      <IdeaDetailView />,
+      { ...lists, "GtmService.GetIdea": { response: { idea: fromBank } }, "GtmService.GetStrategyLibraryEntry": { response: { entry } } },
+      at,
+    );
+    const card = await screen.findByTestId("gtm-idea-library");
+    const link = await within(card).findByRole("link", { name: "Host a local meetup" });
+    expect(link).toHaveAttribute("href", "/gtm/strategy?view=library&entry=sample-local-meetup");
+    expect(within(card).getByText("Where do your users gather?")).toBeInTheDocument();
+    expect(within(card).getByText("Two coworking spaces downtown.")).toBeInTheDocument();
+    expect(within(within(card).getByTestId("gtm-suggested-workflow")).getByRole("button", { name: "Create this workflow" })).toBeInTheDocument();
+  });
+
+  it("shows the raw key when the library no longer has the entry", async () => {
+    const { ConnectError, Code } = await import("@connectrpc/connect");
+    const gone = create(GtmIdeaSchema, { ...accepted, libraryKey: "sample-retired-play" });
+    renderGtm(
+      <IdeaDetailView />,
+      { ...lists, "GtmService.GetIdea": { response: { idea: gone } }, "GtmService.GetStrategyLibraryEntry": { error: new ConnectError("no", Code.NotFound) } },
+      at,
+    );
+    const entry = await screen.findByTestId("gtm-idea-library-entry");
+    expect(await within(entry).findByText("sample-retired-play")).toBeInTheDocument();
+    expect(within(entry).getByText("(no longer in the library)")).toBeInTheDocument();
+    expect(within(entry).queryByRole("link")).not.toBeInTheDocument();
+  });
+
+  it("shows no library card for an idea that did not come from it", async () => {
+    renderGtm(<IdeaDetailView />, { ...lists, "GtmService.GetIdea": { response: { idea: accepted } } }, at);
+    await screen.findByRole("button", { name: "Mark done" });
+    expect(screen.queryByTestId("gtm-idea-library")).not.toBeInTheDocument();
   });
 
   it("says when the idea is not there", async () => {
