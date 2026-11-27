@@ -979,8 +979,9 @@ func WorkerServerActions(pipeline *configv1.PipelineConfig) serveraction.Config 
 // pr.verdict's approve check and reliant/pipeline.request_grant@1 over the
 // capability grants (internal/pipeline/grants), over
 // the worker's database, GitHub through the integration catalog with the
-// run's credentials (writes recorded in the write ledger, as an action
-// node's are), and the Inbox as async questions.
+// run's credentials (metadata only; writes recorded in the write ledger, as
+// an action node's are), a PR's changed files from a daemon of its gate pool
+// (pipelineFiles), and the Inbox as async questions.
 func workerServerActionHandlers(d TemporalWorkerDeps, creds httpaction.CredentialSource) (map[string]serveraction.Handler, error) {
 	var runner writeledger.Runner = httpaction.NewRunner(netguard.New())
 	if d.WriteLedger != nil {
@@ -990,9 +991,14 @@ func workerServerActionHandlers(d TemporalWorkerDeps, creds httpaction.Credentia
 	if err != nil {
 		return nil, err
 	}
+	files, err := pipelineFiles(d.DB, d.Router)
+	if err != nil {
+		return nil, err
+	}
 	actions, err := practions.New(practions.Deps{
 		Store:  d.DB,
 		GitHub: &practions.CatalogGitHub{Catalog: catalog.MustBuiltin(), Runner: runner, Credentials: creds},
+		Files:  files,
 		Inbox: practions.QuestionInbox{
 			Writer: questions.NewFromRepo(d.DB), Reader: store.NewQuestionExtStore(d.DB.ORM()), Refetch: d.DB.UpdateWriter(),
 		},

@@ -217,7 +217,7 @@ func (s *Service) decide(ctx context.Context, p *prCall, pr PullRequest, comment
 	}
 	v := latestOnHead(verdicts, head)
 	if v == nil {
-		return s.review(ctx, p, verdicts)
+		return s.review(ctx, p, pr, verdicts)
 	}
 	return s.afterVerdict(ctx, p, v)
 }
@@ -260,8 +260,10 @@ func (s *Service) passed(ctx context.Context, p *prCall, v *core.PRHeadVerdictRe
 }
 
 // review sends the head to the reviewer, or, for a low-risk head, passes it
-// here with no model.
-func (s *Service) review(ctx context.Context, p *prCall, verdicts []*core.PRHeadVerdictRecord) (decision, error) {
+// here with no model. The risk tier reads the head's changed files as a gate
+// pool daemon lists them (changedFiles); with no daemon to list them the
+// head is high risk.
+func (s *Service) review(ctx context.Context, p *prCall, pr PullRequest, verdicts []*core.PRHeadVerdictRecord) (decision, error) {
 	head := p.row.StateHeadSHA
 	modelRounds := 0
 	for _, v := range verdicts {
@@ -273,13 +275,14 @@ func (s *Service) review(ctx context.Context, p *prCall, verdicts []*core.PRHead
 		return decision{Next: NextEscalate, Head: head,
 			Reason: fmt.Sprintf("%d review rounds ran without the PR passing; a person needs to look", modelRounds)}, nil
 	}
-	files, err := s.deps.GitHub.ChangedFiles(ctx, p.as, p.rec.Repository, p.rec.Number)
+	files, known, err := s.changedFiles(ctx, p, pr)
 	if err != nil {
-		s.log.WarnContext(ctx, "pr.next could not read the PR's files", "pr", prName(p), "error", err)
-		return decision{}, &serveraction.Error{Code: serveraction.CodeUnavailable, Retryable: true,
-			Message: fmt.Sprintf("could not read %s's changed files from GitHub", prName(p))}
+		return decision{}, err
 	}
-	risk := prpolicy.AssessRisk(files.Diff, p.cfg)
+	risk := filesUnavailableRisk
+	if known {
+		risk = prpolicy.AssessRisk(files.Diff, p.cfg)
+	}
 	if !risk.NeedsModel() {
 		v, err := s.structuralVerdict(ctx, p, verdicts, risk, files)
 		if err != nil {
@@ -302,7 +305,8 @@ func (s *Service) review(ctx context.Context, p *prCall, verdicts []*core.PRHead
 			return err
 		}
 		if byExecution(reviews, key) == nil {
-			detail := attemptDetail{Kind: attemptReview, ExecutionKey: key, Risk: string(risk.Tier), RiskReasons: risk.Reasons, Files: files.Blobs}
+			detail := attemptDetail{Kind: attemptReview, ExecutionKey: key, Risk: string(risk.Tier), RiskReasons: risk.Reasons,
+				Files: files.Blobs, FilesUnknown: !known}
 			if _, err := s.deps.Store.NextPipelineAttempt(ctx, core.PipelineAttempt{
 				OrgID: p.repo.OrgID, ProjectID: p.repo.ProjectID, SubjectKind: core.PipelineAttemptSubjectPR, SubjectID: p.rec.ID,
 				HeadSHA: head, Stage: core.PipelineAttemptReview, RunID: p.as.RunID, DetailJSON: detail.raw(),

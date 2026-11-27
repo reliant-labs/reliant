@@ -120,9 +120,62 @@ type PathsRequest struct {
 	Repository string `json:"repository"`
 	Base       string `json:"base"`
 	Head       string `json:"head"`
+	// Stats asks for Files too: each changed file with its status, line
+	// counts and blob at Head, rename detection on, as GitHub's pull request
+	// files list reports them. pr.next's risk tier reads them, so a PR's
+	// diff never reaches the worker. A daemon older than Stats ignores it
+	// and answers with Paths alone (PathsResult.Stats unset).
+	Stats bool `json:"stats,omitempty"`
 }
 
 // PathsResult is the changed paths, sorted and unique.
 type PathsResult struct {
 	Paths []string `json:"paths"`
+	// Stats is set when the daemon computed Files, which it does only when
+	// the request asked. A server that asked and finds it unset is talking
+	// to a daemon older than Stats.
+	Stats bool `json:"stats,omitempty"`
+	// Files are the changed files, sorted by Path and unique, at most
+	// MaxFileStats of them. Every path of Paths is a file's Path, or a
+	// renamed file's PreviousPath.
+	Files []FileStat `json:"files,omitempty"`
+	// FilesTruncated: more than MaxFileStats files changed, and Files holds
+	// the first MaxFileStats by path.
+	FilesTruncated bool `json:"files_truncated,omitempty"`
+}
+
+// MaxFileStats bounds PathsResult.Files: GitHub's pull request files list
+// stops at the same number.
+const MaxFileStats = 3000
+
+// FileStatus is a changed file's status, in the words of GitHub's pull
+// request files list.
+type FileStatus string
+
+const (
+	FileAdded    FileStatus = "added"
+	FileModified FileStatus = "modified"
+	FileRemoved  FileStatus = "removed"
+	FileRenamed  FileStatus = "renamed"
+	FileCopied   FileStatus = "copied"
+	// FileChanged is a change of type alone (a file made a symlink).
+	FileChanged FileStatus = "changed"
+)
+
+// FileStat is one changed file of a paths job's Files.
+type FileStat struct {
+	// Path is repository-relative, with forward slashes.
+	Path string `json:"path"`
+	// PreviousPath is the path a renamed or copied file had at the merge
+	// base; else empty.
+	PreviousPath string     `json:"previous_path,omitempty"`
+	Status       FileStatus `json:"status"`
+	Additions    int        `json:"additions"`
+	Deletions    int        `json:"deletions"`
+	// Binary: git counts no lines in the file, so Additions and Deletions
+	// are 0, as GitHub's list reports a binary file.
+	Binary bool `json:"binary,omitempty"`
+	// BlobSHA is the file's object at Head (a submodule's commit), all
+	// zeros for a removed file.
+	BlobSHA string `json:"blob_sha"`
 }
