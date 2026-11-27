@@ -37,6 +37,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/egresslimit"
+	"github.com/reliant-labs/reliant/internal/featuregate"
 	"github.com/reliant-labs/reliant/internal/handlers/chat"
 	"github.com/reliant-labs/reliant/internal/handlers/run"
 	"github.com/reliant-labs/reliant/internal/handlers/trigger"
@@ -492,6 +493,12 @@ type WorkerTriggerDeps struct {
 	AutomationKeys automationtokens.Service
 	// Owners re-owns an orphaned trigger; trigger.New requires it.
 	Owners triggerowner.Service
+	// Gate decides which feature-gated tools an activation's approval card
+	// names (trigger.Deps.Gate): the same gate the API server's trigger
+	// service gets, so both roots answer one activation alike. Nil names no
+	// gated tool.
+	// forge:optional-dep
+	Gate featuregate.Gate
 }
 
 // NewWorkerTrigger builds the trigger service list_triggers reads through and
@@ -524,6 +531,7 @@ func NewWorkerTrigger(d WorkerTriggerDeps) (*WorkerTrigger, error) {
 	}
 	svc, err := trigger.New(trigger.Deps{
 		OrgGitHubApps:  apps,
+		Gate:           d.Gate,
 		Logger:         d.Logger,
 		Config:         d.Config,
 		Repo:           repo,

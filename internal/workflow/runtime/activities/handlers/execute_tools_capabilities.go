@@ -26,7 +26,15 @@ import (
 func capabilityRefusal(caps *tools.Capabilities, toolCall message.ToolCall) string {
 	name := toolCall.Name
 	if caps == nil {
-		if required := tools.MinimumPermissionForTool(name); !tools.PermissionAtLeast(tools.PermissionMutating, required) {
+		// A batch with no set entitles no feature, so a feature-gated tool is
+		// treated exactly as a name outside the registry: judged at the tier
+		// such a name gets, then answered TOOL_NOT_FOUND by the executor,
+		// which finds no tool for it (toolexec's LocalToolExecutor).
+		tierName := name
+		if caps.HidesTool(name) {
+			tierName = ""
+		}
+		if required := tools.MinimumPermissionForTool(tierName); !tools.PermissionAtLeast(tools.PermissionMutating, required) {
 			return fmt.Sprintf("Tool '%s' requires '%s' permission, but the current permission level is '%s'.",
 				name, required, tools.PermissionMutating)
 		}

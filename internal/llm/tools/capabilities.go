@@ -93,6 +93,11 @@ type Capabilities struct {
 	// SpawnDepthExhausted: the agent is a sub-agent at MaxSpawnDepth, so it is
 	// never offered spawn. load_tool and execution refusals say so.
 	SpawnDepthExhausted bool
+	// EntitledFeatures are the gated features (featuregate.Feature) the run's
+	// owner is entitled to in the run's org, sorted. A tool gated behind any
+	// other feature (FeatureGate) is excluded as if it did not exist. Carried
+	// on the wire, so execute_tools on any worker agrees with call_llm.
+	EntitledFeatures []string
 }
 
 // BoundParam is one bound parameter as a turn's capability set records it.
@@ -160,6 +165,12 @@ type CapabilityInputs struct {
 	// Its spawn declaration, if any, has already been dropped by the caller;
 	// this only lets a refusal name the reason.
 	SpawnDepthExhausted bool
+	// EntitledFeatures are the gated features the run's owner is entitled to
+	// in the run's org (featuregate.Gate, asked by call_llm). It FAILS
+	// CLOSED: a feature that is not named here, or is named false, is not
+	// entitled, and every tool gated behind it is excluded as if it did not
+	// exist.
+	EntitledFeatures map[string]bool
 }
 
 // ResolveCapabilities computes a turn's capability set. Pure: no I/O and no
@@ -169,7 +180,8 @@ type CapabilityInputs struct {
 // it is a registry tool or a connected MCP tool, it does not need a machine on
 // a no-machine run, it is not a no-machine-only tool on a run that has one,
 // its integration (if it needs a connection) is one the owner can use, an
-// unattended run is not withheld it, and it is within the tier. What is
+// unattended run is not withheld it, the owner is entitled to its feature if
+// it is feature-gated (FeatureGate), and it is within the tier. What is
 // offered is the reachable preloaded tools, the reachable grants the
 // declaration may load, and the structural tools every agent of this shape is
 // handed.
@@ -182,6 +194,7 @@ func ResolveCapabilities(in CapabilityInputs) *Capabilities {
 		Unattended:   in.Unattended,
 
 		SpawnDepthExhausted: in.SpawnDepthExhausted,
+		EntitledFeatures:    entitledFeatureNames(in.EntitledFeatures),
 	}
 	if in.Unattended {
 		for _, name := range in.Access.Named {
@@ -312,6 +325,11 @@ const (
 	reachable exclusion = iota
 	// excludedUnknown: neither a registry tool nor an MCP tool.
 	excludedUnknown
+	// excludedNotEntitled: a feature-gated tool (FeatureGate) whose feature
+	// the run's owner is not entitled to. Checked before anything else, and
+	// every refusal of it reads exactly as excludedUnknown's: to this caller
+	// the tool does not exist.
+	excludedNotEntitled
 	// excludedNotConnected: an MCP tool that is not connected.
 	excludedNotConnected
 	// excludedNeedsMachine: needs the user's machine, and the run has none.
@@ -331,6 +349,9 @@ const (
 )
 
 func (c *Capabilities) exclusion(registry map[string]ToolDefinition, name string) exclusion {
+	if c.notEntitled(name) {
+		return excludedNotEntitled
+	}
 	if strings.HasPrefix(name, MCPToolPrefix) {
 		switch {
 		case c.NoMachine:
@@ -494,7 +515,7 @@ func (c *Capabilities) LoadRefusal(name string) string {
 		return "Spawning is not available to this agent: spawn is offered only by a workflow node that declares spawn presets (tools_config.spawn), and this one declares none, so load_tool cannot add it."
 	}
 	switch c.exclusion(registryIndex(), name) {
-	case excludedUnknown:
+	case excludedUnknown, excludedNotEntitled:
 		return fmt.Sprintf("Tool '%s' not found in the registry. Use load_tool with query to search for available tools.", name)
 	case excludedNeedsMachine:
 		return fmt.Sprintf("%s '%s' needs the user's computer, and this run has no machine, so it cannot be loaded.", label, name)
@@ -534,7 +555,7 @@ func (c *Capabilities) Explain(name string) string {
 		return nomachine.Refusal(name)
 	case excludedHasMachine:
 		return fmt.Sprintf("Tool '%s' is only for a chat with no machine, and this chat has one, so the call was not run. Continue with the tools you have.", name)
-	case excludedUnknown:
+	case excludedUnknown, excludedNotEntitled:
 		return fmt.Sprintf("Tool '%s' does not exist, so the call was not run. Use only the tools you were given.", name)
 	case excludedNotConnected:
 		return fmt.Sprintf("MCP tool '%s' is not connected in this environment, so it was not offered and the call was not run.", name)
@@ -616,6 +637,7 @@ func (c *Capabilities) Proto() *reliantv1.ToolCapabilities {
 		Unattended:           c.Unattended,
 		UnattendedOptIn:      c.UnattendedOptIn,
 		SpawnDepthExhausted:  c.SpawnDepthExhausted,
+		EntitledFeatures:     c.EntitledFeatures,
 	}
 }
 
@@ -703,6 +725,7 @@ func CapabilitiesFromProto(p *reliantv1.ToolCapabilities) *Capabilities {
 		Unattended:   p.GetUnattended(),
 
 		SpawnDepthExhausted: p.GetSpawnDepthExhausted(),
+		EntitledFeatures:    sortedUnique(p.GetEntitledFeatures()),
 	}
 	if caps.Unattended {
 		caps.UnattendedOptIn = sortedUnique(p.GetUnattendedOptIn())

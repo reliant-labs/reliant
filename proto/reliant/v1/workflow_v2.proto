@@ -2171,6 +2171,13 @@ message ToolCapabilities {
   // reached the maximum, so it is never offered spawn. load_tool and the
   // execution refusal say so instead of "not found".
   bool spawn_depth_exhausted = 13;
+  // EntitledFeatures are the gated features (featuregate.Feature) the run's
+  // owner is entitled to in the run's org, sorted. A tool gated behind a
+  // feature not named here is excluded exactly as if it did not exist: not
+  // offered, not loadable, not searchable, and a call to it is refused as an
+  // unknown tool. Absent names nothing, so a set that predates the field
+  // reaches no gated tool.
+  repeated string entitled_features = 14;
 }
 
 // ToolBoundParams are one tool's bound parameters, keyed by parameter name.

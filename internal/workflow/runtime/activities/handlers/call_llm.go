@@ -22,6 +22,7 @@ import (
 	cfgpkg "github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/featuregate"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/llm"
@@ -219,6 +220,20 @@ type CallLLMActivity struct {
 	// one project the turn's tools are offered `project` and the prompt
 	// lists them. nil makes every chat its primary project alone.
 	chatProjects ChatProjectLister
+	// gate decides which gated features (featuregate) the run's owner is
+	// entitled to in the run's org, and so which feature-gated tools exist
+	// for the turn; nil entitles nothing.
+	gate featuregate.Gate
+	// entitlements keeps the gate's answers briefly (entitledFeatures).
+	entitlements *entitlementCache
+}
+
+// WithFeatureGate wires the gate that decides which feature-gated tools the
+// run's owner may be offered (entitledFeatures), with a fresh answer cache.
+func (a *CallLLMActivity) WithFeatureGate(g featuregate.Gate) *CallLLMActivity {
+	a.gate = g
+	a.entitlements = newEntitlementCache(nil)
+	return a
 }
 
 // WithChatProjects wires the reader of a chat's attached projects.
@@ -2868,6 +2883,10 @@ func (a *CallLLMActivity) getAvailableTools(ctx context.Context, chat *db.Chat, 
 	if chat != nil {
 		usable = usableIntegrations(ctx, projectScopedToolsFactory, chat, req.Thread, access)
 	}
+	// A feature-gated tool exists only for an owner entitled to its feature
+	// in the run's org: ask which of the features this declaration reaches.
+	// The resolver excludes the rest as if they did not exist.
+	entitled := entitledFeatures(ctx, a.gate, a.entitlements, chat, access)
 
 	// Whether this thread has sub-agents — its own, or inherited by branching
 	// — decides which spawn management tools it is offered. Read from the
@@ -2889,6 +2908,7 @@ func (a *CallLLMActivity) getAvailableTools(ctx context.Context, chat *db.Chat, 
 		ResponseTool:        req.ResponseTool,
 		UsableIntegrations:  usable,
 		Unattended:          req.Unattended,
+		EntitledFeatures:    entitled,
 	})
 
 	logDebug("[CallLLM] Tool capabilities resolved",

@@ -167,6 +167,11 @@ func nodePrivilegeDisclosure(node *pb.Node, values map[string]any, identity stri
 				break
 			}
 		}
+		// A feature-gated tool is never node-exposed, so no invoke_tool node
+		// runs one: the card names it as it names any unknown tool.
+		if _, gated := tools.FeatureGate(name); gated {
+			known = false
+		}
 		if !known {
 			name = unknownScope
 		}

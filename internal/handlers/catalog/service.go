@@ -13,6 +13,7 @@ import (
 	reliantv1connect "github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/connections"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/featuregate"
 	"github.com/reliant-labs/reliant/internal/integrations/catalogindex"
 	"github.com/reliant-labs/reliant/internal/integrations/inputoptions"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/local"
@@ -64,6 +65,11 @@ type Deps struct {
 	// deployment with no orgs) the pickers list the caller's own accounts.
 	// forge:optional-dep
 	Orgs OrgResolver
+	// Gate decides whether ListTools lists a feature-gated tool to the
+	// caller: only to a member of an org entitled to the tool's feature.
+	// Without it no gated tool is listed.
+	// forge:optional-dep
+	Gate featuregate.Gate
 }
 
 // OrgResolver answers which org a request acts in by name; *orgs.Resolver's

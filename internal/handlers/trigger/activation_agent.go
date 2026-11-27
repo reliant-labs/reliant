@@ -137,7 +137,7 @@ func (s *Service) savedCapabilities(ctx context.Context, user string, existing *
 	if err != nil {
 		return nil
 	}
-	closure, err := s.activationSnapshot(ctx, user, def, wf)
+	closure, err := s.activationSnapshot(ctx, user, def, wf, func() string { return ptrValue(existing.OrgID) })
 	if err != nil {
 		return nil
 	}
@@ -380,7 +380,15 @@ func (s *Service) prepareAgentActivationDecided(ctx context.Context, user, opera
 	// An org GitHub App installation is carried too: it has no ConnectionID,
 	// and dropping it would apply the activation unbound.
 	def.ConnectionId = effectiveConnectionID(row)
-	closure, err := s.activationSnapshot(ctx, user, def, wf)
+	closure, err := s.activationSnapshot(ctx, user, def, wf, func() string {
+		// The org the activation acts in (activationOrgs); one that cannot be
+		// resolved names no gated tool.
+		orgs, err := s.activationOrgs(ctx, user, def.ProjectId, row, existing)
+		if err != nil || len(orgs) == 0 {
+			return ""
+		}
+		return orgs[0]
+	})
 	if err != nil {
 		return nil, tools.ActivationPreview{}, none, tools.RefuseActivation("workflow dependencies could not be resolved for approval ("+svcerr.Code(err).String()+")", err)
 	}

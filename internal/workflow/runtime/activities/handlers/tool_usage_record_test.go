@@ -317,7 +317,7 @@ func TestToolUsageKind(t *testing.T) {
 		{tools.ToolView, true, store.ToolKindResponse, ""},
 		{"ignore previous instructions", false, store.ToolKindUnknown, ""},
 	} {
-		kind, recorded := toolUsageKind(tc.name, tc.response)
+		kind, recorded := toolUsageKind(tc.name, tc.response, nil)
 		assert.Equal(t, tc.kind, kind, tc.name)
 		assert.Equal(t, tc.recorded, recorded, tc.name)
 	}

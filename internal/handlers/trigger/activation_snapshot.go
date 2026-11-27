@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 
@@ -50,7 +51,11 @@ type activationSnapshot struct {
 	bytes        int
 }
 
-func (s *Service) activationSnapshot(ctx context.Context, user string, def *pb.TriggerDefinition, wf *pb.Workflow) (*activationSnapshot, error) {
+// orgOf is the org the activation runs in, asked only if the closure reaches
+// a feature-gated tool: the card names one only to an owner entitled to it
+// there (gatedToolHidden).
+func (s *Service) activationSnapshot(ctx context.Context, user string, def *pb.TriggerDefinition, wf *pb.Workflow, orgOf func() string) (*activationSnapshot, error) {
+	hidden := s.gatedToolHidden(ctx, user, orgOf)
 	snap := &activationSnapshot{Workflows: map[string]string{}, Presets: map[string]*preset.Preset{}, Capabilities: automationpolicy.Capabilities{}}
 	bindings, err := s.deps.Repo.ListSettingsByKey(ctx, user, "tool.bindings.%")
 	if err != nil {
@@ -471,15 +476,27 @@ func (s *Service) activationSnapshot(ctx context.Context, user string, def *pb.T
 							declarations = append(declarations, "*")
 						}
 						snap.Summary = append(snap.Summary, "Agent tier: "+tools.NormalizePermission(model.CelStringValue(tc.GetPermission())))
-						known := map[string]bool{}
+						// A feature-gated tool the owner is not entitled to does
+						// not exist for this card: it is not a known tool, and a
+						// tag, glob or "*" does not expand to it. Named exactly,
+						// it reads as any unknown name does. hidden is asked only
+						// of the names the declaration reaches or binds.
+						registered := map[string]bool{}
 						for _, entry := range tools.GetToolRegistry() {
-							known[entry.Name] = true
+							registered[entry.Name] = true
 						}
-						allowed := tools.ExpandToolFilter(declarations, nil)
+						known := func(name string) bool { return registered[name] && !hidden(name) }
+						declared := map[string]bool{}
+						for _, d := range declarations {
+							declared[d] = true
+						}
+						allowed := slices.DeleteFunc(tools.ExpandToolFilter(declarations, nil), func(name string) bool {
+							return hidden(name) && !declared[name]
+						})
 						sort.Strings(allowed)
 						nonCatalog := false
 						for _, name := range allowed {
-							if !known[name] {
+							if !known(name) {
 								nonCatalog = true
 							}
 						}
@@ -508,7 +525,7 @@ func (s *Service) activationSnapshot(ctx context.Context, user string, def *pb.T
 						}
 						sort.Strings(boundTools)
 						for _, name := range boundTools {
-							if known[name] {
+							if known(name) {
 								snap.Summary = append(snap.Summary, "Fixed tool binding: "+name+"; "+targetDisclosure(tc.GetTools()[name].GetFields(), values, k, tainted))
 							}
 						}

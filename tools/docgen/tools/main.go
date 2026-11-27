@@ -70,6 +70,11 @@ func extractFromRegistry() ([]ToolInfo, []TagInfo) {
 	var toolInfos []ToolInfo
 
 	for _, def := range registry {
+		// A feature-gated tool exists only for callers entitled to its
+		// feature, so the public reference never documents it.
+		if _, gated := tools.FeatureGate(def.Name); gated {
+			continue
+		}
 		// Instantiate tool to get Description and ParamSchema
 		tool := def.Factory(factory)
 

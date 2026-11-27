@@ -22,7 +22,7 @@ func TestActivationSnapshotRejectsCycleWithoutUnboundedExpansion(t *testing.T) {
 	root, err := wfyaml.ParseWorkflow([]byte("name: cyclic\nentry: [again]\nnodes:\n - {id: again, type: workflow, ref: project://cyclic}\n"))
 	require.NoError(t, err)
 	svc := NewTestTrigger(t, WithTriggerDeps(Deps{Repo: repo, Triggers: &MockTriggers{}, FiringReads: &MockFiringReads{}, Registrations: &MockRegistrationReads{}, Projects: projectaccesstest.For(repo)}))
-	_, err = svc.activationSnapshot(context.Background(), "owner", &pb.TriggerDefinition{Workflow: "project://cyclic"}, root)
+	_, err = svc.activationSnapshot(context.Background(), "owner", &pb.TriggerDefinition{Workflow: "project://cyclic"}, root, noActivationOrg)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "validation")
 }
@@ -49,7 +49,7 @@ nodes:
 `))
 	require.NoError(t, err)
 	svc := NewTestTrigger(t, WithTriggerDeps(Deps{Repo: repo, Triggers: &MockTriggers{}, FiringReads: &MockFiringReads{}, Registrations: &MockRegistrationReads{}, Projects: projectaccesstest.For(repo)}))
-	snap, err := svc.activationSnapshot(context.Background(), "owner", &pb.TriggerDefinition{Workflow: "project://privilege-test", Presets: map[string]string{"default": "operator"}}, root)
+	snap, err := svc.activationSnapshot(context.Background(), "owner", &pb.TriggerDefinition{Workflow: "project://privilege-test", Presets: map[string]string{"default": "operator"}}, root, noActivationOrg)
 	require.NoError(t, err)
 	require.Equal(t, []any{"shell"}, snap.EffectiveInputs["tools"])
 	summary := strings.Join(snap.Summary, "\n")
@@ -116,7 +116,7 @@ func snapshotFor(t *testing.T, yaml, trigger string, params map[string]any) (*ac
 		def.Params[k] = value
 	}
 	svc := NewTestTrigger(t, WithTriggerDeps(Deps{Repo: repo, Triggers: &MockTriggers{}, FiringReads: &MockFiringReads{}, Registrations: &MockRegistrationReads{}, Projects: projectaccesstest.For(repo)}))
-	return svc.activationSnapshot(context.Background(), "owner", def, root)
+	return svc.activationSnapshot(context.Background(), "owner", def, root, noActivationOrg)
 }
 
 func TestActivationSnapshotBoundsEventPinnedTargetsByTheMatchInput(t *testing.T) {
@@ -494,7 +494,7 @@ func TestActivationSnapshotWalksAChildOnlyWithWhatItsParentPasses(t *testing.T) 
 				Source:   &pb.TriggerDefinition_WorkflowTrigger{WorkflowTrigger: "labelled"},
 			}
 			svc := NewTestTrigger(t, WithTriggerDeps(Deps{Repo: repo, Triggers: &MockTriggers{}, FiringReads: &MockFiringReads{}, Registrations: &MockRegistrationReads{}, Projects: projectaccesstest.For(repo)}))
-			snap, err := svc.activationSnapshot(context.Background(), "owner", def, root)
+			snap, err := svc.activationSnapshot(context.Background(), "owner", def, root, noActivationOrg)
 			require.NoError(t, err)
 			require.Contains(t, strings.Join(snap.Summary, "\n"), "Agent tool privileges: github__pr_list_files;")
 		})
@@ -532,7 +532,7 @@ func TestActivationSnapshotValidatesEachDefinitionOnce(t *testing.T) {
 		Source:   &pb.TriggerDefinition_WorkflowTrigger{WorkflowTrigger: "labelled"},
 	}
 	svc := NewTestTrigger(t, WithTriggerDeps(Deps{Repo: repo, Triggers: &MockTriggers{}, FiringReads: &MockFiringReads{}, Registrations: &MockRegistrationReads{}, Projects: projectaccesstest.For(repo)}))
-	snap, err := svc.activationSnapshot(context.Background(), "owner", def, root)
+	snap, err := svc.activationSnapshot(context.Background(), "owner", def, root, noActivationOrg)
 	require.NoError(t, err)
 	require.Contains(t, strings.Join(snap.Summary, "\n"), "Privileges below are resolved for every one of those values")
 	// The root pass validates the parent and every child it loads.
@@ -556,7 +556,10 @@ func TestActivationSnapshotStillRefusesAnInvalidChild(t *testing.T) {
 	require.NoError(t, err)
 	def := &pb.TriggerDefinition{Workflow: "project://review-lane", Params: map[string]*structpb.Value{"repos": repos}, Source: &pb.TriggerDefinition_WorkflowTrigger{WorkflowTrigger: "labelled"}}
 	svc := NewTestTrigger(t, WithTriggerDeps(Deps{Repo: repo, Triggers: &MockTriggers{}, FiringReads: &MockFiringReads{}, Registrations: &MockRegistrationReads{}, Projects: projectaccesstest.For(repo)}))
-	_, err = svc.activationSnapshot(context.Background(), "owner", def, root)
+	_, err = svc.activationSnapshot(context.Background(), "owner", def, root, noActivationOrg)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "validation failed")
 }
+
+// noActivationOrg is the org of an activation that has none.
+func noActivationOrg() string { return "" }
