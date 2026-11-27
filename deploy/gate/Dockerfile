@@ -38,6 +38,8 @@
 #                     go1.27 module.
 #   kcl 0.13.2        control-plane KCL_VERSION (ci:full's renders)
 #   yq v4.54.3        control-plane YQ_VERSION
+#   git >= 2.40       bookworm-backports (reliant's gitport needs merge-tree
+#                     --write-tree --merge-base)
 #   playwright 1.58.0 reliant frontends/web pnpm-lock.yaml (@playwright/test),
 #                     with chromium and webkit plus their system packages
 #                     (task test:web:e2e)
@@ -138,6 +140,16 @@ RUN PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright \
      npx -y "playwright@${PLAYWRIGHT_VERSION}" install --with-deps chromium webkit \
   && rm -rf /var/lib/apt/lists/* /root/.npm \
   && chmod -R a+rX /opt/ms-playwright
+
+# git from bookworm-backports: reliant's merge queue (internal/mergequeue/
+# gitport) needs git 2.40 or newer for `merge-tree --write-tree
+# --merge-base`, and bookworm ships 2.39. This is its own layer, after
+# Playwright, so the slow layers above stay cached.
+RUN echo 'deb http://deb.debian.org/debian bookworm-backports main' >/etc/apt/sources.list.d/backports.list \
+  && apt-get update \
+  && apt-get install -y --no-install-recommends -t bookworm-backports git \
+  && rm -rf /var/lib/apt/lists/* \
+  && git --version
 
 # The non-root gate user and the writable layout under /gate. The uid is not
 # 1000, so the gate never shares a uid with the machine's first login user.
