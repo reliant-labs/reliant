@@ -13,6 +13,31 @@ Regenerate with: task generate:docs:changelog
 
 Track what's new in each Reliant release.
 
+<Update label="v1.35.0" description="November 27, 2026">
+### 2 new features, 4 fixes and 3 other changes
+
+Every pull request merged since v1.34.1, grouped by its conventional-commit type.
+
+#### Added
+
+- **diskwatch: trim every Go build cache by forge/pkg/gocache's policy; pin forge@eaf3a164 (supersedes #3869)** [#3909](https://github.com/reliant-labs/reliant/pull/3909)
+- **mergequeue: run candidate builds, changed paths and pipeline.yaml reads as gate pool daemon jobs** [#3924](https://github.com/reliant-labs/reliant/pull/3924)
+
+#### Changed
+
+- **db: call trigger event store within delivery transaction** [#3895](https://github.com/reliant-labs/reliant/pull/3895)
+- **perf(web): typecheck with tsgo, TypeScript's native compiler (#3881)** [#3885](https://github.com/reliant-labs/reliant/pull/3885)
+- **refactor(db): delete the six deprecated trigger-event and run-list forwards from the facade (#3630)** [#3788](https://github.com/reliant-labs/reliant/pull/3788)
+
+#### Fixed
+
+- **mergequeue: no code operations on the server roles; guard the api, worker and gateway closure** [#3898](https://github.com/reliant-labs/reliant/pull/3898)
+- **architecture: deps guard skips when git history is unavailable** [#3897](https://github.com/reliant-labs/reliant/pull/3897)
+- **web: size an attachment upload's client budget by its bytes, not a fixed 60s** [#3899](https://github.com/reliant-labs/reliant/pull/3899)
+- **coverage: restore the coverage-source blob read on the API server, bounded in memory** [#3904](https://github.com/reliant-labs/reliant/pull/3904)
+
+</Update>
+
 <Update label="v1.34.1" description="November 27, 2026">
 ### 1 other change
 
