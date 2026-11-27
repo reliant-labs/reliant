@@ -33,7 +33,11 @@ forge env up dev       # the whole product on this machine (deploy/kcl/dev)
 api|worker|gateway`) under air, a `reliant db migrate up` job, and the
 `frontends/web` Vite dev server, all as host processes, over forge's host
 Postgres 16, NATS and Temporal dev server. It needs no docker, no k3d and no
-control plane. Sign in to the web app with the API key forge generated:
+control plane. Air rebuilds the server binary with `scripts/air-build.sh`,
+which links it without DWARF (`-ldflags=-w`): that roughly halves the link,
+and panics, stack traces and pprof still work. To attach delve to a dev
+binary, start the stack with `FORGE_DEV_DWARF=1 forge env up dev`. Sign in to
+the web app with the API key forge generated:
 
 ```bash
 grep AUTH_API_KEY secrets/dev.yaml
