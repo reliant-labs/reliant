@@ -1,0 +1,35 @@
+name: due_row_wakes_the_run_and_decides
+description: >-
+  The PR's pr_pipeline row comes due and the due scan fires the due trigger, whose mapping supplies the
+  repository and number from trigger.record. pr.next decides afresh; here it answers enqueue.
+trigger:
+  name: due
+  payload:
+    table: pr_pipeline
+    record_id: rec-7
+    repository: acme/app
+    number: 7
+    head_sha: 0123456789abcdef0123456789abcdef01234567
+    next_action: decide
+    due_at: "2026-11-26T12:00:00Z"
+events:
+  - node: decide
+    output:
+      is_error: false
+      data:
+        next: enqueue
+        head: 0123456789abcdef0123456789abcdef01234567
+        reason: "rule no_model_low_risk"
+        record_id: rec-7
+        repository: acme/app
+        number: 7
+        shadow: false
+        findings: []
+        blockers: []
+        evidence: {}
+  - node: enqueue
+    output: {is_error: false, data: {queued: true, reason: admitted}}
+expect:
+  outcome: completed
+  completed: [decide, enqueue]
+  not_reached: [review, verdict, wt, fix, push, pushed, close, escalate]

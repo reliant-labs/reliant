@@ -154,6 +154,9 @@ func (in *Intake) Accept(ctx context.Context, trigger *core.Trigger, ev InboundE
 		return nil, errors.New("triggers: an inbound event needs a dedupe key")
 	}
 	began := time.Now()
+	// The owner reads every filter scope makes (OwnerOf) are the same for
+	// all the triggers of one arrival: read them once.
+	in = in.inBatch(opts.Batch)
 	if ev.Sender == nil {
 		// Every receiver knows who authenticated its request; one that
 		// forgot to say would record an event an allowlist can never pass,
@@ -204,7 +207,7 @@ func (in *Intake) Accept(ctx context.Context, trigger *core.Trigger, ev InboundE
 	}
 	// Who caused the event is resolved BEFORE any filter, because the filters
 	// read it, and is frozen on the row so the history can explain a skip.
-	origin := in.enrich(ctx, trigger, &ev)
+	origin := in.enrich(ctx, opts.Batch, trigger, &ev)
 	switch {
 	case def.Broken():
 		outcome, detail = core.TriggerEventFailed, RefusalDetail(def)

@@ -3,6 +3,7 @@ package architecture
 import (
 	"archive/tar"
 	"bytes"
+	"cmp"
 	"fmt"
 	"go/ast"
 	"go/parser"
@@ -479,15 +480,10 @@ func TestEveryConstructionSetsEveryRequiredDepsField(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Read the baseline through git, not the live main checkout. In a merge
-	// group HEAD^1 is the queue base; locally use the branch's merge base.
-	base := os.Getenv("DEPS_GUARD_BASE")
+	// Read the baseline through git, not the live main checkout.
+	base := depsGuardBase(os.Getenv)
 	if base == "" {
-		if os.Getenv("GITHUB_EVENT_NAME") == "merge_group" {
-			base = "HEAD^1"
-		} else {
-			base = strings.TrimSpace(string(depsGit(t, repo, "merge-base", "origin/main", "HEAD")))
-		}
+		base = strings.TrimSpace(string(depsGit(t, repo, "merge-base", "origin/main", "HEAD")))
 	}
 	baseline := map[string][]byte{}
 	archive := tar.NewReader(bytes.NewReader(depsGit(t, repo, "archive", base)))
@@ -558,6 +554,39 @@ func newDepsFindings(current, baseline []depsFinding) []depsFinding {
 		}
 	}
 	return out
+}
+
+// depsGuardBase is the revision the guard's baseline is read at, from the
+// environment: DEPS_GUARD_BASE when set; in a GitHub merge group HEAD^1, the
+// queue base; in a Reliant merge queue gate, whose checkout has no
+// origin/main, the batch's base, GATE_BASE (or CI_BASE). "" means the
+// branch's merge base with origin/main.
+func depsGuardBase(getenv func(string) string) string {
+	if base := getenv("DEPS_GUARD_BASE"); base != "" {
+		return base
+	}
+	if getenv("GITHUB_EVENT_NAME") == "merge_group" {
+		return "HEAD^1"
+	}
+	return cmp.Or(getenv("GATE_BASE"), getenv("CI_BASE"))
+}
+
+func TestDepsGuardBaseHonoursTheQueueBase(t *testing.T) {
+	for _, tc := range []struct {
+		env  map[string]string
+		want string
+	}{
+		{nil, ""},
+		{map[string]string{"GATE_BASE": "g"}, "g"},
+		{map[string]string{"CI_BASE": "c"}, "c"},
+		{map[string]string{"GATE_BASE": "g", "CI_BASE": "c"}, "g"},
+		{map[string]string{"GITHUB_EVENT_NAME": "merge_group", "GATE_BASE": "g"}, "HEAD^1"},
+		{map[string]string{"DEPS_GUARD_BASE": "d", "GITHUB_EVENT_NAME": "merge_group", "GATE_BASE": "g"}, "d"},
+	} {
+		if got := depsGuardBase(func(k string) string { return tc.env[k] }); got != tc.want {
+			t.Errorf("depsGuardBase(%v) = %q, want %q", tc.env, got, tc.want)
+		}
+	}
 }
 
 func TestDepsGuardIgnoresQueueBaselineButFindsRegressions(t *testing.T) {

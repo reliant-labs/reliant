@@ -22,7 +22,6 @@ import Card from "@/components/forge-ui/card";
 import Button from "@/components/forge-ui/button";
 import DataTable, { type DataTableColumn } from "@/components/forge-ui/data_table";
 import { useCurrentIssueUser, useIssues, useOrgMembers, type IssueFilters } from "@/hooks/observability-queries";
-import { useObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
 import { issuesErrorKind } from "@/services/controlPlane/observability/errors";
 import {
   ISSUE_PLATFORMS,
@@ -348,7 +347,6 @@ function IssueTable({
 }) {
   const now = Date.now();
   // Captured at render: a chat's first send happens after this view has unmounted (linkIssueChat.ts).
-  const api = useObservabilityApi();
   const queryClient = useQueryClient();
   const columns: DataTableColumn<IssueRow>[] = [
     {
@@ -429,7 +427,7 @@ function IssueTable({
       width: "2.5rem",
       className: "px-2 text-right",
       render: (_, { issue }) => (
-        <AskReliantMenu subject={issueAskSubject(issue)} onChatCreated={linkChatToIssue(api, queryClient, issue.id)} testId={`obs-issue-ask-${issue.id}`} />
+        <AskReliantMenu subject={issueAskSubject(issue)} onChatCreated={linkChatToIssue(queryClient, issue.id)} testId={`obs-issue-ask-${issue.id}`} />
       ),
     },
   ];
