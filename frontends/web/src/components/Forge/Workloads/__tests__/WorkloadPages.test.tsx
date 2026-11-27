@@ -94,10 +94,10 @@ function everywhere() {
   return { ...base, getWorkload: (req: Parameters<typeof base.getWorkload>[0]) => base.getWorkload({ ...req, envIds: ["env-prod"] }) };
 }
 
-function open(env: string, name = "admin-server", probe?: ReactNode) {
+function open(env: string, name = "admin-server", obs = everywhere(), probe?: ReactNode) {
   route.params = { env, name };
   return render(
-    <WorkloadsProviders obs={everywhere()}>
+    <WorkloadsProviders obs={obs}>
       <>
         <WorkloadPage />
         {probe}
@@ -136,7 +136,7 @@ describe("the workload page in the console", () => {
 
   it("re-reads the panel editor's databases after a restart, as the observability reads", async () => {
     const onFetch = vi.fn();
-    open("prod", "admin-server", <DatabasesProbe onFetch={onFetch} />);
+    open("prod", "admin-server", everywhere(), <DatabasesProbe onFetch={onFetch} />);
     await ready();
     await waitFor(() => expect(onFetch).toHaveBeenCalledTimes(1), { timeout: 10_000 });
     await userEvent.click(screen.getByTestId("workload-restart"));
@@ -145,6 +145,19 @@ describe("the workload page in the console", () => {
     // The re-read follows the restart's answer: give it the time a loaded host takes, not the 1s default.
     await waitFor(() => expect(onFetch).toHaveBeenCalledTimes(2), { timeout: 10_000 });
   }, 30_000);
+
+  it("re-reads the workload after a restart: its generated reads, not only the old observability keys", async () => {
+    const obs = everywhere();
+    const getWorkload = vi.spyOn(obs, "getWorkload");
+    open("prod", "admin-server", obs);
+    await ready();
+    await waitFor(() => expect(getWorkload).toHaveBeenCalled());
+    const before = getWorkload.mock.calls.length;
+    await userEvent.click(screen.getByTestId("workload-restart"));
+    await userEvent.click(within(screen.getByRole("dialog", { name: "Restart admin-server in prod?" })).getByRole("button", { name: "Restart in prod" }));
+    await waitFor(() => expect(cloud.restartWorkload).toHaveBeenCalled());
+    await waitFor(() => expect(getWorkload.mock.calls.length).toBeGreaterThan(before));
+  });
 
   it("stops the workload's own deployment, found in that environment's status", async () => {
     open("prod");

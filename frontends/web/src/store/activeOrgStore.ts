@@ -220,7 +220,11 @@ export const ORG_SCOPED_QUERY_ROOTS: readonly string[] = [
   "observability_billing.v1.ObservabilityBillingService",
   "forge",
   "forgeService",
+  // hooks/identity-queries.ts: the caller's org outside the org tree, then
+  // every IdentityService read on its generated keys (an environment's
+  // sign-in service, its users).
   "identity",
+  "controlplane.v1.IdentityService",
   "dashboards",
   "deploy-usage",
   // Generated DeployService reads (hooks/controlplane): usage rows, the collection policy's environments.
@@ -241,6 +245,13 @@ export const ORG_SCOPED_QUERY_ROOTS: readonly string[] = [
   // Every DaemonService read on its generated keys: a machine's detail,
   // preview template and port-access rules.
   "controlplane.v1.DaemonService",
+  // ObservabilityService's reads on generated hooks: the overview, traces,
+  // profiles, signals, filter values, metrics, workloads, release health and
+  // each frontend's replay switch, every one scoped by its request's org.
+  "controlplane.v1.ObservabilityService",
+  // IssuesService's reads on generated keys: the inbox (scoped by its
+  // request's org), an issue, its events and its timeline.
+  "controlplane.v1.IssuesService",
   // The machine → org map (services/controlPlane/machineOrgs.ts).
   "controlPlane",
   "orgs-members",
@@ -250,4 +261,7 @@ export const ORG_SCOPED_QUERY_ROOTS: readonly string[] = [
   // hooks/changes-queries.ts: the page's org, then ChangesService's reads.
   "changes",
   "controlplane.v1.ChangesService",
+  // The managed secret store's reads (hooks/forge-queries.ts): an
+  // environment's secrets and their version histories.
+  "controlplane.v1.SecretStoreService",
 ];

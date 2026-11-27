@@ -155,8 +155,10 @@ describe("GetReleaseHealth", () => {
     await getReleaseHealth({ orgId: "org-1", projectId: "shop", envIds: ["env-prod"], promotionId: "promo-9", windowMs: 30 * 60_000 });
     const req = client.getReleaseHealth.mock.calls[0][0];
     expect(req.scope).toMatchObject({ orgId: "org-1", projectId: "shop", envIds: ["env-prod"] });
-    // QueryScope.time_range is required by the validator and ignored by the rpc: a token minute.
-    expect(msOf(req.scope.timeRange.end) - msOf(req.scope.timeRange.start)).toBe(60_000);
+    // QueryScope.time_range is required by the validator and ignored by the rpc: a token minute,
+    // relative to the server's now, so the request (the generated hook's key) never moves.
+    expect(req.scope.timeRange.start).toBeUndefined();
+    expect(durationMs(req.scope.timeRange.relative.last)).toBe(60_000);
     expect(req.subject).toEqual({ case: "promotionId", value: "promo-9" });
     expect(durationMs(req.window)).toBe(30 * 60_000);
   });

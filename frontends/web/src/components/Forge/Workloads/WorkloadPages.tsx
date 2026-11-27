@@ -20,6 +20,7 @@ import { useTransport } from "@/lib/transportScope";
 import { appDatabaseServiceKeys } from "@/hooks/controlplane/app-database-service-hooks_gen";
 import { useForgeDomains } from "@/hooks/forge-domain-queries";
 import { useCloudEnvStatus, useCloudEnvStatuses, useEnvironmentShape, useEnvironmentShapes, useSetWorkloadRunState } from "@/hooks/forge-queries";
+import { invalidateAllObservability } from "@/hooks/observability-queries";
 import { useEnvPromotions } from "@/hooks/release-queries";
 import { isPlacedKind, type LiveEnvKind } from "@/services/forge/live";
 import { restartWorkload, type RestartedWorkload } from "@/services/forge/cloudEnvs";
@@ -282,10 +283,11 @@ export function WorkloadPage() {
   const restart = useMutation<RestartedWorkload, Error, string>({
     // The environment the PATH names, by its control-plane id: a restart is always "in <env>".
     mutationFn: (environmentId) => restartWorkload(transport, environmentId, name),
-    // The pods roll over the next minute: re-read the workload so the Pods table follows.
-    // The panel editor's databases (AppDatabaseService's generated keys) refresh with them, as they did under "observability".
+    // The pods roll over the next minute: re-read the workload (its generated
+    // ListWorkloads/GetWorkload reads included) so the Pods table follows.
+    // The panel editor's databases refresh with them on their generated keys.
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ["observability"] });
+      void invalidateAllObservability(queryClient);
       void queryClient.invalidateQueries({ queryKey: appDatabaseServiceKeys.listDashboardDatabases.all });
     },
   });

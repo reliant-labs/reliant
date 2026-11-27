@@ -146,6 +146,7 @@ func staticAnalysisOne(wf *reliantv1.Workflow, opts *ValidationOptions) *Result 
 	// independent of the nodes, and one save should show every finding.
 	validateTriggers(wf, opts, catalogIntegrations{}, result)
 	validateConcurrency(wf, result)
+	validateWorkflowTimeout(wf, result)
 	validateAttentionTree(wf, result)
 	validateCheck(wf, result)
 	validateObserveShapes(wf, result)

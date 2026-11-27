@@ -13,13 +13,13 @@ export function MobileInstallMenuItem() {
         aria-expanded={expanded}
         aria-controls={instructionsId}
         onClick={() => setExpanded((value) => !value)}
-        className="flex min-h-[48px] w-full items-center gap-3 rounded-lg px-3 text-left text-sm text-foreground/85 active:bg-foreground/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className="flex min-h-[48px] w-full items-center gap-3 rounded-lg px-3 text-left text-ui text-foreground/85 active:bg-foreground/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         <Smartphone aria-hidden="true" className="h-4 w-4 shrink-0" />
         <span className="flex-1">Add to Home Screen</span>
         <ChevronDown aria-hidden="true" className="h-4 w-4 shrink-0" />
       </button>
-      <div id={instructionsId} hidden={!expanded} className="space-y-4 px-3 py-3 text-sm text-foreground">
+      <div id={instructionsId} hidden={!expanded} className="space-y-4 px-3 py-3 text-ui text-foreground">
         <section aria-label="iPhone and iPad installation">
           <h3 className="font-semibold">iPhone or iPad · Safari</h3>
           <ol className="mt-2 list-decimal space-y-2 pl-5">
