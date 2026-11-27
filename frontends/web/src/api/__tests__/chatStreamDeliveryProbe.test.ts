@@ -137,10 +137,38 @@ describe("chat-open Connect delivery probe", () => {
     const pending = it.next();
     source.reject(error);
     await expect(pending).rejects.toBe(error);
-    await expect(it.throw?.(error)).rejects.toBe(error);
-    expect(source.forwardError).toHaveBeenCalledWith(error);
+    expect(source.forwardError).toHaveBeenCalledExactlyOnceWith(error);
+    expect(source.close).not.toHaveBeenCalled();
     expect(open.mark).toHaveBeenCalledTimes(2);
   });
+
+  it.each(["throw resolves", "throw rejects", "return resolves", "return rejects", "no cleanup"])(
+    "preserves the consumer's read error when %s",
+    async (cleanup) => {
+      const error = new Error("read failed");
+      const close = vi.fn(async () => {
+        if (cleanup.endsWith("rejects")) throw new Error("cleanup failed");
+        return { done: true as const, value: undefined };
+      });
+      const iterator: AsyncIterator<ChatStreamEvent> = {
+        next: vi.fn(async () => { throw error; }),
+      };
+      if (cleanup.startsWith("throw")) iterator.throw = close;
+      else if (cleanup.startsWith("return")) iterator.return = close;
+      const stream = chatStreamDeliveryProbe(interaction())!.observe({
+        [Symbol.asyncIterator]: () => iterator,
+      });
+      const consume = async () => {
+        for await (const event of stream) {
+          throw new Error(`unexpected event: ${event.event.case}`);
+        }
+      };
+      await expect(consume()).rejects.toBe(error);
+      if (cleanup === "no cleanup") expect(close).not.toHaveBeenCalled();
+      else if (cleanup.startsWith("throw")) expect(close).toHaveBeenCalledExactlyOnceWith(error);
+      else expect(close).toHaveBeenCalledExactlyOnceWith();
+    },
+  );
 
   it("stops marking an already recording open when telemetry is disabled", async () => {
     const open = interaction();

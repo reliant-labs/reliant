@@ -78,6 +78,17 @@ export function chatStreamDeliveryProbe(open: Interaction | undefined, signal?: 
                   if (caughtUp) observed.next = next;
                 }
                 return result;
+              }, async (error: unknown) => {
+                // A rejected read does not make for-await close the iterator.
+                // Forward the failure ourselves, preserving the read's error
+                // even if cleanup resolves or fails with a different error.
+                try {
+                  if (iterator.throw) await iterator.throw(error);
+                  else await iterator.return?.();
+                } catch {
+                  // Cleanup must not mask the original stream failure.
+                }
+                throw error;
               });
             },
           };
