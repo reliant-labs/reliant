@@ -173,10 +173,8 @@ The phases:
      hook always executes: pins alone cannot identify installed plugin/runtime
      bytes, so its former generated-output result cache is not reused.
    - **typecheck** is `scripts/web-typecheck.sh`: frontends/web's
-     `npm run typecheck -- --force` (`tsgo -b --force`, TypeScript 7's native
-     compiler, at GOMAXPROCS a quarter of the gate's CPUs; it includes
-     `tsconfig.test.json`, so test files are type-checked; `npm run
-     typecheck:tsc` is the same check on tsc 5.8). It runs
+     `npm run typecheck -- --force` (`tsc -b --force`, which
+     includes `tsconfig.test.json`, so test files are type-checked). It runs
      when the plan selects the web lane or the diff touches anything under
      `frontends/web/`, or when a regenerate rewrote a web file. The web test lane cannot stand in for it: vitest strips types
      without checking them, and a changed module no test imports selects no

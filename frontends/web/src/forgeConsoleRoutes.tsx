@@ -217,7 +217,7 @@ export function createForgeConsoleRoutes<TParent extends AnyRoute>(
     getParentRoute: () => orgLayoutRoute,
     path: (inOrg ? '/observability/$view' : '/forge/observability/$view') as '/forge/observability/$view',
     validateSearch: forgeOrgObsSearchSchema,
-    beforeLoad: memberOnly<{ view: string }>(({ params, location }) => {
+    beforeLoad: memberOnly(({ params, location }) => {
       if (isObsNavView(params.view)) return
       throw redirect({ href: `${location.pathname.replace(/\/[^/]*\/?$/, '')}${location.searchStr}`, replace: true })
     }),
@@ -301,7 +301,7 @@ export function createForgeConsoleRoutes<TParent extends AnyRoute>(
     getParentRoute: () => consoleRoute,
     path: 'observability/$view',
     validateSearch: forgeConsoleObsSearchSchema,
-    beforeLoad: memberOnly<{ view: string }>(({ params, location }) => {
+    beforeLoad: memberOnly(({ params, location }) => {
       if (isObsNavView(params.view)) return
       throw redirect({ href: `${location.pathname.replace(/\/[^/]*\/?$/, `/${OBS_NAV_VIEWS[0]}`)}${location.searchStr}`, replace: true })
     }),
@@ -319,7 +319,7 @@ export function createForgeConsoleRoutes<TParent extends AnyRoute>(
     getParentRoute: () => consoleRoute,
     path: 'observability/dashboards/$kind/$key',
     validateSearch: forgeConsoleDashboardSearchSchema,
-    beforeLoad: memberOnly<{ kind: string; key: string }>(({ params, location }) => {
+    beforeLoad: memberOnly(({ params, location }) => {
       if (params.kind === 'release' || params.kind === 'workspace') return
       throw redirect({ href: `${location.pathname.replace(/\/[^/]*\/[^/]*\/?$/, '')}${location.searchStr}`, replace: true })
     }),
@@ -351,7 +351,7 @@ export function createForgeConsoleRoutes<TParent extends AnyRoute>(
     getParentRoute: () => consoleRoute,
     path: 'auth/$tab',
     validateSearch: forgeConsoleUsersSearchSchema,
-    beforeLoad: memberOnly<{ tab: string }>(({ params, location }) => {
+    beforeLoad: memberOnly(({ params, location }) => {
       if (isAuthTab(params.tab)) return
       throw redirect({ href: `${location.pathname.replace(/\/[^/]*\/?$/, '')}${location.searchStr}`, replace: true })
     }),
@@ -440,7 +440,7 @@ export function createForgeConsoleRoutes<TParent extends AnyRoute>(
     getParentRoute: () => consoleRoute,
     path: 'analytics/$tab',
     validateSearch: forgeConsoleAnalyticsSearchSchema,
-    beforeLoad: memberOnly<{ tab: string }>(({ params, location }) => {
+    beforeLoad: memberOnly(({ params, location }) => {
       if (isAnalyticsTab(params.tab)) return
       throw redirect({ href: `${location.pathname.replace(/\/[^/]*\/?$/, '')}${location.searchStr}`, replace: true })
     }),

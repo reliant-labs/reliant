@@ -453,69 +453,6 @@ printf '%s|%s|%s|%s|%s|%s|%s|%s\n' "$gofull" "$webfull" "$elec" "$dgen" "$typech
 	}
 }
 
-// Exercise the gate's actual compiler and package script, not a tsc substitute.
-func TestTypecheckPinnedTsgoRejectsInvalidSource(t *testing.T) {
-	root := scriptFixture(t, "web-typecheck.sh") // Real compiler: full tier only.
-	(&orderRepo{t: t}).git(root, "init", "-q")
-	web := filepath.Join(repoRoot, "frontends/web")
-	type packageInfo struct {
-		Version         string            `json:"version"`
-		Scripts         map[string]string `json:"scripts"`
-		DevDependencies map[string]string `json:"devDependencies"`
-	}
-	readPackage := func(path string) packageInfo {
-		t.Helper()
-		var pkg packageInfo
-		data, err := os.ReadFile(path)
-		if err != nil {
-			t.Fatalf("read package (run task deps:web first): %v", err)
-		}
-		if err := json.Unmarshal(data, &pkg); err != nil {
-			t.Fatal(err)
-		}
-		return pkg
-	}
-	pkg := readPackage(filepath.Join(web, "package.json"))
-	installed := readPackage(filepath.Join(web, "node_modules/@typescript/native-preview/package.json"))
-	if pin := pkg.DevDependencies["@typescript/native-preview"]; pin == "" || installed.Version != pin {
-		t.Fatalf("installed tsgo %q does not match pin %q; run task deps:web", installed.Version, pin)
-	}
-	if pkg.Scripts["typecheck"] != "tsgo -b" {
-		t.Fatalf("gate no longer exercises tsgo: %q", pkg.Scripts["typecheck"])
-	}
-	fixturePackage, err := json.Marshal(map[string]any{"scripts": map[string]string{"typecheck": pkg.Scripts["typecheck"]}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	putFixture(t, root, "frontends/web/package.json", string(fixturePackage), 0644)
-	// Invoke the installed shim at its original path so pnpm's relative paths
-	// still work. All compiler output stays in the fixture.
-	compiler := filepath.Join(web, "node_modules/.bin/tsgo")
-	putFixture(t, root, "frontends/web/node_modules/.bin/tsgo", "#!/bin/sh\nexec '"+strings.ReplaceAll(compiler, "'", "'\\''")+"' \"$@\"\n", 0755)
-	putFixture(t, root, "frontends/web/tsconfig.json", `{"compilerOptions":{"composite":true,"types":[],"outDir":"node_modules/.tmp/tsgo","tsBuildInfoFile":"node_modules/.tmp/state.tsbuildinfo"},"include":["src.ts"]}`, 0644)
-	putFixture(t, root, "frontends/web/src.ts", "export const n: number = 1;", 0644)
-	if out, err := runFixture(root, "web-typecheck.sh", nil); err != nil {
-		t.Fatalf("valid source rejected: %v %s", err, out)
-	}
-	if _, err := os.Stat(filepath.Join(root, "frontends/web/node_modules/.tmp/.typecheck-owner")); err != nil {
-		t.Fatalf("successful run left no owner stamp: %v", err)
-	}
-	putFixture(t, root, "frontends/web/src.ts", `export const n: number = "invalid";`, 0644)
-	if out, err := runFixture(root, "web-typecheck.sh", nil); err == nil || !strings.Contains(string(out), "TS2322") {
-		t.Fatalf("tsgo gate accepted invalid source after a successful run: %v %s", err, out)
-	}
-}
-
-func TestMergeGateBudgetsTsgoParallelism(t *testing.T) {
-	data, err := os.ReadFile(filepath.Join(repoRoot, "scripts/merge-gate.sh"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(string(data), `phase typecheck env GOMAXPROCS="$quarter" scripts/web-typecheck.sh`) {
-		t.Fatal("typecheck must receive the merge gate's quarter CPU budget")
-	}
-}
-
 func TestTypecheckBackdatedCrossCheckoutAndHardlinks(t *testing.T) {
 	if testing.Short() {
 		t.Skip("real TypeScript compiler; runs in full scoped tests")
