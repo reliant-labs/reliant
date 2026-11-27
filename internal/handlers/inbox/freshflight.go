@@ -45,9 +45,20 @@ type flightRun[T any] struct {
 // Do returns the result of a run of fn for key that started after this call
 // arrived: a new run when none is in flight, otherwise the run queued behind
 // the one in flight (whose fn is the first queued caller's — callers of one key
-// must be interchangeable). It returns ctx.Err() if ctx ends first.
+// must be interchangeable). It returns ctx.Err() if ctx is canceled before
+// registration or when the result is received.
 func (g *freshFlight[T]) Do(ctx context.Context, key string, fn func() (T, error)) (T, error) {
+	if err := ctx.Err(); err != nil {
+		var zero T
+		return zero, err
+	}
 	g.mu.Lock()
+	// Cancellation may have happened while waiting for the lock.
+	if err := ctx.Err(); err != nil {
+		g.mu.Unlock()
+		var zero T
+		return zero, err
+	}
 	if g.keys == nil {
 		g.keys = map[string]*flightSlot[T]{}
 	}
@@ -69,6 +80,11 @@ func (g *freshFlight[T]) Do(ctx context.Context, key string, fn func() (T, error
 
 	select {
 	case <-run.done:
+		// Prefer cancellation when both channels are ready.
+		if err := ctx.Err(); err != nil {
+			var zero T
+			return zero, err
+		}
 		return run.val, run.err
 	case <-ctx.Done():
 		g.mu.Lock()

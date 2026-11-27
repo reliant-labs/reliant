@@ -79,6 +79,45 @@ func TestFreshFlight_ACallAloneRunsItsFn(t *testing.T) {
 	waitFlightIdle(t, &g)
 }
 
+func TestFreshFlight_AlreadyCanceledCallDoesNotRegister(t *testing.T) {
+	var g freshFlight[int]
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	v, err := g.Do(ctx, "k", unexpected(t))
+	assert.Zero(t, v)
+	require.ErrorIs(t, err, context.Canceled)
+	assert.Empty(t, g.keys, "a canceled call must not create a run")
+
+	h := newHeldRun(t)
+	first := doAsync(context.Background(), &g, "k", h.fn(1))
+	<-h.started
+	v, err = g.Do(ctx, "k", unexpected(t))
+	assert.Zero(t, v)
+	require.ErrorIs(t, err, context.Canceled)
+	g.mu.Lock()
+	next := g.keys["k"].next
+	g.mu.Unlock()
+	assert.Nil(t, next, "a canceled call must not queue a run")
+	h.release()
+	assert.Equal(t, flightResult{1, nil}, <-first)
+	waitFlightIdle(t, &g)
+}
+
+func TestFreshFlight_CancellationBeforeResultReturnsContextError(t *testing.T) {
+	var g freshFlight[int]
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	v, err := g.Do(ctx, "k", func() (int, error) {
+		cancel()
+		return 7, nil
+	})
+	assert.Zero(t, v)
+	require.ErrorIs(t, err, context.Canceled)
+	waitFlightIdle(t, &g)
+}
+
 // A call arriving during a run gets a run that starts after it: the next one,
 // shared with every call queued beside it and started from the first of them.
 func TestFreshFlight_ACallDuringARunGetsTheNextRun(t *testing.T) {
