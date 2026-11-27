@@ -13,11 +13,14 @@ import (
 
 	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
 	"github.com/reliant-labs/reliant/internal/accesstokenclient"
+	"github.com/reliant-labs/reliant/internal/connections"
 	"github.com/reliant-labs/reliant/internal/credentials/connectionvault"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/dblock"
 	"github.com/reliant-labs/reliant/internal/featuregate"
 	gtmsvc "github.com/reliant-labs/reliant/internal/gtm"
+	"github.com/reliant-labs/reliant/internal/integrations/httpaction"
+	"github.com/reliant-labs/reliant/internal/integrations/writeledger"
 	"github.com/reliant-labs/reliant/internal/orgs"
 	"github.com/reliant-labs/reliant/internal/store/storetest"
 	"github.com/reliant-labs/reliant/pkg/config"
@@ -105,6 +108,31 @@ func TestWorkerGtmDomain_OptionalPartsAreOff(t *testing.T) {
 	assert.NotNil(t, gtmAnalytics(&configv1.ControlPlaneConfig{Url: "https://cp.example.com"}, gtmConfig(gtmTestOrg), discard))
 	assert.Nil(t, gtmEmail(nil, nil, discard))
 	assert.Nil(t, gtmEmail(&WorkerIntegrationCredentials{}, nil, discard))
+}
+
+// Email is sent only through the write ledger, which records each send as
+// the run's write: without a ledger there is no sender (email unavailable),
+// never an unrecorded one.
+func TestGtmEmail_NeedsTheWriteLedger(t *testing.T) {
+	discard := slog.New(slog.NewTextHandler(io.Discard, nil))
+	creds := &WorkerIntegrationCredentials{Source: noCredentials{}, Runs: connections.NewResolver(connections.ResolverDeps{})}
+
+	assert.Nil(t, gtmEmail(creds, nil, discard), "no ledger, no sender")
+
+	wrapped := 0
+	ledger := &writeledger.MockService{WrapFunc: func(inner writeledger.Runner) writeledger.Runner {
+		wrapped++
+		return inner
+	}}
+	assert.NotNil(t, gtmEmail(creds, ledger, discard))
+	assert.Equal(t, 1, wrapped, "the sender's runner is the ledger's")
+}
+
+// noCredentials resolves no credential.
+type noCredentials struct{}
+
+func (noCredentials) Credential(context.Context, httpaction.CredentialRequest) (httpaction.Credential, error) {
+	return nil, errors.New("none")
 }
 
 // connection_state is the actor's live connection of the integration: their

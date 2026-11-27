@@ -57,6 +57,8 @@ import (
 type FeatureGateDeps struct {
 	// Config holds GtmConfig (GTM_ALLOWED_ORG_IDS).
 	Config *config.Config
+	// Logger receives whether GTM is on; nil is slog.Default().
+	Logger *slog.Logger
 	// Membership is the org resolver authz decides org resources with; nil
 	// when the deployment has no orgs (no control plane).
 	Membership *orgs.Resolver
@@ -68,6 +70,7 @@ type FeatureGateDeps struct {
 // nothing, and the list is read once (a change takes a restart).
 func NewFeatureGate(d FeatureGateDeps) (featuregate.Gate, error) {
 	cfg := d.Config.GetGtm()
+	log := orDefaultLogger(d.Logger)
 	// A nil *orgs.Resolver must stay a nil Membership: NewStatic denies all
 	// without one.
 	var membership featuregate.Membership
@@ -76,11 +79,11 @@ func NewFeatureGate(d FeatureGateDeps) (featuregate.Gate, error) {
 	}
 	switch n := len(featuregate.ParseOrgIDs(cfg.GetAllowedOrgIds())); {
 	case n == 0:
-		slog.Default().Info("gtm: off: GTM_ALLOWED_ORG_IDS names no organization")
+		log.Info("gtm: off: GTM_ALLOWED_ORG_IDS names no organization")
 	case membership == nil:
-		slog.Default().Warn("gtm: off: GTM_ALLOWED_ORG_IDS is set but this deployment has no organizations (no control plane)")
+		log.Warn("gtm: off: GTM_ALLOWED_ORG_IDS is set but this deployment has no organizations (no control plane)")
 	default:
-		slog.Default().Info("gtm: on for the organizations in GTM_ALLOWED_ORG_IDS", "orgs", n)
+		log.Info("gtm: on for the organizations in GTM_ALLOWED_ORG_IDS", "orgs", n)
 	}
 	return featuregate.NewStatic(cfg, membership), nil
 }
@@ -141,10 +144,7 @@ type WorkerGtmDomainDeps struct {
 //
 //forge:root-only worker
 func NewWorkerGtmDomain(d WorkerGtmDomainDeps) (*WorkerGtmDomain, error) {
-	log := d.Logger
-	if log == nil {
-		log = slog.Default()
-	}
+	log := orDefaultLogger(d.Logger)
 	svc := gtmsvc.NewInstrumented(gtmsvc.Deps{
 		Store:       gtmsvc.NewStore(d.DB.ORM()),
 		Gate:        d.Gate,
@@ -170,6 +170,8 @@ type GtmAssets struct {
 // (ReliantConfig.gtm_assets, GTM_ASSETS_*).
 type GtmAssetsDeps struct {
 	Config *config.Config
+	// Logger receives whether assets are on; nil is slog.Default().
+	Logger *slog.Logger
 }
 
 // NewGtmAssets opens the bucket. No GTM_ASSETS_BUCKET is assets off, never
@@ -181,7 +183,7 @@ func NewGtmAssets(d GtmAssetsDeps) (*GtmAssets, error) {
 		return nil, err
 	}
 	if blobs == nil {
-		slog.Default().Info("gtm: assets off: GTM_ASSETS_BUCKET is not set")
+		orDefaultLogger(d.Logger).Info("gtm: assets off: GTM_ASSETS_BUCKET is not set")
 	}
 	return &GtmAssets{Store: assetstore.New(blobs)}, nil
 }
@@ -199,8 +201,15 @@ const gtmAssetSweepInterval = time.Hour
 
 // GtmAssetSweep deletes GTM assets left PENDING past
 // assetstore.StalePendingAge, whose org never came back to finish or retry
-// the upload. It runs in the api root only, and each pass on one replica:
-// the one that holds dblock.GtmAssetSweep; the others skip theirs.
+// the upload. It runs in the api root only.
+//
+// The lock is per pass, not a lease: every api replica runs its own hourly
+// ticker, and a pass runs only while its replica holds dblock.GtmAssetSweep,
+// so two passes never overlap. A replica whose tick finds the lock free runs
+// its pass even if another replica swept minutes ago, so with N replicas the
+// sweep may run up to N times an hour. That is safe: a pass is idempotent
+// (it deletes only rows still PENDING and older than StalePendingAge, then
+// their objects), so a repeat finds nothing left to do.
 type GtmAssetSweep struct {
 	sweeper *assetstore.Sweeper
 	locker  dblock.Service
@@ -288,16 +297,18 @@ func gtmAnalytics(cp *configv1.ControlPlaneConfig, cfg *config.Config, log *slog
 // gtmEmail is the Gmail sender (internal/gtm/email): message.send through
 // the integration runner, recorded in the write ledger as the run's write,
 // with the run owner's own Gmail connection. nil (sending is unavailable)
-// when it cannot be built.
+// when it cannot be built, and without a write ledger: a send must be
+// recorded as the run's write, so none goes out unrecorded.
 func gtmEmail(creds *WorkerIntegrationCredentials, ledger writeledger.Service, log *slog.Logger) gtmsvc.Email {
 	if creds == nil || creds.Runs == nil {
 		log.Warn("gtm: email sending unavailable: no run records")
 		return nil
 	}
-	var runner writeledger.Runner = httpaction.NewRunner(netguard.New())
-	if ledger != nil {
-		runner = ledger.Wrap(runner)
+	if ledger == nil {
+		log.Warn("gtm: email sending unavailable: no write ledger to record sends in")
+		return nil
 	}
+	runner := ledger.Wrap(httpaction.NewRunner(netguard.New()))
 	sender, err := email.NewGmail(email.Deps{Runner: runner, Credentials: creds.Source, Runs: creds.Runs})
 	if err != nil {
 		log.Error("gtm: email sending unavailable", "error", err)
@@ -337,6 +348,14 @@ func (c gtmConnections) State(ctx context.Context, actor gtmsvc.Actor, integrati
 		return gtmsvc.ConnectionNotConnected, nil
 	}
 	return gtmsvc.ConnectionConnected, nil
+}
+
+// orDefaultLogger is log, or slog.Default() for nil.
+func orDefaultLogger(log *slog.Logger) *slog.Logger {
+	if log == nil {
+		return slog.Default()
+	}
+	return log
 }
 
 func connectionMissing(err error) bool {

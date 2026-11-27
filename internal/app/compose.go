@@ -2132,6 +2132,7 @@ func (g *Graph) newFeatureGate() (featuregate.Gate, error) {
 	return NewFeatureGate(FeatureGateDeps{
 		Config:     g.Cfg,
 		Membership: g.OrgResolver(),
+		Logger:     g.Log,
 	})
 }
 
@@ -2151,6 +2152,7 @@ func (g *Graph) newGtmDomain() (*GtmDomain, error) {
 func (g *Graph) newGtmAssets() (*GtmAssets, error) {
 	return NewGtmAssets(GtmAssetsDeps{
 		Config: g.Cfg,
+		Logger: g.Log,
 	})
 }
 

@@ -31,20 +31,26 @@ import (
 	"github.com/reliant-labs/reliant/pkg/config"
 )
 
-// GTM end to end over a migrated Postgres, composed as internal/app composes
-// it (providers_gtm.go): one featuregate.NewStatic over the org resolver
-// gating the domain (gtm.New over NewStore), the GtmService handler over the
-// domain, and the agent's tools over the same domain in a tools factory run
-// by the tool executor. Two people ask every surface the same questions:
-// alice, a member of the allowlisted org, and carol, a member of an org that
-// is not. Only alice sees anything; to carol GTM does not exist.
+// GTM end to end over a migrated Postgres, from the same parts internal/app
+// composes, built here by hand rather than through its providers: one
+// featuregate.NewStatic over an orgs.Resolver gating the domain (gtm.New over
+// NewStore), the GtmService handler over that domain, and the agent's tools
+// over the same domain in a tools factory run by toolexec's
+// LocalToolExecutor. The providers themselves (NewFeatureGate, NewGtmDomain,
+// NewWorkerGtmDomain, the analytics, email, connections and assets wiring) are
+// covered in internal/app's providers_gtm_test.go, and the gate's path into
+// the worker's call_llm in its feature_gate_wiring_test.go.
 //
-// The capability set a turn carries is built here the way call_llm builds it
-// (activities/handlers entitledFeatures, which is unexported): the real gate's
-// answer for the chat's user and org becomes CapabilityInputs.EntitledFeatures
-// and tools.ResolveCapabilities does the rest. The tools then run through
-// toolexec's LocalToolExecutor, the executor execute_tools runs a
-// server-placed tool with, rather than a whole workflow run.
+// Two people ask every surface the same questions: alice, a member of the
+// allowlisted org, and carol, a member of an org that is not. Only alice sees
+// anything; to carol GTM does not exist.
+//
+// This is not a workflow run. A turn's capability set is built here the way
+// call_llm builds it (activities/handlers entitledFeatures, which is
+// unexported): the real gate's answer for each gated feature the node reaches,
+// for the chat's user and org, becomes CapabilityInputs.EntitledFeatures, and
+// tools.ResolveCapabilities does the rest. The tools then run through the
+// executor execute_tools runs a server-placed tool with.
 
 const (
 	// allowedOrg is the allowlisted org: tenant zero, as in fixtures.
@@ -131,9 +137,13 @@ func (s *gtmStack) caps(t *testing.T, user, org string, preloaded ...string) *to
 	for _, f := range tools.ReachedGatedFeatures(access) {
 		allowed, err := s.gate.Allowed(context.Background(), f, user, org)
 		require.NoError(t, err)
-		if allowed {
-			entitled = map[string]bool{string(f): true}
+		if !allowed {
+			continue
 		}
+		if entitled == nil {
+			entitled = map[string]bool{}
+		}
+		entitled[string(f)] = true
 	}
 	return tools.ResolveCapabilities(tools.CapabilityInputs{Access: access, Permission: tools.PermissionMutating, EntitledFeatures: entitled})
 }
