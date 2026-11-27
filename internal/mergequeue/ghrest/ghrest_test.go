@@ -3,7 +3,6 @@ package ghrest_test
 
 import (
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -299,15 +298,12 @@ func TestUnauthorizedIsAPIError(t *testing.T) {
 	}
 }
 
-func TestPullRequestCommitAndContents(t *testing.T) {
+func TestPullRequestAndCommit(t *testing.T) {
 	s := newServer(t, map[string]route{
 		"GET " + p + "pulls/5": {body: map[string]any{"number": 5, "title": "T", "state": "closed", "merged": true, "merge_commit_sha": "m",
 			"mergeable": nil, "head": map[string]any{"sha": "h", "ref": "feat"}, "base": map[string]any{"ref": "main"}}},
 		"GET " + p + "git/commits/m": {body: map[string]any{"sha": "m", "tree": map[string]any{"sha": "t"}, "parents": []any{map[string]any{"sha": "p"}}, "message": "T (#5)\n"}},
 		"POST " + p + "git/commits":  {status: 201, body: map[string]any{"sha": "r", "tree": map[string]any{"sha": "t0"}, "parents": []any{map[string]any{"sha": "m"}}}},
-		"GET " + p + "contents/.reliant/pipeline.yaml": {body: map[string]any{"type": "file", "encoding": "base64",
-			"content": base64.StdEncoding.EncodeToString([]byte("version: 1\n"))}},
-		"GET " + p + "contents/dir": {body: []any{map[string]any{"type": "file"}}},
 	})
 	c := s.client()
 	pr, err := c.GetPullRequest(t.Context(), repo, 5)
@@ -321,16 +317,6 @@ func TestPullRequestCommitAndContents(t *testing.T) {
 	nc, err := c.CreateCommit(t.Context(), repo, ghport.NewCommit{Message: "Revert", TreeSHA: "t0", Parents: []string{"m"}})
 	if err != nil || nc.SHA != "r" {
 		t.Fatalf("create commit = %+v, %v", nc, err)
-	}
-	data, err := c.GetContents(t.Context(), repo, ".reliant/pipeline.yaml", "main")
-	if err != nil || string(data) != "version: 1\n" {
-		t.Fatalf("contents = %q, %v", data, err)
-	}
-	if _, err := c.GetContents(t.Context(), repo, "dir", "main"); !ghport.IsNotFound(err) {
-		t.Fatalf("a directory: %v", err)
-	}
-	if q := s.requests()[3].query; q != "ref=main" {
-		t.Fatalf("contents query = %q", q)
 	}
 }
 

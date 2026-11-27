@@ -14,8 +14,10 @@
 //   - Org membership, and which Reliant projects lend their GitHub remote,
 //     are reliant's: only the viewer's own projects in the org
 //     (authz.CanReadProject) are searched.
-//   - What the viewer may read on GitHub is GitHub's: the blob is read with
-//     their own token (ghblobs).
+//   - What the viewer may read on GitHub is GitHub's: the blob was read with
+//     their own token. No server role reads it any more (a server holds no
+//     repository bytes, owner 2026-11-27), so until a daemon-side reader
+//     exists every read is NOT_YET_AVAILABLE.
 package coverage_source
 
 import (
@@ -52,8 +54,8 @@ type Deps struct {
 	//
 	// forge:optional-dep
 	Reports Reports
-	// Blobs reads a blob from GitHub as the viewer. nil when this
-	// deployment cannot read GitHub as its users: NOT_YET_AVAILABLE.
+	// Blobs reads a blob as the viewer. nil on every server role, which
+	// holds no repository bytes: NOT_YET_AVAILABLE.
 	//
 	// forge:optional-dep
 	Blobs Blobs
