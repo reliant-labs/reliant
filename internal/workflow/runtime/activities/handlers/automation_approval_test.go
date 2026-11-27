@@ -32,7 +32,7 @@ func TestAutomationApprovalRefusalNamesTheGtmEmailSend(t *testing.T) {
 	a := NewAutomationApprovalActivity(tools.NewToolsFactory(nil))
 	out, err := a.Execute(context.Background(), types.AutomationApprovalInput{
 		ChatID: "chat", Thread: "thread", ToolCallID: "call",
-		ToolName:  toolSendGtmEmail,
+		ToolName:  tools.ToolSendGtmEmail,
 		ToolInput: `{"item_id":"item-1","expected_revision":3}`,
 	})
 	require.NoError(t, err)

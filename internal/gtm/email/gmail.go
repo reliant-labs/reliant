@@ -37,8 +37,10 @@
 //     its unattended flag, and returns ActivationPreview{Title: title, Hash:
 //     hash} with needsApproval TRUE. It never returns needsApproval false (a
 //     NoApproval preview): every send needs a card. Every error is returned
-//     as tools.RefuseActivation(err.Error(), err); the errors' text names ids
-//     and revisions only, never the email.
+//     as a tools.RefuseActivation whose reason is sanitized: this package's
+//     own errors name ids and revisions only, never the email, but an error
+//     from a store or a driver can carry anything, so never pass raw error
+//     text as the reason.
 //   - The hash is opaque: CardHash, the item's gtm.ApprovalHash, ".", and a
 //     hash of the sender the card shows. The tool passes it through as the
 //     preview hash unchanged and never parses or rebuilds it; the runtime
@@ -56,7 +58,11 @@
 // Gmail calls the Gmail API through the integration runner (httpaction), at
 // the manifest connection's base_url, authenticated by the run's connection.
 //
-//forge:not-a-component: a library; internal/app's GTM provider (PR-12) builds Gmail as gtm.Deps.Email, and the send_gtm_email tool builds its Approver over gtm.Service
+// Gmail is the package's contract (//forge:contract, the derived Service):
+// internal/app's GTM provider (PR-12) builds it by hand as gtm.Deps.Email,
+// and the send_gtm_email tool builds its Approver over gtm.Service.
+//
+//forge:provided
 package email
 
 import (
@@ -71,6 +77,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/gtm"
 	"github.com/reliant-labs/reliant/internal/integrations/catalog"
+
 	// Importing gmail also registers the gmail.message_send executor the
 	// action dispatches to.
 	"github.com/reliant-labs/reliant/internal/integrations/gmail"
@@ -120,7 +127,13 @@ type Deps struct {
 	// the run is the acting user's, in the acting org.
 	Runs RunRecords
 	// Catalog resolves SendAction; nil is the builtin catalog.
-	Catalog *catalog.Catalog
+	Catalog ActionCatalog
+}
+
+// ActionCatalog resolves a catalog action by its uses reference.
+// *catalog.Catalog satisfies it.
+type ActionCatalog interface {
+	Resolve(uses string) (*catalog.Action, error)
 }
 
 // RunRecords reads a run's owner and org from the run record (a workflow
@@ -135,28 +148,33 @@ type RunRecords interface {
 
 // Gmail sends GTM emails through the Gmail integration. It implements
 // gtm.Email.
+//
+//forge:contract
 type Gmail struct {
 	runner  writeledger.Runner
 	creds   httpaction.CredentialSource
 	runs    RunRecords
-	catalog *catalog.Catalog
+	catalog ActionCatalog
 }
 
 var _ gtm.Email = (*Gmail)(nil)
 
 // NewGmail builds the sender. A missing runner, credential source or run
 // records is an error: a process that cannot authenticate a send, or tell
-// whose run it is from, must not build one.
-func NewGmail(deps Deps) (*Gmail, error) {
+// whose run it is from, must not build one. Service is gtm.Email's Send.
+//
+//forge:constructor
+func NewGmail(deps Deps) (Service, error) {
 	if deps.Runner == nil || deps.Credentials == nil || deps.Runs == nil {
 		return nil, errors.New("email: a runner, a credential source and run records are required")
 	}
 	c := deps.Catalog
 	if c == nil {
-		var err error
-		if c, err = catalog.Builtin(); err != nil {
+		builtin, err := catalog.Builtin()
+		if err != nil {
 			return nil, fmt.Errorf("email: load the integrations catalog: %w", err)
 		}
+		c = builtin
 	}
 	if _, err := c.Resolve(SendAction); err != nil {
 		return nil, fmt.Errorf("email: %w", err)
