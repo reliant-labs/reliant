@@ -52,11 +52,32 @@ type machineHealthReader interface {
 	MachineHealth(ctx context.Context, userID string, selector *DaemonSelector) (db.MachineHealth, error)
 }
 
+// dispatchProber confirms that a command sent now would be delivered.
+// NATSDaemonRouter satisfies it; a router that does not leaves
+// IsDaemonOnline's answer standing.
+type dispatchProber interface {
+	DispatchReachable(ctx context.Context, userID string, selector *DaemonSelector) bool
+}
+
+// notAnsweringMessage is the reason a machine reads as disconnected when its
+// registration says attached but the daemon dispatch would reach does not
+// answer.
+const notAnsweringMessage = "the machine's registration says it is attached, but its daemon does not answer commands yet; its connection may be dropping and re-establishing"
+
 // MachineStatus reports whether the run's machine is attached, and if not,
 // why; and, for an attached one, whether its daemon reports it degraded. It
 // reads connectivity and the registry only and never wakes anything.
 // A registry lookup that fails is not fatal: the machine reads as not
 // connected with no reason, so a waiter keeps waiting.
+//
+// Connected means the run's next machine tool call would reach the daemon,
+// not only that the registry holds an attachment: wait_for_machine answers
+// "retry now" on it. The two disagreed (reliant#2812): IsDaemonOnline with no
+// selector is true while ANY of the user's daemons is up, but a command with
+// no selector goes to the user's default machine; and liveness is answered by
+// subscriptions other than the ones commands travel on. So an online answer
+// is confirmed by DispatchReachable, which resolves the daemon the way every
+// send does and probes the subject the gateway's bridge serves beside them.
 func (m *RunMachine) MachineStatus(ctx context.Context, userID string) (tools.MachineStatus, error) {
 	if m == nil || m.router == nil {
 		return tools.MachineStatus{}, errors.New("no daemon router configured")
@@ -65,6 +86,10 @@ func (m *RunMachine) MachineStatus(ctx context.Context, userID string) (tools.Ma
 	online, err := m.router.IsDaemonOnline(ctx, userID, selector)
 	if err != nil {
 		return tools.MachineStatus{}, err
+	}
+	notAnswering := false
+	if prober, ok := m.router.(dispatchProber); online && ok && !prober.DispatchReachable(ctx, userID, selector) {
+		online, notAnswering = false, true
 	}
 	if online {
 		status := tools.MachineStatus{Connected: true}
@@ -77,13 +102,23 @@ func (m *RunMachine) MachineStatus(ctx context.Context, userID string) (tools.Ma
 		}
 		return status, nil
 	}
+	status := m.disconnectedStatus(ctx, userID, selector)
+	if notAnswering && status.StatusMessage == "" && !status.Removed {
+		status.StatusMessage = notAnsweringMessage
+	}
+	return status, nil
+}
+
+// disconnectedStatus is why a machine that is not connected is not: the
+// registry's view of it, or no reason when there is none to read.
+func (m *RunMachine) disconnectedStatus(ctx context.Context, userID string, selector *DaemonSelector) tools.MachineStatus {
 	reader, ok := m.router.(machineStateReader)
 	if !ok {
-		return tools.MachineStatus{}, nil
+		return tools.MachineStatus{}
 	}
 	state, err := reader.MachineState(ctx, userID, selector)
 	if err != nil {
-		return tools.MachineStatus{}, nil
+		return tools.MachineStatus{}
 	}
 	return tools.MachineStatus{
 		Removed:       !state.Exists,
@@ -91,5 +126,5 @@ func (m *RunMachine) MachineStatus(ctx context.Context, userID string) (tools.Ma
 		Suspended:     state.Suspended,
 		Starting:      state.Starting,
 		StatusMessage: state.StatusMessage,
-	}, nil
+	}
 }
