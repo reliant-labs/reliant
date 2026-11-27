@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
-	"slices"
 	"sort"
 	"time"
 
@@ -167,24 +166,10 @@ func writeGoCachesSeen(path string, s goCachesSeen) error {
 	return os.Rename(tmp, path)
 }
 
-// trustedGoCacheEnv names the trusted tier of `forge cache prog`: the cache
-// main's builds seed and every other build reads through GOCACHEPROG. No
-// build points GOCACHE at it but those that seed it, so it is named here too.
-const trustedGoCacheEnv = "FORGE_GO_TRUSTED_CACHE"
-
-// goCacheFlags is --go-cache for each cache the record holds, and for the
-// trusted tier the daemon's environment names.
+// goCacheFlags is --go-cache for each cache the record holds.
 func goCacheFlags(policyPath string) []string {
-	return goCacheFlagsWith(policyPath, os.Getenv(trustedGoCacheEnv))
-}
-
-func goCacheFlagsWith(policyPath, trusted string) []string {
-	roots := rememberedGoCaches(policyPath)
-	if filepath.IsAbs(trusted) && gocache.IsCache(trusted) && !slices.Contains(roots, filepath.Clean(trusted)) {
-		roots = append(roots, filepath.Clean(trusted))
-	}
 	var args []string
-	for _, root := range roots {
+	for _, root := range rememberedGoCaches(policyPath) {
 		args = append(args, "--go-cache", root)
 	}
 	return args

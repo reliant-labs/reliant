@@ -120,17 +120,4 @@ func TestReaperTickRemembersBuildCachesAndHandsThemToForge(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(filepath.Dir(h.policy), goCachesSeenName)); err != nil {
 		t.Fatalf("the record is not beside the policy: %v", err)
 	}
-
-	// forge cache prog's trusted tier, which only seeding builds point
-	// GOCACHE at, is handed over too, once, when it is a Go cache.
-	trusted := makeGoCache(t, filepath.Join(t.TempDir(), "go-build-trusted"))
-	if got := goCacheFlagsWith(h.policy, trusted); !reflect.DeepEqual(got, []string{"--go-cache", cache, "--go-cache", trusted}) {
-		t.Fatalf("flags with the trusted tier = %q", got)
-	}
-	if got := goCacheFlagsWith(h.policy, cache); !reflect.DeepEqual(got, want) {
-		t.Fatalf("a trusted tier already remembered is passed twice: %q", got)
-	}
-	if got := goCacheFlagsWith(h.policy, t.TempDir()); !reflect.DeepEqual(got, want) {
-		t.Fatalf("a trusted tier that is not a Go cache is passed: %q", got)
-	}
 }
