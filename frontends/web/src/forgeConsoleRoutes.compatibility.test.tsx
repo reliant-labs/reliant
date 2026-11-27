@@ -8,6 +8,13 @@ const Placeholder = () => null
 const LegacySpeed = () => null
 const SiteInsights = () => null
 
+// The slice of a TanStack route this test reads. The tree's own type is a
+// union too deep to narrow by path, so the test reads it through this shape.
+type RouteNode = {
+  options: { path?: string; component?: unknown; validateSearch?: unknown }
+  children?: RouteNode[]
+}
+
 function insightsRoutes(siteInsights?: ForgeConsoleComponents['siteInsights']) {
   const components = new Proxy({ siteInsights, speedInsights: LegacySpeed }, {
     get(target, key) {
@@ -16,7 +23,7 @@ function insightsRoutes(siteInsights?: ForgeConsoleComponents['siteInsights']) {
     },
   }) as unknown as ForgeConsoleComponents
   const root = createRootRoute()
-  const tree = createForgeConsoleRoutes(() => root, components)
+  const tree = createForgeConsoleRoutes(() => root, components) as unknown as RouteNode
   const consoleRoute = tree.children!.find((route) => route.options.path === '/forge/p/$project')!
   return consoleRoute.children!
 }
