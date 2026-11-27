@@ -5,8 +5,10 @@ package gtm
 import (
 	"context"
 	"errors"
+	"fmt"
 	"slices"
 
+	"github.com/reliant-labs/reliant/internal/gtm/library"
 	"github.com/reliant-labs/reliant/internal/store"
 )
 
@@ -73,10 +75,15 @@ func (s *service) CreateIdea(ctx context.Context, actor Actor, in CreateIdeaInpu
 		checkLen("title", in.Title, 1, MaxTitleLen),
 		checkLen("body_md", in.BodyMD, 0, MaxBodyLen),
 		checkEvidence(in.Evidence),
+		checkIdeaLibrary(in.LibraryKey, in.TailorAnswers, in.SuggestedWorkflowMD),
 	); err != nil {
 		return Idea{}, err
 	}
 	ev, err := evidenceJSON(in.Evidence)
+	if err != nil {
+		return Idea{}, err
+	}
+	answers, err := tailorAnswersJSON(in.TailorAnswers)
 	if err != nil {
 		return Idea{}, err
 	}
@@ -91,19 +98,22 @@ func (s *service) CreateIdea(ctx context.Context, actor Actor, in CreateIdeaInpu
 			return err
 		}
 		row := &store.GtmIdea{
-			OrgID:        actor.OrgID,
-			Kind:         string(in.Kind),
-			Title:        in.Title,
-			BodyMd:       in.BodyMD,
-			Evidence:     ev,
-			Status:       string(IdeaProposed),
-			Source:       string(source),
-			SourceChatID: chat,
-			CreatedBy:    actor.UserID,
-			CampaignID:   strPtrOrNil(in.CampaignID),
-			Revision:     1,
-			CreatedAt:    now,
-			UpdatedAt:    now,
+			OrgID:               actor.OrgID,
+			Kind:                string(in.Kind),
+			Title:               in.Title,
+			BodyMd:              in.BodyMD,
+			Evidence:            ev,
+			Status:              string(IdeaProposed),
+			Source:              string(source),
+			SourceChatID:        chat,
+			CreatedBy:           actor.UserID,
+			CampaignID:          strPtrOrNil(in.CampaignID),
+			LibraryKey:          strPtrOrNil(in.LibraryKey),
+			TailorAnswers:       answers,
+			SuggestedWorkflowMd: in.SuggestedWorkflowMD,
+			Revision:            1,
+			CreatedAt:           now,
+			UpdatedAt:           now,
 		}
 		if err := s.store.CreateIdea(ctx, row); err != nil {
 			return err
@@ -141,6 +151,20 @@ func (s *service) UpdateIdea(ctx context.Context, actor Actor, in UpdateIdeaInpu
 			return Idea{}, err
 		}
 	}
+	var key, workflow string
+	var answers []TailorAnswer
+	if in.LibraryKey != nil {
+		key = *in.LibraryKey
+	}
+	if in.TailorAnswers != nil {
+		answers = *in.TailorAnswers
+	}
+	if in.SuggestedWorkflowMD != nil {
+		workflow = *in.SuggestedWorkflowMD
+	}
+	if err := checkIdeaLibrary(key, answers, workflow); err != nil {
+		return Idea{}, err
+	}
 	var out Idea
 	err := s.store.InTx(ctx, func(ctx context.Context) error {
 		row, err := s.store.GetIdea(ctx, actor.OrgID, in.ID)
@@ -172,6 +196,17 @@ func (s *service) UpdateIdea(ctx context.Context, actor Actor, in UpdateIdeaInpu
 				return err
 			}
 			row.CampaignID = strPtrOrNil(*in.CampaignID)
+		}
+		if in.LibraryKey != nil {
+			row.LibraryKey = strPtrOrNil(*in.LibraryKey)
+		}
+		if in.TailorAnswers != nil {
+			if row.TailorAnswers, err = tailorAnswersJSON(*in.TailorAnswers); err != nil {
+				return err
+			}
+		}
+		if in.SuggestedWorkflowMD != nil {
+			row.SuggestedWorkflowMd = *in.SuggestedWorkflowMD
 		}
 		out, err = s.writeIdea(ctx, actor.OrgID, row, in.ExpectedRevision)
 		return err
@@ -288,4 +323,27 @@ func firstErr(errs ...error) error {
 		}
 	}
 	return nil
+}
+
+// checkIdeaLibrary is the idea bank rule for an idea's fields: a library
+// key the bank holds (or none), at most MaxTailorAnswers answers, each with
+// a question, and a suggested workflow within MaxSuggestedWorkflowLen.
+func checkIdeaLibrary(key string, answers []TailorAnswer, workflow string) error {
+	if key != "" {
+		if _, ok := library.Get(key); !ok {
+			return invalid("library_key", fmt.Sprintf("%q is not an entry of the idea bank", key))
+		}
+	}
+	if len(answers) > MaxTailorAnswers {
+		return invalid("tailor_answers", fmt.Sprintf("at most %d", MaxTailorAnswers))
+	}
+	for i, a := range answers {
+		if err := firstErr(
+			checkLen(fmt.Sprintf("tailor_answers[%d].question", i), a.Question, 1, MaxTailorAnswerLen),
+			checkLen(fmt.Sprintf("tailor_answers[%d].answer", i), a.Answer, 0, MaxTailorAnswerLen),
+		); err != nil {
+			return err
+		}
+	}
+	return checkLen("suggested_workflow_md", workflow, 0, MaxSuggestedWorkflowLen)
 }

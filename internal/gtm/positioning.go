@@ -48,6 +48,13 @@ func (s *service) UpdatePositioning(ctx context.Context, actor Actor, in UpdateP
 			return Positioning{}, err
 		}
 	}
+	if err := checkBusiness(in.BusinessType, in.BusinessModels); err != nil {
+		return Positioning{}, err
+	}
+	models := make([]string, 0, len(in.BusinessModels))
+	for _, m := range in.BusinessModels {
+		models = append(models, string(m))
+	}
 	org := actor.OrgID
 	var out Positioning
 	err := s.store.InTx(ctx, func(ctx context.Context) error {
@@ -65,6 +72,7 @@ func (s *service) UpdatePositioning(ctx context.Context, actor Actor, in UpdateP
 		}
 		row.PositioningMd = in.PositioningMD
 		row.Audiences = slices.Clone(in.Audiences)
+		row.BusinessType, row.BusinessModels = string(in.BusinessType), models
 		row.UpdatedBy = actor.UserID
 		row.UpdatedAt = s.now()
 		current := func() (int32, error) {
@@ -90,4 +98,23 @@ func (s *service) UpdatePositioning(ctx context.Context, actor Actor, in UpdateP
 		return nil
 	})
 	return out, err
+}
+
+// checkBusiness is the profile rule: a known business type or none, and
+// known business models, each once.
+func checkBusiness(t BusinessType, models []BusinessModel) error {
+	if t != "" && !slices.Contains(businessTypes, t) {
+		return invalid("business_type", "unknown business type")
+	}
+	seen := map[BusinessModel]bool{}
+	for _, m := range models {
+		if !slices.Contains(businessModels, m) {
+			return invalid("business_models", fmt.Sprintf("unknown business model %q", m))
+		}
+		if seen[m] {
+			return invalid("business_models", fmt.Sprintf("%q twice", m))
+		}
+		seen[m] = true
+	}
+	return nil
 }

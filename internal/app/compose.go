@@ -63,7 +63,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/handlers/daemon_registry"
 	"github.com/reliant-labs/reliant/internal/handlers/file_system"
 	"github.com/reliant-labs/reliant/internal/handlers/forge"
-	"github.com/reliant-labs/reliant/internal/handlers/gtm"
+	svcGtm "github.com/reliant-labs/reliant/internal/handlers/gtm"
 	"github.com/reliant-labs/reliant/internal/handlers/inbox"
 	"github.com/reliant-labs/reliant/internal/handlers/mcp"
 	"github.com/reliant-labs/reliant/internal/handlers/message"
@@ -1113,8 +1113,8 @@ func (g *Graph) newUserRoutes() (*UserRoutes, error) {
 		CoverageSource:     g.CoverageSource(),
 		PullRequestRecord:  g.PullRequestRecord(),
 		ChatTrace:          g.ChatTrace(),
-		Gtm:                g.Gtm(),
 		Pipeline:           g.Pipeline(),
+		SvcGtm:             g.SvcGtm(),
 	})
 }
 
@@ -2153,9 +2153,9 @@ func (g *Graph) newPipeline() (*pipeline.Service, error) {
 	})
 }
 
-// newGtm constructs the gtm handler (internal/handlers/gtm).
-func (g *Graph) newGtm() (*gtm.Service, error) {
-	return gtm.New(gtm.Deps{
+// newSvcGtm constructs the gtm handler (internal/handlers/gtm).
+func (g *Graph) newSvcGtm() (*svcGtm.Service, error) {
+	return svcGtm.New(svcGtm.Deps{
 		Logger: g.Log,
 		Config: g.Cfg,
 	})

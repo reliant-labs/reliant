@@ -4,9 +4,7 @@ package gtm
 
 import (
 	"context"
-	"slices"
 	"sort"
-	"strings"
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/store"
@@ -15,12 +13,9 @@ import (
 // The r2/r3 half of fakeStore.
 
 type fakeR2 struct {
-	imports    map[string]*store.GtmLibraryImport
-	prunes     map[string]*store.GtmLibraryPruneRequest
 	strategies map[string]*store.GtmStrategy
 	channels   map[string]*store.GtmChannel
 	assets     map[string]*store.GtmAsset
-	library    map[string]*store.GtmStrategyLibrary
 	// seeds counts SeedChannels calls.
 	seeds int
 }
@@ -28,12 +23,9 @@ type fakeR2 struct {
 func (f *fakeStore) r2() *fakeR2 {
 	if f.r2s == nil {
 		f.r2s = &fakeR2{
-			imports:    map[string]*store.GtmLibraryImport{},
-			prunes:     map[string]*store.GtmLibraryPruneRequest{},
 			strategies: map[string]*store.GtmStrategy{},
 			channels:   map[string]*store.GtmChannel{},
 			assets:     map[string]*store.GtmAsset{},
-			library:    map[string]*store.GtmStrategyLibrary{},
 		}
 	}
 	return f.r2s
@@ -247,206 +239,6 @@ func (f *fakeStore) DeletePendingAsset(_ context.Context, orgID, id string, crea
 func (f *fakeStore) DeleteAsset(_ context.Context, orgID, id string) error {
 	if r, ok := f.r2().assets[id]; ok && r.OrgID == orgID {
 		delete(f.r2().assets, id)
-	}
-	return nil
-}
-
-func (f *fakeStore) ListLibrary(_ context.Context, flt LibraryFilter) ([]*store.GtmStrategyLibrary, error) {
-	var out []*store.GtmStrategyLibrary
-	for _, r := range f.r2().library {
-		if r.OrgID != flt.OrgID ||
-			(flt.Category != "" && r.Category != string(flt.Category)) ||
-			(flt.Depth != "" && r.Depth != string(flt.Depth)) ||
-			(flt.Stage != "" && r.Stage != flt.Stage) ||
-			(flt.Cost != "" && r.Cost != flt.Cost) ||
-			(flt.Difficulty != "" && r.Difficulty != flt.Difficulty) ||
-			(flt.Fit != "" && !slices.Contains(r.Fits, flt.Fit)) ||
-			(flt.Keys != nil && !slices.Contains(flt.Keys, r.Key)) {
-			continue
-		}
-		if q := strings.ToLower(flt.Query); q != "" &&
-			!strings.Contains(strings.ToLower(r.Name), q) && !strings.Contains(strings.ToLower(r.SummaryMd), q) {
-			continue
-		}
-		c := *r
-		out = append(out, &c)
-	}
-	sort.Slice(out, func(i, j int) bool {
-		a, b := out[i], out[j]
-		if a.Category != b.Category {
-			return a.Category < b.Category
-		}
-		if a.Name != b.Name {
-			return a.Name < b.Name
-		}
-		return a.Key < b.Key
-	})
-	if flt.Offset > len(out) {
-		return nil, nil
-	}
-	out = out[flt.Offset:]
-	if flt.Limit > 0 && len(out) > flt.Limit {
-		out = out[:flt.Limit]
-	}
-	return out, nil
-}
-
-func (f *fakeStore) GetLibraryEntry(_ context.Context, orgID, key string) (*store.GtmStrategyLibrary, error) {
-	for _, r := range f.r2().library {
-		if r.OrgID == orgID && r.Key == key {
-			c := *r
-			return &c, nil
-		}
-	}
-	return nil, ErrNotFound
-}
-
-func (f *fakeStore) CreateLibraryEntry(_ context.Context, row *store.GtmStrategyLibrary) error {
-	if row.ID == "" {
-		row.ID = f.nextID()
-	}
-	c := *row
-	f.r2().library[row.ID] = &c
-	return nil
-}
-
-func (f *fakeStore) UpdateLibraryEntry(_ context.Context, row *store.GtmStrategyLibrary) error {
-	cur, ok := f.r2().library[row.ID]
-	if !ok || cur.OrgID != row.OrgID {
-		return ErrNotFound
-	}
-	c := *row
-	c.Key = cur.Key
-	f.r2().library[row.ID] = &c
-	return nil
-}
-
-func (f *fakeStore) PruneLibrary(_ context.Context, orgID string, keep []string) (int64, error) {
-	var n int64
-	for id, r := range f.r2().library {
-		if r.OrgID == orgID && !slices.Contains(keep, r.Key) {
-			delete(f.r2().library, id)
-			n++
-		}
-	}
-	return n, nil
-}
-
-func (f *fakeStore) TouchLibraryEntries(_ context.Context, orgID string, keys []string, rev, by string, at time.Time) error {
-	for _, r := range f.r2().library {
-		if r.OrgID == orgID && slices.Contains(keys, r.Key) {
-			r.SourceRevision, r.ImportedBy, r.ImportedAt = rev, by, at
-		}
-	}
-	return nil
-}
-
-func (f *fakeStore) LibraryKeysNotIn(_ context.Context, orgID string, keep []string) ([]string, error) {
-	var out []string
-	for _, r := range f.r2().library {
-		if r.OrgID == orgID && !slices.Contains(keep, r.Key) {
-			out = append(out, r.Key)
-		}
-	}
-	sort.Strings(out)
-	return out, nil
-}
-
-func (f *fakeStore) PruneLibraryKeys(_ context.Context, orgID string, keys []string, before time.Time) (int64, error) {
-	var n int64
-	for id, r := range f.r2().library {
-		if r.OrgID == orgID && slices.Contains(keys, r.Key) && !r.ImportedAt.After(before) {
-			delete(f.r2().library, id)
-			n++
-		}
-	}
-	return n, nil
-}
-
-// newestPage is sortedPage by created_at, newest first.
-func newestPage[T any](m map[string]*T, keep func(*T) bool, created func(*T) time.Time, limit, offset int) []*T {
-	var out []*T
-	for _, v := range m {
-		if keep(v) {
-			c := *v
-			out = append(out, &c)
-		}
-	}
-	sort.SliceStable(out, func(i, j int) bool { return created(out[i]).After(created(out[j])) })
-	if offset > len(out) {
-		return nil
-	}
-	out = out[offset:]
-	if limit > 0 && len(out) > limit {
-		out = out[:limit]
-	}
-	return out
-}
-
-func (f *fakeStore) CreateLibraryImport(_ context.Context, row *store.GtmLibraryImport) error {
-	if row.CredentialKind == string(CredentialToken) && row.Pruned != 0 {
-		return &ValidationError{Field: store.GtmLibraryImportConstraintTokenNeverPrunes, Reason: "violates a constraint"}
-	}
-	if row.PruneRequestID != nil {
-		if r, ok := f.r2().prunes[*row.PruneRequestID]; !ok || r.OrgID != row.OrgID {
-			return &LinkError{Field: "prune_request_id"}
-		}
-	}
-	c := *row
-	f.r2().imports[row.ID] = &c
-	return nil
-}
-
-func (f *fakeStore) ListLibraryImports(_ context.Context, flt LibraryImportFilter) ([]*store.GtmLibraryImport, error) {
-	return newestPage(f.r2().imports, func(r *store.GtmLibraryImport) bool { return r.OrgID == flt.OrgID },
-		func(r *store.GtmLibraryImport) time.Time { return r.CreatedAt }, flt.Limit, flt.Offset), nil
-}
-
-func (f *fakeStore) CreatePruneRequest(_ context.Context, row *store.GtmLibraryPruneRequest) error {
-	if len(row.RemoveKeys) == 0 {
-		return &ValidationError{Field: "remove_keys", Reason: "violates a constraint"}
-	}
-	c := *row
-	c.RemoveKeys = slices.Clone(row.RemoveKeys)
-	f.r2().prunes[row.ID] = &c
-	return nil
-}
-
-func (f *fakeStore) GetPruneRequest(_ context.Context, orgID, id string) (*store.GtmLibraryPruneRequest, error) {
-	r, ok := f.r2().prunes[id]
-	if !ok || r.OrgID != orgID {
-		return nil, ErrNotFound
-	}
-	c := *r
-	return &c, nil
-}
-
-func (f *fakeStore) ListPruneRequests(_ context.Context, flt PruneRequestFilter) ([]*store.GtmLibraryPruneRequest, error) {
-	return newestPage(f.r2().prunes, func(r *store.GtmLibraryPruneRequest) bool {
-		if r.OrgID != flt.OrgID {
-			return false
-		}
-		stale := r.Status == string(PruneRequestPending) && !r.CreatedAt.After(flt.ExpiredAtOrBefore)
-		switch flt.Status {
-		case "":
-			return true
-		case PruneRequestPending:
-			return r.Status == string(PruneRequestPending) && !stale
-		case PruneRequestExpired:
-			return r.Status == string(PruneRequestExpired) || stale
-		}
-		return r.Status == string(flt.Status)
-	}, func(r *store.GtmLibraryPruneRequest) time.Time { return r.CreatedAt }, flt.Limit, flt.Offset), nil
-}
-
-func (f *fakeStore) DecidePruneRequest(_ context.Context, orgID, id string, status PruneRequestStatus, by string, at time.Time) error {
-	r, ok := f.r2().prunes[id]
-	if !ok || r.OrgID != orgID || r.Status != string(PruneRequestPending) {
-		return ErrPruneRequestNotPending
-	}
-	r.Status = string(status)
-	if status != PruneRequestExpired {
-		r.DecidedBy, r.DecidedAt = &by, &at
 	}
 	return nil
 }

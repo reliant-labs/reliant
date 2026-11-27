@@ -49,7 +49,6 @@
         "Forge",
         "GitHubAccess",
         "GitHubAccessLoop",
-        "Gtm",
         "HTTPRoutes",
         "Inbox",
         "InputOptions",
@@ -102,6 +101,7 @@
         "SignInSessions",
         "Streaming",
         "StreamingHub",
+        "SvcGtm",
         "System",
         "TLSFiles",
         "Task",
@@ -240,7 +240,7 @@
           "resolution": "declared_route_set"
         },
         {
-          "component": "Gtm",
+          "component": "SvcGtm",
           "service": "reliant.v1.GtmService",
           "route_set": "UserRoutes",
           "audience": "user",
@@ -63202,18 +63202,6 @@
       "implementation_candidates": []
     },
     {
-      "id": "Gtm",
-      "name": "Gtm",
-      "kind": "component",
-      "type": "*github.com/reliant-labs/reliant/internal/handlers/gtm.Service",
-      "source": {
-        "path": "internal/handlers/gtm/service.go",
-        "symbol": "New"
-      },
-      "methods": [],
-      "implementation_candidates": []
-    },
-    {
       "id": "HTTPRoutes",
       "name": "HTTPRoutes",
       "kind": "provider",
@@ -64208,6 +64196,18 @@
       "source": {
         "path": "internal/app/providers.go",
         "symbol": "NewStreamingHub"
+      },
+      "methods": [],
+      "implementation_candidates": []
+    },
+    {
+      "id": "SvcGtm",
+      "name": "SvcGtm",
+      "kind": "component",
+      "type": "*github.com/reliant-labs/reliant/internal/handlers/gtm.Service",
+      "source": {
+        "path": "internal/handlers/gtm/service.go",
+        "symbol": "New"
       },
       "methods": [],
       "implementation_candidates": []

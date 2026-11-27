@@ -141,6 +141,21 @@ type Idea struct {
 	Revision   int32
 	CreatedAt  time.Time
 	UpdatedAt  time.Time
+	// LibraryKey is the idea bank entry it came from; "" for none.
+	LibraryKey string
+	// TailorAnswers are that entry's tailor questions, answered for this
+	// business.
+	TailorAnswers []TailorAnswer
+	// SuggestedWorkflowMD is a tool-agnostic description of an automation
+	// that carries the idea out (the entry's, tailored); "" for none.
+	SuggestedWorkflowMD string
+}
+
+// TailorAnswer is one of an idea bank entry's tailor questions and its
+// answer for this business.
+type TailorAnswer struct {
+	Question string `json:"question"`
+	Answer   string `json:"answer"`
 }
 
 // Campaign groups ideas and items toward one goal over a period.
@@ -217,6 +232,11 @@ type Positioning struct {
 	UpdatedBy     string
 	Revision      int32
 	UpdatedAt     time.Time
+	// BusinessType is what kind of business the org is; "" for not said.
+	BusinessType BusinessType
+	// BusinessModels is how it makes money (possibly several); empty for
+	// not said. Both are what the library's FitsMyBusiness reads.
+	BusinessModels []BusinessModel
 }
 
 // Claim is one registry fact claimcheck matches a text's claims against.
@@ -289,6 +309,12 @@ const (
 	MaxEmailRecipients = 50
 	MaxAudiences       = 50
 	MaxURLLen          = 2048
+	// MaxTailorAnswers caps an idea's tailor answers; MaxTailorAnswerLen
+	// each question and each answer.
+	MaxTailorAnswers   = 20
+	MaxTailorAnswerLen = 2000
+	// MaxSuggestedWorkflowLen caps an idea's suggested_workflow_md.
+	MaxSuggestedWorkflowLen = 20000
 )
 
 // ListIdeasInput is the input to Service.ListIdeas.
@@ -322,6 +348,14 @@ type CreateIdeaInput struct {
 	Evidence []Evidence
 	// CampaignID links a campaign of the org; "" for none.
 	CampaignID string
+	// LibraryKey names the idea bank entry it comes from; "" for none. A
+	// key the bank does not hold is InvalidArgument.
+	LibraryKey string
+	// TailorAnswers: at most MaxTailorAnswers, each question 1 to and each
+	// answer at most MaxTailorAnswerLen characters.
+	TailorAnswers []TailorAnswer
+	// SuggestedWorkflowMD: at most MaxSuggestedWorkflowLen characters.
+	SuggestedWorkflowMD string
 }
 
 // UpdateIdeaInput is the input to Service.UpdateIdea. A nil field is left
@@ -336,6 +370,12 @@ type UpdateIdeaInput struct {
 	Evidence *[]Evidence
 	// CampaignID, when non-nil, links that campaign; "" unlinks.
 	CampaignID *string
+	// LibraryKey, when non-nil, names the bank entry; "" clears it.
+	LibraryKey *string
+	// TailorAnswers, when non-nil, replaces the whole list (empty clears it).
+	TailorAnswers *[]TailorAnswer
+	// SuggestedWorkflowMD, when non-nil, replaces it.
+	SuggestedWorkflowMD *string
 }
 
 // SetIdeaStatusInput is the input to Service.SetIdeaStatus.
@@ -522,6 +562,10 @@ type UpdatePositioningInput struct {
 	ExpectedRevision int32
 	PositioningMD    string
 	Audiences        []string
+	// BusinessType: "" for not said.
+	BusinessType BusinessType
+	// BusinessModels: each at most once; empty for not said.
+	BusinessModels []BusinessModel
 }
 
 // ListClaimsInput is the input to Service.ListClaims.

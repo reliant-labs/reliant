@@ -21,21 +21,30 @@ func ideaFromRow(r *store.GtmIdea) (Idea, error) {
 			return Idea{}, fmt.Errorf("idea %s evidence: %w", r.ID, err)
 		}
 	}
+	var answers []TailorAnswer
+	if len(r.TailorAnswers) > 0 {
+		if err := json.Unmarshal(r.TailorAnswers, &answers); err != nil {
+			return Idea{}, fmt.Errorf("idea %s tailor answers: %w", r.ID, err)
+		}
+	}
 	return Idea{
-		ID:           r.ID,
-		OrgID:        r.OrgID,
-		Kind:         IdeaKind(r.Kind),
-		Title:        r.Title,
-		BodyMD:       r.BodyMd,
-		Evidence:     ev,
-		Status:       IdeaStatus(r.Status),
-		Source:       IdeaSource(r.Source),
-		SourceChatID: r.SourceChatID,
-		CreatedBy:    r.CreatedBy,
-		CampaignID:   deref(r.CampaignID),
-		Revision:     r.Revision,
-		CreatedAt:    r.CreatedAt,
-		UpdatedAt:    r.UpdatedAt,
+		LibraryKey:          deref(r.LibraryKey),
+		TailorAnswers:       answers,
+		SuggestedWorkflowMD: r.SuggestedWorkflowMd,
+		ID:                  r.ID,
+		OrgID:               r.OrgID,
+		Kind:                IdeaKind(r.Kind),
+		Title:               r.Title,
+		BodyMD:              r.BodyMd,
+		Evidence:            ev,
+		Status:              IdeaStatus(r.Status),
+		Source:              IdeaSource(r.Source),
+		SourceChatID:        r.SourceChatID,
+		CreatedBy:           r.CreatedBy,
+		CampaignID:          deref(r.CampaignID),
+		Revision:            r.Revision,
+		CreatedAt:           r.CreatedAt,
+		UpdatedAt:           r.UpdatedAt,
 	}, nil
 }
 
@@ -58,6 +67,17 @@ func evidenceJSON(ev []Evidence) (json.RawMessage, error) {
 	b, err := json.Marshal(ev)
 	if err != nil {
 		return nil, fmt.Errorf("evidence: %w", err)
+	}
+	return b, nil
+}
+
+func tailorAnswersJSON(as []TailorAnswer) (json.RawMessage, error) {
+	if as == nil {
+		as = []TailorAnswer{}
+	}
+	b, err := json.Marshal(as)
+	if err != nil {
+		return nil, fmt.Errorf("tailor answers: %w", err)
 	}
 	return b, nil
 }
@@ -129,6 +149,14 @@ func positioningFromRow(r *store.GtmPositioning) Positioning {
 		UpdatedBy:     r.UpdatedBy,
 		Revision:      r.Revision,
 		UpdatedAt:     r.UpdatedAt,
+		BusinessType:  BusinessType(r.BusinessType),
+		BusinessModels: func() []BusinessModel {
+			out := make([]BusinessModel, 0, len(r.BusinessModels))
+			for _, m := range r.BusinessModels {
+				out = append(out, BusinessModel(m))
+			}
+			return out
+		}(),
 	}
 }
 
@@ -265,128 +293,6 @@ func assetsFromRows(rows []*store.GtmAsset) []Asset {
 		out = append(out, assetFromRow(r))
 	}
 	return out
-}
-
-func int32Ptr(v int32) *int32 {
-	if v == 0 {
-		return nil
-	}
-	return &v
-}
-
-func int32Of(p *int32) int32 {
-	if p == nil {
-		return 0
-	}
-	return *p
-}
-
-func libraryFromRow(r *store.GtmStrategyLibrary) (LibraryEntry, error) {
-	e := LibraryEntry{
-		Key:            r.Key,
-		Category:       StrategyCategory(r.Category),
-		Depth:          LibraryDepth(r.Depth),
-		Name:           r.Name,
-		SummaryMD:      r.SummaryMd,
-		Icon:           r.Icon,
-		Stage:          r.Stage,
-		Cost:           r.Cost,
-		CostNote:       r.CostNote,
-		Difficulty:     r.Difficulty,
-		Level:          r.Level,
-		Objective:      r.Objective,
-		NorthStar:      r.NorthStar,
-		HypothesisMD:   r.HypothesisMd,
-		Hours:          int32Of(r.Hours),
-		SignalDays:     int32Of(r.SignalDays),
-		WindowDays:     int32Of(r.WindowDays),
-		LaunchDays:     int32Of(r.LaunchDays),
-		Lifecycle:      slices.Clone(r.Lifecycle),
-		ChannelTypes:   slices.Clone(r.ChannelTypes),
-		Integrations:   slices.Clone(r.Integrations),
-		Fits:           slices.Clone(r.Fits),
-		Prerequisites:  slices.Clone(r.Prerequisites),
-		KPIs:           slices.Clone(r.Kpis),
-		Tactics:        slices.Clone(r.Tactics),
-		Automates:      slices.Clone(r.Automates),
-		Experiments:    slices.Clone(r.Experiments),
-		StopWhen:       slices.Clone(r.StopWhen),
-		SourceRevision: r.SourceRevision,
-		ImportedAt:     r.ImportedAt,
-		ImportedBy:     r.ImportedBy,
-	}
-	if r.ExpectedDelta != nil {
-		e.ExpectedDelta = *r.ExpectedDelta
-	}
-	if len(r.Steps) > 0 {
-		if err := json.Unmarshal(r.Steps, &e.Steps); err != nil {
-			return LibraryEntry{}, fmt.Errorf("library entry %s steps: %w", r.Key, err)
-		}
-	}
-	if len(r.Extra) > 0 {
-		if err := json.Unmarshal(r.Extra, &e.Extra); err != nil {
-			return LibraryEntry{}, fmt.Errorf("library entry %s extra: %w", r.Key, err)
-		}
-	}
-	return e, nil
-}
-
-// libraryRow is e's row for orgID; steps and extra are marshalled.
-func libraryRow(orgID string, e LibraryEntry) (*store.GtmStrategyLibrary, error) {
-	steps := e.Steps
-	if steps == nil {
-		steps = []LibraryStep{}
-	}
-	stepsJSON, err := json.Marshal(steps)
-	if err != nil {
-		return nil, fmt.Errorf("library entry %s steps: %w", e.Key, err)
-	}
-	extra := e.Extra
-	if extra == nil {
-		extra = map[string]any{}
-	}
-	extraJSON, err := json.Marshal(extra)
-	if err != nil {
-		return nil, invalid("entries.extra", "not JSON-encodable")
-	}
-	r := &store.GtmStrategyLibrary{
-		OrgID:         orgID,
-		Key:           e.Key,
-		Category:      string(e.Category),
-		Depth:         string(e.Depth),
-		Name:          e.Name,
-		SummaryMd:     e.SummaryMD,
-		Icon:          e.Icon,
-		Stage:         e.Stage,
-		Cost:          e.Cost,
-		CostNote:      e.CostNote,
-		Difficulty:    e.Difficulty,
-		Level:         e.Level,
-		Objective:     e.Objective,
-		NorthStar:     e.NorthStar,
-		HypothesisMd:  e.HypothesisMD,
-		Hours:         int32Ptr(e.Hours),
-		SignalDays:    int32Ptr(e.SignalDays),
-		WindowDays:    int32Ptr(e.WindowDays),
-		LaunchDays:    int32Ptr(e.LaunchDays),
-		Lifecycle:     nonNil(e.Lifecycle),
-		ChannelTypes:  nonNil(e.ChannelTypes),
-		Integrations:  nonNil(e.Integrations),
-		Fits:          nonNil(e.Fits),
-		Prerequisites: nonNil(e.Prerequisites),
-		Kpis:          nonNil(e.KPIs),
-		Tactics:       nonNil(e.Tactics),
-		Automates:     nonNil(e.Automates),
-		Experiments:   nonNil(e.Experiments),
-		StopWhen:      nonNil(e.StopWhen),
-		Steps:         stepsJSON,
-		Extra:         extraJSON,
-	}
-	if e.ExpectedDelta != 0 {
-		d := e.ExpectedDelta
-		r.ExpectedDelta = &d
-	}
-	return r, nil
 }
 
 func nonNil(s []string) []string {
