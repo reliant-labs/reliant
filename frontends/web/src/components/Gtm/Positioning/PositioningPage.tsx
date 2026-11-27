@@ -19,7 +19,6 @@ import Combobox from "@/components/forge-ui/combobox";
 import DataTable, { type DataTableColumn } from "@/components/forge-ui/data_table";
 import EmptyState from "@/components/forge-ui/empty_state";
 import Input from "@/components/forge-ui/input";
-import Link from "@/components/forge-ui/link";
 import PageHeader from "@/components/forge-ui/page_header";
 import SkeletonLoader from "@/components/forge-ui/skeleton_loader";
 import Tag from "@/components/forge-ui/tag";
@@ -29,7 +28,7 @@ import { useGetPositioning, useListClaims, useUpdatePositioning, useUpsertClaim 
 
 import { GtmShell, useGtmOrgId } from "../shared/GtmShell";
 import { PersonActionButton, PersonActionDialog } from "../shared/PersonAction";
-import { ClaimStatusBadge, formatDay } from "../shared/ui";
+import { ClaimStatusBadge, formatDay, OutboundLink } from "../shared/ui";
 import { useGtmWriteError } from "../shared/writes";
 
 /** The most facts the table lists; the list's own page limit (ListClaimsRequest.page_size). */
@@ -81,9 +80,9 @@ export function PositioningView() {
         render: (_, row) => (
           <span className="block whitespace-normal text-ink-muted">
             {row.sourceUrl ? (
-              <Link href={row.sourceUrl} className="break-all underline underline-offset-2">
+              <OutboundLink url={row.sourceUrl} className="break-all underline underline-offset-2">
                 {sourceKindLabel(row.sourceKind) ?? row.sourceUrl}
-              </Link>
+              </OutboundLink>
             ) : (
               "No source yet"
             )}

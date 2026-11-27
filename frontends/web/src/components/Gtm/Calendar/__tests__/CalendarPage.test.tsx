@@ -9,13 +9,13 @@
 
 import { create } from "@bufbuild/protobuf";
 import { timestampDate, timestampFromDate } from "@bufbuild/protobuf/wkt";
-import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { GtmChannelMode, GtmChannelSchema, GtmItemFormat, GtmItemSchema, GtmItemStatus, type UpdateItemRequest } from "@/gen/reliant/v1/gtm_pb";
+import { GtmChannelMode, GtmChannelSchema, GtmItemFormat, GtmItemSchema, GtmItemStatus, type ListItemsRequest, type UpdateItemRequest } from "@/gen/reliant/v1/gtm_pb";
 
 import { renderGtm, TEST_ORG } from "../../shared/__tests__/gtmHarness";
-import { GtmCalendarView } from "../CalendarPage";
+import { GtmCalendarView, visibleRange } from "../CalendarPage";
 
 vi.mock("@/lib/toast-manager", () => ({ toast: { warning: vi.fn(), error: vi.fn(), info: vi.fn() } }));
 
@@ -68,14 +68,53 @@ const reads = {
 };
 
 describe("GtmCalendarView", () => {
-  it("draws what has a date, pins what is out, and counts the undated", async () => {
+  it("draws what has a date and pins what is out", async () => {
     renderGtm(<GtmCalendarView />, reads, { path: "/gtm/calendar" });
     expect(await screen.findByRole("button", { name: "Show HN post" })).toBeInTheDocument();
     expect(screen.getByTestId("chip-item-1")).toHaveAttribute("data-movable", "true");
     expect(screen.getByTestId("chip-item-2")).toHaveAttribute("data-movable", "false");
     expect(screen.getByRole("button", { name: "Email: Invite" })).toBeInTheDocument();
     expect(screen.queryByText("Someday post")).not.toBeInTheDocument();
-    expect(screen.getByText("1 item has no date yet.")).toBeInTheDocument();
+    // One element per test id: the page's own wrapper is gtm-calendar (GtmShell), the grid gtm-calendar-grid.
+    expect(screen.getAllByTestId("gtm-calendar-grid")).toHaveLength(1);
+  });
+
+  it("asks only for the visible month's whole weeks, then the week's", async () => {
+    const list = vi.fn(() => ({ items: [post] }));
+    renderGtm(<GtmCalendarView />, { ...reads, "GtmService.ListItems": list }, { path: "/gtm/calendar" });
+    await screen.findByRole("button", { name: "Show HN post" });
+    const req = (list.mock.calls[0] as unknown[])[0] as ListItemsRequest;
+    const { from, to } = visibleRange(new Date(), "month");
+    expect(timestampDate(req.scheduledFrom!).getTime()).toBe(from.getTime());
+    expect(timestampDate(req.scheduledTo!).getTime()).toBe(to.getTime());
+    expect(from.getDay()).toBe(0);
+  });
+
+  it("knows a month's grid and a week's range", () => {
+    // November 2026 starts on a Sunday and ends on a Monday: five weeks, Nov 1 – Dec 6.
+    expect(visibleRange(new Date(2026, 10, 18), "month")).toEqual({ from: new Date(2026, 10, 1), to: new Date(2026, 11, 6) });
+    expect(visibleRange(new Date(2026, 10, 18), "week")).toEqual({ from: new Date(2026, 10, 15), to: new Date(2026, 10, 22) });
+  });
+
+  it("reads as an agenda on a phone: each day with its items' times, titles and channels", async () => {
+    const realMatchMedia = window.matchMedia;
+    window.matchMedia = ((query: string) => ({ matches: query.includes("max-width"), media: query, addEventListener: () => {}, removeEventListener: () => {} })) as never;
+    try {
+      const today = new Date();
+      const onDay = (d: number, h: number) => timestampFromDate(new Date(today.getFullYear(), today.getMonth(), d, h, 0));
+      const a = create(GtmItemSchema, { ...post, scheduledAt: onDay(3, 9) });
+      const b = create(GtmItemSchema, { ...sent, scheduledAt: onDay(3, 14) });
+      renderGtm(<GtmCalendarView />, { ...reads, "GtmService.ListItems": { response: { items: [a, b] } } }, { path: "/gtm/calendar" });
+      const agenda = await screen.findByTestId("gtm-calendar-agenda");
+      expect(screen.queryByTestId("gtm-calendar-grid")).not.toBeInTheDocument();
+      expect(within(agenda).getByRole("button", { name: /Show HN post/ })).toBeInTheDocument();
+      expect(within(agenda).getByRole("button", { name: /Email: Invite/ })).toBeInTheDocument();
+      expect(within(agenda).getAllByRole("heading", { level: 3 })).toHaveLength(1);
+      fireEvent.click(within(agenda).getByRole("button", { name: /Show HN post/ }));
+      expect(await screen.findByTestId("gtm-item-dialog")).toBeInTheDocument();
+    } finally {
+      window.matchMedia = realMatchMedia;
+    }
   });
 
   it("reschedules on a drag, on the revision on screen", async () => {

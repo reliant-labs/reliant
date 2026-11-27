@@ -40,6 +40,11 @@ describe("PositioningView", () => {
     expect(screen.getByText("Hosting for people who ship.")).toBeInTheDocument();
     expect(await screen.findByText("1 of 3 verified by a person. Claim checks count only verified facts.")).toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: /^Verify:/ })).toHaveLength(2);
+    // A fact's source opens in a new tab, without an opener.
+    const source = screen.getByRole("link", { name: "Docs" });
+    expect(source).toHaveAttribute("href", "https://docs.example/deploy");
+    expect(source).toHaveAttribute("target", "_blank");
+    expect(source).toHaveAttribute("rel", "noopener noreferrer");
   });
 
   it("saves an edit on the revision on screen", async () => {
