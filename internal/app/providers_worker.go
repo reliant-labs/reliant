@@ -975,7 +975,9 @@ func WorkerServerActions(pipeline *configv1.PipelineConfig) serveraction.Config 
 }
 
 // workerServerActionHandlers binds the pipeline's server actions this
-// worker implements: the pr.* actions (internal/pipeline/practions), over
+// worker implements: the pr.* actions (internal/pipeline/practions), with
+// pr.verdict's approve check and reliant/pipeline.request_grant@1 over the
+// capability grants (internal/pipeline/grants), over
 // the worker's database, GitHub through the integration catalog with the
 // run's credentials (writes recorded in the write ledger, as an action
 // node's are), and the Inbox as async questions.
@@ -984,18 +986,27 @@ func workerServerActionHandlers(d TemporalWorkerDeps, creds httpaction.Credentia
 	if d.WriteLedger != nil {
 		runner = d.WriteLedger.Wrap(runner)
 	}
+	capabilityGrants, err := pipelineGrants(d.DB)
+	if err != nil {
+		return nil, err
+	}
 	actions, err := practions.New(practions.Deps{
 		Store:  d.DB,
 		GitHub: &practions.CatalogGitHub{Catalog: catalog.MustBuiltin(), Runner: runner, Credentials: creds},
 		Inbox: practions.QuestionInbox{
 			Writer: questions.NewFromRepo(d.DB), Reader: store.NewQuestionExtStore(d.DB.ORM()), Refetch: d.DB.UpdateWriter(),
 		},
+		Grants: capabilityGrants,
 		Logger: slog.Default(),
 	})
 	if err != nil {
 		return nil, err
 	}
-	return actions.Handlers(), nil
+	handlers := actions.Handlers()
+	for name, h := range capabilityGrants.Handlers() {
+		handlers[name] = h
+	}
+	return handlers, nil
 }
 
 // NewTemporalWorker is the Temporal worker on the shared task queue
