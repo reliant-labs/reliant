@@ -129,6 +129,9 @@ func unmarshalWorkflow(node *yaml.Node) (*reliantv1.Workflow, error) {
 		case "concurrency":
 			wf.Concurrency, err = unmarshalWorkflowConcurrency(val)
 
+		case "timeout":
+			wf.Timeout, err = unmarshalCelString(val)
+
 		case "attention":
 			if wf.Attention != nil {
 				return nil, fmt.Errorf("workflow.attention is set twice")
@@ -442,6 +445,10 @@ func marshalWorkflow(wf *reliantv1.Workflow) (*yaml.Node, error) {
 			return nil, err
 		}
 		m.Content = append(m.Content, scalarNode("concurrency", ""), policy)
+	}
+	// timeout — the run's bound (Workflow.timeout); unset means none.
+	if tn, _ := marshalCelString(wf.Timeout); tn != nil {
+		m.Content = append(m.Content, scalarNode("timeout", ""), tn)
 	}
 	if wf.Attention != nil {
 		policy, err := marshalWorkflowAttention(wf.Attention)

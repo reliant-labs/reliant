@@ -7,7 +7,7 @@
 //   node scripts/pack-desktop.js <mac|linux|win|host> <config> <publish>
 //
 //   config   an electron-builder config in electron/: electron-builder.js
-//            (the latest channel) or electron-builder.alpha.js (alpha)
+//            (the latest channel, the only one published)
 //   publish  electron-builder's --publish: always | never | onTag | onTagOrDraft
 //   host     the platform this machine packages natively (darwin -> mac,
 //            linux -> linux, win32 -> win): what forge's build passes, because

@@ -1273,7 +1273,8 @@ export function createFixtureApi(options: FixtureOptions = {}): ObservabilityApi
         if (!detail) throw new ConnectError(`metric "${req.name}" has no data in this window`, Code.NotFound);
         return detail;
       }),
-    listMetricExemplars: (req) => call("ListMetricExemplars", req, () => fixtureMetricExemplars(req.window.endMs, req.limit)),
+    // 0 is the server default (20), as the wire sends an unset limit.
+    listMetricExemplars: (req) => call("ListMetricExemplars", req, () => fixtureMetricExemplars(req.window.endMs, req.limit || undefined)),
     listAttributeValues: (req) =>
       call("ListAttributeValues", req, () => {
         const values: AttributeValueCount[] = valuesOf(req.key, req)

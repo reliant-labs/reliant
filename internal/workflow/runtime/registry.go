@@ -506,8 +506,9 @@ const (
 	//
 	// One constant, referenced by both the dispatch site and the reporter, is
 	// what keeps the reported denominator honest: change the ladder and the
-	// badge follows, with no second literal to forget.
-	stepActivityMaxAttempts int32 = 5
+	// badge follows, with no second literal to forget. The value is shared
+	// with activities through types.StepActivityMaxAttempts.
+	stepActivityMaxAttempts = activitytypes.StepActivityMaxAttempts
 
 	// routerActivityStartToClose is the router's own CallLLM dispatch timeout
 	// (router_executor.go). The router shares activityHeartbeatTimeout with
@@ -1490,6 +1491,7 @@ func resolveMaxAttempts(info activity.Info) int32 {
 	case "SaveMessage":
 		return inlineSaveMessageMaxAttempts
 	case PreflightRequirementsActivityName,
+		MachinePreflightActivityName,
 		"WorkflowError",
 		"ValidateThreadOwnership",
 		"WorkflowStatus",

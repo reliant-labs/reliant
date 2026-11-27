@@ -8,21 +8,21 @@
  * needs it).
  */
 
-import { useState, type ComponentProps, type ReactElement } from "react";
+import { useRef, useState, type ComponentProps, type ReactElement } from "react";
 import { render, type RenderResult } from "@testing-library/react";
 import { vi } from "vitest";
 
 import type { DomainsState } from "@/hooks/forge-domain-queries";
 import { createTestQueryClient } from "@/test/renderWithQuery";
 import { ObservabilityApiProvider, type ObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
+import { observabilityFixtureTransport } from "@/test/observabilityFixtures";
 import { ReleasesApiProvider } from "@/services/forge/ReleasesApiContext";
 import { RepoMetaProvider, type RepoMetaApi } from "@/services/forge/RepoMetaContext";
-import { TransportScopeProvider } from "@/lib/transportScope";
+import { createTransportScope, TransportScopeProvider } from "@/lib/transportScope";
 
 import { createReleasesFixtureApi } from "../../Releases/__fixtures__/releaseFixtures";
 import { fixtureVulnerabilityApi } from "../../Security/fixtures";
-import { vulnerabilityScope } from "../../Security/__tests__/securityTestUtils";
-import type { VulnerabilityReads } from "../../Security/vulnService";
+import { vulnerabilityTransport, type VulnerabilityReads } from "../../Security/vulnService";
 import { OverviewHome, type HostedByEnv, type OverviewRollback, type OverviewSearch } from "../OverviewHome";
 import { WorkloadDetail, type HostedObservation, type WorkloadActions, type WorkloadDetailSearch } from "../WorkloadDetail";
 import type { StripEnv } from "../workloadModel";
@@ -40,7 +40,15 @@ export function WorkloadsProviders({
   vulns?: VulnerabilityReads;
   children: ReactElement;
 }) {
-  const [scope] = useState(() => vulnerabilityScope(vulns, createTestQueryClient()));
+  const obsRef = useRef(obs);
+  obsRef.current = obs;
+  const [scope] = useState(() =>
+    createTransportScope({
+      id: "workloads-fixtures",
+      transport: vulnerabilityTransport(vulns, observabilityFixtureTransport(() => obsRef.current, Date.now())),
+      queryClient: createTestQueryClient(),
+    })
+  );
   return (
     <TransportScopeProvider scope={scope}>
       <ObservabilityApiProvider api={obs}>

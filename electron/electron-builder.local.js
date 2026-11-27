@@ -22,7 +22,7 @@ const common = require('./electron-builder.common.js');
 //
 // NOT a release artifact: unsigned and un-notarized, so it will not pass
 // Gatekeeper on any machine but the one that built it. Release builds continue
-// to use electron-builder.js / .alpha.js.
+// to use electron-builder.js.
 const { afterSign: _afterSign, ...commonWithoutAfterSign } = common;
 
 /**

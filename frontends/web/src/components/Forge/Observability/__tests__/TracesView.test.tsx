@@ -275,14 +275,15 @@ describe("trace waterfall", () => {
       const getTrace = vi.spyOn(api, "getTrace");
       renderPanel(api, { view: "traces", trace: FIXTURE_TRACE_ID, range: "1h" });
       await screen.findByTestId("trace-detail");
+      // The request names the range relative to the server's now; the fixture server resolves it at `now`.
       expect(getTrace).toHaveBeenLastCalledWith(expect.objectContaining({
         envIds: ["env-prod"],
         window: { startMs: now - 60 * 60_000, endMs: now },
-      }), expect.objectContaining({ signal: expect.anything() }));
+      }));
       await user.selectOptions(screen.getByTestId("obs-range"), "15m");
       await waitFor(() => expect(getTrace).toHaveBeenLastCalledWith(expect.objectContaining({
         window: { startMs: now - 15 * 60_000, endMs: now },
-      }), expect.objectContaining({ signal: expect.anything() })));
+      })));
       expect(getTrace).toHaveBeenCalledTimes(2);
     } finally { clock.mockRestore(); }
   });

@@ -6,8 +6,8 @@
  * each renders the shop pack's data under a scope over `createShopTransport()`,
  * while the module transport records every call and refuses it.
  *
- * The family is these pages' reads (the TestApi, StorageBrowserApi and
- * IdentityApi defaults, the generated VulnerabilityService hooks, and the
+ * The family is these pages' reads (the TestApi and StorageBrowserApi
+ * defaults, the generated VulnerabilityService and Identity hooks, and the
  * coverage source fetch): none may reach the module transport. Reads outside the family
  * (forge's, the generated hooks') move onto the scope in their own PRs, and
  * P4.3's enumeration test holds the whole tour to zero; the app-wide reads a
@@ -50,7 +50,6 @@ import { setTransport, transport as appTransport } from "@/lib/connect";
 import { queryClient as appQueryClient } from "@/lib/query-client";
 import { createTransportScope, TransportScopeProvider } from "@/lib/transportScope";
 import type { LiveEnv } from "@/services/forge/live";
-import { controlPlaneIdentityApi, identityApiOf } from "@/services/controlPlane/identity/IdentityApiContext";
 import { controlPlaneStorageBrowserApi, storageBrowserApiOf } from "@/services/controlPlane/storageBrowser/StorageBrowserApiContext";
 import { controlPlaneTestApi, testApiOf } from "@/services/controlPlane/tests/TestApiContext";
 import { coverageSourceFetchOf } from "@/services/coverageSource/CoverageSourceContext";
@@ -203,13 +202,11 @@ describe("the scoped context defaults", () => {
   it("are the app's constants on the app's transport, and one api per scope transport", () => {
     expect(testApiOf(appTransport)).toBe(controlPlaneTestApi);
     expect(storageBrowserApiOf(appTransport)).toBe(controlPlaneStorageBrowserApi);
-    expect(identityApiOf(appTransport)).toBe(controlPlaneIdentityApi);
     expect(coverageSourceFetchOf(appTransport)).toBe(fetchCoverageSource);
     const shop = createShopTransport();
     for (const [of, app] of [
       [testApiOf, controlPlaneTestApi],
       [storageBrowserApiOf, controlPlaneStorageBrowserApi],
-      [identityApiOf, controlPlaneIdentityApi],
     ] as const) {
       const api = (of as (t: Transport) => object)(shop);
       expect((of as (t: Transport) => object)(shop)).toBe(api);
