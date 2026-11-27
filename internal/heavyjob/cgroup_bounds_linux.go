@@ -4,6 +4,9 @@
 package heavyjob
 
 import (
+	"crypto/sha256"
+	"encoding/json"
+	"fmt"
 	"math"
 	"os"
 	"path/filepath"
@@ -34,15 +37,16 @@ import (
 //
 // So, unlike cpu.max, these are files of the cgroup the wrapper runs in. That
 // is safe because they are only ever lowered: a value already at or below the
-// bound (one the daemon's operator set, or a nested wrapper's) is left alone,
-// and release restores only a value still as the wrapper wrote it. Only in a
+// bound (one the daemon's operator set, or a nested wrapper's) is left alone.
+// Holders share the originals under the cgroup lock; only the last release
+// restores a value, and only if it is still as a wrapper wrote it. Only in a
 // daemon command cgroup, for the reason cpuCap is: one that holds this
 // command line and nothing else. Where a file is missing (no cpu or memory
 // controller enabled for the command cgroups, cgroup v1, not Linux) or not
 // writable, that bound is not set, and nothing says so on the command's
 // output: a missing limiter is not the command's failure.
 type cgroupBounds struct {
-	// dir is C; "" when nothing was lowered.
+	// dir is C; "" when no holder was registered or after release.
 	dir string
 	// lowered is each file written, with the value found and the value it
 	// read back after the write (the kernel rounds memory.high to a page).
@@ -73,6 +77,10 @@ func lowerBoundsAt(selfCgroup, fsRoot string, b bounds) *cgroupBounds {
 		return c
 	}
 	defer unlock()
+	state, path, err := readBoundsState(dir)
+	if err != nil {
+		return c
+	}
 	c.dir = dir
 	if b.weight > 0 {
 		c.lower("cpu.weight", uint64(b.weight))
@@ -80,7 +88,58 @@ func lowerBoundsAt(selfCgroup, fsRoot string, b bounds) *cgroupBounds {
 	if b.memoryHigh > 0 {
 		c.lower("memory.high", b.memoryHigh)
 	}
+	for _, f := range c.lowered {
+		if original, ok := state.Files[f.name]; ok {
+			state.Files[f.name] = [2]string{original[0], f.now}
+		} else {
+			state.Files[f.name] = [2]string{f.was, f.now}
+		}
+	}
+	state.Holders++
+	if err := writeBoundsState(path, state); err != nil {
+		for _, f := range c.lowered {
+			_ = writeCgroupFile(dir, f.name, f.was)
+		}
+		c.dir = ""
+	}
 	return c
+}
+
+// The flock protects both the interfaces and this cross-process holder count.
+// State lives outside cgroupfs, which cannot contain ordinary files.
+type boundsState struct {
+	Holders int
+	Files   map[string][2]string
+}
+
+func readBoundsState(dir string) (boundsState, string, error) {
+	state := boundsState{Files: make(map[string][2]string)}
+	root := filepath.Join(os.TempDir(), fmt.Sprintf("reliant-heavy-bounds-%d", os.Getuid()))
+	if err := os.MkdirAll(root, 0o700); err != nil {
+		return state, "", err
+	}
+	path := filepath.Join(root, fmt.Sprintf("%x.json", sha256.Sum256([]byte(dir))))
+	data, err := os.ReadFile(path)
+	if os.IsNotExist(err) {
+		return state, path, nil
+	}
+	if err != nil {
+		return state, path, err
+	}
+	err = json.Unmarshal(data, &state)
+	return state, path, err
+}
+
+func writeBoundsState(path string, state boundsState) error {
+	data, err := json.Marshal(state)
+	if err != nil {
+		return err
+	}
+	// Rename under the lock so an interrupted write cannot truncate the ledger.
+	if err := os.WriteFile(path+".tmp", data, 0o600); err != nil {
+		return err
+	}
+	return os.Rename(path+".tmp", path)
 }
 
 // lower writes want to dir's interface file name when it reads higher ("max"
@@ -119,18 +178,33 @@ func cgroupValue(s string) (uint64, bool) {
 // changed it since. Best effort, and harmless twice: C is the daemon's, and
 // removed with the command.
 func (c *cgroupBounds) release() {
-	if c.dir == "" || len(c.lowered) == 0 {
+	if c.dir == "" {
 		return
 	}
-	if unlock, err := lockCgroup(c.dir); err == nil {
-		defer unlock()
+	unlock, err := lockCgroup(c.dir)
+	if err != nil {
+		return
 	}
-	for _, f := range c.lowered {
-		data, err := os.ReadFile(filepath.Join(c.dir, f.name))
-		if err != nil || strings.TrimSpace(string(data)) != f.now {
+	defer unlock()
+	state, path, err := readBoundsState(c.dir)
+	if err != nil || state.Holders < 1 {
+		return
+	}
+	state.Holders--
+	if state.Holders > 0 {
+		if writeBoundsState(path, state) == nil {
+			c.dir = ""
+		}
+		return
+	}
+	for name, values := range state.Files {
+		data, err := os.ReadFile(filepath.Join(c.dir, name))
+		if err != nil || strings.TrimSpace(string(data)) != values[1] {
 			continue
 		}
-		_ = writeCgroupFile(c.dir, f.name, f.was)
+		_ = writeCgroupFile(c.dir, name, values[0])
 	}
+	_ = os.Remove(path)
+	c.dir = ""
 	c.lowered = nil
 }

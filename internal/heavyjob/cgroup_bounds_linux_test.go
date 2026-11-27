@@ -206,14 +206,27 @@ func TestLowerBounds_OnARealCommandCgroup(t *testing.T) {
 		t.Skip("no cpu.weight: the cpu controller is not enabled for command cgroups")
 	}
 	high, highErr := os.ReadFile(filepath.Join(dir, "memory.high"))
+	for name, value := range map[string][]byte{"cpu.weight": weight, "memory.high": high} {
+		if value != nil {
+			if err := writeCgroupFile(dir, name, strings.TrimSpace(string(value))); err != nil {
+				t.Skipf("%s is not writable: %v", name, err)
+			}
+		}
+	}
 	// A bound far above what this test uses, so lowering it slows nothing.
 	c := lowerBounds(bounds{weight: 1, memoryHigh: 1 << 40})
+	t.Cleanup(c.release)
 	if got := readTrim(t, filepath.Join(dir, "cpu.weight")); got != "1" && strings.TrimSpace(string(weight)) != "1" {
 		t.Errorf("cpu.weight %q, want 1", got)
 	}
 	if highErr == nil {
-		if got := readTrim(t, filepath.Join(dir, "memory.high")); got != "1099511627776" {
-			t.Errorf("memory.high %q, want 1 TiB", got)
+		want := "1099511627776"
+		original := strings.TrimSpace(string(high))
+		if n, ok := cgroupValue(original); ok && n < 1<<40 {
+			want = original
+		}
+		if got := readTrim(t, filepath.Join(dir, "memory.high")); got != want {
+			t.Errorf("memory.high %q, want %s", got, want)
 		}
 	}
 	c.release()
