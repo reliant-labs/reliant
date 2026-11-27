@@ -1,0 +1,34 @@
+{
+  "name": "reliant-forge",
+  "version": "1.12.0",
+  "displayName": "Reliant Forge",
+  "description": "Deploy what your coding agent built, and let it prove the release works. Deploys need no account. The Forge MCP server and a deploy skill: put a Vite, Next.js or Dockerfile app live from Claude Code and get a URL plus a claim link; signed in, check whether the release is healthy.",
+  "author": {
+    "name": "Reliant Labs",
+    "url": "https://reliantlabs.io"
+  },
+  "homepage": "https://reliantlabs.io",
+  "repository": "https://github.com/reliant-labs/forge",
+  "license": "Apache-2.0",
+  "keywords": [
+    "deploy",
+    "deployment",
+    "hosting",
+    "static-site-hosting",
+    "no-signup",
+    "claimable",
+    "mcp",
+    "forge",
+    "reliant",
+    "guardrails",
+    "vite",
+    "nextjs",
+    "docker",
+    "postgres"
+  ],
+  "icon": "./assets/logo.png",
+  "documentationUrl": "https://docs.reliantlabs.io/forge/overview",
+  "supportUrl": "https://reliantlabs.io",
+  "privacyPolicyUrl": "https://reliantlabs.io/privacy",
+  "termsOfServiceUrl": "https://reliantlabs.io/terms"
+}

@@ -1,0 +1,21 @@
+{
+  "site": "https://docs.example",
+  "expect": {"indexing": "index"},
+  "pages": [
+    {"url": "https://docs.example/", "status": 200, "raw": "page.html"},
+    {"url": "https://docs.example/drafts/", "status": 200, "raw": "noindex.html"},
+    {"url": "https://docs.example/private/secret", "status": 200, "raw": "page.html"}
+  ],
+  "robots": {"url": "https://docs.example/robots.txt", "status": 200, "file": "robots.txt"},
+  "sitemaps": [
+    {"url": "https://docs.example/sitemap_index.xml", "status": 200, "file": "sitemap_index.xml"},
+    {"url": "https://docs.example/sitemap-pages.xml", "status": 200, "file": "sitemap-pages.xml"},
+    {"url": "https://docs.example/sitemap-broken.xml", "status": 200, "file": "broken.xml"},
+    {"url": "https://docs.example/sitemap-feed.xml", "status": 200, "file": "feed.xml"},
+    {"url": "https://docs.example/sitemap-gone.xml", "status": 404}
+  ],
+  "link_results": [
+    {"url": "https://docs.example/removed/", "status": 404},
+    {"url": "https://docs.example/flaky/", "status": 503}
+  ]
+}

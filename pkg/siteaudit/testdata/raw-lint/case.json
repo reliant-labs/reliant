@@ -1,0 +1,9 @@
+{
+  "site": "https://lint.example",
+  "raw": true,
+  "pages": [
+    {"url": "https://lint.example/", "raw": "index.html", "rendered": "index.html", "header": {"X-Robots-Tag": ["noindex"]}}
+  ],
+  "robots": {"url": "https://lint.example/robots.txt", "status": 500},
+  "link_results": [{"url": "https://lint.example/missing", "status": 404}]
+}

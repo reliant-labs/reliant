@@ -1,0 +1,413 @@
+{
+  "rules_version": "1",
+  "site": {
+    "url": "https://docs.example",
+    "host": "docs.example",
+    "score": {
+      "seo": 54,
+      "a11y": null
+    },
+    "indexing": {
+      "expected": "index",
+      "actual": "index"
+    },
+    "robots": {
+      "status": "ok",
+      "problems": 4
+    },
+    "sitemap": {
+      "files": 2,
+      "urls": 7,
+      "broken": 3
+    }
+  },
+  "routes": [
+    {
+      "route": "/",
+      "url": "https://docs.example/",
+      "status": 200,
+      "score": {
+        "seo": 88,
+        "a11y": null
+      },
+      "head": {
+        "title": "Docs Example — the handbook",
+        "description": "The Docs Example handbook: install, configure and operate the example platform.",
+        "lang": "en",
+        "viewport": "width=device-width, initial-scale=1",
+        "indexable": true,
+        "og_complete": false
+      }
+    },
+    {
+      "route": "/drafts/",
+      "url": "https://docs.example/drafts/",
+      "status": 200,
+      "score": {
+        "seo": 37,
+        "a11y": null
+      },
+      "head": {
+        "title": "Drafts — Docs Example",
+        "description": "Unpublished drafts of the Docs Example handbook, not for search engines.",
+        "lang": "en",
+        "robots": "noindex, nofollow",
+        "viewport": "width=device-width, initial-scale=1",
+        "indexable": false,
+        "og_complete": false
+      }
+    },
+    {
+      "route": "/private/secret",
+      "url": "https://docs.example/private/secret",
+      "status": 200,
+      "score": {
+        "seo": 37,
+        "a11y": null
+      },
+      "head": {
+        "title": "Docs Example — the handbook",
+        "description": "The Docs Example handbook: install, configure and operate the example platform.",
+        "lang": "en",
+        "viewport": "width=device-width, initial-scale=1",
+        "indexable": false,
+        "og_complete": false
+      }
+    }
+  ],
+  "findings": [
+    {
+      "code": "robots_invalid",
+      "severity": "warn",
+      "category": "seo",
+      "ref": "line 2",
+      "evidence": {
+        "line": "Disallow: /tmp/",
+        "problem": "disallow before any user-agent: crawlers ignore it"
+      },
+      "fix": "Fix the robots.txt line; crawlers ignore lines they cannot parse."
+    },
+    {
+      "code": "robots_invalid",
+      "severity": "warn",
+      "category": "seo",
+      "ref": "line 5",
+      "evidence": {
+        "line": "Disalow: /typo/",
+        "problem": "unknown directive \"disalow\""
+      },
+      "fix": "Fix the robots.txt line; crawlers ignore lines they cannot parse."
+    },
+    {
+      "code": "robots_invalid",
+      "severity": "warn",
+      "category": "seo",
+      "ref": "line 7",
+      "evidence": {
+        "line": "Allow private",
+        "problem": "not a directive: expected \"\u003cfield\u003e: \u003cvalue\u003e\""
+      },
+      "fix": "Fix the robots.txt line; crawlers ignore lines they cannot parse."
+    },
+    {
+      "code": "robots_invalid",
+      "severity": "warn",
+      "category": "seo",
+      "ref": "line 8",
+      "evidence": {
+        "line": "Sitemap: /sitemap_index.xml",
+        "problem": "sitemap must be an absolute http(s) URL"
+      },
+      "fix": "Fix the robots.txt line; crawlers ignore lines they cannot parse."
+    },
+    {
+      "code": "robots_no_sitemap",
+      "severity": "info",
+      "category": "seo",
+      "ref": "/robots.txt",
+      "fix": "Add \"Sitemap: https://\u003chost\u003e/sitemap.xml\" to robots.txt."
+    },
+    {
+      "code": "sitemap_host_mismatch",
+      "severity": "warn",
+      "category": "seo",
+      "ref": "https://docs.example/sitemap-pages.xml",
+      "evidence": {
+        "example": "https://staging.docs.example/",
+        "expected_host": "docs.example",
+        "urls": "2"
+      },
+      "fix": "List this site's own URLs: search engines ignore sitemap URLs on another host."
+    },
+    {
+      "code": "sitemap_invalid",
+      "severity": "warn",
+      "category": "seo",
+      "ref": "https://docs.example/sitemap-broken.xml",
+      "evidence": {
+        "error": "sitemap XML: XML syntax error on line 4: element \u003curl\u003e closed by \u003c/urlset\u003e"
+      },
+      "fix": "Make the sitemap well-formed XML with a \u003curlset\u003e or \u003csitemapindex\u003e root."
+    },
+    {
+      "code": "sitemap_invalid",
+      "severity": "warn",
+      "category": "seo",
+      "ref": "https://docs.example/sitemap-feed.xml",
+      "evidence": {
+        "error": "not a sitemap: the root element must be \u003curlset\u003e or \u003csitemapindex\u003e"
+      },
+      "fix": "Make the sitemap well-formed XML with a \u003curlset\u003e or \u003csitemapindex\u003e root."
+    },
+    {
+      "code": "sitemap_unreachable",
+      "severity": "warn",
+      "category": "seo",
+      "ref": "https://docs.example/sitemap-gone.xml",
+      "evidence": {
+        "status": "404"
+      },
+      "fix": "Serve the sitemap robots.txt names, or remove its Sitemap: line."
+    },
+    {
+      "code": "sitemap_url_blocked",
+      "severity": "warn",
+      "category": "seo",
+      "ref": "https://docs.example/private/secret",
+      "evidence": {
+        "sitemap": "https://docs.example/sitemap-pages.xml"
+      },
+      "fix": "Remove the URL from the sitemap, or allow it in robots.txt."
+    },
+    {
+      "code": "sitemap_url_broken",
+      "severity": "warn",
+      "category": "seo",
+      "ref": "https://docs.example/flaky/",
+      "evidence": {
+        "sitemap": "https://docs.example/sitemap-pages.xml",
+        "status": "503"
+      },
+      "fix": "Remove the URL from the sitemap or serve it: it answers with an error."
+    },
+    {
+      "code": "sitemap_url_broken",
+      "severity": "warn",
+      "category": "seo",
+      "ref": "https://docs.example/removed/",
+      "evidence": {
+        "sitemap": "https://docs.example/sitemap-pages.xml",
+        "status": "404"
+      },
+      "fix": "Remove the URL from the sitemap or serve it: it answers with an error."
+    },
+    {
+      "code": "sitemap_url_invalid",
+      "severity": "warn",
+      "category": "seo",
+      "ref": "/relative/page",
+      "evidence": {
+        "sitemap": "https://docs.example/sitemap-pages.xml"
+      },
+      "fix": "List absolute http(s) URLs in \u003cloc\u003e."
+    },
+    {
+      "code": "sitemap_url_noindex",
+      "severity": "warn",
+      "category": "seo",
+      "ref": "https://docs.example/drafts/",
+      "evidence": {
+        "sitemap": "https://docs.example/sitemap-pages.xml"
+      },
+      "fix": "Remove the noindex page from the sitemap, or drop its noindex."
+    },
+    {
+      "code": "canonical_missing",
+      "severity": "warn",
+      "category": "seo",
+      "route": "/",
+      "ref": "canonical",
+      "fix": "Add \u003clink rel=\"canonical\" href=\"https://\u003cprod host\u003e/\u003cpath\u003e\"\u003e naming the page's preferred URL."
+    },
+    {
+      "code": "og_tag_missing",
+      "severity": "warn",
+      "category": "seo",
+      "route": "/",
+      "ref": "og:description",
+      "fix": "Add the Open Graph tag to the served HTML so link previews in Slack, X, LinkedIn and Facebook show the page."
+    },
+    {
+      "code": "og_tag_missing",
+      "severity": "warn",
+      "category": "seo",
+      "route": "/",
+      "ref": "og:image",
+      "fix": "Add the Open Graph tag to the served HTML so link previews in Slack, X, LinkedIn and Facebook show the page."
+    },
+    {
+      "code": "og_tag_missing",
+      "severity": "warn",
+      "category": "seo",
+      "route": "/",
+      "ref": "og:title",
+      "fix": "Add the Open Graph tag to the served HTML so link previews in Slack, X, LinkedIn and Facebook show the page."
+    },
+    {
+      "code": "og_tag_missing",
+      "severity": "info",
+      "category": "seo",
+      "route": "/",
+      "ref": "og:type",
+      "fix": "Add the Open Graph tag to the served HTML so link previews in Slack, X, LinkedIn and Facebook show the page."
+    },
+    {
+      "code": "og_tag_missing",
+      "severity": "info",
+      "category": "seo",
+      "route": "/",
+      "ref": "og:url",
+      "fix": "Add the Open Graph tag to the served HTML so link previews in Slack, X, LinkedIn and Facebook show the page."
+    },
+    {
+      "code": "twitter_card_missing",
+      "severity": "info",
+      "category": "seo",
+      "route": "/",
+      "ref": "twitter:card",
+      "fix": "Add \u003cmeta name=\"twitter:card\" content=\"summary_large_image\"\u003e for a large preview on X."
+    },
+    {
+      "code": "canonical_missing",
+      "severity": "warn",
+      "category": "seo",
+      "route": "/drafts/",
+      "ref": "canonical",
+      "fix": "Add \u003clink rel=\"canonical\" href=\"https://\u003cprod host\u003e/\u003cpath\u003e\"\u003e naming the page's preferred URL."
+    },
+    {
+      "code": "indexing_mismatch",
+      "severity": "error",
+      "category": "seo",
+      "route": "/drafts/",
+      "ref": "meta_robots",
+      "evidence": {
+        "expected": "index",
+        "robots": "noindex, nofollow"
+      },
+      "fix": "Remove the noindex (meta robots, X-Robots-Tag) or the robots.txt Disallow: this host is meant to be in search results."
+    },
+    {
+      "code": "og_tag_missing",
+      "severity": "warn",
+      "category": "seo",
+      "route": "/drafts/",
+      "ref": "og:description",
+      "fix": "Add the Open Graph tag to the served HTML so link previews in Slack, X, LinkedIn and Facebook show the page."
+    },
+    {
+      "code": "og_tag_missing",
+      "severity": "warn",
+      "category": "seo",
+      "route": "/drafts/",
+      "ref": "og:image",
+      "fix": "Add the Open Graph tag to the served HTML so link previews in Slack, X, LinkedIn and Facebook show the page."
+    },
+    {
+      "code": "og_tag_missing",
+      "severity": "warn",
+      "category": "seo",
+      "route": "/drafts/",
+      "ref": "og:title",
+      "fix": "Add the Open Graph tag to the served HTML so link previews in Slack, X, LinkedIn and Facebook show the page."
+    },
+    {
+      "code": "og_tag_missing",
+      "severity": "info",
+      "category": "seo",
+      "route": "/drafts/",
+      "ref": "og:type",
+      "fix": "Add the Open Graph tag to the served HTML so link previews in Slack, X, LinkedIn and Facebook show the page."
+    },
+    {
+      "code": "og_tag_missing",
+      "severity": "info",
+      "category": "seo",
+      "route": "/drafts/",
+      "ref": "og:url",
+      "fix": "Add the Open Graph tag to the served HTML so link previews in Slack, X, LinkedIn and Facebook show the page."
+    },
+    {
+      "code": "twitter_card_missing",
+      "severity": "info",
+      "category": "seo",
+      "route": "/drafts/",
+      "ref": "twitter:card",
+      "fix": "Add \u003cmeta name=\"twitter:card\" content=\"summary_large_image\"\u003e for a large preview on X."
+    },
+    {
+      "code": "blocked_by_robots",
+      "severity": "info",
+      "category": "seo",
+      "route": "/private/secret",
+      "ref": "robots_txt",
+      "fix": "robots.txt disallows this page; remove the Disallow if it should be in search results."
+    },
+    {
+      "code": "canonical_missing",
+      "severity": "warn",
+      "category": "seo",
+      "route": "/private/secret",
+      "ref": "canonical",
+      "fix": "Add \u003clink rel=\"canonical\" href=\"https://\u003cprod host\u003e/\u003cpath\u003e\"\u003e naming the page's preferred URL."
+    },
+    {
+      "code": "og_tag_missing",
+      "severity": "warn",
+      "category": "seo",
+      "route": "/private/secret",
+      "ref": "og:description",
+      "fix": "Add the Open Graph tag to the served HTML so link previews in Slack, X, LinkedIn and Facebook show the page."
+    },
+    {
+      "code": "og_tag_missing",
+      "severity": "warn",
+      "category": "seo",
+      "route": "/private/secret",
+      "ref": "og:image",
+      "fix": "Add the Open Graph tag to the served HTML so link previews in Slack, X, LinkedIn and Facebook show the page."
+    },
+    {
+      "code": "og_tag_missing",
+      "severity": "warn",
+      "category": "seo",
+      "route": "/private/secret",
+      "ref": "og:title",
+      "fix": "Add the Open Graph tag to the served HTML so link previews in Slack, X, LinkedIn and Facebook show the page."
+    },
+    {
+      "code": "og_tag_missing",
+      "severity": "info",
+      "category": "seo",
+      "route": "/private/secret",
+      "ref": "og:type",
+      "fix": "Add the Open Graph tag to the served HTML so link previews in Slack, X, LinkedIn and Facebook show the page."
+    },
+    {
+      "code": "og_tag_missing",
+      "severity": "info",
+      "category": "seo",
+      "route": "/private/secret",
+      "ref": "og:url",
+      "fix": "Add the Open Graph tag to the served HTML so link previews in Slack, X, LinkedIn and Facebook show the page."
+    },
+    {
+      "code": "twitter_card_missing",
+      "severity": "info",
+      "category": "seo",
+      "route": "/private/secret",
+      "ref": "twitter:card",
+      "fix": "Add \u003cmeta name=\"twitter:card\" content=\"summary_large_image\"\u003e for a large preview on X."
+    }
+  ]
+}

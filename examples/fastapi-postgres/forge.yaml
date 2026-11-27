@@ -1,0 +1,7 @@
+# Forge project manifest — see https://github.com/reliant-labs/forge.
+# An adopted app: it builds from its own Dockerfile, and deploy/kcl/
+# declares what it runs (workloads.k) and where (<env>/main.k). There is
+# no Go module, so there is no module_path. `forge skill load adopt/deploy`.
+
+name: fastapi-postgres
+forge_version: v1.11.0

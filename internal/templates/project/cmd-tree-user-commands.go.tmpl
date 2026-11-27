@@ -1,0 +1,18 @@
+// yours: scaffolded once, never touched again — forge will not overwrite this file
+// Add short-lived subcommands (reports, backfills, admin jobs) here, not in
+// the assembled cmd package: that package imports internal/app, so importing
+// it would make these commands' tests depend on the whole server graph.
+// Depend on the stores or clients you need, and take any injected inputs as
+// parameters you own. Use cmd.OutOrStdout() and cmd.ErrOrStderr() for output.
+// For typed config, use config.RegisterFieldFlags for only the flags you need.
+// Depth: `forge skill load binaries/commands`.
+package usercmd
+
+import "github.com/spf13/cobra"
+
+// Commands builds the user subcommands to add to the binary's command tree.
+// It returns nil until you add a command. Return fresh commands on each call
+// so their flags and state belong to the tree they are added to.
+func Commands() []*cobra.Command {
+	return nil
+}

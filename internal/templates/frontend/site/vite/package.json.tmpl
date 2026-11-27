@@ -1,0 +1,40 @@
+{
+  "name": "{{.ProjectName}}",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.12"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@bufbuild/protobuf": "{{.Protobuf}}",
+    "@connectrpc/connect": "{{.Connect}}",
+    "@hyperdx/otel-web": "{{.HyperDXOtelWeb}}",
+    "@opentelemetry/api": "{{.OTelAPI}}",
+    "@reliantlabs/forge-web-runtime": "{{.WebRuntimeRange}}",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "rrweb": "{{.RRWeb}}"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.25.0",
+    "@tailwindcss/vite": "^4.1.0",
+    "@types/node": "^22.14.0",
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "@vitejs/plugin-react": "^6.0.0",
+    "eslint": "^9.25.0",
+    "eslint-plugin-jsx-a11y": "^6.10.0",
+    "tailwindcss": "^4.1.0",
+    "typescript": "^5.8.0",
+    "typescript-eslint": "^8.30.0",
+    "vite": "^8.0.0"
+  }
+}

@@ -1,0 +1,64 @@
+# OpenSSF Scorecard: scores forge's supply-chain practices (branch
+# protection, pinned dependencies, token permissions, vulnerabilities,
+# signed releases, ...) and publishes the result, which the README's
+# Scorecard badge and https://scorecard.dev/viewer/?uri=github.com/reliant-labs/forge
+# read. The SARIF also lands in the repository's code-scanning alerts.
+#
+# WHEN: weekly, on a push to main, and when branch protection changes (the
+# trigger Scorecard's own template uses, so that check stays current). One
+# ~1-minute ubuntu job, never part of any gate: nothing requires it.
+#
+# SHAPE: publish_results makes scorecard.dev verify this workflow, and it
+# refuses one with workflow-level write permissions, a top-level env or
+# defaults, containers or services, or steps beyond its allowlist. Keep it to
+# these steps. Third-party actions are pinned by digest: the job holds an OIDC
+# token (id-token: write), which publishing needs.
+
+name: Scorecard
+
+on:
+  branch_protection_rule:
+  schedule:
+    - cron: "17 6 * * 1"
+  push:
+    branches: [main]
+
+permissions: read-all
+
+# ci.yml's rule (internal/templates/ci_concurrency_test.go): a newer push to
+# main supersedes the pending run, a run in progress finishes, and scheduled
+# runs keep a group of their own.
+concurrency:
+  group: scorecard-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  analysis:
+    name: Scorecard analysis
+    if: ${{ github.repository == 'reliant-labs/forge' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      # Upload the SARIF to code scanning.
+      security-events: write
+      # Publish the results to scorecard.dev.
+      id-token: write
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ossf/scorecard-action@23f22cd43608bae7a1f1fa2603d7314dee9538a5 # v2.6.0
+        with:
+          results_file: results.sarif
+          results_format: sarif
+          publish_results: true
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: scorecard-sarif
+          path: results.sarif
+          retention-days: 5
+      - uses: github/codeql-action/upload-sarif@915412ff23e8b7659517e607487dbeae018f2934 # v4.39.5
+        with:
+          sarif_file: results.sarif

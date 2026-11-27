@@ -1,0 +1,14 @@
+// yours: scaffolded once, never touched again — forge will not overwrite this file
+// The assembled command tree depends on usercmd, not the other way around.
+// Add graph-independent subcommands in cmd/{{.Name}}/usercmd/commands.go.
+package cmd
+
+import (
+	"github.com/spf13/cobra"
+
+	"{{.Module}}/cmd/{{.Name}}/usercmd"
+)
+
+func userCommands(_ Deps) []*cobra.Command {
+	return usercmd.Commands()
+}

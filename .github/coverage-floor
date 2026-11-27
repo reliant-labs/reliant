@@ -1,0 +1,7 @@
+# Main's total Go test coverage may not drop below this percentage.
+# ci.yml's coverage-floor job checks it on every push to main
+# (scripts/ci-coverage-floor.sh says what is counted). Raise it when coverage
+# rises; never lower it. Set 2026-11-26 from CI runs of 82d095af3, 0befa6088
+# and d4b2b206b (81.54%, 81.54%, 81.56%), a tenth of a point under.
+# Raised 2026-11-26 to 82.23 from main CI run 45841484307 (96dda7084): 82.33%.
+82.23

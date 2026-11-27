@@ -1,0 +1,278 @@
+<!-- forge:version=1 -->
+# {{.Name}}
+
+This is a **Reliant Forge** project (github.com/reliant-labs/forge), driven by the `{{.CLI}}` CLI — not Atlassian Forge, Foundry's `forge` or Laravel Forge.
+{{- if .Site}} It is a **static site**: a frontend with no backend, shipped by forge with environments, build-once releases{{if .ScaffoldEnvs}} and hosted static hosting{{end}}.{{end}}
+{{- if .Container}} It is an **adopted app**: a server forge did not write, in any language, built from its own Dockerfile and shipped by forge with environments, build-once releases and Reliant hosting.
+{{- else if .Adopted}} It is an **adopted project**: an existing app, in its own language and layout, that uses only the pieces of forge it opted into.{{end}}
+
+This file holds the rules; depth is one `{{.CLI}} skill load <name>` away, named where you need it.
+
+## Engineering disposition
+
+A long-lived product: for anything hard to change later (architecture, public APIs, schemas), argue the alternatives against your own pick and choose the durable design, never a hack. Trivial work: just do it.
+
+{{if .Site -}}
+{{template "site" .}}
+{{- else if or .Container .Adopted -}}
+{{template "adopted" .}}
+{{- else -}}
+{{- $taskGate := or (not .Derived) (eq .Gate.Runner "task") -}}
+## Use forge skills to guide your work
+
+Load a skill before guessing, `{{.CLI}} skill load forge` first (what forge already scaffolds, so you never hand-write it); `{{.CLI}} skill list` is the catalog. `{{.CLI}} project shapes --grep <Name>` finds a symbol in every layer with file:line, `{{.CLI}} project capabilities` lists every verb, and `{{.CLI}} project libraries <pkg>` prints a forge library's API.
+
+## Critical rules
+
+1. **Never edit generated code** (`gen/`, `*_gen.go`, `*-hooks.ts`): edit its input (a proto, a migration, config, a `//forge:contract` type) and run `{{.CLI}} generate`. Handlers, `internal/app/providers.go` and `compose.go` are yours.
+2. **Proto is the API's canonical input; migrations are the DB source of truth.** The ORM is projected from the applied `db/migrations` schema, never from proto.
+3. **Iterate on what you changed; run the full gate ONCE, before you finish.** While iterating: `{{.CLI}} lint --scope <changed path>` (~10s; the full lint takes minutes) and {{if $taskGate}}`task test:short -- ./internal/<pkg>/...`{{else}}`go test -short ./internal/<pkg>/...`{{end}} (cached; never add `-count=1` or `-race`). To finish: `{{.CLI}} generate && {{.CLI}} lint && go build ./...{{if $taskGate}} && task test{{else}}{{range .Gate.Commands}}{{if eq .Does "tests"}} && {{.Run}}{{end}}{{end}}{{end}}`. Never pipe lint through `head`: the verdict is the LAST line (`--quiet` prints only failures).
+{{- if not $taskGate}}
+   **This project has no Taskfile, so there is no `task test` and no `{{.CLI}} test`.** {{template "gate-commands" .}}
+{{- end}}
+4. **A test over ~2s calls `testkit.Slow(t, "<why>")` first** (`github.com/reliant-labs/forge/pkg/testkit`): it skips under {{if $taskGate}}`test:short`, so a green `test:short` never ran it{{else}}`-short`, so a green `-short` run never ran it{{end}} (`testing`). Wait with `testkit.Eventually`/`testkit.Receive`, never `time.Sleep`. Run work over ~2 minutes in the background, never detached (`nohup`, `&`); `⏳ waiting for a heavy slot` is a queue: never kill its holders (`ci/slots`).
+5. **Debugging: `{{.CLI}} skill load debug` first.** Frontend `console.*` calls and uncaught errors are on disk beside the backend logs: `grep '\[browser:error\]' .forge/logs/dev/*.log`.
+6. **`auth_required: false` publishes one RPC, never a page.** Public pages are the route guard's `publicExactPaths`; access checks and row scoping are your handler code (`middleware.GetUser`), never generated (`auth`).
+
+## Where logic goes
+
+This is a Go project; `architecture` maps the tree. An rpc's logic is its `*Service` method in `internal/handlers/<svc>/rpc_<name>.go`, reaching collaborators through `s.deps` (`api`). Errors cross the rpc boundary as `return nil, svcerr.Wrap(err)` (`api`). Shared logic: `{{.CLI}} scaffold package <name>` (`service-layer`). Transactions: `s.deps.DB.RunTx(ctx, orm.Serializable, …)` (`service-layer/transactions`). Wiring: `internal/app/` (`services`). An rpc is CRUD only by its exact name, and list filters are `optional` (`proto`, `authoring`).
+{{- if .Unmanaged}}
+
+**Services forge does not manage:** {{range $i, $s := .Unmanaged}}{{if $i}}, {{end}}`{{$s}}`{{end}} (`// forge:unmanaged`).
+Their handlers stay where this project already keeps them: buf still
+generates their code, forge scaffolds nothing for them, and the layout above
+does not apply to them. Never move one into `internal/handlers/` unless the
+user asks; adopting a service means removing its marker, one service per PR
+(`migration` skill). `{{.CLI}} project audit` lists them.
+{{- end}}
+
+## The scaffolded frontend is starter code
+
+The dashboard, nav, sign-in screen and CRUD pages prove the stack is wired; rewriting them is expected (they are neutral on purpose). Load `frontend/design` before showing any of it to a user.
+
+## Shipping
+
+{{if .ScaffoldEnvs -}}
+`{{.CLI}} env deploy <env>` ships to Reliant hosting (staging/prod are already bound to it), then `{{.CLI}} obs check <env> --wait --json` proves it (`deploy`).
+{{- else -}}
+`{{.CLI}} env deploy <env>` ships an env to wherever its `deploy/kcl/<env>/main.k` binds it, then `{{.CLI}} obs check <env> --wait --json` proves it (`deploy`). {{template "real-envs" .}}
+{{- end}} Without hosting billing a backend deploy exits 7 and prints the billing link: give it to the user, don't retry (what is free: `deploy/hosted-capacity`). Never ask for `forge login` under Reliant; signed out, `--claimable` deploys and prints a claim link (`deploy/hosting`).
+
+{{end -}}
+## When forge itself is wrong — FIX IT
+
+Bad codegen, a lint false positive, a scaffold quirk: fix it in forge when you can (semver at major 1: deprecate, never break), never by hand-editing generated output. Otherwise report it and carry on — forge's own defects only, not this project's code or tests. Never put credentials or file contents in a report:
+
+    {{.CLI}} report-bug --severity high --title "<one line naming the defect>" \
+      --actual "<the exact error text>" --evidence "<commands, output, file paths>"
+
+## Project Notes
+
+<!-- Add project-specific context, conventions, and open questions here. -->
+{{- define "site" -}}
+{{- $prod := "prod"}}{{if not .ScaffoldEnvs}}{{$prod = "<env>"}}{{end -}}
+## What this project is
+
+A static site — a landing page, marketing or docs site, SPA or PWA — is a complete forge project on its own, with **no backend**: no Go module, server, database or proto. `{{.CLI}} generate` skips every Go step by itself and there is no `go build`; never add a `go.mod`, `proto/` or `cmd/` to "make forge work". The site (`package.json`, `src/`, `public/`) is a plain Next.js or Vite app, and yours. forge owns `forge.yaml` and `deploy/kcl/<env>/main.k`, one per env ({{if .ScaffoldEnvs}}dev on its dev server; staging and prod on hosted static hosting{{else if .DeployEnvs}}{{range $i, $e := .DeployEnvs}}{{if $i}}, {{end}}{{$e}}{{end}}{{else}}none declared yet{{end}}), which declares the frontend's `type` and `public_dir`; check a change with `{{.CLI}} env render <env>`.
+
+**Load `{{.CLI}} skill load deploy/static-site`** for the whole flow: envs, the static export, releases, hosting, runtime config, domains, adding an API. Also `frontend/design`, `deploy/domains`, `deploy/hosting`, `debug`.
+
+## Run, build, ship
+
+```bash
+{{.CLI}} env up dev                          # the dev server; mirrors the browser console to .forge/logs/dev/
+{{- if .ScaffoldEnvs}}
+{{.CLI}} lint --static-export && {{.CLI}} env render prod
+{{.CLI}} env build prod --release v0.1.0     # build ONCE, push, record the release
+{{.CLI}} env deploy staging v0.1.0           # promote the same bytes …
+{{.CLI}} env deploy prod v0.1.0              # … to prod, by digest — no rebuild
+{{- else}}
+{{.CLI}} lint --static-export && {{.CLI}} env render <env>
+{{.CLI}} env build <env> --release v0.1.0    # build ONCE, push, record the release
+{{.CLI}} env deploy <env> v0.1.0             # promote the same bytes to each env in turn, by digest
+{{- end}}
+```
+
+Browser `console.*` calls, uncaught errors and unhandled rejections land in `.forge/logs/<env>/frontend_<name>.log` as `[browser:<level>]`: `grep '\[browser:error\]' .forge/logs/dev/*.log` before guessing.
+
+`npm run build` must emit plain files (`out/` for Next.js `output: "export"`, `dist/` for Vite); `{{.CLI}} lint --static-export` names what a static export refuses, with file:line.
+{{- if not .ScaffoldEnvs}} {{template "real-envs" .}}{{end}} A hosted deploy ships only a recorded release; recovery rolls forward. Build-time config is `env_vars` in each env's `main.k`; per-env config without a rebuild is `runtime_config` (`config.js`). Everything in a static site is public: never put a secret in either.
+
+**Billing.** Free static hosting covers one organization per person (one they founded), with no limit on its sites; each env's site is one, within 1 GiB stored per site (`deploy/hosting`). A site in another organization, or any backend or database, needs hosting billing; until then `env deploy` exits 7 and prints the billing link. Give the user that link; don't retry. Never ask for `forge login` under Reliant.
+
+**Custom domains{{if not .ScaffoldEnvs}} (on Reliant hosting){{end}}:** `{{.CLI}} domain add <host> --env {{$prod}}`.
+
+## Design
+
+The starter page is a placeholder, not a design. Ready to show means a brief only the user can give, real copy and a layout built for it: load `frontend/design` first. `{{.CLI}} component search <thing>` before you hand-write a control.
+{{- if .Monitoring}}
+
+{{template "monitoring" .}}
+{{- end}}
+
+## Adding an API later
+
+A backend (waitlist, checkout, login) is its own forge project beside the site (`{{.CLI}} project new <name>-api --service <entity>`); Go scaffolds refuse here. Point the site at its URL through `env_vars` or `runtime_config`.
+
+## Critical rules
+
+1. **The site's files are yours.** forge generates no code into a site; what it owns is `forge.yaml` and `deploy/kcl/`.
+2. **Iterate with `{{.CLI}} lint --static-export`; run the full gate ONCE, before you finish:** `{{.CLI}} lint && npm run build && {{.CLI}} env render {{$prod}}`. Never pipe lint through `head`: the verdict is the LAST line (`--quiet` prints only failures).
+3. **Ship releases, not builds.** Build once (`env build <env> --release <v>`), then deploy that release to each env in turn.
+
+{{end}}
+
+{{- define "adopted" -}}
+{{- $deploy := or .DeployEnvs .Workloads .Container -}}
+## What this project is
+
+{{if .Container -}}
+An app forge did not write — a server in any language, with its own Dockerfile — adopted as a forge project without changing a file of it. forge builds the image from that Dockerfile and deploys it: environments, build-once releases promoted by digest, plans, rollout waits, managed Postgres and secrets on Reliant hosting.
+{{- else -}}
+An existing app, adopted onto forge as it is. forge is here for the pieces this project opted into
+{{- if $deploy}} — its environments and deploys{{if .Monitoring}}, and monitoring{{end}}
+{{- else if .Monitoring}} — monitoring
+{{- else if .Database}} — its database migrations
+{{- else}} — so far only `forge.yaml`, its name and switches{{end}} — not to rebuild it.
+{{- end}}
+
+**It keeps its own language, layout and tooling.** forge owns only `forge.yaml`
+{{- if $deploy}} and `deploy/kcl/`{{end}} (declarations you edit, not generated output), plus whatever the user opts into later. So:
+
+- **Never move existing code into forge's layout** — `internal/handlers/`, `proto/`, `cmd/`, `db/migrations/` — and never rename, restructure or "forge-ify" it, unless the user asks.
+- forge's Go-service rules — handlers, proto as the API, the generated ORM, `{{.CLI}} generate` — describe projects forge built, not this one. Do not add a {{if not .GoModule}}`go.mod`, a {{end}}`proto/` or a `Taskfile.yml` to "make forge work": it already does.
+- Keep the app's existing deploy YAML, Helm charts, compose files and CI as they are. Translating them into KCL is the user's decision, never a cleanup; forge can deploy hand-written manifests and charts where they stand (`deploy/byo-yaml`).
+- **The next pieces are a menu, not a migration.** `{{.CLI}} skill load adopt` lists what forge can take on next — deploys, environments, releases, secrets, migrations, monitoring — each on its own, in any order, with what it takes. Offer one when it would help; start it only when the user asks.
+
+```
+<the app>, as it was               ← yours, in its own language; forge never rewrites it
+forge.yaml                         ← name, forge pin, harness{{if or .Monitoring .DeclaredEnvs}}, and the switches it turns on{{end}}
+{{- if $deploy}}
+deploy/kcl/kcl.mod
+{{- if or .Workloads .Container}}
+deploy/kcl/workloads.k             ← the app, declared ONCE: forge.DockerBuild on the Dockerfile, its port, its probe
+{{- end}}
+deploy/kcl/<env>/main.k            ← where it runs, one per env: {{if .DeployEnvs}}{{range $i, $e := .DeployEnvs}}{{if $i}}, {{end}}{{$e}}{{end}}{{else}}dev, staging, prod{{end}}
+{{- end}}
+```
+
+## Ask forge before guessing
+
+- `{{.CLI}} skill list` is the catalog, `{{.CLI}} skill load <name>` prints one (`adopt` first), and `{{.CLI}} skill search <word>` finds one. Skills come from the binary and are never written to disk.
+- `{{.CLI}} project capabilities` lists every verb forge has: check it before concluding forge cannot do something.
+- Debugging: `{{.CLI}} skill load debug` names the evidence forge keeps{{if $deploy}}; every process `{{.CLI}} env up` runs is teed to `.forge/logs/<env>/<name>.log`, so grep there before guessing{{end}}.
+{{- if $deploy}}
+
+## Environments and deploys
+
+The envs are the declaration: `deploy/kcl/<env>/main.k`. Change a binding or an env value there, then check it with `{{.CLI}} env render <env>`. `deploy`, `deploy/hosting` and `secrets` are the skills.
+
+```bash
+{{.CLI}} env up dev                     # run dev as declared{{if or .Workloads .Container}}: the app's dev command as a host process, with PORT (and DATABASE_URL) set{{end}}
+{{.CLI}} env render <env>               # check an env's declaration
+{{.CLI}} env deploy <env>               # build ONCE, push, cut a release, promote it
+{{.CLI}} obs check <env> --wait --json  # prove the release good; branch on its exit code
+{{.CLI}} env deploy <next-env> <release> # promote the same bytes, by digest — no rebuild
+```
+{{if or .Workloads .Container}}
+The dev command is the `command` in `deploy/kcl/dev/main.k`: replace it with your watch / hot-reload loop.
+{{end}}
+A hosted deploy needs billing on the Reliant organization; until it is set up `env deploy` exits 7 and prints the billing link. Give the user that link; don't retry.
+
+- The app reads its config from environment variables. A per-env value is `env` on the app in that env's `main.k`; a credential is `env = {KEY = forge.ManagedSecret {name = "KEY"}}` there, with its value set once by `{{.CLI}} secret set --env <env> KEY` (stdin). forge never sees a secret's value.
+- A managed database (if declared) reaches the app as `DATABASE_URL` through `forge.DatabaseRef`.
+- `{{.CLI}} obs logs <env>` and `{{.CLI}} obs workloads <env>` (restarts, crash loops, failed jobs) work for any app. Request rates, error rates and traces exist only if the app exports OpenTelemetry (OTLP to `OTEL_EXPORTER_OTLP_ENDPOINT`, which hosting sets on every workload): until it does, `{{.CLI}} obs check` is INCONCLUSIVE with `reason_code: no_request_telemetry` — not proven good — while restarts, alerts and issues still count. Load `observability/query` for the details.
+{{- else if .DeclaredEnvs}}
+
+## Environments
+
+forge.yaml `envs:` names {{range $i, $e := .DeclaredEnvs}}{{if $i}}, {{end}}`{{$e}}`{{end}}. forge knows of them but does not deploy them: the app's own CI and infrastructure do, unchanged. Moving an env into forge's hands is a step on the `adopt` menu, not something to start unasked.
+{{- end}}
+{{- with .Database}}
+
+## Database migrations
+
+{{if .Hook -}}
+The schema migrations are {{.Tool}}'s, in `{{.Evidence}}`: forge.yaml `database.migrations` declares the tool, and forge runs it wherever it would apply its own migrations (`{{$.CLI}} db migrate up`, `status`). Keep writing migrations with {{.Tool}}.
+{{- else if eq .Tool "forge" -}}
+`{{.Evidence}}` holds forge migrations, applied by forge's migrator (`{{$.CLI}} db migrate up`). Load `db` before writing one.
+{{- else if .Tool -}}
+The schema migrations are {{.Tool}}'s (`{{.Evidence}}`){{with .Apply}}, applied with `{{.}}`{{end}}. They stay with {{.Tool}}.
+{{- else -}}
+`{{.Evidence}}` holds the app's migrations, and nothing says which tool applies them: ask the user before running any.
+{{- end}}
+{{- if ne .Tool "forge"}} Never convert them to forge migrations, rename or move them unless the user asks.{{end}}
+{{- if $deploy}} On a forge-deployed env, run them before each rollout as a `kind = "job"` workload from the app's image with `before = [fw.BEFORE_ALL]` (`adopt/deploy` has the template).{{end}}
+{{- end}}
+{{- if .Monitoring}}
+
+{{template "monitoring" .}}
+{{- end}}
+{{- if .Frontends}}
+
+## Frontends
+
+{{range .Frontends}}- `{{.Name}}`{{with .Type}} ({{.}}){{end}}{{with .Dir}} in `{{.}}`{{end}}
+{{end}}
+They are the app's own code: forge generates nothing into them. Before redesigning one, load `frontend/design` (it asks the user for a brief first); `{{.CLI}} component search <thing>` searches forge's component library before you hand-write a control.
+{{- end}}
+
+## Tests and the gate
+
+{{template "gate-commands" .}}
+{{- if and .Gate.Source (ne .Gate.Runner "task")}} There is no Taskfile here, so no `task test`{{if not .GoModule}}, and no Go module, so no `go build`{{end}}.{{end}} There is no `{{.CLI}} test` either.
+{{- if $deploy}} Before shipping, `{{.CLI}} lint` checks forge's own files and `{{.CLI}} env render <env>` proves each env still renders.{{end}}
+
+A run expected to take more than ~2 minutes goes in the background (`run_in_background` + `shell_wait`), never a long foreground call — and never detached by hand with `nohup`, a trailing `&`, `setsid` or `disown`.
+
+## Critical rules
+
+- **The app's files are yours.** forge generates no code into this project and never rewrites its source{{if .Container}}, its Dockerfile{{end}} or its build config. What forge owns is `forge.yaml`{{if $deploy}} and `deploy/kcl/`{{end}}.
+- **Never move the app into forge's layout**, and never translate its existing config into forge's, unless the user asks.
+{{- if .Container}}
+- **The Dockerfile must build on its own.** A deploy runs `docker build` with that file and context and nothing else: an image that `COPY`s a `dist/` built on your machine fails there. Prove it with `docker build .` before the first deploy.
+{{- end}}
+{{- if $deploy}}
+- **Gate with `{{.CLI}} lint` once, before you finish**, not after every edit. Never pipe it through `head` — the verdict is the LAST line.
+- **Ship releases, not builds.** Build once, then deploy that release to each env in turn.
+{{- end}}
+
+{{end}}
+
+{{- define "monitoring" -}}
+## Monitoring
+
+forge monitors this app{{if .DeclaredEnvs}} in {{range $i, $e := .DeclaredEnvs}}{{if $i}}, {{end}}`{{$e}}`{{end}}{{end}}: the app exports OpenTelemetry (traces, logs, metrics) to Reliant with a per-env ingest token, and forge reads it back. It needs a signed-in forge: under Reliant it already is; standalone, `{{.CLI}} login` (or a token in CI). Dashboards: https://forge.reliantlabs.io/forge/p/{{.Name}}/observability.
+
+```bash
+{{.CLI}} obs status <env>          # what is wrong now
+{{.CLI}} obs issues <env>          # grouped errors, new and regressed
+{{.CLI}} obs logs <env>            # logs; `obs traces` and `obs metrics` beside it
+{{.CLI}} obs check <env> --json    # judge the newest service.version; branch on its exit code
+```
+
+With no deploy recorded, `obs check` dates a release from the first telemetry carrying its new `service.version`, and labels that marker INFERRED. Load `observability`, and `observability/query` for flags, documents and exit codes.
+{{- end}}
+
+{{- define "gate-commands" -}}
+{{- if .Gate.Commands -}}
+This project's own commands, from its `{{.Gate.Source}}`: {{range $i, $c := .Gate.Commands}}{{if $i}}; {{end}}`{{$c.Run}}` ({{$c.Does}}){{end}}. Use them, not forge's defaults: while iterating, run only the tests your change reaches; run the whole suite once, before you finish.
+{{- else if .Gate.Source -}}
+This project's commands live in its `{{.Gate.Source}}`, but none is named test, lint or build: read it, or ask the user which of them gate a change.
+{{- else if .Derived -}}
+No test command was found (no Taskfile, package.json scripts or Makefile): ask the user how this project is tested and built before calling work done. Its CI configuration (`.github/workflows/`, …) shows what CI runs.
+{{- else -}}
+Use this project's own test and build commands: its Taskfile, package.json scripts, Makefile or CI configuration.
+{{- end}}
+{{- end}}
+
+{{- /* real-envs: list the environments an existing project declares without
+inferring a hosting binding. Only an environment render resolves its runtime. */ -}}
+{{- define "real-envs" -}}
+{{- if .DeployEnvs -}}
+This project's envs are {{range $i, $e := .DeployEnvs}}{{if $i}}, {{end}}`{{$e}}`{{end}}. Names don't establish where an env runs, so never assume one is hosted: its `main.k` declares the bindings, and `{{.CLI}} env render <env>` resolves them (`forge.OnHosted` is Reliant hosting). A new env on hosting is `{{.CLI}} env new <name> --from <env> --bind {{if .Site}}<frontend>{{else}}<workload>{{end}}=hosted` (`deploy/hosting`).
+{{- else -}}
+This project declares no env yet (no `deploy/kcl/<env>/main.k`), so nothing is bound to Reliant hosting: an env binds a workload or frontend there with `forge.OnHosted {}` (`deploy/hosting`).
+{{- end}}
+{{- end}}

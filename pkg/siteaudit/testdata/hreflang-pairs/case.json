@@ -1,0 +1,9 @@
+{
+  "site": "https://intl.example",
+  "expect": {"indexing": "index"},
+  "pages": [
+    {"url": "https://intl.example/en/", "status": 200, "raw": "en.html"},
+    {"url": "https://intl.example/de/", "status": 200, "raw": "de.html"},
+    {"url": "https://intl.example/fr/", "status": 200, "raw": "fr.html"}
+  ]
+}

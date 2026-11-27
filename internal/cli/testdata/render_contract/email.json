@@ -1,0 +1,346 @@
+{
+  "output": {
+    "applier": null,
+    "cluster_target": {
+      "cluster": "k3d-acme",
+      "connected_cluster": null,
+      "domain": null,
+      "image_pull_secrets": [],
+      "namespace": "acme-dev",
+      "platform": null
+    },
+    "clusters": [],
+    "config_maps": [],
+    "connected_clusters": null,
+    "control_plane_secrets": [],
+    "data_access": {
+      "db_query": "open"
+    },
+    "databases": [],
+    "env": "dev",
+    "external_secrets_operators": [],
+    "frontends": [],
+    "gateways": [],
+    "grpc_routes": [],
+    "helm_charts": [],
+    "http_routes": [],
+    "image_tag": "latest",
+    "infra": [
+      {
+        "data_dir": null,
+        "database": "postgres",
+        "engine": "mailpit",
+        "idp_database": "zitadel",
+        "idp_database_port": null,
+        "idp_masterkey": "MasterkeyNeedsToHave32Characters",
+        "idp_pat_path": ".forge/idp/pat.txt",
+        "idp_steps_file": "idp-steps.yaml",
+        "name": "mail",
+        "nats_monitor_port": null,
+        "password": "postgres",
+        "port": 1125,
+        "temporal_namespaces": null,
+        "temporal_ui_port": null,
+        "user": "postgres",
+        "version": null
+      }
+    ],
+    "kubeconfig_secrets": [],
+    "lifecycle": "local",
+    "manifest_owners": [],
+    "manifests": [
+      {
+        "apiVersion": "v1",
+        "kind": "Namespace",
+        "metadata": {
+          "labels": {
+            "app.kubernetes.io/managed-by": "forge",
+            "forge.dev/cluster": "k3d-acme",
+            "forge.dev/env": "dev",
+            "pod-security.kubernetes.io/audit": "restricted",
+            "pod-security.kubernetes.io/enforce": "restricted",
+            "pod-security.kubernetes.io/warn": "restricted"
+          },
+          "name": "acme-dev"
+        }
+      },
+      {
+        "apiVersion": "forge.dev/v1alpha1",
+        "kind": "Workload",
+        "metadata": {
+          "labels": {
+            "app.kubernetes.io/managed-by": "forge",
+            "app.kubernetes.io/name": "invoicer",
+            "app.kubernetes.io/part-of": "acme",
+            "forge.dev/cluster": "k3d-acme",
+            "forge.dev/env": "dev"
+          },
+          "name": "invoicer",
+          "namespace": "acme-dev"
+        },
+        "spec": {
+          "args": [
+            "invoicer"
+          ],
+          "env": [
+            {
+              "name": "MAIL_SMTP_HOST",
+              "value": "smtp.postmarkapp.com"
+            },
+            {
+              "name": "MAIL_SMTP_PORT",
+              "value": "587"
+            },
+            {
+              "name": "MAIL_SMTP_TLS",
+              "value": "starttls"
+            },
+            {
+              "managedSecret": {
+                "name": "SMTP_USERNAME"
+              },
+              "name": "MAIL_SMTP_USERNAME"
+            },
+            {
+              "name": "MAIL_SMTP_PASSWORD",
+              "secretRef": {
+                "key": "password",
+                "name": "postmark-smtp"
+              }
+            },
+            {
+              "name": "MAIL_FROM",
+              "value": "\"Acme, Inc.\" \u003cno-reply@billing.acme.com\u003e"
+            },
+            {
+              "name": "MAIL_FROM_DOMAIN",
+              "value": "billing.acme.com"
+            },
+            {
+              "name": "MAIL_API_URL",
+              "value": ""
+            },
+            {
+              "name": "OTEL_SERVICE_NAME",
+              "value": "invoicer"
+            },
+            {
+              "name": "OTEL_RESOURCE_ATTRIBUTES",
+              "value": "deployment.environment.name=dev,service.namespace=acme"
+            },
+            {
+              "name": "GOMEMLIMIT",
+              "value": "921MiB"
+            }
+          ],
+          "image": "localhost:5051/acme:latest",
+          "kind": "worker",
+          "replicas": 1,
+          "resources": {
+            "cpuRequestMillicores": 250,
+            "memoryRequestBytes": 1073741824
+          }
+        }
+      }
+    ],
+    "network_policy": null,
+    "overrides": {},
+    "project": "acme",
+    "release_manifest_consumers": [],
+    "rendered_secrets": [],
+    "required_dns": [],
+    "required_secrets": [],
+    "runtime_classes": [],
+    "secret_provider": {
+      "path": "secrets/dev.yaml",
+      "type": "file"
+    },
+    "workloads": [
+      {
+        "build": {
+          "cmd": "./cmd/acme",
+          "env": {},
+          "flags": [],
+          "goarch": null,
+          "goos": null,
+          "inputs_file": null,
+          "ldflags": [],
+          "output_name": "acme",
+          "tags": [],
+          "type": "go",
+          "unit": null
+        },
+        "build_image": "acme",
+        "image": "acme",
+        "kind": "service",
+        "name": "api",
+        "release_inputs": {},
+        "runtime": {
+          "air_config": null,
+          "delve_port": 2345,
+          "listen_ports": null,
+          "runner": "go-run",
+          "startup_after": [],
+          "type": "host",
+          "working_dir": null
+        },
+        "spec": {
+          "args": [
+            "api"
+          ],
+          "env": [
+            {
+              "name": "MAIL_SMTP_HOST",
+              "value": "127.0.0.1"
+            },
+            {
+              "name": "MAIL_SMTP_PORT",
+              "value": "1125"
+            },
+            {
+              "name": "MAIL_SMTP_TLS",
+              "value": "none"
+            },
+            {
+              "name": "MAIL_SMTP_USERNAME",
+              "value": ""
+            },
+            {
+              "name": "MAIL_SMTP_PASSWORD",
+              "value": ""
+            },
+            {
+              "name": "MAIL_FROM",
+              "value": "Acme \u003chello@mail.acme.com\u003e"
+            },
+            {
+              "name": "MAIL_FROM_DOMAIN",
+              "value": "mail.acme.com"
+            },
+            {
+              "name": "MAIL_API_URL",
+              "value": ""
+            },
+            {
+              "name": "OTEL_SERVICE_NAME",
+              "value": "api"
+            },
+            {
+              "name": "OTEL_RESOURCE_ATTRIBUTES",
+              "value": "deployment.environment.name=dev,service.namespace=acme"
+            }
+          ],
+          "image": "",
+          "kind": "service",
+          "probes": {
+            "failureThreshold": 3,
+            "initialDelaySeconds": 0,
+            "livenessPath": "/healthz",
+            "periodSeconds": 5,
+            "port": 8080,
+            "readinessPath": "/readyz",
+            "startupPath": "/readyz",
+            "timeoutSeconds": 3
+          },
+          "replicas": 1,
+          "resources": {
+            "cpuRequestMillicores": 250,
+            "memoryRequestBytes": 1073741824
+          }
+        }
+      },
+      {
+        "build": {
+          "cmd": "./cmd/acme",
+          "env": {},
+          "flags": [],
+          "goarch": null,
+          "goos": null,
+          "inputs_file": null,
+          "ldflags": [],
+          "output_name": "acme",
+          "tags": [],
+          "type": "go",
+          "unit": null
+        },
+        "build_image": "localhost:5051/acme",
+        "image": "localhost:5051/acme",
+        "kind": "worker",
+        "name": "invoicer",
+        "release_inputs": {},
+        "runtime": {
+          "cluster": "k3d-acme",
+          "connected_cluster": null,
+          "domain": null,
+          "image_pull_secrets": [],
+          "namespace": "acme-dev",
+          "platform": null,
+          "type": "cluster"
+        },
+        "spec": {
+          "args": [
+            "invoicer"
+          ],
+          "env": [
+            {
+              "name": "MAIL_SMTP_HOST",
+              "value": "smtp.postmarkapp.com"
+            },
+            {
+              "name": "MAIL_SMTP_PORT",
+              "value": "587"
+            },
+            {
+              "name": "MAIL_SMTP_TLS",
+              "value": "starttls"
+            },
+            {
+              "managedSecret": {
+                "name": "SMTP_USERNAME"
+              },
+              "name": "MAIL_SMTP_USERNAME"
+            },
+            {
+              "name": "MAIL_SMTP_PASSWORD",
+              "secretRef": {
+                "key": "password",
+                "name": "postmark-smtp"
+              }
+            },
+            {
+              "name": "MAIL_FROM",
+              "value": "\"Acme, Inc.\" \u003cno-reply@billing.acme.com\u003e"
+            },
+            {
+              "name": "MAIL_FROM_DOMAIN",
+              "value": "billing.acme.com"
+            },
+            {
+              "name": "MAIL_API_URL",
+              "value": ""
+            },
+            {
+              "name": "OTEL_SERVICE_NAME",
+              "value": "invoicer"
+            },
+            {
+              "name": "OTEL_RESOURCE_ATTRIBUTES",
+              "value": "deployment.environment.name=dev,service.namespace=acme"
+            },
+            {
+              "name": "GOMEMLIMIT",
+              "value": "921MiB"
+            }
+          ],
+          "image": "localhost:5051/acme:latest",
+          "kind": "worker",
+          "replicas": 1,
+          "resources": {
+            "cpuRequestMillicores": 250,
+            "memoryRequestBytes": 1073741824
+          }
+        }
+      }
+    ]
+  }
+}

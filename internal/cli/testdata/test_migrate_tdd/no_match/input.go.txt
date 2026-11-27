@@ -1,0 +1,13 @@
+package user_test
+
+import (
+	"context"
+	"testing"
+)
+
+// This file does not match the codemod shape: no `tests := []struct` slice,
+// no connect.NewRequest call. The codemod should leave it untouched.
+func TestSomething(t *testing.T) {
+	t.Parallel()
+	_ = context.Background()
+}

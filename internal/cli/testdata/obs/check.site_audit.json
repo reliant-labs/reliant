@@ -1,0 +1,93 @@
+{
+  "schema": "forge.obs.check/v1",
+  "ok": true,
+  "exit_code": 0,
+  "scope": {
+    "env": "prod",
+    "backend": "cloud",
+    "env_id": "env-prod",
+    "from": "2026-10-22T11:25:00Z",
+    "to": "2026-10-22T11:55:00Z"
+  },
+  "query_mode": "structured",
+  "verdict": "PASS",
+  "subject": {
+    "promotion_id": "promo-7",
+    "release": "v2",
+    "git_commit": "abc123",
+    "promoted_at": "2026-10-22T11:40:00Z",
+    "previous_release": "v1"
+  },
+  "windows": {
+    "before": {
+      "from": "2026-10-22T11:25:00Z",
+      "to": "2026-10-22T11:40:00Z"
+    },
+    "after": {
+      "from": "2026-10-22T11:40:00Z",
+      "to": "2026-10-22T11:55:00Z"
+    },
+    "after_complete": true
+  },
+  "services": [
+    {
+      "service": "api",
+      "before": {
+        "requests": 900,
+        "error_rate": 0.001,
+        "p50_ms": 0,
+        "p95_ms": 100,
+        "p99_ms": 0
+      },
+      "after": {
+        "requests": 1000,
+        "error_rate": 0.05,
+        "p50_ms": 0,
+        "p95_ms": 110,
+        "p99_ms": 0
+      },
+      "version_share": 1
+    }
+  ],
+  "findings": [
+    {
+      "code": "seo_regressed",
+      "service": "web",
+      "value": 21,
+      "threshold": 10,
+      "policy": "warn",
+      "message": "web: SEO score dropped since v1: site 92 -\u003e 71 (-21) (limit 10 points)"
+    },
+    {
+      "code": "a11y_regressed",
+      "service": "web",
+      "value": 1,
+      "threshold": 1,
+      "policy": "warn",
+      "message": "web: 1 new accessibility critical violation since v1: a11y_violation button-name on /pricing"
+    }
+  ],
+  "thresholds": [
+    {
+      "name": "min_requests",
+      "value": "50",
+      "source": "default"
+    },
+    {
+      "name": "fail_on",
+      "value": "error_rate,new_issue",
+      "source": "release_shape"
+    },
+    {
+      "name": "regressed_issue_min_events",
+      "value": "3",
+      "source": "default"
+    },
+    {
+      "name": "error_rate_min_errors",
+      "value": "10",
+      "source": "default"
+    }
+  ],
+  "version_share": 1
+}

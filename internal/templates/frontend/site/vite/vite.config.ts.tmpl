@@ -1,0 +1,108 @@
+import tailwindcss from "@tailwindcss/vite";
+import react from "@vitejs/plugin-react";
+import { defineConfig, type Plugin } from "vite";
+import { forgeSiteFiles } from "@reliantlabs/forge-web-runtime/vite";
+{{- if .DevLogFromRuntime}}
+import {
+  forgeDevLog,
+  forgeOtelProxy,
+  forgeRuntimeConfig,
+} from "@reliantlabs/forge-web-runtime/vite";
+{{- else}}
+import { forgeOtelProxy, forgeRuntimeConfig } from "@reliantlabs/forge-web-runtime/vite";
+
+import { devLogPlugin } from "./src/lib/devlog-plugin";
+{{- end}}
+
+// The dev server's port. `forge env up dev` sets PORT to the port it
+// allocated for this site; a bare `npm run dev` falls back to Vite's own.
+const port = Number(process.env.PORT) || 5173;
+
+// Hosts besides localhost that may load the dev server: a Reliant workspace
+// preview host (RELIANT_PREVIEW_URL_TEMPLATE, `https://{port}-<id>...`) and
+// any FORGE_DEV_ALLOWED_ORIGINS (comma-separated; a leading "." allows every
+// subdomain). Vite answers anything else with "Blocked request".
+const devAllowedHosts = (): string[] => {
+  const out = new Set<string>();
+  const preview = process.env.RELIANT_PREVIEW_URL_TEMPLATE;
+  if (preview) {
+    try {
+      out.add(new URL(preview.replace("{port}", String(port))).hostname);
+    } catch {
+      // A malformed template allows nothing extra.
+    }
+  }
+  for (const host of (process.env.FORGE_DEV_ALLOWED_ORIGINS ?? "").split(",")) {
+    if (host.trim()) out.add(host.trim());
+  }
+  return [...out];
+};
+
+// The site's public origin, e.g. https://example.com. deploy/kcl/<env>/main.k
+// declares it per env (forge.FrontendURL): the dev server's URL in dev, the
+// hosted site's hostname when forge builds a release.
+const siteUrl = (process.env.SITE_URL ?? "").replace(/\/+$/, "");
+
+// siteHead writes the head tags that need the absolute origin into
+// index.html at build time: the canonical link, og:url, og:image and the
+// WebSite JSON-LD. Crawlers and link previews read the HTML as served, so
+// these cannot wait for JavaScript. With SITE_URL empty (a first release,
+// built before the env has a hostname) it writes none of them rather than a
+// wrong origin, and the site audit names what is missing.
+function siteHead(): Plugin {
+  return {
+    name: "site-head",
+    transformIndexHtml() {
+      if (!siteUrl) return [];
+      const home = `${siteUrl}/`;
+      const website = {
+        "@context": "https://schema.org",
+        "@type": "WebSite",
+        name: "{{.ProjectName}}",
+        url: home,
+      };
+      return [
+        { tag: "link", attrs: { rel: "canonical", href: home }, injectTo: "head" },
+        { tag: "meta", attrs: { property: "og:url", content: home }, injectTo: "head" },
+        { tag: "meta", attrs: { property: "og:image", content: `${siteUrl}/og.png` }, injectTo: "head" },
+        { tag: "script", attrs: { type: "application/ld+json" }, children: JSON.stringify(website), injectTo: "head" },
+      ];
+    },
+  };
+}
+
+export default defineConfig({
+  // {{if .DevLogFromRuntime}}forgeDevLog{{else}}devLogPlugin{{end}} is dev-only: it receives the browser console lines that
+  // installDevLogging() posts from src/main.tsx and prints them to this dev
+  // server's stdout, which `forge env up` tees to
+  // .forge/logs/<env>/frontend_<name>.log. Delete both to opt out.
+  plugins: [
+    react(),
+    tailwindcss(),
+    {{if .DevLogFromRuntime}}forgeDevLog(){{else}}devLogPlugin(){{end}},
+    forgeRuntimeConfig(),
+    forgeOtelProxy(),
+    siteHead(),
+    // robots.txt and sitemap.xml, written into dist/ at build time: both
+    // need the absolute SITE_URL. The sitemap lists every .html file of the
+    // build; list client-side routes with `routes: ["/pricing"]`. A file you
+    // put in public/ is never overwritten. With SITE_URL empty it writes
+    // robots.txt without a Sitemap: line, and no sitemap.
+    forgeSiteFiles({ siteUrl: process.env.SITE_URL }),
+  ],
+  build: {
+    // The static export hosted static hosting serves. deploy/kcl/<env>/main.k
+    // names this directory as the frontend's public_dir; move both together.
+    outDir: "dist",
+    // forge asks for source maps when IT builds for a deploy
+    // (FORGE_SOURCEMAPS=1) and moves them out of the served tree, so they
+    // symbolicate errors without being public.
+    sourcemap: process.env.FORGE_SOURCEMAPS === "1",
+  },
+  server: {
+    port,
+    strictPort: Boolean(process.env.PORT),
+    host: true,
+    allowedHosts: devAllowedHosts(),
+  },
+});

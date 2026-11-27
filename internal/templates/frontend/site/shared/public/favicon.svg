@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- forge:placeholder-image: the starter's neutral icon. Replace public/favicon.svg with the site's own. -->
+  <rect width="32" height="32" rx="7" fill="#18181b"/>
+  <rect x="10" y="10" width="12" height="12" rx="3" fill="#fafafa"/>
+</svg>

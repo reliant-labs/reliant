@@ -1,0 +1,138 @@
+exporters: {}
+extensions: {}
+k8sattributes_labels: null
+logs_preserve:
+  from: body
+  id: forge_telemetry_original
+  if: resource["service.name"] in ["nats"]
+  to: attributes["forge.telemetry.original"]
+  type: copy
+logs_processors:
+- transform/telemetry_identity
+- transform/telemetry_logs
+node_metrics_processors: null
+pipelines:
+  metrics/telemetry_nats:
+    exporters:
+    - otlphttp/clickstack
+    processors:
+    - memory_limiter
+    - transform/telemetry_target/nats
+    - batch
+    receivers:
+    - prometheus/telemetry_nats
+    - tcpcheck/telemetry_nats_0
+processors:
+  transform/telemetry_identity:
+    error_mode: ignore
+    log_statements:
+    - conditions:
+      - attributes["service.name"] == "nats"
+      context: resource
+      statements:
+      - set(attributes["service.name"], "nats")
+      - set(attributes["deployment.environment.name"], "dev")
+    metric_statements:
+    - conditions:
+      - attributes["service.name"] == "nats"
+      context: resource
+      statements:
+      - set(attributes["service.name"], "nats")
+      - set(attributes["deployment.environment.name"], "dev")
+    profile_statements:
+    - conditions:
+      - attributes["service.name"] == "nats"
+      context: resource
+      statements:
+      - set(attributes["service.name"], "nats")
+      - set(attributes["deployment.environment.name"], "dev")
+    trace_statements:
+    - conditions:
+      - attributes["service.name"] == "nats"
+      context: resource
+      statements:
+      - set(attributes["service.name"], "nats")
+      - set(attributes["deployment.environment.name"], "dev")
+  transform/telemetry_logs:
+    error_mode: silent
+    log_statements:
+    - conditions:
+      - resource.attributes["service.name"] == "nats"
+      statements:
+      - set(log.attributes["forge.telemetry.original"], log.body) where log.attributes["forge.telemetry.original"]
+        == nil
+      - set(log.attributes["forge.telemetry.parsed"], ExtractPatterns(log.attributes["forge.telemetry.original"],
+        "^\\[(?P<pid>\\d+)\\] (?P<ts>\\S+ \\S+) \\[(?P<lvl>[A-Z]{3})\\] (?P<msg>.*)$$"))
+      - merge_maps(log.attributes, log.attributes["forge.telemetry.parsed"], "upsert")
+        where log.attributes["forge.telemetry.parsed"] != nil
+      - set(log.time, Time(log.attributes["forge.telemetry.parsed"]["ts"], "%Y/%m/%d
+        %H:%M:%S.%f")) where log.attributes["forge.telemetry.parsed"]["ts"] != nil
+      - set(log.severity_text, String(log.attributes["forge.telemetry.parsed"]["lvl"]))
+        where log.attributes["forge.telemetry.parsed"]["lvl"] != nil
+      - set(log.severity_number, SEVERITY_NUMBER_UNSPECIFIED) where log.attributes["forge.telemetry.parsed"]["lvl"]
+        != nil
+      - set(log.severity_number, SEVERITY_NUMBER_DEBUG) where log.attributes["forge.telemetry.parsed"]["lvl"]
+        != nil and IsMatch(String(log.attributes["forge.telemetry.parsed"]["lvl"]),
+        "(?i)^(?:DBG|TRC)$$")
+      - set(log.severity_number, SEVERITY_NUMBER_INFO) where log.attributes["forge.telemetry.parsed"]["lvl"]
+        != nil and IsMatch(String(log.attributes["forge.telemetry.parsed"]["lvl"]),
+        "(?i)^(?:INF)$$")
+      - set(log.severity_number, SEVERITY_NUMBER_WARN) where log.attributes["forge.telemetry.parsed"]["lvl"]
+        != nil and IsMatch(String(log.attributes["forge.telemetry.parsed"]["lvl"]),
+        "(?i)^(?:WRN)$$")
+      - set(log.severity_number, SEVERITY_NUMBER_ERROR) where log.attributes["forge.telemetry.parsed"]["lvl"]
+        != nil and IsMatch(String(log.attributes["forge.telemetry.parsed"]["lvl"]),
+        "(?i)^(?:ERR)$$")
+      - set(log.severity_number, SEVERITY_NUMBER_FATAL) where log.attributes["forge.telemetry.parsed"]["lvl"]
+        != nil and IsMatch(String(log.attributes["forge.telemetry.parsed"]["lvl"]),
+        "(?i)^(?:FTL)$$")
+      - set(log.body, log.attributes["forge.telemetry.parsed"]["msg"]) where log.attributes["forge.telemetry.parsed"]["msg"]
+        != nil
+      - delete_key(log.attributes, "ts")
+      - delete_key(log.attributes, "lvl")
+      - delete_key(log.attributes, "msg")
+      - delete_key(log.attributes, "pid")
+    - statements:
+      - delete_key(log.attributes, "forge.telemetry.original")
+      - delete_key(log.attributes, "forge.telemetry.parsed")
+      - delete_key(log.attributes, "forge.telemetry.rule")
+  transform/telemetry_target/nats:
+    error_mode: ignore
+    metric_statements:
+    - context: resource
+      statements:
+      - set(attributes["service.name"], "nats")
+      - set(attributes["deployment.environment.name"], "dev")
+    - context: metric
+      statements:
+      - convert_gauge_to_sum("cumulative", true) where metric.type == METRIC_DATA_TYPE_GAUGE
+        and IsMatch(metric.name, "^(?:(?:in_msgs|out_msgs))$$")
+receivers:
+  prometheus/telemetry_nats:
+    config:
+      scrape_configs:
+      - fallback_scrape_protocol: PrometheusText0.0.4
+        job_name: telemetry/nats/0
+        label_limit: 30
+        label_value_length_limit: 256
+        metric_relabel_configs:
+        - action: keep
+          regex: up|(?:.*)
+          source_labels:
+          - __name__
+        metrics_path: /varz
+        sample_limit: 5000
+        scheme: http
+        scrape_interval: 30s
+        scrape_timeout: 10s
+        static_configs:
+        - targets:
+          - 127.0.0.1:8222
+  tcpcheck/telemetry_nats_0:
+    collection_interval: 30s
+    targets:
+    - endpoint: 127.0.0.1:4222
+service_extensions: null
+warnings:
+- 'telemetry hostinfra:nats (service nats): profiles skipped: Options.EnableProfiles
+  is off'

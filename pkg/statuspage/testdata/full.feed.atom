@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <id>https://status.acme.test/feed.atom</id>
+  <title>Acme status</title>
+  <updated>2026-11-25T13:30:00Z</updated>
+  <link rel="self" type="application/atom+xml" href="https://status.acme.test/feed.atom"></link>
+  <link rel="alternate" type="text/html" href="https://status.acme.test/"></link>
+  <author>
+    <name>Acme status</name>
+  </author>
+  <entry>
+    <id>https://status.acme.test/#incident-inc-2</id>
+    <title>API is unavailable</title>
+    <updated>2026-11-25T13:30:00Z</updated>
+    <published>2026-11-25T13:02:00Z</published>
+    <link rel="alternate" type="text/html" href="https://status.acme.test/#incident-inc-2"></link>
+    <content type="text">Major impact. Started 2026-11-25 13:02 UTC. Affects API, Checkout.&#xA;&#xA;Identified (2026-11-25 13:30 UTC)&#xA;A database migration locked the orders table.&#xA;&#xA;We are rolling it back.&#xA;&#xA;Investigating (2026-11-25 13:05 UTC)&#xA;API requests are failing.&#xA;We are looking into it.</content>
+  </entry>
+  <entry>
+    <id>https://status.acme.test/#maintenance-m-2</id>
+    <title>Maintenance: Database upgrade</title>
+    <updated>2026-11-24T09:00:00Z</updated>
+    <published>2026-11-24T09:00:00Z</published>
+    <link rel="alternate" type="text/html" href="https://status.acme.test/#maintenance-m-2"></link>
+    <content type="text">Scheduled maintenance, 2026-11-28 02:00 UTC to 2026-11-28 03:00 UTC. Affects API.&#xA;&#xA;Scheduled (2026-11-24 09:00 UTC)&#xA;The API may be read-only for up to an hour.</content>
+  </entry>
+  <entry>
+    <id>https://status.acme.test/#incident-inc-1</id>
+    <title>Resolved: Slow page loads</title>
+    <updated>2026-11-20T15:10:00Z</updated>
+    <published>2026-11-20T14:00:00Z</published>
+    <link rel="alternate" type="text/html" href="https://status.acme.test/#incident-inc-1"></link>
+    <content type="text">Minor impact. Started 2026-11-20 14:00 UTC, resolved 2026-11-20 15:10 UTC. Affects Website.&#xA;&#xA;Resolved (2026-11-20 15:10 UTC)&#xA;Fixed.&#xA;&#xA;Investigating (2026-11-20 14:05 UTC)&#xA;Pages load slowly &lt;for some&gt; users &amp; we know.</content>
+  </entry>
+  <entry>
+    <id>https://status.acme.test/#maintenance-m-1</id>
+    <title>Maintenance: Network work</title>
+    <updated>2026-11-15T02:25:00Z</updated>
+    <published>2026-11-10T09:00:00Z</published>
+    <link rel="alternate" type="text/html" href="https://status.acme.test/#maintenance-m-1"></link>
+    <content type="text">Completed maintenance, 2026-11-15 02:00 UTC to 2026-11-15 02:30 UTC. Affects Website.&#xA;&#xA;Completed (2026-11-15 02:25 UTC)&#xA;Done.&#xA;&#xA;Scheduled (2026-11-10 09:00 UTC)&#xA;Brief interruptions.</content>
+  </entry>
+</feed>

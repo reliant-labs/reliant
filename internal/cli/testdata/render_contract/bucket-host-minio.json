@@ -1,0 +1,188 @@
+{
+  "output": {
+    "applier": null,
+    "clusters": [],
+    "config_maps": [],
+    "connected_clusters": null,
+    "control_plane_secrets": [],
+    "data_access": {
+      "db_query": "open"
+    },
+    "databases": [],
+    "declared_buckets": [
+      {
+        "name": "uploads",
+        "runtime_kind": "minio"
+      },
+      {
+        "name": "avatars",
+        "public_read": true,
+        "runtime_kind": "minio"
+      }
+    ],
+    "env": "dev",
+    "external_secrets_operators": [],
+    "frontends": [],
+    "gateways": [],
+    "grpc_routes": [],
+    "helm_charts": [],
+    "http_routes": [],
+    "image_tag": "latest",
+    "infra": [
+      {
+        "data_dir": null,
+        "database": "postgres",
+        "engine": "minio",
+        "idp_database": "zitadel",
+        "idp_database_port": null,
+        "idp_masterkey": "MasterkeyNeedsToHave32Characters",
+        "idp_pat_path": ".forge/idp/pat.txt",
+        "idp_steps_file": "idp-steps.yaml",
+        "minio_buckets": [
+          {
+            "name": "uploads",
+            "public_read": false
+          },
+          {
+            "name": "avatars",
+            "public_read": true
+          }
+        ],
+        "minio_console_port": 9201,
+        "minio_cors_allow_origin": "http://localhost:5173",
+        "minio_region": "us-east-1",
+        "minio_root_password_secret": "MINIO_ROOT_PASSWORD",
+        "minio_root_user_secret": "MINIO_ROOT_USER",
+        "name": "minio",
+        "nats_monitor_port": null,
+        "password": "postgres",
+        "port": 9200,
+        "temporal_namespaces": null,
+        "temporal_ui_port": null,
+        "user": "postgres",
+        "version": null
+      }
+    ],
+    "kubeconfig_secrets": [],
+    "lifecycle": "local",
+    "manifest_owners": [],
+    "manifests": [],
+    "network_policy": null,
+    "overrides": {},
+    "project": "acme",
+    "release_manifest_consumers": [],
+    "rendered_secrets": [],
+    "required_dns": [],
+    "required_secrets": [],
+    "runtime_classes": [],
+    "secret_provider": {
+      "generate": {
+        "MINIO_ROOT_PASSWORD": {
+          "bytes": 32,
+          "encoding": "hex"
+        },
+        "MINIO_ROOT_USER": {
+          "bytes": 16,
+          "encoding": "hex"
+        }
+      },
+      "path": "secrets/dev.yaml",
+      "type": "file"
+    },
+    "workloads": [
+      {
+        "build": {
+          "cmd": "./cmd/acme",
+          "env": {},
+          "flags": [],
+          "goarch": null,
+          "goos": null,
+          "inputs_file": null,
+          "ldflags": [],
+          "output_name": "acme",
+          "tags": [],
+          "type": "go",
+          "unit": null
+        },
+        "build_image": "acme",
+        "image": "acme",
+        "kind": "service",
+        "name": "api",
+        "release_inputs": {},
+        "runtime": {
+          "air_config": null,
+          "delve_port": 2345,
+          "listen_ports": null,
+          "runner": "go-run",
+          "startup_after": [],
+          "type": "host",
+          "working_dir": null
+        },
+        "spec": {
+          "args": [
+            "api"
+          ],
+          "env": [
+            {
+              "name": "UPLOADS_ENDPOINT",
+              "value": "http://localhost:9200"
+            },
+            {
+              "name": "UPLOADS_PUBLIC_ENDPOINT",
+              "value": "http://localhost:9200"
+            },
+            {
+              "name": "UPLOADS_REGION",
+              "value": "us-east-1"
+            },
+            {
+              "name": "UPLOADS_BUCKET",
+              "value": "uploads"
+            },
+            {
+              "managedSecret": {
+                "name": "MINIO_ROOT_USER"
+              },
+              "name": "UPLOADS_ACCESS_KEY_ID"
+            },
+            {
+              "managedSecret": {
+                "name": "MINIO_ROOT_PASSWORD"
+              },
+              "name": "UPLOADS_SECRET_ACCESS_KEY"
+            },
+            {
+              "name": "UPLOADS_PATH_STYLE",
+              "value": "true"
+            },
+            {
+              "name": "OTEL_SERVICE_NAME",
+              "value": "api"
+            },
+            {
+              "name": "OTEL_RESOURCE_ATTRIBUTES",
+              "value": "deployment.environment.name=dev,service.namespace=acme"
+            }
+          ],
+          "image": "",
+          "kind": "service",
+          "probes": {
+            "failureThreshold": 3,
+            "initialDelaySeconds": 0,
+            "livenessPath": "/healthz",
+            "periodSeconds": 5,
+            "port": 8080,
+            "readinessPath": "/readyz",
+            "startupPath": "/readyz",
+            "timeoutSeconds": 3
+          },
+          "replicas": 1,
+          "resources": {
+            "cpuRequestMillicores": 250,
+            "memoryRequestBytes": 1073741824
+          }
+        }
+      }
+    ]
+  }
+}

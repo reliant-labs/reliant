@@ -1,0 +1,973 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: forge
+    forge.dev/env: staging
+    pod-security.kubernetes.io/audit: privileged
+    pod-security.kubernetes.io/enforce: privileged
+    pod-security.kubernetes.io/warn: privileged
+  name: forge-observability
+spec: {}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: forge
+    app.kubernetes.io/name: otel-agent
+    app.kubernetes.io/part-of: demo
+    forge.dev/env: staging
+  name: otel-agent
+  namespace: forge-observability
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: forge
+    app.kubernetes.io/name: otel-agent
+    app.kubernetes.io/part-of: demo
+    forge.dev/env: staging
+  name: forge-observability-otel-agent
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - pods
+  - namespaces
+  - nodes
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - apps
+  resources:
+  - replicasets
+  - deployments
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - nodes/stats
+  verbs:
+  - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: forge
+    app.kubernetes.io/name: otel-agent
+    app.kubernetes.io/part-of: demo
+    forge.dev/env: staging
+  name: forge-observability-otel-agent
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: forge-observability-otel-agent
+subjects:
+- kind: ServiceAccount
+  name: otel-agent
+  namespace: forge-observability
+---
+apiVersion: v1
+data:
+  config.yaml: |
+    exporters:
+      otlphttp/destination:
+        auth:
+          authenticator: bearertokenauth
+        endpoint: https://otlp.example.com
+        retry_on_failure:
+          enabled: true
+          initial_interval: 5s
+          max_elapsed_time: 300s
+          max_interval: 30s
+        sending_queue:
+          enabled: true
+          num_consumers: 4
+          queue_size: 2000
+          storage: file_storage
+    extensions:
+      bearertokenauth:
+        filename: /etc/otel-auth/token
+        retry_on_failure:
+          enabled: true
+          interval: 10s
+          max_retries: 0
+      file_storage:
+        create_directory: true
+        directory: /var/lib/otel-agent
+      health_check:
+        endpoint: 0.0.0.0:13133
+    processors:
+      batch:
+        send_batch_size: 8192
+        timeout: 5s
+      k8sattributes:
+        auth_type: serviceAccount
+        extract:
+          labels:
+          - from: pod
+            key: app.kubernetes.io/name
+            tag_name: service.name
+          - from: pod
+            key: app.kubernetes.io/part-of
+            tag_name: service.namespace
+          - from: pod
+            key: forge.dev/env
+            tag_name: deployment.environment.name
+          - from: pod
+            key: app.kubernetes.io/version
+            tag_name: service.version
+          metadata:
+          - k8s.namespace.name
+          - k8s.pod.name
+          - k8s.pod.uid
+          - k8s.node.name
+          - k8s.deployment.name
+          - k8s.container.name
+        filter:
+          node_from_env_var: K8S_NODE_NAME
+        pod_association:
+        - sources:
+          - from: resource_attribute
+            name: k8s.pod.uid
+        - sources:
+          - from: connection
+      memory_limiter:
+        check_interval: 1s
+        limit_mib: 204
+        spike_limit_mib: 51
+      transform/line_resource:
+        error_mode: ignore
+        log_statements:
+        - context: resource
+          statements:
+          - set(attributes["service.name"], attributes["forge.line.service.name"]) where
+            attributes["service.name"] == nil and attributes["forge.line.service.name"]
+            != nil
+          - set(attributes["service.version"], attributes["forge.line.service.version"])
+            where attributes["service.version"] == nil and attributes["forge.line.service.version"]
+            != nil
+          - set(attributes["service.namespace"], attributes["forge.line.service.namespace"])
+            where attributes["service.namespace"] == nil and attributes["forge.line.service.namespace"]
+            != nil
+          - set(attributes["deployment.environment.name"], attributes["forge.line.deployment.environment.name"])
+            where attributes["deployment.environment.name"] == nil and attributes["forge.line.deployment.environment.name"]
+            != nil
+          - set(attributes["service.instance.id"], attributes["forge.line.service.instance.id"])
+            where attributes["service.instance.id"] == nil and attributes["forge.line.service.instance.id"]
+            != nil
+          - delete_matching_keys(attributes, "^forge[.]line[.]")
+      transform/strip_client_identity:
+        error_mode: ignore
+        log_statements:
+        - context: resource
+          statements:
+          - delete_matching_keys(resource.attributes, "^(k8s|reliant|forge\\.telemetry\\.label)\\..*")
+        metric_statements:
+        - context: resource
+          statements:
+          - delete_matching_keys(resource.attributes, "^(k8s|reliant|forge\\.telemetry\\.label)\\..*")
+        profile_statements:
+        - context: resource
+          statements:
+          - delete_matching_keys(resource.attributes, "^(k8s|reliant|forge\\.telemetry\\.label)\\..*")
+        trace_statements:
+        - context: resource
+          statements:
+          - delete_matching_keys(resource.attributes, "^(k8s|reliant|forge\\.telemetry\\.label)\\..*")
+    receivers:
+      filelog:
+        exclude:
+        - /var/log/pods/forge-observability_*/*/*.log
+        include:
+        - /var/log/pods/*/*/*.log
+        include_file_path: true
+        operators:
+        - id: container-parser
+          type: container
+        - if: body matches "^\\s*\\{"
+          on_error: send_quiet
+          parse_from: body
+          severity:
+            parse_from: attributes.level
+          timestamp:
+            layout: 2006-01-02T15:04:05.999999999Z07:00
+            layout_type: gotime
+            parse_from: attributes.time
+          type: json_parser
+        - if: attributes.trace_id != nil
+          span_id:
+            parse_from: attributes.span_id
+          trace_id:
+            parse_from: attributes.trace_id
+          type: trace_parser
+        - field: attributes.trace_id
+          if: attributes.trace_id != nil
+          type: remove
+        - field: attributes.span_id
+          if: attributes.span_id != nil
+          type: remove
+        - field: attributes.time
+          if: attributes.time != nil
+          type: remove
+        - field: attributes.level
+          if: attributes.level != nil
+          type: remove
+        - from: attributes.msg
+          if: attributes.msg != nil
+          to: body
+          type: move
+        - from: attributes.resource["service.name"]
+          if: type(attributes.resource) == "map" && attributes.resource["service.name"]
+            != nil && resource["forge.line.service.name"] == nil
+          to: resource["forge.line.service.name"]
+          type: move
+        - from: attributes.resource["service.version"]
+          if: type(attributes.resource) == "map" && attributes.resource["service.version"]
+            != nil && resource["forge.line.service.version"] == nil
+          to: resource["forge.line.service.version"]
+          type: move
+        - from: attributes.resource["service.namespace"]
+          if: type(attributes.resource) == "map" && attributes.resource["service.namespace"]
+            != nil && resource["forge.line.service.namespace"] == nil
+          to: resource["forge.line.service.namespace"]
+          type: move
+        - from: attributes.resource["deployment.environment.name"]
+          if: type(attributes.resource) == "map" && attributes.resource["deployment.environment.name"]
+            != nil && resource["forge.line.deployment.environment.name"] == nil
+          to: resource["forge.line.deployment.environment.name"]
+          type: move
+        - from: attributes.resource["service.instance.id"]
+          if: type(attributes.resource) == "map" && attributes.resource["service.instance.id"]
+            != nil && resource["forge.line.service.instance.id"] == nil
+          to: resource["forge.line.service.instance.id"]
+          type: move
+        - field: attributes.resource
+          if: type(attributes.resource) == "map"
+          type: remove
+        start_at: end
+        storage: file_storage
+      kubeletstats:
+        auth_type: serviceAccount
+        collection_interval: 30s
+        endpoint: https://${env:K8S_NODE_IP}:10250
+        insecure_skip_verify: true
+      otlp:
+        protocols:
+          grpc:
+            endpoint: 0.0.0.0:4317
+          http:
+            endpoint: 0.0.0.0:4318
+            idle_timeout: 5m
+    service:
+      extensions:
+      - health_check
+      - file_storage
+      - bearertokenauth
+      pipelines:
+        logs:
+          exporters:
+          - otlphttp/destination
+          processors:
+          - memory_limiter
+          - k8sattributes
+          - transform/line_resource
+          - batch
+          receivers:
+          - filelog
+        metrics:
+          exporters:
+          - otlphttp/destination
+          processors:
+          - memory_limiter
+          - transform/strip_client_identity
+          - k8sattributes
+          - batch
+          receivers:
+          - otlp
+        metrics/node:
+          exporters:
+          - otlphttp/destination
+          processors:
+          - memory_limiter
+          - k8sattributes
+          - batch
+          receivers:
+          - kubeletstats
+        traces:
+          exporters:
+          - otlphttp/destination
+          processors:
+          - memory_limiter
+          - transform/strip_client_identity
+          - k8sattributes
+          - batch
+          receivers:
+          - otlp
+kind: ConfigMap
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: forge
+    app.kubernetes.io/name: otel-agent
+    app.kubernetes.io/part-of: demo
+    forge.dev/env: staging
+  name: otel-agent
+  namespace: forge-observability
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: forge
+    app.kubernetes.io/name: otel-agent
+    app.kubernetes.io/part-of: demo
+    forge.dev/env: staging
+  name: otel-agent
+  namespace: forge-observability
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: otel-agent
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/managed-by: forge
+        app.kubernetes.io/name: otel-agent
+        app.kubernetes.io/part-of: demo
+        forge.dev/env: staging
+    spec:
+      containers:
+      - args:
+        - --config=/etc/otel/config.yaml
+        env:
+        - name: K8S_NODE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
+        - name: K8S_NODE_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.hostIP
+        - name: GOMEMLIMIT
+          value: 204MiB
+        image: otel/opentelemetry-collector-contrib:0.162.0@sha256:39923a8e431bd1f57be82411999d389fcfe40857492e4365456d97a4c1f74be6
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 13133
+          initialDelaySeconds: 10
+        name: collector
+        ports:
+        - containerPort: 4317
+          name: otlp-grpc
+          protocol: TCP
+        - containerPort: 4318
+          name: otlp-http
+          protocol: TCP
+        - containerPort: 13133
+          name: health
+          protocol: TCP
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 13133
+        resources:
+          limits:
+            memory: 256Mi
+          requests:
+            cpu: 50m
+            memory: 128Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+          runAsUser: 0
+          seccompProfile:
+            type: RuntimeDefault
+        volumeMounts:
+        - mountPath: /etc/otel
+          name: config
+          readOnly: true
+        - mountPath: /var/log/pods
+          name: pod-logs
+          readOnly: true
+        - mountPath: /var/lib/otel-agent
+          name: storage
+        - mountPath: /etc/otel-auth
+          name: otlp-token
+          readOnly: true
+      enableServiceLinks: false
+      serviceAccountName: otel-agent
+      tolerations:
+      - operator: Exists
+      volumes:
+      - configMap:
+          name: otel-agent
+        name: config
+      - hostPath:
+          path: /var/log/pods
+          type: Directory
+        name: pod-logs
+      - hostPath:
+          path: /var/lib/forge-otel-agent
+          type: DirectoryOrCreate
+        name: storage
+      - name: otlp-token
+        secret:
+          items:
+          - key: token
+            path: token
+          optional: true
+          secretName: forge-telemetry-token
+  updateStrategy:
+    type: RollingUpdate
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: forge
+    app.kubernetes.io/name: otel-agent
+    app.kubernetes.io/part-of: demo
+    forge.dev/env: staging
+  name: otel-agent
+  namespace: forge-observability
+spec:
+  internalTrafficPolicy: Local
+  ports:
+  - name: otlp-grpc
+    port: 4317
+    protocol: TCP
+    targetPort: otlp-grpc
+  - name: otlp-http
+    port: 4318
+    protocol: TCP
+    targetPort: otlp-http
+  selector:
+    app.kubernetes.io/name: otel-agent
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: forge
+    app.kubernetes.io/name: cluster-collector
+    app.kubernetes.io/part-of: demo
+    forge.dev/env: staging
+  name: cluster-collector
+  namespace: forge-observability
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: forge
+    app.kubernetes.io/name: cluster-collector
+    app.kubernetes.io/part-of: demo
+    forge.dev/env: staging
+  name: forge-observability-cluster-collector
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - nodes
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - apps
+  resources:
+  - daemonsets
+  - deployments
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - events.k8s.io
+  resources:
+  - events
+  verbs:
+  - get
+  - list
+  - watch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: forge
+    app.kubernetes.io/name: cluster-collector
+    app.kubernetes.io/part-of: demo
+    forge.dev/env: staging
+  name: forge-observability-cluster-collector
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: forge-observability-cluster-collector
+subjects:
+- kind: ServiceAccount
+  name: cluster-collector
+  namespace: forge-observability
+---
+apiVersion: v1
+data:
+  config.yaml: |
+    exporters:
+      otlphttp/destination:
+        auth:
+          authenticator: bearertokenauth
+        endpoint: https://otlp.example.com
+        retry_on_failure:
+          enabled: true
+          initial_interval: 5s
+          max_elapsed_time: 300s
+          max_interval: 30s
+        sending_queue:
+          enabled: true
+          num_consumers: 4
+          queue_size: 2000
+    extensions:
+      bearertokenauth:
+        filename: /etc/otel-auth/token
+        retry_on_failure:
+          enabled: true
+          interval: 10s
+          max_retries: 0
+      health_check:
+        endpoint: 0.0.0.0:13133
+    processors:
+      batch: {}
+      memory_limiter:
+        check_interval: 1s
+        limit_mib: 204
+        spike_limit_mib: 51
+      resource:
+        attributes:
+        - action: upsert
+          key: k8s.cluster.name
+          value: k3d-gpu
+      transform/inventory_allowlist:
+        error_mode: silent
+        log_statements:
+        - context: log
+          statements:
+          - set(log.cache["raw"], log.body)
+          - set(log.body, {})
+          - set(log.cache["obj"], log.cache["raw"]["object"]) where IsMap(log.cache["raw"]["object"])
+          - set(log.cache["obj"], log.cache["raw"]) where not IsMap(log.cache["raw"]["object"])
+          - set(log.cache["out"]["kind"], log.cache["obj"]["kind"]) where log.cache["obj"]["kind"]
+            != nil
+          - set(log.cache["out"]["apiVersion"], log.cache["obj"]["apiVersion"]) where
+            log.cache["obj"]["apiVersion"] != nil
+          - set(log.cache["out"]["metadata"]["name"], log.cache["obj"]["metadata"]["name"])
+            where log.cache["obj"]["metadata"]["name"] != nil
+          - set(log.cache["out"]["metadata"]["namespace"], log.cache["obj"]["metadata"]["namespace"])
+            where log.cache["obj"]["metadata"]["namespace"] != nil
+          - set(log.cache["out"]["metadata"]["uid"], log.cache["obj"]["metadata"]["uid"])
+            where log.cache["obj"]["metadata"]["uid"] != nil
+          - set(log.cache["out"]["metadata"]["creationTimestamp"], log.cache["obj"]["metadata"]["creationTimestamp"])
+            where log.cache["obj"]["metadata"]["creationTimestamp"] != nil
+          - set(log.cache["out"]["metadata"]["deletionTimestamp"], log.cache["obj"]["metadata"]["deletionTimestamp"])
+            where log.cache["obj"]["metadata"]["deletionTimestamp"] != nil
+          - set(log.cache["out"]["metadata"]["generation"], log.cache["obj"]["metadata"]["generation"])
+            where log.cache["obj"]["metadata"]["generation"] != nil
+          - set(log.cache["out"]["spec"]["unschedulable"], log.cache["obj"]["spec"]["unschedulable"])
+            where log.cache["obj"]["spec"]["unschedulable"] != nil
+          - set(log.cache["out"]["spec"]["providerID"], log.cache["obj"]["spec"]["providerID"])
+            where log.cache["obj"]["spec"]["providerID"] != nil
+          - set(log.cache["out"]["status"]["capacity"], log.cache["obj"]["status"]["capacity"])
+            where log.cache["obj"]["status"]["capacity"] != nil
+          - set(log.cache["out"]["status"]["allocatable"], log.cache["obj"]["status"]["allocatable"])
+            where log.cache["obj"]["status"]["allocatable"] != nil
+          - set(log.cache["out"]["status"]["nodeInfo"]["architecture"], log.cache["obj"]["status"]["nodeInfo"]["architecture"])
+            where log.cache["obj"]["status"]["nodeInfo"]["architecture"] != nil
+          - set(log.cache["out"]["status"]["nodeInfo"]["operatingSystem"], log.cache["obj"]["status"]["nodeInfo"]["operatingSystem"])
+            where log.cache["obj"]["status"]["nodeInfo"]["operatingSystem"] != nil
+          - set(log.cache["out"]["status"]["nodeInfo"]["osImage"], log.cache["obj"]["status"]["nodeInfo"]["osImage"])
+            where log.cache["obj"]["status"]["nodeInfo"]["osImage"] != nil
+          - set(log.cache["out"]["status"]["nodeInfo"]["kernelVersion"], log.cache["obj"]["status"]["nodeInfo"]["kernelVersion"])
+            where log.cache["obj"]["status"]["nodeInfo"]["kernelVersion"] != nil
+          - set(log.cache["out"]["status"]["nodeInfo"]["kubeletVersion"], log.cache["obj"]["status"]["nodeInfo"]["kubeletVersion"])
+            where log.cache["obj"]["status"]["nodeInfo"]["kubeletVersion"] != nil
+          - set(log.cache["out"]["status"]["nodeInfo"]["containerRuntimeVersion"], log.cache["obj"]["status"]["nodeInfo"]["containerRuntimeVersion"])
+            where log.cache["obj"]["status"]["nodeInfo"]["containerRuntimeVersion"] !=
+            nil
+          - set(log.cache["out"]["spec"]["replicas"], log.cache["obj"]["spec"]["replicas"])
+            where log.cache["obj"]["spec"]["replicas"] != nil
+          - set(log.cache["out"]["status"]["observedGeneration"], log.cache["obj"]["status"]["observedGeneration"])
+            where log.cache["obj"]["status"]["observedGeneration"] != nil
+          - set(log.cache["out"]["status"]["replicas"], log.cache["obj"]["status"]["replicas"])
+            where log.cache["obj"]["status"]["replicas"] != nil
+          - set(log.cache["out"]["status"]["readyReplicas"], log.cache["obj"]["status"]["readyReplicas"])
+            where log.cache["obj"]["status"]["readyReplicas"] != nil
+          - set(log.cache["out"]["status"]["availableReplicas"], log.cache["obj"]["status"]["availableReplicas"])
+            where log.cache["obj"]["status"]["availableReplicas"] != nil
+          - set(log.cache["out"]["status"]["updatedReplicas"], log.cache["obj"]["status"]["updatedReplicas"])
+            where log.cache["obj"]["status"]["updatedReplicas"] != nil
+          - set(log.cache["out"]["status"]["unavailableReplicas"], log.cache["obj"]["status"]["unavailableReplicas"])
+            where log.cache["obj"]["status"]["unavailableReplicas"] != nil
+          - set(log.cache["out"]["status"]["desiredNumberScheduled"], log.cache["obj"]["status"]["desiredNumberScheduled"])
+            where log.cache["obj"]["status"]["desiredNumberScheduled"] != nil
+          - set(log.cache["out"]["status"]["currentNumberScheduled"], log.cache["obj"]["status"]["currentNumberScheduled"])
+            where log.cache["obj"]["status"]["currentNumberScheduled"] != nil
+          - set(log.cache["out"]["status"]["numberReady"], log.cache["obj"]["status"]["numberReady"])
+            where log.cache["obj"]["status"]["numberReady"] != nil
+          - set(log.cache["out"]["status"]["numberAvailable"], log.cache["obj"]["status"]["numberAvailable"])
+            where log.cache["obj"]["status"]["numberAvailable"] != nil
+          - set(log.cache["out"]["status"]["numberUnavailable"], log.cache["obj"]["status"]["numberUnavailable"])
+            where log.cache["obj"]["status"]["numberUnavailable"] != nil
+          - set(log.cache["out"]["status"]["numberMisscheduled"], log.cache["obj"]["status"]["numberMisscheduled"])
+            where log.cache["obj"]["status"]["numberMisscheduled"] != nil
+          - set(log.cache["out"]["status"]["updatedNumberScheduled"], log.cache["obj"]["status"]["updatedNumberScheduled"])
+            where log.cache["obj"]["status"]["updatedNumberScheduled"] != nil
+          - set(log.cache["out"]["type"], log.cache["obj"]["type"]) where log.cache["obj"]["type"]
+            != nil
+          - set(log.cache["out"]["reason"], log.cache["obj"]["reason"]) where log.cache["obj"]["reason"]
+            != nil
+          - set(log.cache["out"]["action"], log.cache["obj"]["action"]) where log.cache["obj"]["action"]
+            != nil
+          - set(log.cache["out"]["reportingController"], log.cache["obj"]["reportingController"])
+            where log.cache["obj"]["reportingController"] != nil
+          - set(log.cache["out"]["eventTime"], log.cache["obj"]["eventTime"]) where log.cache["obj"]["eventTime"]
+            != nil
+          - set(log.cache["out"]["deprecatedCount"], log.cache["obj"]["deprecatedCount"])
+            where log.cache["obj"]["deprecatedCount"] != nil
+          - set(log.cache["out"]["deprecatedFirstTimestamp"], log.cache["obj"]["deprecatedFirstTimestamp"])
+            where log.cache["obj"]["deprecatedFirstTimestamp"] != nil
+          - set(log.cache["out"]["deprecatedLastTimestamp"], log.cache["obj"]["deprecatedLastTimestamp"])
+            where log.cache["obj"]["deprecatedLastTimestamp"] != nil
+          - set(log.cache["out"]["series"]["count"], log.cache["obj"]["series"]["count"])
+            where log.cache["obj"]["series"]["count"] != nil
+          - set(log.cache["out"]["series"]["lastObservedTime"], log.cache["obj"]["series"]["lastObservedTime"])
+            where log.cache["obj"]["series"]["lastObservedTime"] != nil
+          - set(log.cache["out"]["regarding"]["apiVersion"], log.cache["obj"]["regarding"]["apiVersion"])
+            where log.cache["obj"]["regarding"]["apiVersion"] != nil
+          - set(log.cache["out"]["regarding"]["kind"], log.cache["obj"]["regarding"]["kind"])
+            where log.cache["obj"]["regarding"]["kind"] != nil
+          - set(log.cache["out"]["regarding"]["namespace"], log.cache["obj"]["regarding"]["namespace"])
+            where log.cache["obj"]["regarding"]["namespace"] != nil
+          - set(log.cache["out"]["regarding"]["name"], log.cache["obj"]["regarding"]["name"])
+            where log.cache["obj"]["regarding"]["name"] != nil
+          - set(log.cache["out"]["regarding"]["uid"], log.cache["obj"]["regarding"]["uid"])
+            where log.cache["obj"]["regarding"]["uid"] != nil
+          - set(log.cache["out"]["metadata"]["labels"]["app.kubernetes.io/name"], log.cache["obj"]["metadata"]["labels"]["app.kubernetes.io/name"])
+            where log.cache["obj"]["metadata"]["labels"]["app.kubernetes.io/name"] !=
+            nil
+          - set(log.cache["out"]["metadata"]["labels"]["app.kubernetes.io/instance"],
+            log.cache["obj"]["metadata"]["labels"]["app.kubernetes.io/instance"]) where
+            log.cache["obj"]["metadata"]["labels"]["app.kubernetes.io/instance"] != nil
+          - set(log.cache["out"]["metadata"]["labels"]["app.kubernetes.io/version"], log.cache["obj"]["metadata"]["labels"]["app.kubernetes.io/version"])
+            where log.cache["obj"]["metadata"]["labels"]["app.kubernetes.io/version"]
+            != nil
+          - set(log.cache["out"]["metadata"]["labels"]["app.kubernetes.io/component"],
+            log.cache["obj"]["metadata"]["labels"]["app.kubernetes.io/component"]) where
+            log.cache["obj"]["metadata"]["labels"]["app.kubernetes.io/component"] != nil
+          - set(log.cache["out"]["metadata"]["labels"]["app.kubernetes.io/part-of"], log.cache["obj"]["metadata"]["labels"]["app.kubernetes.io/part-of"])
+            where log.cache["obj"]["metadata"]["labels"]["app.kubernetes.io/part-of"]
+            != nil
+          - set(log.cache["out"]["metadata"]["labels"]["app.kubernetes.io/managed-by"],
+            log.cache["obj"]["metadata"]["labels"]["app.kubernetes.io/managed-by"]) where
+            log.cache["obj"]["metadata"]["labels"]["app.kubernetes.io/managed-by"] !=
+            nil
+          - set(log.cache["out"]["metadata"]["labels"]["helm.sh/chart"], log.cache["obj"]["metadata"]["labels"]["helm.sh/chart"])
+            where log.cache["obj"]["metadata"]["labels"]["helm.sh/chart"] != nil
+          - set(log.cache["out"]["metadata"]["labels"]["forge.dev/component-owner"], log.cache["obj"]["metadata"]["labels"]["forge.dev/component-owner"])
+            where log.cache["obj"]["metadata"]["labels"]["forge.dev/component-owner"]
+            != nil
+          - 'set(log.cache["list0_0"], {"name": log.cache["obj"]["spec"]["template"]["spec"]["containers"][0]["name"],
+            "image": log.cache["obj"]["spec"]["template"]["spec"]["containers"][0]["image"]})'
+          - set(log.cache["out"]["spec"]["template"]["spec"]["containers"], [log.cache["list0_0"]])
+            where Len(log.cache["obj"]["spec"]["template"]["spec"]["containers"]) == 1
+          - 'set(log.cache["list0_1"], {"name": log.cache["obj"]["spec"]["template"]["spec"]["containers"][1]["name"],
+            "image": log.cache["obj"]["spec"]["template"]["spec"]["containers"][1]["image"]})'
+          - set(log.cache["out"]["spec"]["template"]["spec"]["containers"], [log.cache["list0_0"],
+            log.cache["list0_1"]]) where Len(log.cache["obj"]["spec"]["template"]["spec"]["containers"])
+            == 2
+          - 'set(log.cache["list0_2"], {"name": log.cache["obj"]["spec"]["template"]["spec"]["containers"][2]["name"],
+            "image": log.cache["obj"]["spec"]["template"]["spec"]["containers"][2]["image"]})'
+          - set(log.cache["out"]["spec"]["template"]["spec"]["containers"], [log.cache["list0_0"],
+            log.cache["list0_1"], log.cache["list0_2"]]) where Len(log.cache["obj"]["spec"]["template"]["spec"]["containers"])
+            == 3
+          - 'set(log.cache["list0_3"], {"name": log.cache["obj"]["spec"]["template"]["spec"]["containers"][3]["name"],
+            "image": log.cache["obj"]["spec"]["template"]["spec"]["containers"][3]["image"]})'
+          - set(log.cache["out"]["spec"]["template"]["spec"]["containers"], [log.cache["list0_0"],
+            log.cache["list0_1"], log.cache["list0_2"], log.cache["list0_3"]]) where Len(log.cache["obj"]["spec"]["template"]["spec"]["containers"])
+            == 4
+          - 'set(log.cache["list0_4"], {"name": log.cache["obj"]["spec"]["template"]["spec"]["containers"][4]["name"],
+            "image": log.cache["obj"]["spec"]["template"]["spec"]["containers"][4]["image"]})'
+          - set(log.cache["out"]["spec"]["template"]["spec"]["containers"], [log.cache["list0_0"],
+            log.cache["list0_1"], log.cache["list0_2"], log.cache["list0_3"], log.cache["list0_4"]])
+            where Len(log.cache["obj"]["spec"]["template"]["spec"]["containers"]) == 5
+          - 'set(log.cache["list0_5"], {"name": log.cache["obj"]["spec"]["template"]["spec"]["containers"][5]["name"],
+            "image": log.cache["obj"]["spec"]["template"]["spec"]["containers"][5]["image"]})'
+          - set(log.cache["out"]["spec"]["template"]["spec"]["containers"], [log.cache["list0_0"],
+            log.cache["list0_1"], log.cache["list0_2"], log.cache["list0_3"], log.cache["list0_4"],
+            log.cache["list0_5"]]) where Len(log.cache["obj"]["spec"]["template"]["spec"]["containers"])
+            == 6
+          - 'set(log.cache["list0_6"], {"name": log.cache["obj"]["spec"]["template"]["spec"]["containers"][6]["name"],
+            "image": log.cache["obj"]["spec"]["template"]["spec"]["containers"][6]["image"]})'
+          - set(log.cache["out"]["spec"]["template"]["spec"]["containers"], [log.cache["list0_0"],
+            log.cache["list0_1"], log.cache["list0_2"], log.cache["list0_3"], log.cache["list0_4"],
+            log.cache["list0_5"], log.cache["list0_6"]]) where Len(log.cache["obj"]["spec"]["template"]["spec"]["containers"])
+            == 7
+          - 'set(log.cache["list0_7"], {"name": log.cache["obj"]["spec"]["template"]["spec"]["containers"][7]["name"],
+            "image": log.cache["obj"]["spec"]["template"]["spec"]["containers"][7]["image"]})'
+          - set(log.cache["out"]["spec"]["template"]["spec"]["containers"], [log.cache["list0_0"],
+            log.cache["list0_1"], log.cache["list0_2"], log.cache["list0_3"], log.cache["list0_4"],
+            log.cache["list0_5"], log.cache["list0_6"], log.cache["list0_7"]]) where Len(log.cache["obj"]["spec"]["template"]["spec"]["containers"])
+            >= 8
+          - 'set(log.cache["list1_0"], {"type": log.cache["obj"]["status"]["conditions"][0]["type"],
+            "status": log.cache["obj"]["status"]["conditions"][0]["status"], "reason":
+            log.cache["obj"]["status"]["conditions"][0]["reason"]})'
+          - set(log.cache["out"]["status"]["conditions"], [log.cache["list1_0"]]) where
+            Len(log.cache["obj"]["status"]["conditions"]) == 1
+          - 'set(log.cache["list1_1"], {"type": log.cache["obj"]["status"]["conditions"][1]["type"],
+            "status": log.cache["obj"]["status"]["conditions"][1]["status"], "reason":
+            log.cache["obj"]["status"]["conditions"][1]["reason"]})'
+          - set(log.cache["out"]["status"]["conditions"], [log.cache["list1_0"], log.cache["list1_1"]])
+            where Len(log.cache["obj"]["status"]["conditions"]) == 2
+          - 'set(log.cache["list1_2"], {"type": log.cache["obj"]["status"]["conditions"][2]["type"],
+            "status": log.cache["obj"]["status"]["conditions"][2]["status"], "reason":
+            log.cache["obj"]["status"]["conditions"][2]["reason"]})'
+          - set(log.cache["out"]["status"]["conditions"], [log.cache["list1_0"], log.cache["list1_1"],
+            log.cache["list1_2"]]) where Len(log.cache["obj"]["status"]["conditions"])
+            == 3
+          - 'set(log.cache["list1_3"], {"type": log.cache["obj"]["status"]["conditions"][3]["type"],
+            "status": log.cache["obj"]["status"]["conditions"][3]["status"], "reason":
+            log.cache["obj"]["status"]["conditions"][3]["reason"]})'
+          - set(log.cache["out"]["status"]["conditions"], [log.cache["list1_0"], log.cache["list1_1"],
+            log.cache["list1_2"], log.cache["list1_3"]]) where Len(log.cache["obj"]["status"]["conditions"])
+            == 4
+          - 'set(log.cache["list1_4"], {"type": log.cache["obj"]["status"]["conditions"][4]["type"],
+            "status": log.cache["obj"]["status"]["conditions"][4]["status"], "reason":
+            log.cache["obj"]["status"]["conditions"][4]["reason"]})'
+          - set(log.cache["out"]["status"]["conditions"], [log.cache["list1_0"], log.cache["list1_1"],
+            log.cache["list1_2"], log.cache["list1_3"], log.cache["list1_4"]]) where Len(log.cache["obj"]["status"]["conditions"])
+            == 5
+          - 'set(log.cache["list1_5"], {"type": log.cache["obj"]["status"]["conditions"][5]["type"],
+            "status": log.cache["obj"]["status"]["conditions"][5]["status"], "reason":
+            log.cache["obj"]["status"]["conditions"][5]["reason"]})'
+          - set(log.cache["out"]["status"]["conditions"], [log.cache["list1_0"], log.cache["list1_1"],
+            log.cache["list1_2"], log.cache["list1_3"], log.cache["list1_4"], log.cache["list1_5"]])
+            where Len(log.cache["obj"]["status"]["conditions"]) == 6
+          - 'set(log.cache["list1_6"], {"type": log.cache["obj"]["status"]["conditions"][6]["type"],
+            "status": log.cache["obj"]["status"]["conditions"][6]["status"], "reason":
+            log.cache["obj"]["status"]["conditions"][6]["reason"]})'
+          - set(log.cache["out"]["status"]["conditions"], [log.cache["list1_0"], log.cache["list1_1"],
+            log.cache["list1_2"], log.cache["list1_3"], log.cache["list1_4"], log.cache["list1_5"],
+            log.cache["list1_6"]]) where Len(log.cache["obj"]["status"]["conditions"])
+            == 7
+          - 'set(log.cache["list1_7"], {"type": log.cache["obj"]["status"]["conditions"][7]["type"],
+            "status": log.cache["obj"]["status"]["conditions"][7]["status"], "reason":
+            log.cache["obj"]["status"]["conditions"][7]["reason"]})'
+          - set(log.cache["out"]["status"]["conditions"], [log.cache["list1_0"], log.cache["list1_1"],
+            log.cache["list1_2"], log.cache["list1_3"], log.cache["list1_4"], log.cache["list1_5"],
+            log.cache["list1_6"], log.cache["list1_7"]]) where Len(log.cache["obj"]["status"]["conditions"])
+            == 8
+          - 'set(log.cache["list1_8"], {"type": log.cache["obj"]["status"]["conditions"][8]["type"],
+            "status": log.cache["obj"]["status"]["conditions"][8]["status"], "reason":
+            log.cache["obj"]["status"]["conditions"][8]["reason"]})'
+          - set(log.cache["out"]["status"]["conditions"], [log.cache["list1_0"], log.cache["list1_1"],
+            log.cache["list1_2"], log.cache["list1_3"], log.cache["list1_4"], log.cache["list1_5"],
+            log.cache["list1_6"], log.cache["list1_7"], log.cache["list1_8"]]) where Len(log.cache["obj"]["status"]["conditions"])
+            == 9
+          - 'set(log.cache["list1_9"], {"type": log.cache["obj"]["status"]["conditions"][9]["type"],
+            "status": log.cache["obj"]["status"]["conditions"][9]["status"], "reason":
+            log.cache["obj"]["status"]["conditions"][9]["reason"]})'
+          - set(log.cache["out"]["status"]["conditions"], [log.cache["list1_0"], log.cache["list1_1"],
+            log.cache["list1_2"], log.cache["list1_3"], log.cache["list1_4"], log.cache["list1_5"],
+            log.cache["list1_6"], log.cache["list1_7"], log.cache["list1_8"], log.cache["list1_9"]])
+            where Len(log.cache["obj"]["status"]["conditions"]) == 10
+          - 'set(log.cache["list1_10"], {"type": log.cache["obj"]["status"]["conditions"][10]["type"],
+            "status": log.cache["obj"]["status"]["conditions"][10]["status"], "reason":
+            log.cache["obj"]["status"]["conditions"][10]["reason"]})'
+          - set(log.cache["out"]["status"]["conditions"], [log.cache["list1_0"], log.cache["list1_1"],
+            log.cache["list1_2"], log.cache["list1_3"], log.cache["list1_4"], log.cache["list1_5"],
+            log.cache["list1_6"], log.cache["list1_7"], log.cache["list1_8"], log.cache["list1_9"],
+            log.cache["list1_10"]]) where Len(log.cache["obj"]["status"]["conditions"])
+            == 11
+          - 'set(log.cache["list1_11"], {"type": log.cache["obj"]["status"]["conditions"][11]["type"],
+            "status": log.cache["obj"]["status"]["conditions"][11]["status"], "reason":
+            log.cache["obj"]["status"]["conditions"][11]["reason"]})'
+          - set(log.cache["out"]["status"]["conditions"], [log.cache["list1_0"], log.cache["list1_1"],
+            log.cache["list1_2"], log.cache["list1_3"], log.cache["list1_4"], log.cache["list1_5"],
+            log.cache["list1_6"], log.cache["list1_7"], log.cache["list1_8"], log.cache["list1_9"],
+            log.cache["list1_10"], log.cache["list1_11"]]) where Len(log.cache["obj"]["status"]["conditions"])
+            == 12
+          - 'set(log.cache["list1_12"], {"type": log.cache["obj"]["status"]["conditions"][12]["type"],
+            "status": log.cache["obj"]["status"]["conditions"][12]["status"], "reason":
+            log.cache["obj"]["status"]["conditions"][12]["reason"]})'
+          - set(log.cache["out"]["status"]["conditions"], [log.cache["list1_0"], log.cache["list1_1"],
+            log.cache["list1_2"], log.cache["list1_3"], log.cache["list1_4"], log.cache["list1_5"],
+            log.cache["list1_6"], log.cache["list1_7"], log.cache["list1_8"], log.cache["list1_9"],
+            log.cache["list1_10"], log.cache["list1_11"], log.cache["list1_12"]]) where
+            Len(log.cache["obj"]["status"]["conditions"]) == 13
+          - 'set(log.cache["list1_13"], {"type": log.cache["obj"]["status"]["conditions"][13]["type"],
+            "status": log.cache["obj"]["status"]["conditions"][13]["status"], "reason":
+            log.cache["obj"]["status"]["conditions"][13]["reason"]})'
+          - set(log.cache["out"]["status"]["conditions"], [log.cache["list1_0"], log.cache["list1_1"],
+            log.cache["list1_2"], log.cache["list1_3"], log.cache["list1_4"], log.cache["list1_5"],
+            log.cache["list1_6"], log.cache["list1_7"], log.cache["list1_8"], log.cache["list1_9"],
+            log.cache["list1_10"], log.cache["list1_11"], log.cache["list1_12"], log.cache["list1_13"]])
+            where Len(log.cache["obj"]["status"]["conditions"]) == 14
+          - 'set(log.cache["list1_14"], {"type": log.cache["obj"]["status"]["conditions"][14]["type"],
+            "status": log.cache["obj"]["status"]["conditions"][14]["status"], "reason":
+            log.cache["obj"]["status"]["conditions"][14]["reason"]})'
+          - set(log.cache["out"]["status"]["conditions"], [log.cache["list1_0"], log.cache["list1_1"],
+            log.cache["list1_2"], log.cache["list1_3"], log.cache["list1_4"], log.cache["list1_5"],
+            log.cache["list1_6"], log.cache["list1_7"], log.cache["list1_8"], log.cache["list1_9"],
+            log.cache["list1_10"], log.cache["list1_11"], log.cache["list1_12"], log.cache["list1_13"],
+            log.cache["list1_14"]]) where Len(log.cache["obj"]["status"]["conditions"])
+            == 15
+          - 'set(log.cache["list1_15"], {"type": log.cache["obj"]["status"]["conditions"][15]["type"],
+            "status": log.cache["obj"]["status"]["conditions"][15]["status"], "reason":
+            log.cache["obj"]["status"]["conditions"][15]["reason"]})'
+          - set(log.cache["out"]["status"]["conditions"], [log.cache["list1_0"], log.cache["list1_1"],
+            log.cache["list1_2"], log.cache["list1_3"], log.cache["list1_4"], log.cache["list1_5"],
+            log.cache["list1_6"], log.cache["list1_7"], log.cache["list1_8"], log.cache["list1_9"],
+            log.cache["list1_10"], log.cache["list1_11"], log.cache["list1_12"], log.cache["list1_13"],
+            log.cache["list1_14"], log.cache["list1_15"]]) where Len(log.cache["obj"]["status"]["conditions"])
+            >= 16
+          - set(log.body["type"], log.cache["raw"]["type"]) where IsMap(log.cache["raw"]["object"])
+          - set(log.body["object"], log.cache["out"]) where IsMap(log.cache["raw"]["object"])
+          - set(log.body, log.cache["out"]) where not IsMap(log.cache["raw"]["object"])
+    receivers:
+      k8sobjects:
+        auth_type: serviceAccount
+        objects:
+        - interval: 60s
+          mode: pull
+          name: nodes
+        - group: apps
+          interval: 300s
+          mode: pull
+          name: daemonsets
+        - group: apps
+          interval: 300s
+          mode: pull
+          name: deployments
+        - group: events.k8s.io
+          mode: watch
+          name: events
+    service:
+      extensions:
+      - health_check
+      - bearertokenauth
+      pipelines:
+        logs:
+          exporters:
+          - otlphttp/destination
+          processors:
+          - memory_limiter
+          - transform/inventory_allowlist
+          - resource
+          - batch
+          receivers:
+          - k8sobjects
+kind: ConfigMap
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: forge
+    app.kubernetes.io/name: cluster-collector
+    app.kubernetes.io/part-of: demo
+    forge.dev/env: staging
+  name: cluster-collector
+  namespace: forge-observability
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: forge
+    app.kubernetes.io/name: cluster-collector
+    app.kubernetes.io/part-of: demo
+    forge.dev/env: staging
+  name: cluster-collector
+  namespace: forge-observability
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: cluster-collector
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      annotations:
+        forge.dev/config-sha256: 84037ea605914e52867fbe829d3606e87e7635f5c5dc9cc0a04be28587652022
+      labels:
+        app.kubernetes.io/managed-by: forge
+        app.kubernetes.io/name: cluster-collector
+        app.kubernetes.io/part-of: demo
+        forge.dev/env: staging
+    spec:
+      containers:
+      - args:
+        - --config=/etc/otel/config.yaml
+        env:
+        - name: GOMEMLIMIT
+          value: 204MiB
+        image: otel/opentelemetry-collector-contrib:0.162.0@sha256:39923a8e431bd1f57be82411999d389fcfe40857492e4365456d97a4c1f74be6
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 13133
+          initialDelaySeconds: 10
+        name: collector
+        ports:
+        - containerPort: 13133
+          name: health
+          protocol: TCP
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 13133
+        resources:
+          limits:
+            memory: 256Mi
+          requests:
+            cpu: 20m
+            memory: 128Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 10001
+          seccompProfile:
+            type: RuntimeDefault
+        volumeMounts:
+        - mountPath: /etc/otel
+          name: config
+          readOnly: true
+        - mountPath: /etc/otel-auth
+          name: otlp-token
+          readOnly: true
+      enableServiceLinks: false
+      serviceAccountName: cluster-collector
+      volumes:
+      - configMap:
+          name: cluster-collector
+        name: config
+      - name: otlp-token
+        secret:
+          items:
+          - key: token
+            path: token
+          optional: true
+          secretName: forge-telemetry-token

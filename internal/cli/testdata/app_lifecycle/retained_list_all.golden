@@ -1,0 +1,9 @@
+--- stdout
+ID      DATABASE   ENV       PROJECT   STORAGE   RETAINED
+rdb_9   main       prod      other     1 GiB     2026-11-02 00:00 UTC
+rdb_1   main       old       shop      3 GiB     2026-11-01 12:30 UTC
+rdb_2   orders     preview   shop      10 GiB    2026-11-10 09:00 UTC
+
+3 retained database(s), 14 GiB: each keeps billing as storage until purged. A re-deploy does not reattach one.
+Purge one now (IRREVERSIBLE): forge env retained purge <id>
+--- error

@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites name="pytest">
+  <testsuite name="pytest" tests="5" failures="1" skipped="1">
+    <testcase classname="tests.test_api.TestAPI" name="test_flaky" time="0.2">
+      <flakyFailure message="timeout" type="TimeoutError">first try timed out</flakyFailure>
+    </testcase>
+    <testcase classname="tests.test_api.TestAPI" name="test_rerun" time="0.1">
+      <failure message="boom">Traceback: boom</failure>
+    </testcase>
+    <testcase classname="tests.test_api.TestAPI" name="test_rerun" time="0.1"/>
+    <testcase classname="tests.test_api.TestAPI" name="test_fail" time="1.5">
+      <failure message="AssertionError: 1 != 2" type="AssertionError">tests/test_api.py:12: AssertionError</failure>
+      <system-out>captured stdout</system-out>
+    </testcase>
+    <testcase classname="tests.test_api.TestAPI" name="test_skip" time="0">
+      <skipped message="not today"/>
+    </testcase>
+    <testsuite name="src/math.test.ts">
+      <testcase name="adds" file="/work/repo/src/math.test.ts" time="0.003"/>
+    </testsuite>
+  </testsuite>
+</testsuites>

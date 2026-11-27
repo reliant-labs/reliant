@@ -1,0 +1,38 @@
+import type { Metadata } from "next";
+
+// What search engines and link previews read about this site. Yours: replace
+// the description, and public/og.png (1200×630) with the site's own image.
+
+export const SITE_NAME = "landing";
+export const SITE_DESCRIPTION = "landing — built with Forge. Replace this description.";
+
+// The site's public origin, e.g. https://example.com, read at build time:
+// a static export writes it into the HTML, robots.txt and sitemap.xml, which
+// crawlers read as served. deploy/kcl/<env>/main.k declares it per env
+// (forge.FrontendURL): the dev server's URL in dev, the hosted site's hostname
+// when forge builds a release. Empty on a first release, built before the env
+// has a hostname: the tags that need it are then left out rather than given a
+// wrong origin, and the site audit names them.
+export const SITE_URL = (process.env.SITE_URL ?? "").replace(/\/+$/, "");
+
+// The Open Graph tags every page shares. A page's own `openGraph` replaces
+// its layout's whole object, so pageMetadata spreads this into each page's.
+export const openGraph: NonNullable<Metadata["openGraph"]> = {
+  type: "website",
+  siteName: SITE_NAME,
+  title: SITE_NAME,
+  description: SITE_DESCRIPTION,
+  ...(SITE_URL ? { images: [{ url: "/og.png", width: 1200, height: 630 }] } : {}),
+};
+
+// pageMetadata is the per-page part of the metadata: the canonical link and
+// og:url for the page at `path`. Give every page its own:
+//
+//     export const metadata = pageMetadata("/pricing");
+//
+// A canonical set in the root layout would be inherited by every page, and
+// name the home page as the preferred URL of each.
+export function pageMetadata(path: string): Metadata {
+  if (!SITE_URL) return {};
+  return { alternates: { canonical: path }, openGraph: { ...openGraph, url: path } };
+}

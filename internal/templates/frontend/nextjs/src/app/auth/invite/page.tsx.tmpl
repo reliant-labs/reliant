@@ -1,0 +1,47 @@
+"use client";
+
+// yours: scaffolded once, never touched again — forge will not overwrite this file
+//
+// /auth/invite?userID=…&code=…&orgID=… — the page an invitation email opens.
+//
+// Public (the route guard lists it beside /auth/sign-in) and rendered outside
+// the app shell, like the sign-in screen. The form is shared with the Vite
+// scaffold: src/components/accept-invite-form.tsx.
+
+import { useSearchParams } from "next/navigation";
+import { Suspense } from "react";
+
+import { AcceptInviteForm } from "@/components/accept-invite-form";
+import { AuthPage } from "@/components/auth-ui";
+import { useAuth } from "@/lib/auth/use-auth";
+import { joinBasePath } from "@/lib/basepath_gen";
+
+function Page() {
+  const searchParams = useSearchParams();
+  const { refresh } = useAuth();
+  return (
+    <AuthPage>
+      <AcceptInviteForm
+        userID={searchParams?.get("userID") ?? null}
+        code={searchParams?.get("code") ?? null}
+        orgID={searchParams?.get("orgID") ?? null}
+        signInHref={joinBasePath("/auth/sign-in")}
+        onSignedIn={async () => {
+          // A full navigation, as the sign-in screen does: every provider
+          // re-initialises with the session in place.
+          await refresh();
+          window.location.assign(joinBasePath("/"));
+        }}
+      />
+    </AuthPage>
+  );
+}
+
+// useSearchParams bails out of prerendering; keep the bailout to this page.
+export default function InvitePage() {
+  return (
+    <Suspense fallback={null}>
+      <Page />
+    </Suspense>
+  );
+}

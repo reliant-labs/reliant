@@ -1,0 +1,102 @@
+package {{.ServicePackage}}
+
+import (
+	"context"
+{{- if connectV2 .}}
+
+	"github.com/reliant-labs/forge/pkg/svcerr"
+{{- with .StubImports}}
+{{range .}}
+	{{.Alias}} "{{.Path}}"
+{{- end}}
+{{- end}}
+{{- if .HasStreamingMethods}}
+	{{.ProtoConnectPackage}} "{{.Module}}/gen/{{.ProtoPackage}}/v1/{{.ProtoConnectPackage}}"
+{{- end}}
+{{- else}}
+
+	"connectrpc.com/connect"
+	"github.com/reliant-labs/forge/pkg/svcerr"
+{{- with .StubImports}}
+{{range .}}
+	{{.Alias}} "{{.Path}}"
+{{- end}}
+{{- end}}
+{{- end}}
+)
+
+{{range .Methods}}
+{{- if and .ClientStreaming .ServerStreaming}}
+// {{.Name | goName}} implements the {{.Name | goName}} bidirectional streaming RPC.
+// FORGE_SCAFFOLD: implement business logic; remove this marker when done.
+// forge:gen unwired-stub symbol={{$.ServicePackage}}.{{.Name | goName}}
+{{- if .Name | goName | tripsReviveVarNaming}}
+//nolint:revive // var-naming: name fixed by the generated {{$.HandlerName}}Handler interface (proto rpc {{.Name}})
+{{- end}}
+func (s *Service) {{.Name | goName}}(
+	ctx context.Context,
+{{- if connectV2 $}}
+	stream {{$.ProtoConnectPackage}}.{{$.HandlerName}}{{.Name | goName}}ServerStream,
+{{- else}}
+	stream *connect.BidiStream[{{.InputRef}}, {{.OutputRef}}],
+{{- end}}
+) error {
+	return svcerr.Wrap(svcerr.ScaffoldStub("{{.Name | goName}}"))
+}
+{{- else if .ClientStreaming}}
+// {{.Name | goName}} implements the {{.Name | goName}} client streaming RPC.
+// FORGE_SCAFFOLD: implement business logic; remove this marker when done.
+// forge:gen unwired-stub symbol={{$.ServicePackage}}.{{.Name | goName}}
+{{- if .Name | goName | tripsReviveVarNaming}}
+//nolint:revive // var-naming: name fixed by the generated {{$.HandlerName}}Handler interface (proto rpc {{.Name}})
+{{- end}}
+func (s *Service) {{.Name | goName}}(
+	ctx context.Context,
+{{- if connectV2 $}}
+	stream {{$.ProtoConnectPackage}}.{{$.HandlerName}}{{.Name | goName}}ServerStream,
+) (*{{.OutputRef}}, error) {
+{{- else}}
+	stream *connect.ClientStream[{{.InputRef}}],
+) (*connect.Response[{{.OutputRef}}], error) {
+{{- end}}
+	return nil, svcerr.Wrap(svcerr.ScaffoldStub("{{.Name | goName}}"))
+}
+{{- else if .ServerStreaming}}
+// {{.Name | goName}} implements the {{.Name | goName}} server streaming RPC.
+// FORGE_SCAFFOLD: implement business logic; remove this marker when done.
+// forge:gen unwired-stub symbol={{$.ServicePackage}}.{{.Name | goName}}
+{{- if .Name | goName | tripsReviveVarNaming}}
+//nolint:revive // var-naming: name fixed by the generated {{$.HandlerName}}Handler interface (proto rpc {{.Name}})
+{{- end}}
+func (s *Service) {{.Name | goName}}(
+	ctx context.Context,
+{{- if connectV2 $}}
+	req *{{.InputRef}},
+	stream {{$.ProtoConnectPackage}}.{{$.HandlerName}}{{.Name | goName}}ServerStream,
+{{- else}}
+	req *connect.Request[{{.InputRef}}],
+	stream *connect.ServerStream[{{.OutputRef}}],
+{{- end}}
+) error {
+	return svcerr.Wrap(svcerr.ScaffoldStub("{{.Name | goName}}"))
+}
+{{- else}}
+// {{.Name | goName}} implements the {{.Name | goName}} RPC.
+// FORGE_SCAFFOLD: implement business logic; remove this marker when done.
+// forge:gen unwired-stub symbol={{$.ServicePackage}}.{{.Name | goName}}
+{{- if .Name | goName | tripsReviveVarNaming}}
+//nolint:revive // var-naming: name fixed by the generated {{$.HandlerName}}Handler interface (proto rpc {{.Name}})
+{{- end}}
+func (s *Service) {{.Name | goName}}(
+	ctx context.Context,
+{{- if connectV2 $}}
+	req *{{.InputRef}},
+) (*{{.OutputRef}}, error) {
+{{- else}}
+	req *connect.Request[{{.InputRef}}],
+) (*connect.Response[{{.OutputRef}}], error) {
+{{- end}}
+	return nil, svcerr.Wrap(svcerr.ScaffoldStub("{{.Name | goName}}"))
+}
+{{- end}}
+{{end}}

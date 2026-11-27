@@ -1,0 +1,493 @@
+{
+  "output": {
+    "applier": null,
+    "bundled_charts": [
+      {
+        "chart": "node-problem-detector",
+        "cluster": "gke_acme_us-central1_gpu",
+        "labels": {
+          "forge.dev/component": "ml-node-problem-detector",
+          "forge.dev/component-owner": "acme.prod"
+        },
+        "name": "node-problem-detector",
+        "namespace": "forge-ml",
+        "oci": null,
+        "repo": "https://charts.deliveryhero.io/",
+        "values": {},
+        "version": "2.3.14"
+      }
+    ],
+    "cluster_target": {
+      "cluster": "gke_acme_us-central1_gpu",
+      "connected_cluster": null,
+      "domain": null,
+      "image_pull_secrets": [],
+      "namespace": "acme-prod",
+      "platform": "amd64"
+    },
+    "clusters": [],
+    "config_maps": [],
+    "connected_clusters": null,
+    "control_plane_secrets": [],
+    "databases": [],
+    "env": "prod",
+    "external_secrets_operators": [],
+    "frontends": [],
+    "gateways": [],
+    "grpc_routes": [],
+    "helm_charts": [
+      {
+        "chart": null,
+        "cluster": "gke_acme_us-central1_gpu",
+        "cluster_target": true,
+        "crds": null,
+        "labels": {
+          "forge.dev/component": "ml-jobset",
+          "forge.dev/component-owner": "acme.prod"
+        },
+        "manifests": null,
+        "name": "jobset",
+        "namespace": "jobset-system",
+        "namespace_annotations": null,
+        "namespace_labels": null,
+        "oci": "oci://registry.k8s.io/jobset/charts/jobset",
+        "patches": null,
+        "prune": true,
+        "repo": null,
+        "values": {},
+        "version": "0.10.1"
+      }
+    ],
+    "http_routes": [],
+    "image_tag": "stable",
+    "infra": [],
+    "kubeconfig_secrets": [],
+    "lifecycle": null,
+    "manifest_owners": [],
+    "manifests": [
+      {
+        "apiVersion": "v1",
+        "kind": "Namespace",
+        "metadata": {
+          "labels": {
+            "app.kubernetes.io/managed-by": "forge",
+            "forge.dev/cluster": "gke_acme_us-central1_gpu",
+            "forge.dev/env": "prod",
+            "pod-security.kubernetes.io/audit": "restricted",
+            "pod-security.kubernetes.io/enforce": "restricted",
+            "pod-security.kubernetes.io/warn": "restricted"
+          },
+          "name": "acme-prod"
+        }
+      },
+      {
+        "apiVersion": "v1",
+        "kind": "Namespace",
+        "metadata": {
+          "annotations": {
+            "kustomize.toolkit.fluxcd.io/prune": "disabled"
+          },
+          "labels": {
+            "app.kubernetes.io/managed-by": "forge",
+            "forge.dev/cluster": "gke_acme_us-central1_gpu",
+            "forge.dev/component-owner": "acme.prod",
+            "forge.dev/env": "prod"
+          },
+          "name": "forge-ml"
+        }
+      },
+      {
+        "apiVersion": "forge.dev/v1alpha1",
+        "kind": "Workload",
+        "metadata": {
+          "labels": {
+            "app.kubernetes.io/managed-by": "forge",
+            "app.kubernetes.io/name": "trainer-ui",
+            "app.kubernetes.io/part-of": "acme",
+            "forge.dev/cluster": "gke_acme_us-central1_gpu",
+            "forge.dev/env": "prod"
+          },
+          "name": "trainer-ui",
+          "namespace": "acme-prod"
+        },
+        "spec": {
+          "env": [
+            {
+              "name": "OTEL_SERVICE_NAME",
+              "value": "trainer-ui"
+            },
+            {
+              "name": "OTEL_RESOURCE_ATTRIBUTES",
+              "value": "deployment.environment.name=prod,service.namespace=acme"
+            },
+            {
+              "name": "OTEL_EXPORTER_OTLP_ENDPOINT",
+              "value": "http://otel-agent.forge-observability.svc.cluster.local:4318"
+            },
+            {
+              "name": "OTEL_EXPORTER_OTLP_PROTOCOL",
+              "value": "http/protobuf"
+            },
+            {
+              "name": "OTEL_PROFILES_EXPORTER",
+              "value": "none"
+            }
+          ],
+          "image": "registry.example.com/acme/trainer-ui:1.0.0",
+          "kind": "service",
+          "ports": [
+            {
+              "name": "http",
+              "port": 8080,
+              "protocol": "tcp"
+            }
+          ],
+          "replicas": 1,
+          "resources": {
+            "cpuRequestMillicores": 250,
+            "memoryRequestBytes": 1073741824
+          }
+        }
+      },
+      {
+        "apiVersion": "forge.dev/v1alpha1",
+        "kind": "ObservabilityAgent",
+        "metadata": {
+          "labels": {
+            "app.kubernetes.io/managed-by": "forge",
+            "app.kubernetes.io/name": "otel-agent",
+            "app.kubernetes.io/part-of": "acme",
+            "forge.dev/cluster": "gke_acme_us-central1_gpu",
+            "forge.dev/env": "prod"
+          },
+          "name": "otel-agent",
+          "namespace": "forge-observability"
+        },
+        "spec": {
+          "endpoint": "https://otlp.example.com",
+          "headersSecret": null,
+          "image": "ghcr.io/open-telemetry/opentelemetry-collector-releases/opentelemetry-collector-contrib:0.162.0@sha256:39923a8e431bd1f57be82411999d389fcfe40857492e4365456d97a4c1f74be6",
+          "memoryLimitMiB": 256,
+          "protocol": "http/protobuf",
+          "signals": {
+            "logs": true,
+            "metrics": true,
+            "profiles": false,
+            "traces": true
+          },
+          "telemetry": [
+            {
+              "address": "",
+              "attachment": "observability",
+              "checks": [],
+              "cluster": "gke_acme_us-central1_gpu",
+              "container": "",
+              "dashboard": {
+                "enabled": true,
+                "title": ""
+              },
+              "dashboards": [],
+              "default_alerts": true,
+              "isolated": false,
+              "logs": null,
+              "metrics": [
+                {
+                  "allow": "DCGM_FI_DEV_GPU_UTIL|DCGM_FI_DEV_FB_USED|DCGM_FI_DEV_XID_ERRORS",
+                  "bearer_token": null,
+                  "counters": "",
+                  "deny": "",
+                  "drop_labels": [],
+                  "interval": "30s",
+                  "label_limit": 30,
+                  "label_value_length_limit": 256,
+                  "name": "",
+                  "params": {},
+                  "path": "/metrics",
+                  "port": 9400,
+                  "sample_limit": 5000,
+                  "scheme": "http",
+                  "timeout": "10s",
+                  "tls": null
+                }
+              ],
+              "namespaces": [
+                "gpu-operator"
+              ],
+              "otlp": null,
+              "ports": {},
+              "profiles": [],
+              "runtime": "cluster",
+              "scope": "platform",
+              "selector": {
+                "app": "nvidia-dcgm-exporter"
+              },
+              "service_name": "ml-dcgm-exporter",
+              "source": "ml-stack:gke_acme_us-central1_gpu"
+            }
+          ],
+          "tokenSecret": null
+        }
+      }
+    ],
+    "ml_stacks": [
+      {
+        "accelerators": [
+          {
+            "node_selector": {},
+            "resource": "nvidia.com/gpu",
+            "vendor": "nvidia"
+          }
+        ],
+        "cluster": "gke_acme_us-central1_gpu",
+        "components": [
+          {
+            "allow": [
+              "DCGM_FI_DEV_GPU_UTIL",
+              "DCGM_FI_DEV_FB_USED",
+              "DCGM_FI_DEV_XID_ERRORS"
+            ],
+            "chart": "",
+            "kind": "dcgm-exporter",
+            "mode": "adopt",
+            "namespace": "gpu-operator",
+            "note": "",
+            "port": 9400,
+            "reason": "",
+            "selector": {
+              "app": "nvidia-dcgm-exporter"
+            },
+            "service_name": "ml-dcgm-exporter",
+            "slot": "accelerators",
+            "vendor": "nvidia",
+            "version": "3.3.9"
+          },
+          {
+            "allow": [],
+            "chart": "node-problem-detector",
+            "kind": "node-problem-detector",
+            "mode": "install",
+            "namespace": "forge-ml",
+            "note": "",
+            "port": 0,
+            "reason": "",
+            "selector": {},
+            "service_name": "",
+            "slot": "node_health",
+            "vendor": "",
+            "version": "2.3.14"
+          },
+          {
+            "allow": [],
+            "chart": "",
+            "kind": "kueue",
+            "mode": "adopt",
+            "namespace": "kueue-system",
+            "note": "",
+            "port": 0,
+            "reason": "",
+            "selector": {},
+            "service_name": "",
+            "slot": "queue",
+            "vendor": "",
+            "version": "0.9.1"
+          },
+          {
+            "allow": [],
+            "chart": "jobset",
+            "kind": "jobset",
+            "mode": "install",
+            "namespace": "jobset-system",
+            "note": "",
+            "port": 0,
+            "reason": "",
+            "selector": {},
+            "service_name": "",
+            "slot": "training",
+            "vendor": "",
+            "version": "0.10.1"
+          }
+        ],
+        "decisions": [
+          {
+            "decision": "dismiss",
+            "expires": "2027-06-01",
+            "id": "kubelet-tracing-off",
+            "reason": "GKE does not expose kubelet tracing config"
+          }
+        ],
+        "namespace": "acme-prod",
+        "observed": [
+          "gpu-operator",
+          "dcgm-exporter",
+          "kueue"
+        ],
+        "observed_at": "2026-11-25"
+      }
+    ],
+    "network_policy": null,
+    "observability": {
+      "agent": {
+        "image": "ghcr.io/open-telemetry/opentelemetry-collector-releases/opentelemetry-collector-contrib:0.162.0@sha256:39923a8e431bd1f57be82411999d389fcfe40857492e4365456d97a4c1f74be6",
+        "memory_limit_mib": 256,
+        "namespace": "forge-observability"
+      },
+      "alertmanager_port": null,
+      "alerts_port": null,
+      "destination": {
+        "endpoint": "https://otlp.example.com",
+        "headers_secret": null,
+        "protocol": "http/protobuf",
+        "token_from_control_plane": false,
+        "token_secret": null
+      },
+      "dev_telemetry": "auto",
+      "enabled": true,
+      "local_endpoint": null,
+      "local_port": 0,
+      "policy": {
+        "disabled": [],
+        "enabled": true,
+        "opt_in": []
+      },
+      "profiles_endpoint": null,
+      "retention": {
+        "browser_days": 0,
+        "errors_days": 30,
+        "logs_days": 0,
+        "metrics_days": 0,
+        "overrides": [],
+        "product_events_days": 90,
+        "replay_days": 14,
+        "traces_days": 0
+      },
+      "sampling": {
+        "destination_tail_samples": false,
+        "errors_always": false,
+        "traces_ratio": 1
+      },
+      "signals": {
+        "browser": true,
+        "logs": true,
+        "metadata": true,
+        "metrics": true,
+        "profiles": false,
+        "replay": false,
+        "traces": true
+      }
+    },
+    "overrides": {},
+    "project": "acme",
+    "release_manifest_consumers": [],
+    "rendered_secrets": [],
+    "required_dns": [],
+    "required_secrets": [],
+    "runtime_classes": [],
+    "telemetry": [
+      {
+        "address": "",
+        "attachment": "observability",
+        "checks": [],
+        "cluster": "gke_acme_us-central1_gpu",
+        "container": "",
+        "dashboard": {
+          "enabled": true,
+          "title": ""
+        },
+        "dashboards": [],
+        "default_alerts": true,
+        "isolated": false,
+        "logs": null,
+        "metrics": [
+          {
+            "allow": "DCGM_FI_DEV_GPU_UTIL|DCGM_FI_DEV_FB_USED|DCGM_FI_DEV_XID_ERRORS",
+            "bearer_token": null,
+            "counters": "",
+            "deny": "",
+            "drop_labels": [],
+            "interval": "30s",
+            "label_limit": 30,
+            "label_value_length_limit": 256,
+            "name": "",
+            "params": {},
+            "path": "/metrics",
+            "port": 9400,
+            "sample_limit": 5000,
+            "scheme": "http",
+            "timeout": "10s",
+            "tls": null
+          }
+        ],
+        "namespaces": [
+          "gpu-operator"
+        ],
+        "otlp": null,
+        "ports": {},
+        "profiles": [],
+        "runtime": "cluster",
+        "scope": "platform",
+        "selector": {
+          "app": "nvidia-dcgm-exporter"
+        },
+        "service_name": "ml-dcgm-exporter",
+        "source": "ml-stack:gke_acme_us-central1_gpu"
+      }
+    ],
+    "workloads": [
+      {
+        "build": null,
+        "build_image": null,
+        "image": "",
+        "kind": "service",
+        "name": "trainer-ui",
+        "release_inputs": {},
+        "runtime": {
+          "cluster": "gke_acme_us-central1_gpu",
+          "connected_cluster": null,
+          "domain": null,
+          "image_pull_secrets": [],
+          "namespace": "acme-prod",
+          "platform": "amd64",
+          "type": "cluster"
+        },
+        "spec": {
+          "env": [
+            {
+              "name": "OTEL_SERVICE_NAME",
+              "value": "trainer-ui"
+            },
+            {
+              "name": "OTEL_RESOURCE_ATTRIBUTES",
+              "value": "deployment.environment.name=prod,service.namespace=acme"
+            },
+            {
+              "name": "OTEL_EXPORTER_OTLP_ENDPOINT",
+              "value": "http://otel-agent.forge-observability.svc.cluster.local:4318"
+            },
+            {
+              "name": "OTEL_EXPORTER_OTLP_PROTOCOL",
+              "value": "http/protobuf"
+            },
+            {
+              "name": "OTEL_PROFILES_EXPORTER",
+              "value": "none"
+            }
+          ],
+          "image": "registry.example.com/acme/trainer-ui:1.0.0",
+          "kind": "service",
+          "ports": [
+            {
+              "name": "http",
+              "port": 8080,
+              "protocol": "tcp"
+            }
+          ],
+          "replicas": 1,
+          "resources": {
+            "cpuRequestMillicores": 250,
+            "memoryRequestBytes": 1073741824
+          }
+        }
+      }
+    ]
+  }
+}

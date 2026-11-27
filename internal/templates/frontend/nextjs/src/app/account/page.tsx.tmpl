@@ -1,0 +1,17 @@
+"use client";
+
+// yours: scaffolded once, never touched again — forge will not overwrite this file
+//
+// The account page: /account, linked from the user menu. Static-export safe —
+// it reads no query string. Signed-in only: the route guard sends a signed-out
+// visitor to sign in. This page renders INSIDE AppShell's <main>: use a <div>
+// or <section>, never a second <main>.
+//
+// The content lives in @/components/account-settings (shared with the Vite
+// scaffold); this file is the framing.
+
+import { AccountSettings } from "@/components/account-settings";
+
+export default function AccountPage() {
+  return <AccountSettings />;
+}

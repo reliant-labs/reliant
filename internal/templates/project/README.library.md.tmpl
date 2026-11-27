@@ -1,0 +1,65 @@
+# {{.Name}}
+
+A Go library scaffolded with [Forge](https://github.com/reliant-labs/forge).
+
+## Layout
+
+```
+{{.Name}}/
+├── pkg/{{.Name}}/  # Public API (importable as {{.Module}}/pkg/{{.Name}})
+├── internal/        # Private implementation packages
+├── docs/            # Architecture Decision Records
+├── forge.yaml       # Forge project manifest (kind: library)
+├── go.mod
+└── Taskfile.yml
+```
+
+## Quick start
+
+```bash
+task deps   # go mod download
+task test   # go test -race ./..., recorded with its coverage
+task lint   # golangci-lint run
+task fmt    # goimports + go mod tidy
+```
+
+## Test results and coverage
+
+`task test` records every lane it runs, with its coverage, under
+`.forge/tests/runs/` (gitignored); `task test:report` summarises the last
+run. `FORGE_TESTS=off` records nothing for one run.
+
+CI's "Report test results" step uploads the run to your project's control
+plane with no secret: its job has `id-token: write`, and forge exchanges the
+job's GitHub OIDC token for a short-lived `tests:write` token. That works once
+the Reliant GitHub App is installed on this repository and an org admin has
+linked the installation to the org in the web app's organization settings
+(Reliant cloud: https://forge.reliantlabs.io). Until then, and on a fork's pull
+request, which gets no OIDC token, the step prints one line and stays green; it
+never decides the job's result. To upload with a token instead, store one with
+`tests:write` (or `deploy:write`) as the secret `FORGE_CONTROL_PLANE_TOKEN` and
+pass it in the step's `env:`: the secret, if set, overrides OIDC.
+`tests.upload: never` in `forge.yaml` turns upload off.
+
+## Adding code
+
+- **Public API** lives under `pkg/{{.Name}}/`. Anything you want
+  importers to use goes here.
+- **Private helpers** live under `internal/`. Use
+  `forge scaffold package <name>` to scaffold a new internal package with
+  a contract interface and a generated mock.
+- **Tests** live next to the code (`xxx_test.go`). Runnable examples
+  go into `Example*` test functions; they show up rendered in
+  generated docs and run as part of `go test`.
+
+## Versioning
+
+This module follows [Semantic Versioning](https://semver.org). Cut
+releases by tagging the repository:
+
+```bash
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+Importers will pull the tagged version via `go get {{.Module}}@v0.1.0`.

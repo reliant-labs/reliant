@@ -1,0 +1,33 @@
+{"Time":"2026-10-19T21:32:05.339204-04:00","Action":"start","Package":"example.com/budgetfixture"}
+{"Time":"2026-10-19T21:32:05.509138-04:00","Action":"run","Package":"example.com/budgetfixture","Test":"TestFast"}
+{"Time":"2026-10-19T21:32:05.509244-04:00","Action":"output","Package":"example.com/budgetfixture","Test":"TestFast","Output":"=== RUN   TestFast\n","OutputType":"frame"}
+{"Time":"2026-10-19T21:32:05.509291-04:00","Action":"output","Package":"example.com/budgetfixture","Test":"TestFast","Output":"--- PASS: TestFast (0.00s)\n","OutputType":"frame"}
+{"Time":"2026-10-19T21:32:05.509308-04:00","Action":"pass","Package":"example.com/budgetfixture","Test":"TestFast","Elapsed":0}
+{"Time":"2026-10-19T21:32:05.509318-04:00","Action":"run","Package":"example.com/budgetfixture","Test":"TestSlowUnmarked"}
+{"Time":"2026-10-19T21:32:05.509324-04:00","Action":"output","Package":"example.com/budgetfixture","Test":"TestSlowUnmarked","Output":"=== RUN   TestSlowUnmarked\n","OutputType":"frame"}
+{"Time":"2026-10-19T21:32:08.009231-04:00","Action":"output","Package":"example.com/budgetfixture","Test":"TestSlowUnmarked","Output":"--- PASS: TestSlowUnmarked (2.50s)\n","OutputType":"frame"}
+{"Time":"2026-10-19T21:32:08.009307-04:00","Action":"pass","Package":"example.com/budgetfixture","Test":"TestSlowUnmarked","Elapsed":2.5}
+{"Time":"2026-10-19T21:32:08.009328-04:00","Action":"run","Package":"example.com/budgetfixture","Test":"TestMarkedSlow"}
+{"Time":"2026-10-19T21:32:08.009338-04:00","Action":"output","Package":"example.com/budgetfixture","Test":"TestMarkedSlow","Output":"=== RUN   TestMarkedSlow\n","OutputType":"frame"}
+{"Time":"2026-10-19T21:32:08.009351-04:00","Action":"output","Package":"example.com/budgetfixture","Test":"TestMarkedSlow","Output":"    budget_test.go:21: sleeps 3s\n"}
+{"Time":"2026-10-19T21:32:08.009366-04:00","Action":"output","Package":"example.com/budgetfixture","Test":"TestMarkedSlow","Output":"--- SKIP: TestMarkedSlow (0.00s)\n","OutputType":"frame"}
+{"Time":"2026-10-19T21:32:08.009377-04:00","Action":"skip","Package":"example.com/budgetfixture","Test":"TestMarkedSlow","Elapsed":0}
+{"Time":"2026-10-19T21:32:08.009385-04:00","Action":"run","Package":"example.com/budgetfixture","Test":"TestTable"}
+{"Time":"2026-10-19T21:32:08.009395-04:00","Action":"output","Package":"example.com/budgetfixture","Test":"TestTable","Output":"=== RUN   TestTable\n","OutputType":"frame"}
+{"Time":"2026-10-19T21:32:08.009404-04:00","Action":"run","Package":"example.com/budgetfixture","Test":"TestTable/a"}
+{"Time":"2026-10-19T21:32:08.009412-04:00","Action":"output","Package":"example.com/budgetfixture","Test":"TestTable/a","Output":"=== RUN   TestTable/a\n","OutputType":"frame"}
+{"Time":"2026-10-19T21:32:08.811341-04:00","Action":"output","Package":"example.com/budgetfixture","Test":"TestTable/a","Output":"--- PASS: TestTable/a (0.80s)\n","OutputType":"frame"}
+{"Time":"2026-10-19T21:32:08.811379-04:00","Action":"pass","Package":"example.com/budgetfixture","Test":"TestTable/a","Elapsed":0.8}
+{"Time":"2026-10-19T21:32:08.811389-04:00","Action":"run","Package":"example.com/budgetfixture","Test":"TestTable/b"}
+{"Time":"2026-10-19T21:32:08.811394-04:00","Action":"output","Package":"example.com/budgetfixture","Test":"TestTable/b","Output":"=== RUN   TestTable/b\n","OutputType":"frame"}
+{"Time":"2026-10-19T21:32:09.613667-04:00","Action":"output","Package":"example.com/budgetfixture","Test":"TestTable/b","Output":"--- PASS: TestTable/b (0.80s)\n","OutputType":"frame"}
+{"Time":"2026-10-19T21:32:09.613727-04:00","Action":"pass","Package":"example.com/budgetfixture","Test":"TestTable/b","Elapsed":0.8}
+{"Time":"2026-10-19T21:32:09.613741-04:00","Action":"run","Package":"example.com/budgetfixture","Test":"TestTable/c"}
+{"Time":"2026-10-19T21:32:09.613749-04:00","Action":"output","Package":"example.com/budgetfixture","Test":"TestTable/c","Output":"=== RUN   TestTable/c\n","OutputType":"frame"}
+{"Time":"2026-10-19T21:32:10.414146-04:00","Action":"output","Package":"example.com/budgetfixture","Test":"TestTable/c","Output":"--- PASS: TestTable/c (0.80s)\n","OutputType":"frame"}
+{"Time":"2026-10-19T21:32:10.416259-04:00","Action":"pass","Package":"example.com/budgetfixture","Test":"TestTable/c","Elapsed":0.8}
+{"Time":"2026-10-19T21:32:10.416269-04:00","Action":"output","Package":"example.com/budgetfixture","Test":"TestTable","Output":"--- PASS: TestTable (2.40s)\n","OutputType":"frame"}
+{"Time":"2026-10-19T21:32:10.416274-04:00","Action":"pass","Package":"example.com/budgetfixture","Test":"TestTable","Elapsed":2.4}
+{"Time":"2026-10-19T21:32:10.416278-04:00","Action":"output","Package":"example.com/budgetfixture","Output":"PASS\n","OutputType":"frame"}
+{"Time":"2026-10-19T21:32:10.41656-04:00","Action":"output","Package":"example.com/budgetfixture","Output":"ok  \texample.com/budgetfixture\t5.076s\n"}
+{"Time":"2026-10-19T21:32:10.420156-04:00","Action":"pass","Package":"example.com/budgetfixture","Elapsed":5.081}

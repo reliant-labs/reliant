@@ -1,0 +1,8 @@
+{
+  "site": "https://abc123.reliantpreview.example",
+  "expect": {"indexing": "noindex"},
+  "pages": [
+    {"url": "https://abc123.reliantpreview.example/", "status": 200, "raw": "page.html"},
+    {"url": "https://abc123.reliantpreview.example/sent-noindex", "status": 200, "header": {"X-Robots-Tag": ["noindex"]}, "raw": "page.html"}
+  ]
+}
