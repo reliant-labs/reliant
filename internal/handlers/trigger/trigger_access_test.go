@@ -21,6 +21,7 @@ import (
 	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/integrations/ghaccess"
 	"github.com/reliant-labs/reliant/internal/netguard/netguardtest"
@@ -217,9 +218,10 @@ func (*snapshotTxProbe) PruneIntegrationAccess(context.Context, time.Time) (int6
 // Reproduce ManageActivation's dependency lock before refreshing access. A
 // detached credential renewal waits on this transaction's own SHARE lock.
 func TestAccessRefreshRenewsUnderActivationConnectionLock(t *testing.T) {
-	testkit.Slow(t, "DB-backed connection locking and access refresh")
 	t.Parallel()
-	env, _ := setupAccessTriggerTest(t)
+	// Only the connection row is needed: avoid constructing the handler's
+	// project, daemon, vault and automation-token fixtures in the short tier.
+	env := &triggerTestEnv{repo: db.NewTestRepo(t), userID: uuid.NewString(), ctx: context.Background()}
 	conn := env.createConnection(t, env.userID, "github", "11", core.ConnectionStatusActive)
 	expired := time.Now().Add(-time.Hour)
 	require.NoError(t, store.ReplaceConnectionSecrets(env.ctx, env.repo.ORM(), conn.ID, nil, &expired))
