@@ -13,6 +13,7 @@ import (
 	_ "github.com/reliant-labs/forge/pkg/forgepb"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
+	structpb "google.golang.org/protobuf/types/known/structpb"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 	reflect "reflect"
 	sync "sync"
@@ -247,64 +248,728 @@ func (GtmCampaignStatus) EnumDescriptor() ([]byte, []int) {
 	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{3}
 }
 
-// GtmItemKind is what an item is.
-type GtmItemKind int32
+// GtmStrategyStatus is a strategy's lifecycle. An agent creates and edits
+// DRAFT strategies only; only a person moves one to ACTIVE, DONE or ARCHIVED.
+type GtmStrategyStatus int32
 
 const (
-	GtmItemKind_GTM_ITEM_KIND_UNSPECIFIED GtmItemKind = 0
-	GtmItemKind_GTM_ITEM_KIND_BLOG_POST   GtmItemKind = 1
-	GtmItemKind_GTM_ITEM_KIND_SOCIAL_POST GtmItemKind = 2
-	// An email, sent through the org's Gmail once a person approved it.
-	GtmItemKind_GTM_ITEM_KIND_EMAIL  GtmItemKind = 3
-	GtmItemKind_GTM_ITEM_KIND_LAUNCH GtmItemKind = 4
-	GtmItemKind_GTM_ITEM_KIND_OTHER  GtmItemKind = 5
+	GtmStrategyStatus_GTM_STRATEGY_STATUS_UNSPECIFIED GtmStrategyStatus = 0
+	GtmStrategyStatus_GTM_STRATEGY_STATUS_DRAFT       GtmStrategyStatus = 1
+	// Being worked; several strategies may be ACTIVE at once.
+	GtmStrategyStatus_GTM_STRATEGY_STATUS_ACTIVE   GtmStrategyStatus = 2
+	GtmStrategyStatus_GTM_STRATEGY_STATUS_DONE     GtmStrategyStatus = 3
+	GtmStrategyStatus_GTM_STRATEGY_STATUS_ARCHIVED GtmStrategyStatus = 4
 )
 
-// Enum value maps for GtmItemKind.
+// Enum value maps for GtmStrategyStatus.
 var (
-	GtmItemKind_name = map[int32]string{
-		0: "GTM_ITEM_KIND_UNSPECIFIED",
-		1: "GTM_ITEM_KIND_BLOG_POST",
-		2: "GTM_ITEM_KIND_SOCIAL_POST",
-		3: "GTM_ITEM_KIND_EMAIL",
-		4: "GTM_ITEM_KIND_LAUNCH",
-		5: "GTM_ITEM_KIND_OTHER",
+	GtmStrategyStatus_name = map[int32]string{
+		0: "GTM_STRATEGY_STATUS_UNSPECIFIED",
+		1: "GTM_STRATEGY_STATUS_DRAFT",
+		2: "GTM_STRATEGY_STATUS_ACTIVE",
+		3: "GTM_STRATEGY_STATUS_DONE",
+		4: "GTM_STRATEGY_STATUS_ARCHIVED",
 	}
-	GtmItemKind_value = map[string]int32{
-		"GTM_ITEM_KIND_UNSPECIFIED": 0,
-		"GTM_ITEM_KIND_BLOG_POST":   1,
-		"GTM_ITEM_KIND_SOCIAL_POST": 2,
-		"GTM_ITEM_KIND_EMAIL":       3,
-		"GTM_ITEM_KIND_LAUNCH":      4,
-		"GTM_ITEM_KIND_OTHER":       5,
+	GtmStrategyStatus_value = map[string]int32{
+		"GTM_STRATEGY_STATUS_UNSPECIFIED": 0,
+		"GTM_STRATEGY_STATUS_DRAFT":       1,
+		"GTM_STRATEGY_STATUS_ACTIVE":      2,
+		"GTM_STRATEGY_STATUS_DONE":        3,
+		"GTM_STRATEGY_STATUS_ARCHIVED":    4,
 	}
 )
 
-func (x GtmItemKind) Enum() *GtmItemKind {
-	p := new(GtmItemKind)
+func (x GtmStrategyStatus) Enum() *GtmStrategyStatus {
+	p := new(GtmStrategyStatus)
 	*p = x
 	return p
 }
 
-func (x GtmItemKind) String() string {
+func (x GtmStrategyStatus) String() string {
 	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
 }
 
-func (GtmItemKind) Descriptor() protoreflect.EnumDescriptor {
+func (GtmStrategyStatus) Descriptor() protoreflect.EnumDescriptor {
 	return file_reliant_v1_gtm_proto_enumTypes[4].Descriptor()
 }
 
-func (GtmItemKind) Type() protoreflect.EnumType {
+func (GtmStrategyStatus) Type() protoreflect.EnumType {
 	return &file_reliant_v1_gtm_proto_enumTypes[4]
 }
 
-func (x GtmItemKind) Number() protoreflect.EnumNumber {
+func (x GtmStrategyStatus) Number() protoreflect.EnumNumber {
 	return protoreflect.EnumNumber(x)
 }
 
-// Deprecated: Use GtmItemKind.Descriptor instead.
-func (GtmItemKind) EnumDescriptor() ([]byte, []int) {
+// Deprecated: Use GtmStrategyStatus.Descriptor instead.
+func (GtmStrategyStatus) EnumDescriptor() ([]byte, []int) {
 	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{4}
+}
+
+// GtmChannelMode is how items go out on a channel.
+type GtmChannelMode int32
+
+const (
+	GtmChannelMode_GTM_CHANNEL_MODE_UNSPECIFIED GtmChannelMode = 0
+	// Through a Reliant integration (integration_kind), e.g. Gmail.
+	GtmChannelMode_GTM_CHANNEL_MODE_INTEGRATED GtmChannelMode = 1
+	// By hand, following manual_instructions_md; the person records the
+	// published URL on the item.
+	GtmChannelMode_GTM_CHANNEL_MODE_MANUAL GtmChannelMode = 2
+)
+
+// Enum value maps for GtmChannelMode.
+var (
+	GtmChannelMode_name = map[int32]string{
+		0: "GTM_CHANNEL_MODE_UNSPECIFIED",
+		1: "GTM_CHANNEL_MODE_INTEGRATED",
+		2: "GTM_CHANNEL_MODE_MANUAL",
+	}
+	GtmChannelMode_value = map[string]int32{
+		"GTM_CHANNEL_MODE_UNSPECIFIED": 0,
+		"GTM_CHANNEL_MODE_INTEGRATED":  1,
+		"GTM_CHANNEL_MODE_MANUAL":      2,
+	}
+)
+
+func (x GtmChannelMode) Enum() *GtmChannelMode {
+	p := new(GtmChannelMode)
+	*p = x
+	return p
+}
+
+func (x GtmChannelMode) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (GtmChannelMode) Descriptor() protoreflect.EnumDescriptor {
+	return file_reliant_v1_gtm_proto_enumTypes[5].Descriptor()
+}
+
+func (GtmChannelMode) Type() protoreflect.EnumType {
+	return &file_reliant_v1_gtm_proto_enumTypes[5]
+}
+
+func (x GtmChannelMode) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use GtmChannelMode.Descriptor instead.
+func (GtmChannelMode) EnumDescriptor() ([]byte, []int) {
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{5}
+}
+
+// GtmChannelStatus is a channel's lifecycle.
+type GtmChannelStatus int32
+
+const (
+	GtmChannelStatus_GTM_CHANNEL_STATUS_UNSPECIFIED GtmChannelStatus = 0
+	GtmChannelStatus_GTM_CHANNEL_STATUS_ACTIVE      GtmChannelStatus = 1
+	GtmChannelStatus_GTM_CHANNEL_STATUS_PAUSED      GtmChannelStatus = 2
+	GtmChannelStatus_GTM_CHANNEL_STATUS_ARCHIVED    GtmChannelStatus = 3
+)
+
+// Enum value maps for GtmChannelStatus.
+var (
+	GtmChannelStatus_name = map[int32]string{
+		0: "GTM_CHANNEL_STATUS_UNSPECIFIED",
+		1: "GTM_CHANNEL_STATUS_ACTIVE",
+		2: "GTM_CHANNEL_STATUS_PAUSED",
+		3: "GTM_CHANNEL_STATUS_ARCHIVED",
+	}
+	GtmChannelStatus_value = map[string]int32{
+		"GTM_CHANNEL_STATUS_UNSPECIFIED": 0,
+		"GTM_CHANNEL_STATUS_ACTIVE":      1,
+		"GTM_CHANNEL_STATUS_PAUSED":      2,
+		"GTM_CHANNEL_STATUS_ARCHIVED":    3,
+	}
+)
+
+func (x GtmChannelStatus) Enum() *GtmChannelStatus {
+	p := new(GtmChannelStatus)
+	*p = x
+	return p
+}
+
+func (x GtmChannelStatus) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (GtmChannelStatus) Descriptor() protoreflect.EnumDescriptor {
+	return file_reliant_v1_gtm_proto_enumTypes[6].Descriptor()
+}
+
+func (GtmChannelStatus) Type() protoreflect.EnumType {
+	return &file_reliant_v1_gtm_proto_enumTypes[6]
+}
+
+func (x GtmChannelStatus) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use GtmChannelStatus.Descriptor instead.
+func (GtmChannelStatus) EnumDescriptor() ([]byte, []int) {
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{6}
+}
+
+// GtmConnectionState is whether the caller can reach an INTEGRATED channel's
+// integration right now. Display only, computed per read, never stored and
+// never used to authorize anything.
+type GtmConnectionState int32
+
+const (
+	// A MANUAL channel (nothing to connect).
+	GtmConnectionState_GTM_CONNECTION_STATE_UNSPECIFIED   GtmConnectionState = 0
+	GtmConnectionState_GTM_CONNECTION_STATE_CONNECTED     GtmConnectionState = 1
+	GtmConnectionState_GTM_CONNECTION_STATE_NOT_CONNECTED GtmConnectionState = 2
+	// The state could not be read.
+	GtmConnectionState_GTM_CONNECTION_STATE_UNKNOWN GtmConnectionState = 3
+)
+
+// Enum value maps for GtmConnectionState.
+var (
+	GtmConnectionState_name = map[int32]string{
+		0: "GTM_CONNECTION_STATE_UNSPECIFIED",
+		1: "GTM_CONNECTION_STATE_CONNECTED",
+		2: "GTM_CONNECTION_STATE_NOT_CONNECTED",
+		3: "GTM_CONNECTION_STATE_UNKNOWN",
+	}
+	GtmConnectionState_value = map[string]int32{
+		"GTM_CONNECTION_STATE_UNSPECIFIED":   0,
+		"GTM_CONNECTION_STATE_CONNECTED":     1,
+		"GTM_CONNECTION_STATE_NOT_CONNECTED": 2,
+		"GTM_CONNECTION_STATE_UNKNOWN":       3,
+	}
+)
+
+func (x GtmConnectionState) Enum() *GtmConnectionState {
+	p := new(GtmConnectionState)
+	*p = x
+	return p
+}
+
+func (x GtmConnectionState) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (GtmConnectionState) Descriptor() protoreflect.EnumDescriptor {
+	return file_reliant_v1_gtm_proto_enumTypes[7].Descriptor()
+}
+
+func (GtmConnectionState) Type() protoreflect.EnumType {
+	return &file_reliant_v1_gtm_proto_enumTypes[7]
+}
+
+func (x GtmConnectionState) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use GtmConnectionState.Descriptor instead.
+func (GtmConnectionState) EnumDescriptor() ([]byte, []int) {
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{7}
+}
+
+// GtmItemFormat is what an item is, apart from where it goes (its channel).
+// EMAIL and COLD_OUTREACH are the EMAIL-TYPE formats: sent through the email
+// send path, never SCHEDULED or PUBLISHED (GtmItemStatus).
+type GtmItemFormat int32
+
+const (
+	GtmItemFormat_GTM_ITEM_FORMAT_UNSPECIFIED GtmItemFormat = 0
+	// A short post: a social post, a forum or community post.
+	GtmItemFormat_GTM_ITEM_FORMAT_SHORT_POST GtmItemFormat = 1
+	// A long post: a blog post, an article.
+	GtmItemFormat_GTM_ITEM_FORMAT_LONG_POST GtmItemFormat = 2
+	// An email (email-type).
+	GtmItemFormat_GTM_ITEM_FORMAT_EMAIL GtmItemFormat = 3
+	// A first email to someone who does not know the org (email-type).
+	GtmItemFormat_GTM_ITEM_FORMAT_COLD_OUTREACH GtmItemFormat = 4
+	GtmItemFormat_GTM_ITEM_FORMAT_VIDEO         GtmItemFormat = 5
+	// A pitch to a journalist, podcast or newsletter.
+	GtmItemFormat_GTM_ITEM_FORMAT_MEDIA_PITCH GtmItemFormat = 6
+	GtmItemFormat_GTM_ITEM_FORMAT_AD          GtmItemFormat = 7
+	GtmItemFormat_GTM_ITEM_FORMAT_OTHER       GtmItemFormat = 8
+)
+
+// Enum value maps for GtmItemFormat.
+var (
+	GtmItemFormat_name = map[int32]string{
+		0: "GTM_ITEM_FORMAT_UNSPECIFIED",
+		1: "GTM_ITEM_FORMAT_SHORT_POST",
+		2: "GTM_ITEM_FORMAT_LONG_POST",
+		3: "GTM_ITEM_FORMAT_EMAIL",
+		4: "GTM_ITEM_FORMAT_COLD_OUTREACH",
+		5: "GTM_ITEM_FORMAT_VIDEO",
+		6: "GTM_ITEM_FORMAT_MEDIA_PITCH",
+		7: "GTM_ITEM_FORMAT_AD",
+		8: "GTM_ITEM_FORMAT_OTHER",
+	}
+	GtmItemFormat_value = map[string]int32{
+		"GTM_ITEM_FORMAT_UNSPECIFIED":   0,
+		"GTM_ITEM_FORMAT_SHORT_POST":    1,
+		"GTM_ITEM_FORMAT_LONG_POST":     2,
+		"GTM_ITEM_FORMAT_EMAIL":         3,
+		"GTM_ITEM_FORMAT_COLD_OUTREACH": 4,
+		"GTM_ITEM_FORMAT_VIDEO":         5,
+		"GTM_ITEM_FORMAT_MEDIA_PITCH":   6,
+		"GTM_ITEM_FORMAT_AD":            7,
+		"GTM_ITEM_FORMAT_OTHER":         8,
+	}
+)
+
+func (x GtmItemFormat) Enum() *GtmItemFormat {
+	p := new(GtmItemFormat)
+	*p = x
+	return p
+}
+
+func (x GtmItemFormat) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (GtmItemFormat) Descriptor() protoreflect.EnumDescriptor {
+	return file_reliant_v1_gtm_proto_enumTypes[8].Descriptor()
+}
+
+func (GtmItemFormat) Type() protoreflect.EnumType {
+	return &file_reliant_v1_gtm_proto_enumTypes[8]
+}
+
+func (x GtmItemFormat) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use GtmItemFormat.Descriptor instead.
+func (GtmItemFormat) EnumDescriptor() ([]byte, []int) {
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{8}
+}
+
+// GtmAssetStatus is whether an asset's bytes are in place.
+type GtmAssetStatus int32
+
+const (
+	GtmAssetStatus_GTM_ASSET_STATUS_UNSPECIFIED GtmAssetStatus = 0
+	// CreateAssetUpload issued an upload URL (to the staging key); the bytes
+	// are not confirmed. It counts toward the org's quota until the URL expires
+	// (20 minutes), and is swept (row and objects) after 24 hours.
+	GtmAssetStatus_GTM_ASSET_STATUS_PENDING GtmAssetStatus = 1
+	// ConfirmAssetUpload checked the bytes (size, type, sha256).
+	GtmAssetStatus_GTM_ASSET_STATUS_READY GtmAssetStatus = 2
+)
+
+// Enum value maps for GtmAssetStatus.
+var (
+	GtmAssetStatus_name = map[int32]string{
+		0: "GTM_ASSET_STATUS_UNSPECIFIED",
+		1: "GTM_ASSET_STATUS_PENDING",
+		2: "GTM_ASSET_STATUS_READY",
+	}
+	GtmAssetStatus_value = map[string]int32{
+		"GTM_ASSET_STATUS_UNSPECIFIED": 0,
+		"GTM_ASSET_STATUS_PENDING":     1,
+		"GTM_ASSET_STATUS_READY":       2,
+	}
+)
+
+func (x GtmAssetStatus) Enum() *GtmAssetStatus {
+	p := new(GtmAssetStatus)
+	*p = x
+	return p
+}
+
+func (x GtmAssetStatus) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (GtmAssetStatus) Descriptor() protoreflect.EnumDescriptor {
+	return file_reliant_v1_gtm_proto_enumTypes[9].Descriptor()
+}
+
+func (GtmAssetStatus) Type() protoreflect.EnumType {
+	return &file_reliant_v1_gtm_proto_enumTypes[9]
+}
+
+func (x GtmAssetStatus) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use GtmAssetStatus.Descriptor instead.
+func (GtmAssetStatus) EnumDescriptor() ([]byte, []int) {
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{9}
+}
+
+// GtmChannelSource is who added a channel.
+type GtmChannelSource int32
+
+const (
+	GtmChannelSource_GTM_CHANNEL_SOURCE_UNSPECIFIED GtmChannelSource = 0
+	// One of the defaults the service seeds.
+	GtmChannelSource_GTM_CHANNEL_SOURCE_SEED GtmChannelSource = 1
+	// An agent added it (always MANUAL when added); the web badges it.
+	GtmChannelSource_GTM_CHANNEL_SOURCE_AGENT  GtmChannelSource = 2
+	GtmChannelSource_GTM_CHANNEL_SOURCE_PERSON GtmChannelSource = 3
+)
+
+// Enum value maps for GtmChannelSource.
+var (
+	GtmChannelSource_name = map[int32]string{
+		0: "GTM_CHANNEL_SOURCE_UNSPECIFIED",
+		1: "GTM_CHANNEL_SOURCE_SEED",
+		2: "GTM_CHANNEL_SOURCE_AGENT",
+		3: "GTM_CHANNEL_SOURCE_PERSON",
+	}
+	GtmChannelSource_value = map[string]int32{
+		"GTM_CHANNEL_SOURCE_UNSPECIFIED": 0,
+		"GTM_CHANNEL_SOURCE_SEED":        1,
+		"GTM_CHANNEL_SOURCE_AGENT":       2,
+		"GTM_CHANNEL_SOURCE_PERSON":      3,
+	}
+)
+
+func (x GtmChannelSource) Enum() *GtmChannelSource {
+	p := new(GtmChannelSource)
+	*p = x
+	return p
+}
+
+func (x GtmChannelSource) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (GtmChannelSource) Descriptor() protoreflect.EnumDescriptor {
+	return file_reliant_v1_gtm_proto_enumTypes[10].Descriptor()
+}
+
+func (GtmChannelSource) Type() protoreflect.EnumType {
+	return &file_reliant_v1_gtm_proto_enumTypes[10]
+}
+
+func (x GtmChannelSource) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use GtmChannelSource.Descriptor instead.
+func (GtmChannelSource) EnumDescriptor() ([]byte, []int) {
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{10}
+}
+
+// GtmStrategyCategory is a strategy's or library entry's category: the 13
+// categories of the strategy catalog. The comment on each is its display
+// label.
+type GtmStrategyCategory int32
+
+const (
+	GtmStrategyCategory_GTM_STRATEGY_CATEGORY_UNSPECIFIED GtmStrategyCategory = 0
+	// Pricing, offers & incentives
+	GtmStrategyCategory_GTM_STRATEGY_CATEGORY_PRICING_OFFERS_INCENTIVES GtmStrategyCategory = 1
+	// Referral & viral growth
+	GtmStrategyCategory_GTM_STRATEGY_CATEGORY_REFERRAL_VIRAL_GROWTH GtmStrategyCategory = 2
+	// Paid acquisition
+	GtmStrategyCategory_GTM_STRATEGY_CATEGORY_PAID_ACQUISITION GtmStrategyCategory = 3
+	// Organic content & SEO
+	GtmStrategyCategory_GTM_STRATEGY_CATEGORY_ORGANIC_CONTENT_SEO GtmStrategyCategory = 4
+	// Outbound sales & prospecting
+	GtmStrategyCategory_GTM_STRATEGY_CATEGORY_OUTBOUND_SALES_PROSPECTING GtmStrategyCategory = 5
+	// Partnerships & distribution
+	GtmStrategyCategory_GTM_STRATEGY_CATEGORY_PARTNERSHIPS_DISTRIBUTION GtmStrategyCategory = 6
+	// Launches & PR
+	GtmStrategyCategory_GTM_STRATEGY_CATEGORY_LAUNCHES_PR GtmStrategyCategory = 7
+	// Community & events
+	GtmStrategyCategory_GTM_STRATEGY_CATEGORY_COMMUNITY_EVENTS GtmStrategyCategory = 8
+	// Product-led growth
+	GtmStrategyCategory_GTM_STRATEGY_CATEGORY_PRODUCT_LED_GROWTH GtmStrategyCategory = 9
+	// Conversion optimization
+	GtmStrategyCategory_GTM_STRATEGY_CATEGORY_CONVERSION_OPTIMIZATION GtmStrategyCategory = 10
+	// Retention & expansion
+	GtmStrategyCategory_GTM_STRATEGY_CATEGORY_RETENTION_EXPANSION GtmStrategyCategory = 11
+	// Trust & reputation
+	GtmStrategyCategory_GTM_STRATEGY_CATEGORY_TRUST_REPUTATION GtmStrategyCategory = 12
+	// Market research & positioning
+	GtmStrategyCategory_GTM_STRATEGY_CATEGORY_MARKET_RESEARCH_POSITIONING GtmStrategyCategory = 13
+)
+
+// Enum value maps for GtmStrategyCategory.
+var (
+	GtmStrategyCategory_name = map[int32]string{
+		0:  "GTM_STRATEGY_CATEGORY_UNSPECIFIED",
+		1:  "GTM_STRATEGY_CATEGORY_PRICING_OFFERS_INCENTIVES",
+		2:  "GTM_STRATEGY_CATEGORY_REFERRAL_VIRAL_GROWTH",
+		3:  "GTM_STRATEGY_CATEGORY_PAID_ACQUISITION",
+		4:  "GTM_STRATEGY_CATEGORY_ORGANIC_CONTENT_SEO",
+		5:  "GTM_STRATEGY_CATEGORY_OUTBOUND_SALES_PROSPECTING",
+		6:  "GTM_STRATEGY_CATEGORY_PARTNERSHIPS_DISTRIBUTION",
+		7:  "GTM_STRATEGY_CATEGORY_LAUNCHES_PR",
+		8:  "GTM_STRATEGY_CATEGORY_COMMUNITY_EVENTS",
+		9:  "GTM_STRATEGY_CATEGORY_PRODUCT_LED_GROWTH",
+		10: "GTM_STRATEGY_CATEGORY_CONVERSION_OPTIMIZATION",
+		11: "GTM_STRATEGY_CATEGORY_RETENTION_EXPANSION",
+		12: "GTM_STRATEGY_CATEGORY_TRUST_REPUTATION",
+		13: "GTM_STRATEGY_CATEGORY_MARKET_RESEARCH_POSITIONING",
+	}
+	GtmStrategyCategory_value = map[string]int32{
+		"GTM_STRATEGY_CATEGORY_UNSPECIFIED":                 0,
+		"GTM_STRATEGY_CATEGORY_PRICING_OFFERS_INCENTIVES":   1,
+		"GTM_STRATEGY_CATEGORY_REFERRAL_VIRAL_GROWTH":       2,
+		"GTM_STRATEGY_CATEGORY_PAID_ACQUISITION":            3,
+		"GTM_STRATEGY_CATEGORY_ORGANIC_CONTENT_SEO":         4,
+		"GTM_STRATEGY_CATEGORY_OUTBOUND_SALES_PROSPECTING":  5,
+		"GTM_STRATEGY_CATEGORY_PARTNERSHIPS_DISTRIBUTION":   6,
+		"GTM_STRATEGY_CATEGORY_LAUNCHES_PR":                 7,
+		"GTM_STRATEGY_CATEGORY_COMMUNITY_EVENTS":            8,
+		"GTM_STRATEGY_CATEGORY_PRODUCT_LED_GROWTH":          9,
+		"GTM_STRATEGY_CATEGORY_CONVERSION_OPTIMIZATION":     10,
+		"GTM_STRATEGY_CATEGORY_RETENTION_EXPANSION":         11,
+		"GTM_STRATEGY_CATEGORY_TRUST_REPUTATION":            12,
+		"GTM_STRATEGY_CATEGORY_MARKET_RESEARCH_POSITIONING": 13,
+	}
+)
+
+func (x GtmStrategyCategory) Enum() *GtmStrategyCategory {
+	p := new(GtmStrategyCategory)
+	*p = x
+	return p
+}
+
+func (x GtmStrategyCategory) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (GtmStrategyCategory) Descriptor() protoreflect.EnumDescriptor {
+	return file_reliant_v1_gtm_proto_enumTypes[11].Descriptor()
+}
+
+func (GtmStrategyCategory) Type() protoreflect.EnumType {
+	return &file_reliant_v1_gtm_proto_enumTypes[11]
+}
+
+func (x GtmStrategyCategory) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use GtmStrategyCategory.Descriptor instead.
+func (GtmStrategyCategory) EnumDescriptor() ([]byte, []int) {
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{11}
+}
+
+// GtmCredentialKind is the class of credential a library import came
+// through.
+type GtmCredentialKind int32
+
+const (
+	GtmCredentialKind_GTM_CREDENTIAL_KIND_UNSPECIFIED GtmCredentialKind = 0
+	// A person-class credential: a signed-in session, a shared key, a browser
+	// session.
+	GtmCredentialKind_GTM_CREDENTIAL_KIND_PERSON GtmCredentialKind = 1
+	// An access token (the import rpc only): it upserts, never removes.
+	GtmCredentialKind_GTM_CREDENTIAL_KIND_TOKEN GtmCredentialKind = 2
+)
+
+// Enum value maps for GtmCredentialKind.
+var (
+	GtmCredentialKind_name = map[int32]string{
+		0: "GTM_CREDENTIAL_KIND_UNSPECIFIED",
+		1: "GTM_CREDENTIAL_KIND_PERSON",
+		2: "GTM_CREDENTIAL_KIND_TOKEN",
+	}
+	GtmCredentialKind_value = map[string]int32{
+		"GTM_CREDENTIAL_KIND_UNSPECIFIED": 0,
+		"GTM_CREDENTIAL_KIND_PERSON":      1,
+		"GTM_CREDENTIAL_KIND_TOKEN":       2,
+	}
+)
+
+func (x GtmCredentialKind) Enum() *GtmCredentialKind {
+	p := new(GtmCredentialKind)
+	*p = x
+	return p
+}
+
+func (x GtmCredentialKind) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (GtmCredentialKind) Descriptor() protoreflect.EnumDescriptor {
+	return file_reliant_v1_gtm_proto_enumTypes[12].Descriptor()
+}
+
+func (GtmCredentialKind) Type() protoreflect.EnumType {
+	return &file_reliant_v1_gtm_proto_enumTypes[12]
+}
+
+func (x GtmCredentialKind) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use GtmCredentialKind.Descriptor instead.
+func (GtmCredentialKind) EnumDescriptor() ([]byte, []int) {
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{12}
+}
+
+// GtmPruneRequestStatus is a staged prune's lifecycle.
+type GtmPruneRequestStatus int32
+
+const (
+	GtmPruneRequestStatus_GTM_PRUNE_REQUEST_STATUS_UNSPECIFIED GtmPruneRequestStatus = 0
+	// Waiting for a person (ConfirmLibraryPrune / CancelLibraryPrune).
+	GtmPruneRequestStatus_GTM_PRUNE_REQUEST_STATUS_PENDING   GtmPruneRequestStatus = 1
+	GtmPruneRequestStatus_GTM_PRUNE_REQUEST_STATUS_CONFIRMED GtmPruneRequestStatus = 2
+	GtmPruneRequestStatus_GTM_PRUNE_REQUEST_STATUS_CANCELLED GtmPruneRequestStatus = 3
+	// Not decided within 7 days; it can no longer be confirmed.
+	GtmPruneRequestStatus_GTM_PRUNE_REQUEST_STATUS_EXPIRED GtmPruneRequestStatus = 4
+)
+
+// Enum value maps for GtmPruneRequestStatus.
+var (
+	GtmPruneRequestStatus_name = map[int32]string{
+		0: "GTM_PRUNE_REQUEST_STATUS_UNSPECIFIED",
+		1: "GTM_PRUNE_REQUEST_STATUS_PENDING",
+		2: "GTM_PRUNE_REQUEST_STATUS_CONFIRMED",
+		3: "GTM_PRUNE_REQUEST_STATUS_CANCELLED",
+		4: "GTM_PRUNE_REQUEST_STATUS_EXPIRED",
+	}
+	GtmPruneRequestStatus_value = map[string]int32{
+		"GTM_PRUNE_REQUEST_STATUS_UNSPECIFIED": 0,
+		"GTM_PRUNE_REQUEST_STATUS_PENDING":     1,
+		"GTM_PRUNE_REQUEST_STATUS_CONFIRMED":   2,
+		"GTM_PRUNE_REQUEST_STATUS_CANCELLED":   3,
+		"GTM_PRUNE_REQUEST_STATUS_EXPIRED":     4,
+	}
+)
+
+func (x GtmPruneRequestStatus) Enum() *GtmPruneRequestStatus {
+	p := new(GtmPruneRequestStatus)
+	*p = x
+	return p
+}
+
+func (x GtmPruneRequestStatus) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (GtmPruneRequestStatus) Descriptor() protoreflect.EnumDescriptor {
+	return file_reliant_v1_gtm_proto_enumTypes[13].Descriptor()
+}
+
+func (GtmPruneRequestStatus) Type() protoreflect.EnumType {
+	return &file_reliant_v1_gtm_proto_enumTypes[13]
+}
+
+func (x GtmPruneRequestStatus) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use GtmPruneRequestStatus.Descriptor instead.
+func (GtmPruneRequestStatus) EnumDescriptor() ([]byte, []int) {
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{13}
+}
+
+// GtmLibraryDepth is how much a library entry holds.
+type GtmLibraryDepth int32
+
+const (
+	GtmLibraryDepth_GTM_LIBRARY_DEPTH_UNSPECIFIED GtmLibraryDepth = 0
+	// A full play: stage, cost, steps, KPIs, experiments, stop rules.
+	GtmLibraryDepth_GTM_LIBRARY_DEPTH_PLAY GtmLibraryDepth = 1
+	// A light tactic: a name, a pitch, its level and fits.
+	GtmLibraryDepth_GTM_LIBRARY_DEPTH_TACTIC GtmLibraryDepth = 2
+)
+
+// Enum value maps for GtmLibraryDepth.
+var (
+	GtmLibraryDepth_name = map[int32]string{
+		0: "GTM_LIBRARY_DEPTH_UNSPECIFIED",
+		1: "GTM_LIBRARY_DEPTH_PLAY",
+		2: "GTM_LIBRARY_DEPTH_TACTIC",
+	}
+	GtmLibraryDepth_value = map[string]int32{
+		"GTM_LIBRARY_DEPTH_UNSPECIFIED": 0,
+		"GTM_LIBRARY_DEPTH_PLAY":        1,
+		"GTM_LIBRARY_DEPTH_TACTIC":      2,
+	}
+)
+
+func (x GtmLibraryDepth) Enum() *GtmLibraryDepth {
+	p := new(GtmLibraryDepth)
+	*p = x
+	return p
+}
+
+func (x GtmLibraryDepth) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (GtmLibraryDepth) Descriptor() protoreflect.EnumDescriptor {
+	return file_reliant_v1_gtm_proto_enumTypes[14].Descriptor()
+}
+
+func (GtmLibraryDepth) Type() protoreflect.EnumType {
+	return &file_reliant_v1_gtm_proto_enumTypes[14]
+}
+
+func (x GtmLibraryDepth) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use GtmLibraryDepth.Descriptor instead.
+func (GtmLibraryDepth) EnumDescriptor() ([]byte, []int) {
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{14}
+}
+
+// GtmAssetSource is where an asset came from.
+type GtmAssetSource int32
+
+const (
+	GtmAssetSource_GTM_ASSET_SOURCE_UNSPECIFIED GtmAssetSource = 0
+	// Copied from a chat attachment: by an agent's tool, or by the person in
+	// the chat. (An agent's copy is CHAT; there is no separate agent source.)
+	GtmAssetSource_GTM_ASSET_SOURCE_CHAT GtmAssetSource = 1
+	// Written by a workflow run.
+	GtmAssetSource_GTM_ASSET_SOURCE_WORKFLOW GtmAssetSource = 2
+	// Uploaded by a person.
+	GtmAssetSource_GTM_ASSET_SOURCE_PERSON GtmAssetSource = 3
+)
+
+// Enum value maps for GtmAssetSource.
+var (
+	GtmAssetSource_name = map[int32]string{
+		0: "GTM_ASSET_SOURCE_UNSPECIFIED",
+		1: "GTM_ASSET_SOURCE_CHAT",
+		2: "GTM_ASSET_SOURCE_WORKFLOW",
+		3: "GTM_ASSET_SOURCE_PERSON",
+	}
+	GtmAssetSource_value = map[string]int32{
+		"GTM_ASSET_SOURCE_UNSPECIFIED": 0,
+		"GTM_ASSET_SOURCE_CHAT":        1,
+		"GTM_ASSET_SOURCE_WORKFLOW":    2,
+		"GTM_ASSET_SOURCE_PERSON":      3,
+	}
+)
+
+func (x GtmAssetSource) Enum() *GtmAssetSource {
+	p := new(GtmAssetSource)
+	*p = x
+	return p
+}
+
+func (x GtmAssetSource) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (GtmAssetSource) Descriptor() protoreflect.EnumDescriptor {
+	return file_reliant_v1_gtm_proto_enumTypes[15].Descriptor()
+}
+
+func (GtmAssetSource) Type() protoreflect.EnumType {
+	return &file_reliant_v1_gtm_proto_enumTypes[15]
+}
+
+func (x GtmAssetSource) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use GtmAssetSource.Descriptor instead.
+func (GtmAssetSource) EnumDescriptor() ([]byte, []int) {
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{15}
 }
 
 // GtmItemStatus is an item's lifecycle. These transitions are the only ones;
@@ -317,18 +982,34 @@ func (GtmItemKind) EnumDescriptor() ([]byte, []int) {
 //   - never touches an item in any other status.
 //
 // A PERSON:
+//   - every change an agent may make (DRAFT <-> REVIEW, content and date
+//     edits on a DRAFT or REVIEW item);
 //   - DRAFT or REVIEW -> APPROVED;
-//   - APPROVED -> SCHEDULED, for an item that is not an EMAIL;
+//   - APPROVED -> SCHEDULED, for an item that is not email-type;
 //   - any status (but SENT) -> PAUSED, and PAUSED -> DRAFT;
-//   - APPROVED or SCHEDULED -> PUBLISHED, for an item that is not an EMAIL: a
-//     manual "it went out" marker, since publishing happens outside GTM;
+//   - APPROVED or SCHEDULED -> PUBLISHED, for an item that is not
+//     email-type: a manual "it went out" marker, since publishing happens
+//     outside GTM. On a MANUAL channel it needs published_url: the person
+//     who posted by hand records the URL and marks it PUBLISHED in one
+//     UpdateItem;
 //   - a content edit of an APPROVED or SCHEDULED item returns it to REVIEW.
 //
-// The EMAIL SEND PATH alone writes SENT: from APPROVED, for an EMAIL item.
+// A CONTENT EDIT changes any of title, body_md, format, channel_id, email_to
+// or email_subject. scheduled_at and published_url are not content: dating an
+// APPROVED item keeps it APPROVED, and recording its URL changes no status.
+// clear_scheduled_at on a SCHEDULED item is FailedPrecondition, and there is
+// no SCHEDULED -> APPROVED: to take an item off the calendar, pause it
+// (PAUSED -> DRAFT) and approve it again.
 //
-// An EMAIL never uses SCHEDULED or PUBLISHED (the table refuses both): a
-// person may date an APPROVED email (scheduled_at) and it stays APPROVED until
-// the send path sends it.
+// EMAIL-TYPE items (format EMAIL or COLD_OUTREACH): the EMAIL SEND PATH alone
+// writes SENT, from APPROVED, and only when the item's channel, if set, is
+// ACTIVE, INTEGRATED and integration_kind "gmail". A send whose outcome is
+// unknown leaves the item HELD (GtmItem.approval_hash) and frozen until a
+// person resolves it with ResolveItemSend, which records SENT (the email went
+// out) or releases the hold (it did not). An email-type item never uses
+// SCHEDULED or PUBLISHED (the table refuses both): a person may date an
+// APPROVED one (scheduled_at) and it stays APPROVED until the send path sends
+// it.
 type GtmItemStatus int32
 
 const (
@@ -338,13 +1019,13 @@ const (
 	GtmItemStatus_GTM_ITEM_STATUS_REVIEW GtmItemStatus = 2
 	// A person approved it.
 	GtmItemStatus_GTM_ITEM_STATUS_APPROVED GtmItemStatus = 3
-	// A person put an approved non-email item on the calendar (scheduled_at is
-	// set). Scheduling publishes nothing.
+	// A person put an approved non-email-type item on the calendar
+	// (scheduled_at is set). Scheduling publishes nothing.
 	GtmItemStatus_GTM_ITEM_STATUS_SCHEDULED GtmItemStatus = 4
 	// The approved email was sent (written only by the email send path).
 	GtmItemStatus_GTM_ITEM_STATUS_SENT GtmItemStatus = 5
-	// A person marked a non-email item as gone out; publishing itself happens
-	// outside GTM (the owner's own workflow, or by hand).
+	// A person marked a non-email-type item as gone out; publishing itself
+	// happens outside GTM (the owner's own workflow, or by hand).
 	GtmItemStatus_GTM_ITEM_STATUS_PUBLISHED GtmItemStatus = 6
 	// A person paused it; it goes back to DRAFT to resume.
 	GtmItemStatus_GTM_ITEM_STATUS_PAUSED GtmItemStatus = 7
@@ -385,11 +1066,11 @@ func (x GtmItemStatus) String() string {
 }
 
 func (GtmItemStatus) Descriptor() protoreflect.EnumDescriptor {
-	return file_reliant_v1_gtm_proto_enumTypes[5].Descriptor()
+	return file_reliant_v1_gtm_proto_enumTypes[16].Descriptor()
 }
 
 func (GtmItemStatus) Type() protoreflect.EnumType {
-	return &file_reliant_v1_gtm_proto_enumTypes[5]
+	return &file_reliant_v1_gtm_proto_enumTypes[16]
 }
 
 func (x GtmItemStatus) Number() protoreflect.EnumNumber {
@@ -398,7 +1079,7 @@ func (x GtmItemStatus) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use GtmItemStatus.Descriptor instead.
 func (GtmItemStatus) EnumDescriptor() ([]byte, []int) {
-	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{5}
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{16}
 }
 
 // GtmClaimCategory is what kind of fact a claim states.
@@ -449,11 +1130,11 @@ func (x GtmClaimCategory) String() string {
 }
 
 func (GtmClaimCategory) Descriptor() protoreflect.EnumDescriptor {
-	return file_reliant_v1_gtm_proto_enumTypes[6].Descriptor()
+	return file_reliant_v1_gtm_proto_enumTypes[17].Descriptor()
 }
 
 func (GtmClaimCategory) Type() protoreflect.EnumType {
-	return &file_reliant_v1_gtm_proto_enumTypes[6]
+	return &file_reliant_v1_gtm_proto_enumTypes[17]
 }
 
 func (x GtmClaimCategory) Number() protoreflect.EnumNumber {
@@ -462,7 +1143,7 @@ func (x GtmClaimCategory) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use GtmClaimCategory.Descriptor instead.
 func (GtmClaimCategory) EnumDescriptor() ([]byte, []int) {
-	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{6}
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{17}
 }
 
 // GtmClaimStatus is a claim's lifecycle.
@@ -504,11 +1185,11 @@ func (x GtmClaimStatus) String() string {
 }
 
 func (GtmClaimStatus) Descriptor() protoreflect.EnumDescriptor {
-	return file_reliant_v1_gtm_proto_enumTypes[7].Descriptor()
+	return file_reliant_v1_gtm_proto_enumTypes[18].Descriptor()
 }
 
 func (GtmClaimStatus) Type() protoreflect.EnumType {
-	return &file_reliant_v1_gtm_proto_enumTypes[7]
+	return &file_reliant_v1_gtm_proto_enumTypes[18]
 }
 
 func (x GtmClaimStatus) Number() protoreflect.EnumNumber {
@@ -517,7 +1198,7 @@ func (x GtmClaimStatus) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use GtmClaimStatus.Descriptor instead.
 func (GtmClaimStatus) EnumDescriptor() ([]byte, []int) {
-	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{7}
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{18}
 }
 
 // GtmClaimSourceKind is where a verified claim's evidence comes from.
@@ -561,11 +1242,11 @@ func (x GtmClaimSourceKind) String() string {
 }
 
 func (GtmClaimSourceKind) Descriptor() protoreflect.EnumDescriptor {
-	return file_reliant_v1_gtm_proto_enumTypes[8].Descriptor()
+	return file_reliant_v1_gtm_proto_enumTypes[19].Descriptor()
 }
 
 func (GtmClaimSourceKind) Type() protoreflect.EnumType {
-	return &file_reliant_v1_gtm_proto_enumTypes[8]
+	return &file_reliant_v1_gtm_proto_enumTypes[19]
 }
 
 func (x GtmClaimSourceKind) Number() protoreflect.EnumNumber {
@@ -574,7 +1255,7 @@ func (x GtmClaimSourceKind) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use GtmClaimSourceKind.Descriptor instead.
 func (GtmClaimSourceKind) EnumDescriptor() ([]byte, []int) {
-	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{8}
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{19}
 }
 
 // GtmClaimFindingKind is what the registry says about one candidate claim.
@@ -620,11 +1301,11 @@ func (x GtmClaimFindingKind) String() string {
 }
 
 func (GtmClaimFindingKind) Descriptor() protoreflect.EnumDescriptor {
-	return file_reliant_v1_gtm_proto_enumTypes[9].Descriptor()
+	return file_reliant_v1_gtm_proto_enumTypes[20].Descriptor()
 }
 
 func (GtmClaimFindingKind) Type() protoreflect.EnumType {
-	return &file_reliant_v1_gtm_proto_enumTypes[9]
+	return &file_reliant_v1_gtm_proto_enumTypes[20]
 }
 
 func (x GtmClaimFindingKind) Number() protoreflect.EnumNumber {
@@ -633,7 +1314,1180 @@ func (x GtmClaimFindingKind) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use GtmClaimFindingKind.Descriptor instead.
 func (GtmClaimFindingKind) EnumDescriptor() ([]byte, []int) {
-	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{9}
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{20}
+}
+
+// GtmStrategy is one strategy (gtm_strategies): a goal over a period, and the
+// campaigns that pursue it.
+type GtmStrategy struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Id    string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	OrgId string                 `protobuf:"bytes,2,opt,name=org_id,json=orgId,proto3" json:"org_id,omitempty"`
+	Name  string                 `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`
+	// The goal, its north star, in markdown.
+	GoalMd string `protobuf:"bytes,4,opt,name=goal_md,json=goalMd,proto3" json:"goal_md,omitempty"`
+	// What success is measured by, free text: "200 weekly active orgs".
+	TargetMetric string `protobuf:"bytes,5,opt,name=target_metric,json=targetMetric,proto3" json:"target_metric,omitempty"`
+	// The period, as real calendar dates (YYYY-MM-DD); empty for open.
+	PeriodStart string                 `protobuf:"bytes,6,opt,name=period_start,json=periodStart,proto3" json:"period_start,omitempty"`
+	PeriodEnd   string                 `protobuf:"bytes,7,opt,name=period_end,json=periodEnd,proto3" json:"period_end,omitempty"`
+	Status      GtmStrategyStatus      `protobuf:"varint,8,opt,name=status,proto3,enum=reliant.v1.GtmStrategyStatus" json:"status,omitempty"`
+	Revision    int32                  `protobuf:"varint,9,opt,name=revision,proto3" json:"revision,omitempty"`
+	CreatedBy   string                 `protobuf:"bytes,10,opt,name=created_by,json=createdBy,proto3" json:"created_by,omitempty"`
+	UpdatedBy   string                 `protobuf:"bytes,11,opt,name=updated_by,json=updatedBy,proto3" json:"updated_by,omitempty"`
+	CreatedAt   *timestamppb.Timestamp `protobuf:"bytes,12,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	UpdatedAt   *timestamppb.Timestamp `protobuf:"bytes,13,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	Category    GtmStrategyCategory    `protobuf:"varint,14,opt,name=category,proto3,enum=reliant.v1.GtmStrategyCategory" json:"category,omitempty"`
+	// The library entry it was made from (UseLibraryStrategy); empty for none.
+	// A reference, not a link: a re-import may remove the entry.
+	LibraryKey    string `protobuf:"bytes,15,opt,name=library_key,json=libraryKey,proto3" json:"library_key,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GtmStrategy) Reset() {
+	*x = GtmStrategy{}
+	mi := &file_reliant_v1_gtm_proto_msgTypes[0]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GtmStrategy) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GtmStrategy) ProtoMessage() {}
+
+func (x *GtmStrategy) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_gtm_proto_msgTypes[0]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GtmStrategy.ProtoReflect.Descriptor instead.
+func (*GtmStrategy) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{0}
+}
+
+func (x *GtmStrategy) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *GtmStrategy) GetOrgId() string {
+	if x != nil {
+		return x.OrgId
+	}
+	return ""
+}
+
+func (x *GtmStrategy) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *GtmStrategy) GetGoalMd() string {
+	if x != nil {
+		return x.GoalMd
+	}
+	return ""
+}
+
+func (x *GtmStrategy) GetTargetMetric() string {
+	if x != nil {
+		return x.TargetMetric
+	}
+	return ""
+}
+
+func (x *GtmStrategy) GetPeriodStart() string {
+	if x != nil {
+		return x.PeriodStart
+	}
+	return ""
+}
+
+func (x *GtmStrategy) GetPeriodEnd() string {
+	if x != nil {
+		return x.PeriodEnd
+	}
+	return ""
+}
+
+func (x *GtmStrategy) GetStatus() GtmStrategyStatus {
+	if x != nil {
+		return x.Status
+	}
+	return GtmStrategyStatus_GTM_STRATEGY_STATUS_UNSPECIFIED
+}
+
+func (x *GtmStrategy) GetRevision() int32 {
+	if x != nil {
+		return x.Revision
+	}
+	return 0
+}
+
+func (x *GtmStrategy) GetCreatedBy() string {
+	if x != nil {
+		return x.CreatedBy
+	}
+	return ""
+}
+
+func (x *GtmStrategy) GetUpdatedBy() string {
+	if x != nil {
+		return x.UpdatedBy
+	}
+	return ""
+}
+
+func (x *GtmStrategy) GetCreatedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.CreatedAt
+	}
+	return nil
+}
+
+func (x *GtmStrategy) GetUpdatedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.UpdatedAt
+	}
+	return nil
+}
+
+func (x *GtmStrategy) GetCategory() GtmStrategyCategory {
+	if x != nil {
+		return x.Category
+	}
+	return GtmStrategyCategory_GTM_STRATEGY_CATEGORY_UNSPECIFIED
+}
+
+func (x *GtmStrategy) GetLibraryKey() string {
+	if x != nil {
+		return x.LibraryKey
+	}
+	return ""
+}
+
+// GtmChannel is one place items go out (gtm_channels): integrated (a Reliant
+// integration such as Gmail) or manual (a person posts by hand and records
+// the URL).
+type GtmChannel struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Id    string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	OrgId string                 `protobuf:"bytes,2,opt,name=org_id,json=orgId,proto3" json:"org_id,omitempty"`
+	// A slug, unique in the org: "blog", "hacker-news". UpdateChannel may
+	// change it (a key the org already holds is AlreadyExists).
+	Key  string         `protobuf:"bytes,3,opt,name=key,proto3" json:"key,omitempty"`
+	Name string         `protobuf:"bytes,4,opt,name=name,proto3" json:"name,omitempty"`
+	Mode GtmChannelMode `protobuf:"varint,5,opt,name=mode,proto3,enum=reliant.v1.GtmChannelMode" json:"mode,omitempty"`
+	// INTEGRATED only: the Reliant integration catalog id, e.g. "gmail". Empty
+	// here is NULL in the table (never stored as '').
+	IntegrationKind string `protobuf:"bytes,6,opt,name=integration_kind,json=integrationKind,proto3" json:"integration_kind,omitempty"`
+	// INTEGRATED only: the Reliant connection to use; empty (NULL in the table)
+	// means the acting user's default connection for integration_kind.
+	ConnectionId string `protobuf:"bytes,7,opt,name=connection_id,json=connectionId,proto3" json:"connection_id,omitempty"`
+	// How to post on it by hand (MANUAL), in markdown.
+	ManualInstructionsMd string           `protobuf:"bytes,8,opt,name=manual_instructions_md,json=manualInstructionsMd,proto3" json:"manual_instructions_md,omitempty"`
+	Status               GtmChannelStatus `protobuf:"varint,9,opt,name=status,proto3,enum=reliant.v1.GtmChannelStatus" json:"status,omitempty"`
+	// Whether the caller can reach integration_kind now (INTEGRATED);
+	// UNSPECIFIED for a MANUAL channel. Display only, never authorization.
+	ConnectionState GtmConnectionState     `protobuf:"varint,10,opt,name=connection_state,json=connectionState,proto3,enum=reliant.v1.GtmConnectionState" json:"connection_state,omitempty"`
+	Revision        int32                  `protobuf:"varint,11,opt,name=revision,proto3" json:"revision,omitempty"`
+	CreatedAt       *timestamppb.Timestamp `protobuf:"bytes,12,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	UpdatedAt       *timestamppb.Timestamp `protobuf:"bytes,13,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	// Who added it: seeded, an agent ("Added by agent"), or a person.
+	Source GtmChannelSource `protobuf:"varint,14,opt,name=source,proto3,enum=reliant.v1.GtmChannelSource" json:"source,omitempty"`
+	// The user who added it (for an agent, the user it ran as); empty when
+	// seeded.
+	CreatedBy string `protobuf:"bytes,15,opt,name=created_by,json=createdBy,proto3" json:"created_by,omitempty"`
+	// The kinds of channel it is, as slugs (^[a-z0-9-]{1,32}$): what a library
+	// entry's channel_types are matched against (UseLibraryStrategy). The org
+	// chooses its own; the seeded defaults carry a small generic set.
+	ChannelTypes  []string `protobuf:"bytes,16,rep,name=channel_types,json=channelTypes,proto3" json:"channel_types,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GtmChannel) Reset() {
+	*x = GtmChannel{}
+	mi := &file_reliant_v1_gtm_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GtmChannel) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GtmChannel) ProtoMessage() {}
+
+func (x *GtmChannel) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_gtm_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GtmChannel.ProtoReflect.Descriptor instead.
+func (*GtmChannel) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *GtmChannel) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *GtmChannel) GetOrgId() string {
+	if x != nil {
+		return x.OrgId
+	}
+	return ""
+}
+
+func (x *GtmChannel) GetKey() string {
+	if x != nil {
+		return x.Key
+	}
+	return ""
+}
+
+func (x *GtmChannel) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *GtmChannel) GetMode() GtmChannelMode {
+	if x != nil {
+		return x.Mode
+	}
+	return GtmChannelMode_GTM_CHANNEL_MODE_UNSPECIFIED
+}
+
+func (x *GtmChannel) GetIntegrationKind() string {
+	if x != nil {
+		return x.IntegrationKind
+	}
+	return ""
+}
+
+func (x *GtmChannel) GetConnectionId() string {
+	if x != nil {
+		return x.ConnectionId
+	}
+	return ""
+}
+
+func (x *GtmChannel) GetManualInstructionsMd() string {
+	if x != nil {
+		return x.ManualInstructionsMd
+	}
+	return ""
+}
+
+func (x *GtmChannel) GetStatus() GtmChannelStatus {
+	if x != nil {
+		return x.Status
+	}
+	return GtmChannelStatus_GTM_CHANNEL_STATUS_UNSPECIFIED
+}
+
+func (x *GtmChannel) GetConnectionState() GtmConnectionState {
+	if x != nil {
+		return x.ConnectionState
+	}
+	return GtmConnectionState_GTM_CONNECTION_STATE_UNSPECIFIED
+}
+
+func (x *GtmChannel) GetRevision() int32 {
+	if x != nil {
+		return x.Revision
+	}
+	return 0
+}
+
+func (x *GtmChannel) GetCreatedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.CreatedAt
+	}
+	return nil
+}
+
+func (x *GtmChannel) GetUpdatedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.UpdatedAt
+	}
+	return nil
+}
+
+func (x *GtmChannel) GetSource() GtmChannelSource {
+	if x != nil {
+		return x.Source
+	}
+	return GtmChannelSource_GTM_CHANNEL_SOURCE_UNSPECIFIED
+}
+
+func (x *GtmChannel) GetCreatedBy() string {
+	if x != nil {
+		return x.CreatedBy
+	}
+	return ""
+}
+
+func (x *GtmChannel) GetChannelTypes() []string {
+	if x != nil {
+		return x.ChannelTypes
+	}
+	return nil
+}
+
+// GtmChannelTypeList is a whole channel_types list, so an update can tell
+// "replace with this list" (set, possibly empty) from "leave alone" (unset).
+type GtmChannelTypeList struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Types         []string               `protobuf:"bytes,1,rep,name=types,proto3" json:"types,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GtmChannelTypeList) Reset() {
+	*x = GtmChannelTypeList{}
+	mi := &file_reliant_v1_gtm_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GtmChannelTypeList) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GtmChannelTypeList) ProtoMessage() {}
+
+func (x *GtmChannelTypeList) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_gtm_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GtmChannelTypeList.ProtoReflect.Descriptor instead.
+func (*GtmChannelTypeList) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *GtmChannelTypeList) GetTypes() []string {
+	if x != nil {
+		return x.Types
+	}
+	return nil
+}
+
+// GtmLibraryImport is one ImportStrategyLibrary call (gtm_library_imports),
+// for the audit history.
+type GtmLibraryImport struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Id    string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	OrgId string                 `protobuf:"bytes,2,opt,name=org_id,json=orgId,proto3" json:"org_id,omitempty"`
+	// The user it acted as.
+	ActorUserId    string            `protobuf:"bytes,3,opt,name=actor_user_id,json=actorUserId,proto3" json:"actor_user_id,omitempty"`
+	CredentialKind GtmCredentialKind `protobuf:"varint,4,opt,name=credential_kind,json=credentialKind,proto3,enum=reliant.v1.GtmCredentialKind" json:"credential_kind,omitempty"`
+	SourceRevision string            `protobuf:"bytes,5,opt,name=source_revision,json=sourceRevision,proto3" json:"source_revision,omitempty"`
+	Created        int32             `protobuf:"varint,6,opt,name=created,proto3" json:"created,omitempty"`
+	Updated        int32             `protobuf:"varint,7,opt,name=updated,proto3" json:"updated,omitempty"`
+	Unchanged      int32             `protobuf:"varint,8,opt,name=unchanged,proto3" json:"unchanged,omitempty"`
+	Pruned         int32             `protobuf:"varint,9,opt,name=pruned,proto3" json:"pruned,omitempty"`
+	// The prune request it staged, if any.
+	PruneRequestId string                 `protobuf:"bytes,10,opt,name=prune_request_id,json=pruneRequestId,proto3" json:"prune_request_id,omitempty"`
+	CreatedAt      *timestamppb.Timestamp `protobuf:"bytes,11,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *GtmLibraryImport) Reset() {
+	*x = GtmLibraryImport{}
+	mi := &file_reliant_v1_gtm_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GtmLibraryImport) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GtmLibraryImport) ProtoMessage() {}
+
+func (x *GtmLibraryImport) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_gtm_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GtmLibraryImport.ProtoReflect.Descriptor instead.
+func (*GtmLibraryImport) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *GtmLibraryImport) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *GtmLibraryImport) GetOrgId() string {
+	if x != nil {
+		return x.OrgId
+	}
+	return ""
+}
+
+func (x *GtmLibraryImport) GetActorUserId() string {
+	if x != nil {
+		return x.ActorUserId
+	}
+	return ""
+}
+
+func (x *GtmLibraryImport) GetCredentialKind() GtmCredentialKind {
+	if x != nil {
+		return x.CredentialKind
+	}
+	return GtmCredentialKind_GTM_CREDENTIAL_KIND_UNSPECIFIED
+}
+
+func (x *GtmLibraryImport) GetSourceRevision() string {
+	if x != nil {
+		return x.SourceRevision
+	}
+	return ""
+}
+
+func (x *GtmLibraryImport) GetCreated() int32 {
+	if x != nil {
+		return x.Created
+	}
+	return 0
+}
+
+func (x *GtmLibraryImport) GetUpdated() int32 {
+	if x != nil {
+		return x.Updated
+	}
+	return 0
+}
+
+func (x *GtmLibraryImport) GetUnchanged() int32 {
+	if x != nil {
+		return x.Unchanged
+	}
+	return 0
+}
+
+func (x *GtmLibraryImport) GetPruned() int32 {
+	if x != nil {
+		return x.Pruned
+	}
+	return 0
+}
+
+func (x *GtmLibraryImport) GetPruneRequestId() string {
+	if x != nil {
+		return x.PruneRequestId
+	}
+	return ""
+}
+
+func (x *GtmLibraryImport) GetCreatedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.CreatedAt
+	}
+	return nil
+}
+
+// GtmLibraryPruneRequest is a prune an import over a token staged
+// (gtm_library_prune_requests): the keys it would remove, waiting for a
+// person.
+type GtmLibraryPruneRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Id    string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	OrgId string                 `protobuf:"bytes,2,opt,name=org_id,json=orgId,proto3" json:"org_id,omitempty"`
+	// The user the staging import acted as.
+	RequestedBy    string            `protobuf:"bytes,3,opt,name=requested_by,json=requestedBy,proto3" json:"requested_by,omitempty"`
+	CredentialKind GtmCredentialKind `protobuf:"varint,4,opt,name=credential_kind,json=credentialKind,proto3,enum=reliant.v1.GtmCredentialKind" json:"credential_kind,omitempty"`
+	SourceRevision string            `protobuf:"bytes,5,opt,name=source_revision,json=sourceRevision,proto3" json:"source_revision,omitempty"`
+	RemoveKeys     []string          `protobuf:"bytes,6,rep,name=remove_keys,json=removeKeys,proto3" json:"remove_keys,omitempty"`
+	// PENDING past 7 days is answered as EXPIRED.
+	Status GtmPruneRequestStatus `protobuf:"varint,7,opt,name=status,proto3,enum=reliant.v1.GtmPruneRequestStatus" json:"status,omitempty"`
+	// Who confirmed or cancelled it, and when.
+	DecidedBy string                 `protobuf:"bytes,8,opt,name=decided_by,json=decidedBy,proto3" json:"decided_by,omitempty"`
+	DecidedAt *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=decided_at,json=decidedAt,proto3" json:"decided_at,omitempty"`
+	CreatedAt *timestamppb.Timestamp `protobuf:"bytes,10,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	// When a PENDING request expires (created_at + 7 days).
+	ExpiresAt     *timestamppb.Timestamp `protobuf:"bytes,11,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GtmLibraryPruneRequest) Reset() {
+	*x = GtmLibraryPruneRequest{}
+	mi := &file_reliant_v1_gtm_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GtmLibraryPruneRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GtmLibraryPruneRequest) ProtoMessage() {}
+
+func (x *GtmLibraryPruneRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_gtm_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GtmLibraryPruneRequest.ProtoReflect.Descriptor instead.
+func (*GtmLibraryPruneRequest) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *GtmLibraryPruneRequest) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *GtmLibraryPruneRequest) GetOrgId() string {
+	if x != nil {
+		return x.OrgId
+	}
+	return ""
+}
+
+func (x *GtmLibraryPruneRequest) GetRequestedBy() string {
+	if x != nil {
+		return x.RequestedBy
+	}
+	return ""
+}
+
+func (x *GtmLibraryPruneRequest) GetCredentialKind() GtmCredentialKind {
+	if x != nil {
+		return x.CredentialKind
+	}
+	return GtmCredentialKind_GTM_CREDENTIAL_KIND_UNSPECIFIED
+}
+
+func (x *GtmLibraryPruneRequest) GetSourceRevision() string {
+	if x != nil {
+		return x.SourceRevision
+	}
+	return ""
+}
+
+func (x *GtmLibraryPruneRequest) GetRemoveKeys() []string {
+	if x != nil {
+		return x.RemoveKeys
+	}
+	return nil
+}
+
+func (x *GtmLibraryPruneRequest) GetStatus() GtmPruneRequestStatus {
+	if x != nil {
+		return x.Status
+	}
+	return GtmPruneRequestStatus_GTM_PRUNE_REQUEST_STATUS_UNSPECIFIED
+}
+
+func (x *GtmLibraryPruneRequest) GetDecidedBy() string {
+	if x != nil {
+		return x.DecidedBy
+	}
+	return ""
+}
+
+func (x *GtmLibraryPruneRequest) GetDecidedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.DecidedAt
+	}
+	return nil
+}
+
+func (x *GtmLibraryPruneRequest) GetCreatedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.CreatedAt
+	}
+	return nil
+}
+
+func (x *GtmLibraryPruneRequest) GetExpiresAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.ExpiresAt
+	}
+	return nil
+}
+
+// GtmLibraryStep is one step of a play and who does it.
+type GtmLibraryStep struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Who does it, as the catalog says ("agent", "you", ...).
+	Who           string `protobuf:"bytes,1,opt,name=who,proto3" json:"who,omitempty"`
+	Title         string `protobuf:"bytes,2,opt,name=title,proto3" json:"title,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GtmLibraryStep) Reset() {
+	*x = GtmLibraryStep{}
+	mi := &file_reliant_v1_gtm_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GtmLibraryStep) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GtmLibraryStep) ProtoMessage() {}
+
+func (x *GtmLibraryStep) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_gtm_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GtmLibraryStep.ProtoReflect.Descriptor instead.
+func (*GtmLibraryStep) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *GtmLibraryStep) GetWho() string {
+	if x != nil {
+		return x.Who
+	}
+	return ""
+}
+
+func (x *GtmLibraryStep) GetTitle() string {
+	if x != nil {
+		return x.Title
+	}
+	return ""
+}
+
+// GtmStrategyLibraryEntry is one play or tactic of the org's strategy library
+// (gtm_strategy_library), as imported. The org's own import is the only
+// source of entries: Reliant ships none.
+type GtmStrategyLibraryEntry struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// A slug, unique in the org: what an import upserts by
+	// (^[a-z0-9][a-z0-9_-]{0,127}$). A catalog entry without a key of its own
+	// (a tactic) gets one derived by the importer: its category's slug and its
+	// name's, lower-cased, every run of other characters turned into one "-",
+	// trimmed of "-" and cut to 128 characters ("<category>-<name>"), so the
+	// same entry gets the same key on every import.
+	Key      string              `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
+	Category GtmStrategyCategory `protobuf:"varint,2,opt,name=category,proto3,enum=reliant.v1.GtmStrategyCategory" json:"category,omitempty"`
+	Depth    GtmLibraryDepth     `protobuf:"varint,3,opt,name=depth,proto3,enum=reliant.v1.GtmLibraryDepth" json:"depth,omitempty"`
+	Name     string              `protobuf:"bytes,4,opt,name=name,proto3" json:"name,omitempty"`
+	// The one-paragraph pitch, in markdown.
+	SummaryMd string `protobuf:"bytes,5,opt,name=summary_md,json=summaryMd,proto3" json:"summary_md,omitempty"`
+	Icon      string `protobuf:"bytes,6,opt,name=icon,proto3" json:"icon,omitempty"`
+	// The play's free vocabularies, stored as given: the funnel stage, the
+	// cost band, the difficulty, the level, the objective.
+	Stage        string `protobuf:"bytes,7,opt,name=stage,proto3" json:"stage,omitempty"`
+	Cost         string `protobuf:"bytes,8,opt,name=cost,proto3" json:"cost,omitempty"`
+	CostNote     string `protobuf:"bytes,9,opt,name=cost_note,json=costNote,proto3" json:"cost_note,omitempty"`
+	Difficulty   string `protobuf:"bytes,10,opt,name=difficulty,proto3" json:"difficulty,omitempty"`
+	Level        string `protobuf:"bytes,11,opt,name=level,proto3" json:"level,omitempty"`
+	Objective    string `protobuf:"bytes,12,opt,name=objective,proto3" json:"objective,omitempty"`
+	NorthStar    string `protobuf:"bytes,13,opt,name=north_star,json=northStar,proto3" json:"north_star,omitempty"`
+	HypothesisMd string `protobuf:"bytes,14,opt,name=hypothesis_md,json=hypothesisMd,proto3" json:"hypothesis_md,omitempty"`
+	// Hours of work, days to a signal, the experiment window, days to launch;
+	// 0 when the entry does not say.
+	Hours      int32 `protobuf:"varint,15,opt,name=hours,proto3" json:"hours,omitempty"`
+	SignalDays int32 `protobuf:"varint,16,opt,name=signal_days,json=signalDays,proto3" json:"signal_days,omitempty"`
+	WindowDays int32 `protobuf:"varint,17,opt,name=window_days,json=windowDays,proto3" json:"window_days,omitempty"`
+	LaunchDays int32 `protobuf:"varint,18,opt,name=launch_days,json=launchDays,proto3" json:"launch_days,omitempty"`
+	// The expected change of the north star, as the catalog gives it.
+	ExpectedDelta float64           `protobuf:"fixed64,19,opt,name=expected_delta,json=expectedDelta,proto3" json:"expected_delta,omitempty"`
+	Lifecycle     []string          `protobuf:"bytes,20,rep,name=lifecycle,proto3" json:"lifecycle,omitempty"`
+	ChannelTypes  []string          `protobuf:"bytes,21,rep,name=channel_types,json=channelTypes,proto3" json:"channel_types,omitempty"`
+	Integrations  []string          `protobuf:"bytes,22,rep,name=integrations,proto3" json:"integrations,omitempty"`
+	Fits          []string          `protobuf:"bytes,23,rep,name=fits,proto3" json:"fits,omitempty"`
+	Prerequisites []string          `protobuf:"bytes,24,rep,name=prerequisites,proto3" json:"prerequisites,omitempty"`
+	Kpis          []string          `protobuf:"bytes,25,rep,name=kpis,proto3" json:"kpis,omitempty"`
+	Tactics       []string          `protobuf:"bytes,26,rep,name=tactics,proto3" json:"tactics,omitempty"`
+	Automates     []string          `protobuf:"bytes,27,rep,name=automates,proto3" json:"automates,omitempty"`
+	Experiments   []string          `protobuf:"bytes,28,rep,name=experiments,proto3" json:"experiments,omitempty"`
+	StopWhen      []string          `protobuf:"bytes,29,rep,name=stop_when,json=stopWhen,proto3" json:"stop_when,omitempty"`
+	Steps         []*GtmLibraryStep `protobuf:"bytes,30,rep,name=steps,proto3" json:"steps,omitempty"`
+	// Any field of the entry this message has no field for, kept whole.
+	Extra *structpb.Struct `protobuf:"bytes,31,opt,name=extra,proto3" json:"extra,omitempty"`
+	// Set by the import; ignored on the way in. imported_at moves on every
+	// import that names the key, changed or not: a prune request skips an entry
+	// imported again after it was made.
+	SourceRevision string                 `protobuf:"bytes,32,opt,name=source_revision,json=sourceRevision,proto3" json:"source_revision,omitempty"`
+	ImportedAt     *timestamppb.Timestamp `protobuf:"bytes,33,opt,name=imported_at,json=importedAt,proto3" json:"imported_at,omitempty"`
+	ImportedBy     string                 `protobuf:"bytes,34,opt,name=imported_by,json=importedBy,proto3" json:"imported_by,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *GtmStrategyLibraryEntry) Reset() {
+	*x = GtmStrategyLibraryEntry{}
+	mi := &file_reliant_v1_gtm_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GtmStrategyLibraryEntry) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GtmStrategyLibraryEntry) ProtoMessage() {}
+
+func (x *GtmStrategyLibraryEntry) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_gtm_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GtmStrategyLibraryEntry.ProtoReflect.Descriptor instead.
+func (*GtmStrategyLibraryEntry) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *GtmStrategyLibraryEntry) GetKey() string {
+	if x != nil {
+		return x.Key
+	}
+	return ""
+}
+
+func (x *GtmStrategyLibraryEntry) GetCategory() GtmStrategyCategory {
+	if x != nil {
+		return x.Category
+	}
+	return GtmStrategyCategory_GTM_STRATEGY_CATEGORY_UNSPECIFIED
+}
+
+func (x *GtmStrategyLibraryEntry) GetDepth() GtmLibraryDepth {
+	if x != nil {
+		return x.Depth
+	}
+	return GtmLibraryDepth_GTM_LIBRARY_DEPTH_UNSPECIFIED
+}
+
+func (x *GtmStrategyLibraryEntry) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *GtmStrategyLibraryEntry) GetSummaryMd() string {
+	if x != nil {
+		return x.SummaryMd
+	}
+	return ""
+}
+
+func (x *GtmStrategyLibraryEntry) GetIcon() string {
+	if x != nil {
+		return x.Icon
+	}
+	return ""
+}
+
+func (x *GtmStrategyLibraryEntry) GetStage() string {
+	if x != nil {
+		return x.Stage
+	}
+	return ""
+}
+
+func (x *GtmStrategyLibraryEntry) GetCost() string {
+	if x != nil {
+		return x.Cost
+	}
+	return ""
+}
+
+func (x *GtmStrategyLibraryEntry) GetCostNote() string {
+	if x != nil {
+		return x.CostNote
+	}
+	return ""
+}
+
+func (x *GtmStrategyLibraryEntry) GetDifficulty() string {
+	if x != nil {
+		return x.Difficulty
+	}
+	return ""
+}
+
+func (x *GtmStrategyLibraryEntry) GetLevel() string {
+	if x != nil {
+		return x.Level
+	}
+	return ""
+}
+
+func (x *GtmStrategyLibraryEntry) GetObjective() string {
+	if x != nil {
+		return x.Objective
+	}
+	return ""
+}
+
+func (x *GtmStrategyLibraryEntry) GetNorthStar() string {
+	if x != nil {
+		return x.NorthStar
+	}
+	return ""
+}
+
+func (x *GtmStrategyLibraryEntry) GetHypothesisMd() string {
+	if x != nil {
+		return x.HypothesisMd
+	}
+	return ""
+}
+
+func (x *GtmStrategyLibraryEntry) GetHours() int32 {
+	if x != nil {
+		return x.Hours
+	}
+	return 0
+}
+
+func (x *GtmStrategyLibraryEntry) GetSignalDays() int32 {
+	if x != nil {
+		return x.SignalDays
+	}
+	return 0
+}
+
+func (x *GtmStrategyLibraryEntry) GetWindowDays() int32 {
+	if x != nil {
+		return x.WindowDays
+	}
+	return 0
+}
+
+func (x *GtmStrategyLibraryEntry) GetLaunchDays() int32 {
+	if x != nil {
+		return x.LaunchDays
+	}
+	return 0
+}
+
+func (x *GtmStrategyLibraryEntry) GetExpectedDelta() float64 {
+	if x != nil {
+		return x.ExpectedDelta
+	}
+	return 0
+}
+
+func (x *GtmStrategyLibraryEntry) GetLifecycle() []string {
+	if x != nil {
+		return x.Lifecycle
+	}
+	return nil
+}
+
+func (x *GtmStrategyLibraryEntry) GetChannelTypes() []string {
+	if x != nil {
+		return x.ChannelTypes
+	}
+	return nil
+}
+
+func (x *GtmStrategyLibraryEntry) GetIntegrations() []string {
+	if x != nil {
+		return x.Integrations
+	}
+	return nil
+}
+
+func (x *GtmStrategyLibraryEntry) GetFits() []string {
+	if x != nil {
+		return x.Fits
+	}
+	return nil
+}
+
+func (x *GtmStrategyLibraryEntry) GetPrerequisites() []string {
+	if x != nil {
+		return x.Prerequisites
+	}
+	return nil
+}
+
+func (x *GtmStrategyLibraryEntry) GetKpis() []string {
+	if x != nil {
+		return x.Kpis
+	}
+	return nil
+}
+
+func (x *GtmStrategyLibraryEntry) GetTactics() []string {
+	if x != nil {
+		return x.Tactics
+	}
+	return nil
+}
+
+func (x *GtmStrategyLibraryEntry) GetAutomates() []string {
+	if x != nil {
+		return x.Automates
+	}
+	return nil
+}
+
+func (x *GtmStrategyLibraryEntry) GetExperiments() []string {
+	if x != nil {
+		return x.Experiments
+	}
+	return nil
+}
+
+func (x *GtmStrategyLibraryEntry) GetStopWhen() []string {
+	if x != nil {
+		return x.StopWhen
+	}
+	return nil
+}
+
+func (x *GtmStrategyLibraryEntry) GetSteps() []*GtmLibraryStep {
+	if x != nil {
+		return x.Steps
+	}
+	return nil
+}
+
+func (x *GtmStrategyLibraryEntry) GetExtra() *structpb.Struct {
+	if x != nil {
+		return x.Extra
+	}
+	return nil
+}
+
+func (x *GtmStrategyLibraryEntry) GetSourceRevision() string {
+	if x != nil {
+		return x.SourceRevision
+	}
+	return ""
+}
+
+func (x *GtmStrategyLibraryEntry) GetImportedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.ImportedAt
+	}
+	return nil
+}
+
+func (x *GtmStrategyLibraryEntry) GetImportedBy() string {
+	if x != nil {
+		return x.ImportedBy
+	}
+	return ""
+}
+
+// GtmAsset is one file attached to an item or a campaign (gtm_assets):
+// metadata only. The bytes live in the org's bucket under
+// gtm/<org_id>/<id>: written through CreateAssetUpload and
+// ConfirmAssetUpload, read through GetAssetDownload (a presigned URL, or the
+// gated HTTP handler /api/gtm/assets/{id}/content; the download path is not an
+// rpc that carries bytes).
+type GtmAsset struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Id    string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	OrgId string                 `protobuf:"bytes,2,opt,name=org_id,json=orgId,proto3" json:"org_id,omitempty"`
+	// The item and/or campaign it is attached to; at least one is set.
+	ItemId     string `protobuf:"bytes,3,opt,name=item_id,json=itemId,proto3" json:"item_id,omitempty"`
+	CampaignId string `protobuf:"bytes,4,opt,name=campaign_id,json=campaignId,proto3" json:"campaign_id,omitempty"`
+	Filename   string `protobuf:"bytes,5,opt,name=filename,proto3" json:"filename,omitempty"`
+	// The confirmed (sniffed) type once READY; the declared one while PENDING.
+	ContentType string `protobuf:"bytes,6,opt,name=content_type,json=contentType,proto3" json:"content_type,omitempty"`
+	// The declared size while PENDING, the checked size once READY.
+	SizeBytes int64 `protobuf:"varint,7,opt,name=size_bytes,json=sizeBytes,proto3" json:"size_bytes,omitempty"`
+	// Hex SHA-256 of the bytes; set once READY.
+	Sha256        string                 `protobuf:"bytes,8,opt,name=sha256,proto3" json:"sha256,omitempty"`
+	UploadedBy    string                 `protobuf:"bytes,9,opt,name=uploaded_by,json=uploadedBy,proto3" json:"uploaded_by,omitempty"`
+	Source        GtmAssetSource         `protobuf:"varint,10,opt,name=source,proto3,enum=reliant.v1.GtmAssetSource" json:"source,omitempty"`
+	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,11,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	Status        GtmAssetStatus         `protobuf:"varint,12,opt,name=status,proto3,enum=reliant.v1.GtmAssetStatus" json:"status,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GtmAsset) Reset() {
+	*x = GtmAsset{}
+	mi := &file_reliant_v1_gtm_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GtmAsset) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GtmAsset) ProtoMessage() {}
+
+func (x *GtmAsset) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_gtm_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GtmAsset.ProtoReflect.Descriptor instead.
+func (*GtmAsset) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *GtmAsset) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *GtmAsset) GetOrgId() string {
+	if x != nil {
+		return x.OrgId
+	}
+	return ""
+}
+
+func (x *GtmAsset) GetItemId() string {
+	if x != nil {
+		return x.ItemId
+	}
+	return ""
+}
+
+func (x *GtmAsset) GetCampaignId() string {
+	if x != nil {
+		return x.CampaignId
+	}
+	return ""
+}
+
+func (x *GtmAsset) GetFilename() string {
+	if x != nil {
+		return x.Filename
+	}
+	return ""
+}
+
+func (x *GtmAsset) GetContentType() string {
+	if x != nil {
+		return x.ContentType
+	}
+	return ""
+}
+
+func (x *GtmAsset) GetSizeBytes() int64 {
+	if x != nil {
+		return x.SizeBytes
+	}
+	return 0
+}
+
+func (x *GtmAsset) GetSha256() string {
+	if x != nil {
+		return x.Sha256
+	}
+	return ""
+}
+
+func (x *GtmAsset) GetUploadedBy() string {
+	if x != nil {
+		return x.UploadedBy
+	}
+	return ""
+}
+
+func (x *GtmAsset) GetSource() GtmAssetSource {
+	if x != nil {
+		return x.Source
+	}
+	return GtmAssetSource_GTM_ASSET_SOURCE_UNSPECIFIED
+}
+
+func (x *GtmAsset) GetCreatedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.CreatedAt
+	}
+	return nil
+}
+
+func (x *GtmAsset) GetStatus() GtmAssetStatus {
+	if x != nil {
+		return x.Status
+	}
+	return GtmAssetStatus_GTM_ASSET_STATUS_UNSPECIFIED
 }
 
 // GtmEvidence is one piece of evidence behind an idea: an analytics readout,
@@ -655,7 +2509,7 @@ type GtmEvidence struct {
 
 func (x *GtmEvidence) Reset() {
 	*x = GtmEvidence{}
-	mi := &file_reliant_v1_gtm_proto_msgTypes[0]
+	mi := &file_reliant_v1_gtm_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -667,7 +2521,7 @@ func (x *GtmEvidence) String() string {
 func (*GtmEvidence) ProtoMessage() {}
 
 func (x *GtmEvidence) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_gtm_proto_msgTypes[0]
+	mi := &file_reliant_v1_gtm_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -680,7 +2534,7 @@ func (x *GtmEvidence) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GtmEvidence.ProtoReflect.Descriptor instead.
 func (*GtmEvidence) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{0}
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *GtmEvidence) GetKind() string {
@@ -729,7 +2583,7 @@ type GtmEvidenceList struct {
 
 func (x *GtmEvidenceList) Reset() {
 	*x = GtmEvidenceList{}
-	mi := &file_reliant_v1_gtm_proto_msgTypes[1]
+	mi := &file_reliant_v1_gtm_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -741,7 +2595,7 @@ func (x *GtmEvidenceList) String() string {
 func (*GtmEvidenceList) ProtoMessage() {}
 
 func (x *GtmEvidenceList) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_gtm_proto_msgTypes[1]
+	mi := &file_reliant_v1_gtm_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -754,7 +2608,7 @@ func (x *GtmEvidenceList) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GtmEvidenceList.ProtoReflect.Descriptor instead.
 func (*GtmEvidenceList) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{1}
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *GtmEvidenceList) GetEvidence() []*GtmEvidence {
@@ -790,7 +2644,7 @@ type GtmIdea struct {
 
 func (x *GtmIdea) Reset() {
 	*x = GtmIdea{}
-	mi := &file_reliant_v1_gtm_proto_msgTypes[2]
+	mi := &file_reliant_v1_gtm_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -802,7 +2656,7 @@ func (x *GtmIdea) String() string {
 func (*GtmIdea) ProtoMessage() {}
 
 func (x *GtmIdea) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_gtm_proto_msgTypes[2]
+	mi := &file_reliant_v1_gtm_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -815,7 +2669,7 @@ func (x *GtmIdea) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GtmIdea.ProtoReflect.Descriptor instead.
 func (*GtmIdea) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{2}
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *GtmIdea) GetId() string {
@@ -923,20 +2777,26 @@ type GtmCampaign struct {
 	OrgId string                 `protobuf:"bytes,2,opt,name=org_id,json=orgId,proto3" json:"org_id,omitempty"`
 	Name  string                 `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`
 	// What the campaign is for: its north star.
-	Goal          string                 `protobuf:"bytes,4,opt,name=goal,proto3" json:"goal,omitempty"`
-	PeriodStart   *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=period_start,json=periodStart,proto3" json:"period_start,omitempty"`
-	PeriodEnd     *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=period_end,json=periodEnd,proto3" json:"period_end,omitempty"`
-	Status        GtmCampaignStatus      `protobuf:"varint,7,opt,name=status,proto3,enum=reliant.v1.GtmCampaignStatus" json:"status,omitempty"`
-	Revision      int32                  `protobuf:"varint,8,opt,name=revision,proto3" json:"revision,omitempty"`
-	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
-	UpdatedAt     *timestamppb.Timestamp `protobuf:"bytes,10,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Goal        string                 `protobuf:"bytes,4,opt,name=goal,proto3" json:"goal,omitempty"`
+	PeriodStart *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=period_start,json=periodStart,proto3" json:"period_start,omitempty"`
+	PeriodEnd   *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=period_end,json=periodEnd,proto3" json:"period_end,omitempty"`
+	Status      GtmCampaignStatus      `protobuf:"varint,7,opt,name=status,proto3,enum=reliant.v1.GtmCampaignStatus" json:"status,omitempty"`
+	Revision    int32                  `protobuf:"varint,8,opt,name=revision,proto3" json:"revision,omitempty"`
+	CreatedAt   *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	UpdatedAt   *timestamppb.Timestamp `protobuf:"bytes,10,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	// The strategy it belongs to (every campaign has one).
+	StrategyId string `protobuf:"bytes,11,opt,name=strategy_id,json=strategyId,proto3" json:"strategy_id,omitempty"`
+	// The channels (GtmChannel.id) and formats it plans to use. Coverage
+	// (GetCampaignResponse.coverage) holds them against its items.
+	PlannedChannelIds []string        `protobuf:"bytes,12,rep,name=planned_channel_ids,json=plannedChannelIds,proto3" json:"planned_channel_ids,omitempty"`
+	PlannedFormats    []GtmItemFormat `protobuf:"varint,13,rep,packed,name=planned_formats,json=plannedFormats,proto3,enum=reliant.v1.GtmItemFormat" json:"planned_formats,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *GtmCampaign) Reset() {
 	*x = GtmCampaign{}
-	mi := &file_reliant_v1_gtm_proto_msgTypes[3]
+	mi := &file_reliant_v1_gtm_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -948,7 +2808,7 @@ func (x *GtmCampaign) String() string {
 func (*GtmCampaign) ProtoMessage() {}
 
 func (x *GtmCampaign) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_gtm_proto_msgTypes[3]
+	mi := &file_reliant_v1_gtm_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -961,7 +2821,7 @@ func (x *GtmCampaign) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GtmCampaign.ProtoReflect.Descriptor instead.
 func (*GtmCampaign) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{3}
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *GtmCampaign) GetId() string {
@@ -1034,7 +2894,258 @@ func (x *GtmCampaign) GetUpdatedAt() *timestamppb.Timestamp {
 	return nil
 }
 
-// GtmItem is one post, email or launch (gtm_items): an entry on the calendar
+func (x *GtmCampaign) GetStrategyId() string {
+	if x != nil {
+		return x.StrategyId
+	}
+	return ""
+}
+
+func (x *GtmCampaign) GetPlannedChannelIds() []string {
+	if x != nil {
+		return x.PlannedChannelIds
+	}
+	return nil
+}
+
+func (x *GtmCampaign) GetPlannedFormats() []GtmItemFormat {
+	if x != nil {
+		return x.PlannedFormats
+	}
+	return nil
+}
+
+// GtmChannelIdList is a whole list of channel ids, so an update can tell
+// "replace with this list" (set, possibly empty) from "leave alone" (unset).
+type GtmChannelIdList struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Ids           []string               `protobuf:"bytes,1,rep,name=ids,proto3" json:"ids,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GtmChannelIdList) Reset() {
+	*x = GtmChannelIdList{}
+	mi := &file_reliant_v1_gtm_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GtmChannelIdList) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GtmChannelIdList) ProtoMessage() {}
+
+func (x *GtmChannelIdList) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_gtm_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GtmChannelIdList.ProtoReflect.Descriptor instead.
+func (*GtmChannelIdList) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *GtmChannelIdList) GetIds() []string {
+	if x != nil {
+		return x.Ids
+	}
+	return nil
+}
+
+// GtmItemFormatList is a whole list of formats, for the same reason.
+type GtmItemFormatList struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Formats       []GtmItemFormat        `protobuf:"varint,1,rep,packed,name=formats,proto3,enum=reliant.v1.GtmItemFormat" json:"formats,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GtmItemFormatList) Reset() {
+	*x = GtmItemFormatList{}
+	mi := &file_reliant_v1_gtm_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GtmItemFormatList) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GtmItemFormatList) ProtoMessage() {}
+
+func (x *GtmItemFormatList) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_gtm_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GtmItemFormatList.ProtoReflect.Descriptor instead.
+func (*GtmItemFormatList) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *GtmItemFormatList) GetFormats() []GtmItemFormat {
+	if x != nil {
+		return x.Formats
+	}
+	return nil
+}
+
+// GtmItemStatusCount is how many items are in one status.
+type GtmItemStatusCount struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Status        GtmItemStatus          `protobuf:"varint,1,opt,name=status,proto3,enum=reliant.v1.GtmItemStatus" json:"status,omitempty"`
+	Count         int32                  `protobuf:"varint,2,opt,name=count,proto3" json:"count,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GtmItemStatusCount) Reset() {
+	*x = GtmItemStatusCount{}
+	mi := &file_reliant_v1_gtm_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GtmItemStatusCount) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GtmItemStatusCount) ProtoMessage() {}
+
+func (x *GtmItemStatusCount) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_gtm_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GtmItemStatusCount.ProtoReflect.Descriptor instead.
+func (*GtmItemStatusCount) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *GtmItemStatusCount) GetStatus() GtmItemStatus {
+	if x != nil {
+		return x.Status
+	}
+	return GtmItemStatus_GTM_ITEM_STATUS_UNSPECIFIED
+}
+
+func (x *GtmItemStatusCount) GetCount() int32 {
+	if x != nil {
+		return x.Count
+	}
+	return 0
+}
+
+// GtmCoverageRow is one (channel, format) pair of a campaign: planned
+// (planned_channel_ids x planned_formats), used by its items, or both, with
+// its items counted by status. A planned pair no item uses has no counts
+// ("Reddit planned, nothing drafted").
+type GtmCoverageRow struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Empty on a planned row: any channel (only formats were planned). Empty on
+	// an unplanned row: items with no channel yet.
+	ChannelId string `protobuf:"bytes,1,opt,name=channel_id,json=channelId,proto3" json:"channel_id,omitempty"`
+	// UNSPECIFIED on a planned row: any format (only channels were planned).
+	Format GtmItemFormat `protobuf:"varint,2,opt,name=format,proto3,enum=reliant.v1.GtmItemFormat" json:"format,omitempty"`
+	// Whether the campaign planned this pair.
+	Planned bool `protobuf:"varint,3,opt,name=planned,proto3" json:"planned,omitempty"`
+	// The pair's items by status; only statuses with a count above zero.
+	Counts []*GtmItemStatusCount `protobuf:"bytes,4,rep,name=counts,proto3" json:"counts,omitempty"`
+	// All the pair's items.
+	Total         int32 `protobuf:"varint,5,opt,name=total,proto3" json:"total,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GtmCoverageRow) Reset() {
+	*x = GtmCoverageRow{}
+	mi := &file_reliant_v1_gtm_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GtmCoverageRow) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GtmCoverageRow) ProtoMessage() {}
+
+func (x *GtmCoverageRow) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_gtm_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GtmCoverageRow.ProtoReflect.Descriptor instead.
+func (*GtmCoverageRow) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *GtmCoverageRow) GetChannelId() string {
+	if x != nil {
+		return x.ChannelId
+	}
+	return ""
+}
+
+func (x *GtmCoverageRow) GetFormat() GtmItemFormat {
+	if x != nil {
+		return x.Format
+	}
+	return GtmItemFormat_GTM_ITEM_FORMAT_UNSPECIFIED
+}
+
+func (x *GtmCoverageRow) GetPlanned() bool {
+	if x != nil {
+		return x.Planned
+	}
+	return false
+}
+
+func (x *GtmCoverageRow) GetCounts() []*GtmItemStatusCount {
+	if x != nil {
+		return x.Counts
+	}
+	return nil
+}
+
+func (x *GtmCoverageRow) GetTotal() int32 {
+	if x != nil {
+		return x.Total
+	}
+	return 0
+}
+
+// GtmItem is one post, email, video, pitch or ad (gtm_items): an entry on the calendar
 // once it has a date.
 type GtmItem struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -1043,34 +3154,42 @@ type GtmItem struct {
 	// The campaign it belongs to; empty for none.
 	CampaignId string `protobuf:"bytes,3,opt,name=campaign_id,json=campaignId,proto3" json:"campaign_id,omitempty"`
 	// The idea it carries out; empty for none.
-	IdeaId string      `protobuf:"bytes,4,opt,name=idea_id,json=ideaId,proto3" json:"idea_id,omitempty"`
-	Kind   GtmItemKind `protobuf:"varint,5,opt,name=kind,proto3,enum=reliant.v1.GtmItemKind" json:"kind,omitempty"`
-	// Where it goes, free-form: "blog", "linkedin", "x", "newsletter".
-	Channel string        `protobuf:"bytes,6,opt,name=channel,proto3" json:"channel,omitempty"`
-	Title   string        `protobuf:"bytes,7,opt,name=title,proto3" json:"title,omitempty"`
-	BodyMd  string        `protobuf:"bytes,8,opt,name=body_md,json=bodyMd,proto3" json:"body_md,omitempty"`
-	Status  GtmItemStatus `protobuf:"varint,9,opt,name=status,proto3,enum=reliant.v1.GtmItemStatus" json:"status,omitempty"`
+	IdeaId string        `protobuf:"bytes,4,opt,name=idea_id,json=ideaId,proto3" json:"idea_id,omitempty"`
+	Format GtmItemFormat `protobuf:"varint,5,opt,name=format,proto3,enum=reliant.v1.GtmItemFormat" json:"format,omitempty"`
+	// The channel it goes out on (GtmChannel.id); empty for none yet.
+	ChannelId string        `protobuf:"bytes,6,opt,name=channel_id,json=channelId,proto3" json:"channel_id,omitempty"`
+	Title     string        `protobuf:"bytes,7,opt,name=title,proto3" json:"title,omitempty"`
+	BodyMd    string        `protobuf:"bytes,8,opt,name=body_md,json=bodyMd,proto3" json:"body_md,omitempty"`
+	Status    GtmItemStatus `protobuf:"varint,9,opt,name=status,proto3,enum=reliant.v1.GtmItemStatus" json:"status,omitempty"`
 	// When it is planned for. Unset: not on the calendar yet.
 	ScheduledAt *timestamppb.Timestamp `protobuf:"bytes,10,opt,name=scheduled_at,json=scheduledAt,proto3" json:"scheduled_at,omitempty"`
-	// EMAIL only: the recipients and subject.
+	// Email-type only: the recipients and subject.
 	EmailTo      []string `protobuf:"bytes,11,rep,name=email_to,json=emailTo,proto3" json:"email_to,omitempty"`
 	EmailSubject string   `protobuf:"bytes,12,opt,name=email_subject,json=emailSubject,proto3" json:"email_subject,omitempty"`
-	// EMAIL only, once SENT: Gmail's id for the sent message, when and by whom
-	// it was sent, and the hash of the approval card it was sent under.
+	// Email-type only, once SENT: Gmail's id for the sent message, when and by
+	// whom it was sent.
 	GmailMessageId string                 `protobuf:"bytes,13,opt,name=gmail_message_id,json=gmailMessageId,proto3" json:"gmail_message_id,omitempty"`
 	SentAt         *timestamppb.Timestamp `protobuf:"bytes,14,opt,name=sent_at,json=sentAt,proto3" json:"sent_at,omitempty"`
 	SentBy         string                 `protobuf:"bytes,15,opt,name=sent_by,json=sentBy,proto3" json:"sent_by,omitempty"`
-	ApprovalHash   string                 `protobuf:"bytes,16,opt,name=approval_hash,json=approvalHash,proto3" json:"approval_hash,omitempty"`
-	Revision       int32                  `protobuf:"varint,17,opt,name=revision,proto3" json:"revision,omitempty"`
-	CreatedAt      *timestamppb.Timestamp `protobuf:"bytes,18,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
-	UpdatedAt      *timestamppb.Timestamp `protobuf:"bytes,19,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// Email-type only: the hash of the approval card the email is sent under. Set
+	// while status is not SENT, the item is HELD: a send started and its
+	// outcome is unknown. A held item is frozen (every UpdateItem is
+	// FailedPrecondition) until a person resolves it with ResolveItemSend; the
+	// web shows that action for it. Once SENT, it is the card it was sent under.
+	ApprovalHash string                 `protobuf:"bytes,16,opt,name=approval_hash,json=approvalHash,proto3" json:"approval_hash,omitempty"`
+	Revision     int32                  `protobuf:"varint,17,opt,name=revision,proto3" json:"revision,omitempty"`
+	CreatedAt    *timestamppb.Timestamp `protobuf:"bytes,18,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	UpdatedAt    *timestamppb.Timestamp `protobuf:"bytes,19,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	// Where it went out (http or https), recorded by a person; required to mark
+	// an item on a MANUAL channel PUBLISHED. Empty: not recorded.
+	PublishedUrl  string `protobuf:"bytes,20,opt,name=published_url,json=publishedUrl,proto3" json:"published_url,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *GtmItem) Reset() {
 	*x = GtmItem{}
-	mi := &file_reliant_v1_gtm_proto_msgTypes[4]
+	mi := &file_reliant_v1_gtm_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1082,7 +3201,7 @@ func (x *GtmItem) String() string {
 func (*GtmItem) ProtoMessage() {}
 
 func (x *GtmItem) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_gtm_proto_msgTypes[4]
+	mi := &file_reliant_v1_gtm_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1095,7 +3214,7 @@ func (x *GtmItem) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GtmItem.ProtoReflect.Descriptor instead.
 func (*GtmItem) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{4}
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *GtmItem) GetId() string {
@@ -1126,16 +3245,16 @@ func (x *GtmItem) GetIdeaId() string {
 	return ""
 }
 
-func (x *GtmItem) GetKind() GtmItemKind {
+func (x *GtmItem) GetFormat() GtmItemFormat {
 	if x != nil {
-		return x.Kind
+		return x.Format
 	}
-	return GtmItemKind_GTM_ITEM_KIND_UNSPECIFIED
+	return GtmItemFormat_GTM_ITEM_FORMAT_UNSPECIFIED
 }
 
-func (x *GtmItem) GetChannel() string {
+func (x *GtmItem) GetChannelId() string {
 	if x != nil {
-		return x.Channel
+		return x.ChannelId
 	}
 	return ""
 }
@@ -1231,6 +3350,13 @@ func (x *GtmItem) GetUpdatedAt() *timestamppb.Timestamp {
 	return nil
 }
 
+func (x *GtmItem) GetPublishedUrl() string {
+	if x != nil {
+		return x.PublishedUrl
+	}
+	return ""
+}
+
 // GtmPositioning is the org's positioning (gtm_positioning): one per org.
 type GtmPositioning struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -1248,7 +3374,7 @@ type GtmPositioning struct {
 
 func (x *GtmPositioning) Reset() {
 	*x = GtmPositioning{}
-	mi := &file_reliant_v1_gtm_proto_msgTypes[5]
+	mi := &file_reliant_v1_gtm_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1260,7 +3386,7 @@ func (x *GtmPositioning) String() string {
 func (*GtmPositioning) ProtoMessage() {}
 
 func (x *GtmPositioning) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_gtm_proto_msgTypes[5]
+	mi := &file_reliant_v1_gtm_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1273,7 +3399,7 @@ func (x *GtmPositioning) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GtmPositioning.ProtoReflect.Descriptor instead.
 func (*GtmPositioning) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{5}
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *GtmPositioning) GetOrgId() string {
@@ -1346,7 +3472,7 @@ type GtmClaim struct {
 
 func (x *GtmClaim) Reset() {
 	*x = GtmClaim{}
-	mi := &file_reliant_v1_gtm_proto_msgTypes[6]
+	mi := &file_reliant_v1_gtm_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1358,7 +3484,7 @@ func (x *GtmClaim) String() string {
 func (*GtmClaim) ProtoMessage() {}
 
 func (x *GtmClaim) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_gtm_proto_msgTypes[6]
+	mi := &file_reliant_v1_gtm_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1371,7 +3497,7 @@ func (x *GtmClaim) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GtmClaim.ProtoReflect.Descriptor instead.
 func (*GtmClaim) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{6}
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *GtmClaim) GetId() string {
@@ -1504,7 +3630,7 @@ type GtmClaimFinding struct {
 
 func (x *GtmClaimFinding) Reset() {
 	*x = GtmClaimFinding{}
-	mi := &file_reliant_v1_gtm_proto_msgTypes[7]
+	mi := &file_reliant_v1_gtm_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1516,7 +3642,7 @@ func (x *GtmClaimFinding) String() string {
 func (*GtmClaimFinding) ProtoMessage() {}
 
 func (x *GtmClaimFinding) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_gtm_proto_msgTypes[7]
+	mi := &file_reliant_v1_gtm_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1529,7 +3655,7 @@ func (x *GtmClaimFinding) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GtmClaimFinding.ProtoReflect.Descriptor instead.
 func (*GtmClaimFinding) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{7}
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *GtmClaimFinding) GetKind() GtmClaimFindingKind {
@@ -1601,7 +3727,7 @@ type GtmRevisionConflict struct {
 
 func (x *GtmRevisionConflict) Reset() {
 	*x = GtmRevisionConflict{}
-	mi := &file_reliant_v1_gtm_proto_msgTypes[8]
+	mi := &file_reliant_v1_gtm_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1613,7 +3739,7 @@ func (x *GtmRevisionConflict) String() string {
 func (*GtmRevisionConflict) ProtoMessage() {}
 
 func (x *GtmRevisionConflict) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_gtm_proto_msgTypes[8]
+	mi := &file_reliant_v1_gtm_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1626,7 +3752,7 @@ func (x *GtmRevisionConflict) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GtmRevisionConflict.ProtoReflect.Descriptor instead.
 func (*GtmRevisionConflict) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{8}
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *GtmRevisionConflict) GetId() string {
@@ -1659,7 +3785,7 @@ type GetGtmAccessRequest struct {
 
 func (x *GetGtmAccessRequest) Reset() {
 	*x = GetGtmAccessRequest{}
-	mi := &file_reliant_v1_gtm_proto_msgTypes[9]
+	mi := &file_reliant_v1_gtm_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1671,7 +3797,7 @@ func (x *GetGtmAccessRequest) String() string {
 func (*GetGtmAccessRequest) ProtoMessage() {}
 
 func (x *GetGtmAccessRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_gtm_proto_msgTypes[9]
+	mi := &file_reliant_v1_gtm_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1684,7 +3810,7 @@ func (x *GetGtmAccessRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetGtmAccessRequest.ProtoReflect.Descriptor instead.
 func (*GetGtmAccessRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{9}
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *GetGtmAccessRequest) GetOrgId() string {
@@ -1703,7 +3829,7 @@ type GetGtmAccessResponse struct {
 
 func (x *GetGtmAccessResponse) Reset() {
 	*x = GetGtmAccessResponse{}
-	mi := &file_reliant_v1_gtm_proto_msgTypes[10]
+	mi := &file_reliant_v1_gtm_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1715,7 +3841,7 @@ func (x *GetGtmAccessResponse) String() string {
 func (*GetGtmAccessResponse) ProtoMessage() {}
 
 func (x *GetGtmAccessResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_gtm_proto_msgTypes[10]
+	mi := &file_reliant_v1_gtm_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1728,7 +3854,7 @@ func (x *GetGtmAccessResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetGtmAccessResponse.ProtoReflect.Descriptor instead.
 func (*GetGtmAccessResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{10}
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *GetGtmAccessResponse) GetEnabled() bool {
@@ -1736,6 +3862,2787 @@ func (x *GetGtmAccessResponse) GetEnabled() bool {
 		return x.Enabled
 	}
 	return false
+}
+
+type ListStrategiesRequest struct {
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	OrgId  string                 `protobuf:"bytes,1,opt,name=org_id,json=orgId,proto3" json:"org_id,omitempty"`
+	Status *GtmStrategyStatus     `protobuf:"varint,2,opt,name=status,proto3,enum=reliant.v1.GtmStrategyStatus,oneof" json:"status,omitempty"`
+	// page_size is at most 200; 0 is 50.
+	PageSize      int32  `protobuf:"varint,3,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
+	PageToken     string `protobuf:"bytes,4,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListStrategiesRequest) Reset() {
+	*x = ListStrategiesRequest{}
+	mi := &file_reliant_v1_gtm_proto_msgTypes[23]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListStrategiesRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListStrategiesRequest) ProtoMessage() {}
+
+func (x *ListStrategiesRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_gtm_proto_msgTypes[23]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListStrategiesRequest.ProtoReflect.Descriptor instead.
+func (*ListStrategiesRequest) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{23}
+}
+
+func (x *ListStrategiesRequest) GetOrgId() string {
+	if x != nil {
+		return x.OrgId
+	}
+	return ""
+}
+
+func (x *ListStrategiesRequest) GetStatus() GtmStrategyStatus {
+	if x != nil && x.Status != nil {
+		return *x.Status
+	}
+	return GtmStrategyStatus_GTM_STRATEGY_STATUS_UNSPECIFIED
+}
+
+func (x *ListStrategiesRequest) GetPageSize() int32 {
+	if x != nil {
+		return x.PageSize
+	}
+	return 0
+}
+
+func (x *ListStrategiesRequest) GetPageToken() string {
+	if x != nil {
+		return x.PageToken
+	}
+	return ""
+}
+
+type ListStrategiesResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Strategies    []*GtmStrategy         `protobuf:"bytes,1,rep,name=strategies,proto3" json:"strategies,omitempty"`
+	NextPageToken string                 `protobuf:"bytes,2,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListStrategiesResponse) Reset() {
+	*x = ListStrategiesResponse{}
+	mi := &file_reliant_v1_gtm_proto_msgTypes[24]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListStrategiesResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListStrategiesResponse) ProtoMessage() {}
+
+func (x *ListStrategiesResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_gtm_proto_msgTypes[24]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListStrategiesResponse.ProtoReflect.Descriptor instead.
+func (*ListStrategiesResponse) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{24}
+}
+
+func (x *ListStrategiesResponse) GetStrategies() []*GtmStrategy {
+	if x != nil {
+		return x.Strategies
+	}
+	return nil
+}
+
+func (x *ListStrategiesResponse) GetNextPageToken() string {
+	if x != nil {
+		return x.NextPageToken
+	}
+	return ""
+}
+
+type GetStrategyRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	OrgId         string                 `protobuf:"bytes,1,opt,name=org_id,json=orgId,proto3" json:"org_id,omitempty"`
+	Id            string                 `protobuf:"bytes,2,opt,name=id,proto3" json:"id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetStrategyRequest) Reset() {
+	*x = GetStrategyRequest{}
+	mi := &file_reliant_v1_gtm_proto_msgTypes[25]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetStrategyRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetStrategyRequest) ProtoMessage() {}
+
+func (x *GetStrategyRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_gtm_proto_msgTypes[25]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetStrategyRequest.ProtoReflect.Descriptor instead.
+func (*GetStrategyRequest) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{25}
+}
+
+func (x *GetStrategyRequest) GetOrgId() string {
+	if x != nil {
+		return x.OrgId
+	}
+	return ""
+}
+
+func (x *GetStrategyRequest) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+type GetStrategyResponse struct {
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	Strategy *GtmStrategy           `protobuf:"bytes,1,opt,name=strategy,proto3" json:"strategy,omitempty"`
+	// Its campaigns, newest first, at most 200.
+	Campaigns []*GtmCampaign `protobuf:"bytes,2,rep,name=campaigns,proto3" json:"campaigns,omitempty"`
+	// True when campaigns was cut at 200.
+	Truncated     bool `protobuf:"varint,3,opt,name=truncated,proto3" json:"truncated,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetStrategyResponse) Reset() {
+	*x = GetStrategyResponse{}
+	mi := &file_reliant_v1_gtm_proto_msgTypes[26]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetStrategyResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetStrategyResponse) ProtoMessage() {}
+
+func (x *GetStrategyResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_gtm_proto_msgTypes[26]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetStrategyResponse.ProtoReflect.Descriptor instead.
+func (*GetStrategyResponse) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{26}
+}
+
+func (x *GetStrategyResponse) GetStrategy() *GtmStrategy {
+	if x != nil {
+		return x.Strategy
+	}
+	return nil
+}
+
+func (x *GetStrategyResponse) GetCampaigns() []*GtmCampaign {
+	if x != nil {
+		return x.Campaigns
+	}
+	return nil
+}
+
+func (x *GetStrategyResponse) GetTruncated() bool {
+	if x != nil {
+		return x.Truncated
+	}
+	return false
+}
+
+type CreateStrategyRequest struct {
+	state        protoimpl.MessageState `protogen:"open.v1"`
+	OrgId        string                 `protobuf:"bytes,1,opt,name=org_id,json=orgId,proto3" json:"org_id,omitempty"`
+	Name         string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	GoalMd       string                 `protobuf:"bytes,3,opt,name=goal_md,json=goalMd,proto3" json:"goal_md,omitempty"`
+	TargetMetric string                 `protobuf:"bytes,4,opt,name=target_metric,json=targetMetric,proto3" json:"target_metric,omitempty"`
+	// A real calendar date, YYYY-MM-DD (2026-02-30 is InvalidArgument), or empty.
+	PeriodStart string `protobuf:"bytes,5,opt,name=period_start,json=periodStart,proto3" json:"period_start,omitempty"`
+	PeriodEnd   string `protobuf:"bytes,6,opt,name=period_end,json=periodEnd,proto3" json:"period_end,omitempty"`
+	// Unset: DRAFT. An agent creates DRAFT only.
+	Status *GtmStrategyStatus `protobuf:"varint,7,opt,name=status,proto3,enum=reliant.v1.GtmStrategyStatus,oneof" json:"status,omitempty"`
+	// Unset: no category.
+	Category      *GtmStrategyCategory `protobuf:"varint,8,opt,name=category,proto3,enum=reliant.v1.GtmStrategyCategory,oneof" json:"category,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CreateStrategyRequest) Reset() {
+	*x = CreateStrategyRequest{}
+	mi := &file_reliant_v1_gtm_proto_msgTypes[27]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CreateStrategyRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CreateStrategyRequest) ProtoMessage() {}
+
+func (x *CreateStrategyRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_gtm_proto_msgTypes[27]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CreateStrategyRequest.ProtoReflect.Descriptor instead.
+func (*CreateStrategyRequest) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{27}
+}
+
+func (x *CreateStrategyRequest) GetOrgId() string {
+	if x != nil {
+		return x.OrgId
+	}
+	return ""
+}
+
+func (x *CreateStrategyRequest) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *CreateStrategyRequest) GetGoalMd() string {
+	if x != nil {
+		return x.GoalMd
+	}
+	return ""
+}
+
+func (x *CreateStrategyRequest) GetTargetMetric() string {
+	if x != nil {
+		return x.TargetMetric
+	}
+	return ""
+}
+
+func (x *CreateStrategyRequest) GetPeriodStart() string {
+	if x != nil {
+		return x.PeriodStart
+	}
+	return ""
+}
+
+func (x *CreateStrategyRequest) GetPeriodEnd() string {
+	if x != nil {
+		return x.PeriodEnd
+	}
+	return ""
+}
+
+func (x *CreateStrategyRequest) GetStatus() GtmStrategyStatus {
+	if x != nil && x.Status != nil {
+		return *x.Status
+	}
+	return GtmStrategyStatus_GTM_STRATEGY_STATUS_UNSPECIFIED
+}
+
+func (x *CreateStrategyRequest) GetCategory() GtmStrategyCategory {
+	if x != nil && x.Category != nil {
+		return *x.Category
+	}
+	return GtmStrategyCategory_GTM_STRATEGY_CATEGORY_UNSPECIFIED
+}
+
+type CreateStrategyResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Strategy      *GtmStrategy           `protobuf:"bytes,1,opt,name=strategy,proto3" json:"strategy,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CreateStrategyResponse) Reset() {
+	*x = CreateStrategyResponse{}
+	mi := &file_reliant_v1_gtm_proto_msgTypes[28]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CreateStrategyResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CreateStrategyResponse) ProtoMessage() {}
+
+func (x *CreateStrategyResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_gtm_proto_msgTypes[28]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CreateStrategyResponse.ProtoReflect.Descriptor instead.
+func (*CreateStrategyResponse) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{28}
+}
+
+func (x *CreateStrategyResponse) GetStrategy() *GtmStrategy {
+	if x != nil {
+		return x.Strategy
+	}
+	return nil
+}
+
+type UpdateStrategyRequest struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	OrgId            string                 `protobuf:"bytes,1,opt,name=org_id,json=orgId,proto3" json:"org_id,omitempty"`
+	Id               string                 `protobuf:"bytes,2,opt,name=id,proto3" json:"id,omitempty"`
+	ExpectedRevision int32                  `protobuf:"varint,3,opt,name=expected_revision,json=expectedRevision,proto3" json:"expected_revision,omitempty"`
+	Name             *string                `protobuf:"bytes,4,opt,name=name,proto3,oneof" json:"name,omitempty"`
+	GoalMd           *string                `protobuf:"bytes,5,opt,name=goal_md,json=goalMd,proto3,oneof" json:"goal_md,omitempty"`
+	TargetMetric     *string                `protobuf:"bytes,6,opt,name=target_metric,json=targetMetric,proto3,oneof" json:"target_metric,omitempty"`
+	// Set: a real calendar date, YYYY-MM-DD, or empty to clear.
+	PeriodStart *string `protobuf:"bytes,7,opt,name=period_start,json=periodStart,proto3,oneof" json:"period_start,omitempty"`
+	PeriodEnd   *string `protobuf:"bytes,8,opt,name=period_end,json=periodEnd,proto3,oneof" json:"period_end,omitempty"`
+	// A person's act only.
+	Status *GtmStrategyStatus `protobuf:"varint,9,opt,name=status,proto3,enum=reliant.v1.GtmStrategyStatus,oneof" json:"status,omitempty"`
+	// Set: its category; UNSPECIFIED clears it.
+	Category      *GtmStrategyCategory `protobuf:"varint,10,opt,name=category,proto3,enum=reliant.v1.GtmStrategyCategory,oneof" json:"category,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpdateStrategyRequest) Reset() {
+	*x = UpdateStrategyRequest{}
+	mi := &file_reliant_v1_gtm_proto_msgTypes[29]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpdateStrategyRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpdateStrategyRequest) ProtoMessage() {}
+
+func (x *UpdateStrategyRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_gtm_proto_msgTypes[29]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpdateStrategyRequest.ProtoReflect.Descriptor instead.
+func (*UpdateStrategyRequest) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{29}
+}
+
+func (x *UpdateStrategyRequest) GetOrgId() string {
+	if x != nil {
+		return x.OrgId
+	}
+	return ""
+}
+
+func (x *UpdateStrategyRequest) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *UpdateStrategyRequest) GetExpectedRevision() int32 {
+	if x != nil {
+		return x.ExpectedRevision
+	}
+	return 0
+}
+
+func (x *UpdateStrategyRequest) GetName() string {
+	if x != nil && x.Name != nil {
+		return *x.Name
+	}
+	return ""
+}
+
+func (x *UpdateStrategyRequest) GetGoalMd() string {
+	if x != nil && x.GoalMd != nil {
+		return *x.GoalMd
+	}
+	return ""
+}
+
+func (x *UpdateStrategyRequest) GetTargetMetric() string {
+	if x != nil && x.TargetMetric != nil {
+		return *x.TargetMetric
+	}
+	return ""
+}
+
+func (x *UpdateStrategyRequest) GetPeriodStart() string {
+	if x != nil && x.PeriodStart != nil {
+		return *x.PeriodStart
+	}
+	return ""
+}
+
+func (x *UpdateStrategyRequest) GetPeriodEnd() string {
+	if x != nil && x.PeriodEnd != nil {
+		return *x.PeriodEnd
+	}
+	return ""
+}
+
+func (x *UpdateStrategyRequest) GetStatus() GtmStrategyStatus {
+	if x != nil && x.Status != nil {
+		return *x.Status
+	}
+	return GtmStrategyStatus_GTM_STRATEGY_STATUS_UNSPECIFIED
+}
+
+func (x *UpdateStrategyRequest) GetCategory() GtmStrategyCategory {
+	if x != nil && x.Category != nil {
+		return *x.Category
+	}
+	return GtmStrategyCategory_GTM_STRATEGY_CATEGORY_UNSPECIFIED
+}
+
+type UpdateStrategyResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Strategy      *GtmStrategy           `protobuf:"bytes,1,opt,name=strategy,proto3" json:"strategy,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpdateStrategyResponse) Reset() {
+	*x = UpdateStrategyResponse{}
+	mi := &file_reliant_v1_gtm_proto_msgTypes[30]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpdateStrategyResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpdateStrategyResponse) ProtoMessage() {}
+
+func (x *UpdateStrategyResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_gtm_proto_msgTypes[30]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpdateStrategyResponse.ProtoReflect.Descriptor instead.
+func (*UpdateStrategyResponse) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{30}
+}
+
+func (x *UpdateStrategyResponse) GetStrategy() *GtmStrategy {
+	if x != nil {
+		return x.Strategy
+	}
+	return nil
+}
+
+type ListChannelsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	OrgId         string                 `protobuf:"bytes,1,opt,name=org_id,json=orgId,proto3" json:"org_id,omitempty"`
+	Status        *GtmChannelStatus      `protobuf:"varint,2,opt,name=status,proto3,enum=reliant.v1.GtmChannelStatus,oneof" json:"status,omitempty"`
+	Mode          *GtmChannelMode        `protobuf:"varint,3,opt,name=mode,proto3,enum=reliant.v1.GtmChannelMode,oneof" json:"mode,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListChannelsRequest) Reset() {
+	*x = ListChannelsRequest{}
+	mi := &file_reliant_v1_gtm_proto_msgTypes[31]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListChannelsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListChannelsRequest) ProtoMessage() {}
+
+func (x *ListChannelsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_gtm_proto_msgTypes[31]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListChannelsRequest.ProtoReflect.Descriptor instead.
+func (*ListChannelsRequest) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{31}
+}
+
+func (x *ListChannelsRequest) GetOrgId() string {
+	if x != nil {
+		return x.OrgId
+	}
+	return ""
+}
+
+func (x *ListChannelsRequest) GetStatus() GtmChannelStatus {
+	if x != nil && x.Status != nil {
+		return *x.Status
+	}
+	return GtmChannelStatus_GTM_CHANNEL_STATUS_UNSPECIFIED
+}
+
+func (x *ListChannelsRequest) GetMode() GtmChannelMode {
+	if x != nil && x.Mode != nil {
+		return *x.Mode
+	}
+	return GtmChannelMode_GTM_CHANNEL_MODE_UNSPECIFIED
+}
+
+type ListChannelsResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Every channel of the org (a handful, so no paging), by key.
+	Channels      []*GtmChannel `protobuf:"bytes,1,rep,name=channels,proto3" json:"channels,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListChannelsResponse) Reset() {
+	*x = ListChannelsResponse{}
+	mi := &file_reliant_v1_gtm_proto_msgTypes[32]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListChannelsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListChannelsResponse) ProtoMessage() {}
+
+func (x *ListChannelsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_gtm_proto_msgTypes[32]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListChannelsResponse.ProtoReflect.Descriptor instead.
+func (*ListChannelsResponse) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{32}
+}
+
+func (x *ListChannelsResponse) GetChannels() []*GtmChannel {
+	if x != nil {
+		return x.Channels
+	}
+	return nil
+}
+
+type GetChannelRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	OrgId         string                 `protobuf:"bytes,1,opt,name=org_id,json=orgId,proto3" json:"org_id,omitempty"`
+	Id            string                 `protobuf:"bytes,2,opt,name=id,proto3" json:"id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetChannelRequest) Reset() {
+	*x = GetChannelRequest{}
+	mi := &file_reliant_v1_gtm_proto_msgTypes[33]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetChannelRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetChannelRequest) ProtoMessage() {}
+
+func (x *GetChannelRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_gtm_proto_msgTypes[33]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetChannelRequest.ProtoReflect.Descriptor instead.
+func (*GetChannelRequest) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{33}
+}
+
+func (x *GetChannelRequest) GetOrgId() string {
+	if x != nil {
+		return x.OrgId
+	}
+	return ""
+}
+
+func (x *GetChannelRequest) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+type GetChannelResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Channel       *GtmChannel            `protobuf:"bytes,1,opt,name=channel,proto3" json:"channel,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetChannelResponse) Reset() {
+	*x = GetChannelResponse{}
+	mi := &file_reliant_v1_gtm_proto_msgTypes[34]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetChannelResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetChannelResponse) ProtoMessage() {}
+
+func (x *GetChannelResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_gtm_proto_msgTypes[34]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetChannelResponse.ProtoReflect.Descriptor instead.
+func (*GetChannelResponse) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{34}
+}
+
+func (x *GetChannelResponse) GetChannel() *GtmChannel {
+	if x != nil {
+		return x.Channel
+	}
+	return nil
+}
+
+type CreateChannelRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	OrgId string                 `protobuf:"bytes,1,opt,name=org_id,json=orgId,proto3" json:"org_id,omitempty"`
+	Key   string                 `protobuf:"bytes,2,opt,name=key,proto3" json:"key,omitempty"`
+	Name  string                 `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`
+	Mode  GtmChannelMode         `protobuf:"varint,4,opt,name=mode,proto3,enum=reliant.v1.GtmChannelMode" json:"mode,omitempty"`
+	// Empty is stored as NULL.
+	IntegrationKind string `protobuf:"bytes,5,opt,name=integration_kind,json=integrationKind,proto3" json:"integration_kind,omitempty"`
+	// Empty (stored as NULL): the acting user's default connection for
+	// integration_kind.
+	ConnectionId         string `protobuf:"bytes,6,opt,name=connection_id,json=connectionId,proto3" json:"connection_id,omitempty"`
+	ManualInstructionsMd string `protobuf:"bytes,7,opt,name=manual_instructions_md,json=manualInstructionsMd,proto3" json:"manual_instructions_md,omitempty"`
+	// Unset: ACTIVE.
+	Status        *GtmChannelStatus `protobuf:"varint,8,opt,name=status,proto3,enum=reliant.v1.GtmChannelStatus,oneof" json:"status,omitempty"`
+	ChannelTypes  []string          `protobuf:"bytes,9,rep,name=channel_types,json=channelTypes,proto3" json:"channel_types,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CreateChannelRequest) Reset() {
+	*x = CreateChannelRequest{}
+	mi := &file_reliant_v1_gtm_proto_msgTypes[35]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CreateChannelRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CreateChannelRequest) ProtoMessage() {}
+
+func (x *CreateChannelRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_gtm_proto_msgTypes[35]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CreateChannelRequest.ProtoReflect.Descriptor instead.
+func (*CreateChannelRequest) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{35}
+}
+
+func (x *CreateChannelRequest) GetOrgId() string {
+	if x != nil {
+		return x.OrgId
+	}
+	return ""
+}
+
+func (x *CreateChannelRequest) GetKey() string {
+	if x != nil {
+		return x.Key
+	}
+	return ""
+}
+
+func (x *CreateChannelRequest) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *CreateChannelRequest) GetMode() GtmChannelMode {
+	if x != nil {
+		return x.Mode
+	}
+	return GtmChannelMode_GTM_CHANNEL_MODE_UNSPECIFIED
+}
+
+func (x *CreateChannelRequest) GetIntegrationKind() string {
+	if x != nil {
+		return x.IntegrationKind
+	}
+	return ""
+}
+
+func (x *CreateChannelRequest) GetConnectionId() string {
+	if x != nil {
+		return x.ConnectionId
+	}
+	return ""
+}
+
+func (x *CreateChannelRequest) GetManualInstructionsMd() string {
+	if x != nil {
+		return x.ManualInstructionsMd
+	}
+	return ""
+}
+
+func (x *CreateChannelRequest) GetStatus() GtmChannelStatus {
+	if x != nil && x.Status != nil {
+		return *x.Status
+	}
+	return GtmChannelStatus_GTM_CHANNEL_STATUS_UNSPECIFIED
+}
+
+func (x *CreateChannelRequest) GetChannelTypes() []string {
+	if x != nil {
+		return x.ChannelTypes
+	}
+	return nil
+}
+
+type CreateChannelResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Channel       *GtmChannel            `protobuf:"bytes,1,opt,name=channel,proto3" json:"channel,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CreateChannelResponse) Reset() {
+	*x = CreateChannelResponse{}
+	mi := &file_reliant_v1_gtm_proto_msgTypes[36]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CreateChannelResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CreateChannelResponse) ProtoMessage() {}
+
+func (x *CreateChannelResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_gtm_proto_msgTypes[36]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CreateChannelResponse.ProtoReflect.Descriptor instead.
+func (*CreateChannelResponse) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{36}
+}
+
+func (x *CreateChannelResponse) GetChannel() *GtmChannel {
+	if x != nil {
+		return x.Channel
+	}
+	return nil
+}
+
+type UpdateChannelRequest struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	OrgId            string                 `protobuf:"bytes,1,opt,name=org_id,json=orgId,proto3" json:"org_id,omitempty"`
+	Id               string                 `protobuf:"bytes,2,opt,name=id,proto3" json:"id,omitempty"`
+	ExpectedRevision int32                  `protobuf:"varint,3,opt,name=expected_revision,json=expectedRevision,proto3" json:"expected_revision,omitempty"`
+	Name             *string                `protobuf:"bytes,4,opt,name=name,proto3,oneof" json:"name,omitempty"`
+	// A change of mode must leave integration_kind / connection_id consistent
+	// with it (InvalidArgument otherwise; the table refuses it too).
+	Mode *GtmChannelMode `protobuf:"varint,5,opt,name=mode,proto3,enum=reliant.v1.GtmChannelMode,oneof" json:"mode,omitempty"`
+	// Set: replaces it; empty clears it (NULL in the table).
+	IntegrationKind      *string           `protobuf:"bytes,6,opt,name=integration_kind,json=integrationKind,proto3,oneof" json:"integration_kind,omitempty"`
+	ConnectionId         *string           `protobuf:"bytes,7,opt,name=connection_id,json=connectionId,proto3,oneof" json:"connection_id,omitempty"`
+	ManualInstructionsMd *string           `protobuf:"bytes,8,opt,name=manual_instructions_md,json=manualInstructionsMd,proto3,oneof" json:"manual_instructions_md,omitempty"`
+	Status               *GtmChannelStatus `protobuf:"varint,9,opt,name=status,proto3,enum=reliant.v1.GtmChannelStatus,oneof" json:"status,omitempty"`
+	// Set: renames the key; a key the org already holds is AlreadyExists.
+	Key *string `protobuf:"bytes,10,opt,name=key,proto3,oneof" json:"key,omitempty"`
+	// Set: replaces channel_types (empty clears them).
+	ChannelTypes  *GtmChannelTypeList `protobuf:"bytes,11,opt,name=channel_types,json=channelTypes,proto3" json:"channel_types,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpdateChannelRequest) Reset() {
+	*x = UpdateChannelRequest{}
+	mi := &file_reliant_v1_gtm_proto_msgTypes[37]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpdateChannelRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpdateChannelRequest) ProtoMessage() {}
+
+func (x *UpdateChannelRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_gtm_proto_msgTypes[37]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpdateChannelRequest.ProtoReflect.Descriptor instead.
+func (*UpdateChannelRequest) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{37}
+}
+
+func (x *UpdateChannelRequest) GetOrgId() string {
+	if x != nil {
+		return x.OrgId
+	}
+	return ""
+}
+
+func (x *UpdateChannelRequest) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *UpdateChannelRequest) GetExpectedRevision() int32 {
+	if x != nil {
+		return x.ExpectedRevision
+	}
+	return 0
+}
+
+func (x *UpdateChannelRequest) GetName() string {
+	if x != nil && x.Name != nil {
+		return *x.Name
+	}
+	return ""
+}
+
+func (x *UpdateChannelRequest) GetMode() GtmChannelMode {
+	if x != nil && x.Mode != nil {
+		return *x.Mode
+	}
+	return GtmChannelMode_GTM_CHANNEL_MODE_UNSPECIFIED
+}
+
+func (x *UpdateChannelRequest) GetIntegrationKind() string {
+	if x != nil && x.IntegrationKind != nil {
+		return *x.IntegrationKind
+	}
+	return ""
+}
+
+func (x *UpdateChannelRequest) GetConnectionId() string {
+	if x != nil && x.ConnectionId != nil {
+		return *x.ConnectionId
+	}
+	return ""
+}
+
+func (x *UpdateChannelRequest) GetManualInstructionsMd() string {
+	if x != nil && x.ManualInstructionsMd != nil {
+		return *x.ManualInstructionsMd
+	}
+	return ""
+}
+
+func (x *UpdateChannelRequest) GetStatus() GtmChannelStatus {
+	if x != nil && x.Status != nil {
+		return *x.Status
+	}
+	return GtmChannelStatus_GTM_CHANNEL_STATUS_UNSPECIFIED
+}
+
+func (x *UpdateChannelRequest) GetKey() string {
+	if x != nil && x.Key != nil {
+		return *x.Key
+	}
+	return ""
+}
+
+func (x *UpdateChannelRequest) GetChannelTypes() *GtmChannelTypeList {
+	if x != nil {
+		return x.ChannelTypes
+	}
+	return nil
+}
+
+type UpdateChannelResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Channel       *GtmChannel            `protobuf:"bytes,1,opt,name=channel,proto3" json:"channel,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpdateChannelResponse) Reset() {
+	*x = UpdateChannelResponse{}
+	mi := &file_reliant_v1_gtm_proto_msgTypes[38]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpdateChannelResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpdateChannelResponse) ProtoMessage() {}
+
+func (x *UpdateChannelResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_gtm_proto_msgTypes[38]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpdateChannelResponse.ProtoReflect.Descriptor instead.
+func (*UpdateChannelResponse) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{38}
+}
+
+func (x *UpdateChannelResponse) GetChannel() *GtmChannel {
+	if x != nil {
+		return x.Channel
+	}
+	return nil
+}
+
+type ListAssetsRequest struct {
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	OrgId      string                 `protobuf:"bytes,1,opt,name=org_id,json=orgId,proto3" json:"org_id,omitempty"`
+	ItemId     *string                `protobuf:"bytes,2,opt,name=item_id,json=itemId,proto3,oneof" json:"item_id,omitempty"`
+	CampaignId *string                `protobuf:"bytes,3,opt,name=campaign_id,json=campaignId,proto3,oneof" json:"campaign_id,omitempty"`
+	// page_size is at most 200; 0 is 50.
+	PageSize      int32  `protobuf:"varint,4,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
+	PageToken     string `protobuf:"bytes,5,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListAssetsRequest) Reset() {
+	*x = ListAssetsRequest{}
+	mi := &file_reliant_v1_gtm_proto_msgTypes[39]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListAssetsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListAssetsRequest) ProtoMessage() {}
+
+func (x *ListAssetsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_gtm_proto_msgTypes[39]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListAssetsRequest.ProtoReflect.Descriptor instead.
+func (*ListAssetsRequest) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{39}
+}
+
+func (x *ListAssetsRequest) GetOrgId() string {
+	if x != nil {
+		return x.OrgId
+	}
+	return ""
+}
+
+func (x *ListAssetsRequest) GetItemId() string {
+	if x != nil && x.ItemId != nil {
+		return *x.ItemId
+	}
+	return ""
+}
+
+func (x *ListAssetsRequest) GetCampaignId() string {
+	if x != nil && x.CampaignId != nil {
+		return *x.CampaignId
+	}
+	return ""
+}
+
+func (x *ListAssetsRequest) GetPageSize() int32 {
+	if x != nil {
+		return x.PageSize
+	}
+	return 0
+}
+
+func (x *ListAssetsRequest) GetPageToken() string {
+	if x != nil {
+		return x.PageToken
+	}
+	return ""
+}
+
+type ListAssetsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Assets        []*GtmAsset            `protobuf:"bytes,1,rep,name=assets,proto3" json:"assets,omitempty"`
+	NextPageToken string                 `protobuf:"bytes,2,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListAssetsResponse) Reset() {
+	*x = ListAssetsResponse{}
+	mi := &file_reliant_v1_gtm_proto_msgTypes[40]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListAssetsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListAssetsResponse) ProtoMessage() {}
+
+func (x *ListAssetsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_gtm_proto_msgTypes[40]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListAssetsResponse.ProtoReflect.Descriptor instead.
+func (*ListAssetsResponse) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{40}
+}
+
+func (x *ListAssetsResponse) GetAssets() []*GtmAsset {
+	if x != nil {
+		return x.Assets
+	}
+	return nil
+}
+
+func (x *ListAssetsResponse) GetNextPageToken() string {
+	if x != nil {
+		return x.NextPageToken
+	}
+	return ""
+}
+
+type GetAssetRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	OrgId         string                 `protobuf:"bytes,1,opt,name=org_id,json=orgId,proto3" json:"org_id,omitempty"`
+	Id            string                 `protobuf:"bytes,2,opt,name=id,proto3" json:"id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetAssetRequest) Reset() {
+	*x = GetAssetRequest{}
+	mi := &file_reliant_v1_gtm_proto_msgTypes[41]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetAssetRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetAssetRequest) ProtoMessage() {}
+
+func (x *GetAssetRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_gtm_proto_msgTypes[41]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetAssetRequest.ProtoReflect.Descriptor instead.
+func (*GetAssetRequest) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{41}
+}
+
+func (x *GetAssetRequest) GetOrgId() string {
+	if x != nil {
+		return x.OrgId
+	}
+	return ""
+}
+
+func (x *GetAssetRequest) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+type GetAssetResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Asset         *GtmAsset              `protobuf:"bytes,1,opt,name=asset,proto3" json:"asset,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetAssetResponse) Reset() {
+	*x = GetAssetResponse{}
+	mi := &file_reliant_v1_gtm_proto_msgTypes[42]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetAssetResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetAssetResponse) ProtoMessage() {}
+
+func (x *GetAssetResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_gtm_proto_msgTypes[42]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetAssetResponse.ProtoReflect.Descriptor instead.
+func (*GetAssetResponse) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{42}
+}
+
+func (x *GetAssetResponse) GetAsset() *GtmAsset {
+	if x != nil {
+		return x.Asset
+	}
+	return nil
+}
+
+type CreateAssetUploadRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	OrgId string                 `protobuf:"bytes,1,opt,name=org_id,json=orgId,proto3" json:"org_id,omitempty"`
+	// What the asset is attached to.
+	//
+	// Types that are valid to be assigned to Target:
+	//
+	//	*CreateAssetUploadRequest_ItemId
+	//	*CreateAssetUploadRequest_CampaignId
+	Target   isCreateAssetUploadRequest_Target `protobuf_oneof:"target"`
+	Filename string                            `protobuf:"bytes,4,opt,name=filename,proto3" json:"filename,omitempty"`
+	// The client's claim; ConfirmAssetUpload sniffs the bytes against the
+	// allowlist.
+	ContentType string `protobuf:"bytes,5,opt,name=content_type,json=contentType,proto3" json:"content_type,omitempty"`
+	// The exact size the PUT must carry. At most 64 MiB (the most any path
+	// allows); the service's per-asset and per-org limits are lower
+	// (CreateAssetUpload).
+	SizeBytes     int64 `protobuf:"varint,6,opt,name=size_bytes,json=sizeBytes,proto3" json:"size_bytes,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CreateAssetUploadRequest) Reset() {
+	*x = CreateAssetUploadRequest{}
+	mi := &file_reliant_v1_gtm_proto_msgTypes[43]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CreateAssetUploadRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CreateAssetUploadRequest) ProtoMessage() {}
+
+func (x *CreateAssetUploadRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_gtm_proto_msgTypes[43]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CreateAssetUploadRequest.ProtoReflect.Descriptor instead.
+func (*CreateAssetUploadRequest) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{43}
+}
+
+func (x *CreateAssetUploadRequest) GetOrgId() string {
+	if x != nil {
+		return x.OrgId
+	}
+	return ""
+}
+
+func (x *CreateAssetUploadRequest) GetTarget() isCreateAssetUploadRequest_Target {
+	if x != nil {
+		return x.Target
+	}
+	return nil
+}
+
+func (x *CreateAssetUploadRequest) GetItemId() string {
+	if x != nil {
+		if x, ok := x.Target.(*CreateAssetUploadRequest_ItemId); ok {
+			return x.ItemId
+		}
+	}
+	return ""
+}
+
+func (x *CreateAssetUploadRequest) GetCampaignId() string {
+	if x != nil {
+		if x, ok := x.Target.(*CreateAssetUploadRequest_CampaignId); ok {
+			return x.CampaignId
+		}
+	}
+	return ""
+}
+
+func (x *CreateAssetUploadRequest) GetFilename() string {
+	if x != nil {
+		return x.Filename
+	}
+	return ""
+}
+
+func (x *CreateAssetUploadRequest) GetContentType() string {
+	if x != nil {
+		return x.ContentType
+	}
+	return ""
+}
+
+func (x *CreateAssetUploadRequest) GetSizeBytes() int64 {
+	if x != nil {
+		return x.SizeBytes
+	}
+	return 0
+}
+
+type isCreateAssetUploadRequest_Target interface {
+	isCreateAssetUploadRequest_Target()
+}
+
+type CreateAssetUploadRequest_ItemId struct {
+	ItemId string `protobuf:"bytes,2,opt,name=item_id,json=itemId,proto3,oneof"`
+}
+
+type CreateAssetUploadRequest_CampaignId struct {
+	CampaignId string `protobuf:"bytes,3,opt,name=campaign_id,json=campaignId,proto3,oneof"`
+}
+
+func (*CreateAssetUploadRequest_ItemId) isCreateAssetUploadRequest_Target() {}
+
+func (*CreateAssetUploadRequest_CampaignId) isCreateAssetUploadRequest_Target() {}
+
+type CreateAssetUploadResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The PENDING asset.
+	Asset *GtmAsset `protobuf:"bytes,1,opt,name=asset,proto3" json:"asset,omitempty"`
+	// Where to PUT the bytes, and the headers the PUT must carry exactly.
+	UploadUrl       string                 `protobuf:"bytes,2,opt,name=upload_url,json=uploadUrl,proto3" json:"upload_url,omitempty"`
+	RequiredHeaders map[string]string      `protobuf:"bytes,3,rep,name=required_headers,json=requiredHeaders,proto3" json:"required_headers,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	ExpiresAt       *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *CreateAssetUploadResponse) Reset() {
+	*x = CreateAssetUploadResponse{}
+	mi := &file_reliant_v1_gtm_proto_msgTypes[44]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CreateAssetUploadResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CreateAssetUploadResponse) ProtoMessage() {}
+
+func (x *CreateAssetUploadResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_gtm_proto_msgTypes[44]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CreateAssetUploadResponse.ProtoReflect.Descriptor instead.
+func (*CreateAssetUploadResponse) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{44}
+}
+
+func (x *CreateAssetUploadResponse) GetAsset() *GtmAsset {
+	if x != nil {
+		return x.Asset
+	}
+	return nil
+}
+
+func (x *CreateAssetUploadResponse) GetUploadUrl() string {
+	if x != nil {
+		return x.UploadUrl
+	}
+	return ""
+}
+
+func (x *CreateAssetUploadResponse) GetRequiredHeaders() map[string]string {
+	if x != nil {
+		return x.RequiredHeaders
+	}
+	return nil
+}
+
+func (x *CreateAssetUploadResponse) GetExpiresAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.ExpiresAt
+	}
+	return nil
+}
+
+type ConfirmAssetUploadRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	OrgId         string                 `protobuf:"bytes,1,opt,name=org_id,json=orgId,proto3" json:"org_id,omitempty"`
+	AssetId       string                 `protobuf:"bytes,2,opt,name=asset_id,json=assetId,proto3" json:"asset_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ConfirmAssetUploadRequest) Reset() {
+	*x = ConfirmAssetUploadRequest{}
+	mi := &file_reliant_v1_gtm_proto_msgTypes[45]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ConfirmAssetUploadRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ConfirmAssetUploadRequest) ProtoMessage() {}
+
+func (x *ConfirmAssetUploadRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_gtm_proto_msgTypes[45]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ConfirmAssetUploadRequest.ProtoReflect.Descriptor instead.
+func (*ConfirmAssetUploadRequest) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{45}
+}
+
+func (x *ConfirmAssetUploadRequest) GetOrgId() string {
+	if x != nil {
+		return x.OrgId
+	}
+	return ""
+}
+
+func (x *ConfirmAssetUploadRequest) GetAssetId() string {
+	if x != nil {
+		return x.AssetId
+	}
+	return ""
+}
+
+type ConfirmAssetUploadResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The READY asset.
+	Asset         *GtmAsset `protobuf:"bytes,1,opt,name=asset,proto3" json:"asset,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ConfirmAssetUploadResponse) Reset() {
+	*x = ConfirmAssetUploadResponse{}
+	mi := &file_reliant_v1_gtm_proto_msgTypes[46]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ConfirmAssetUploadResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ConfirmAssetUploadResponse) ProtoMessage() {}
+
+func (x *ConfirmAssetUploadResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_gtm_proto_msgTypes[46]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ConfirmAssetUploadResponse.ProtoReflect.Descriptor instead.
+func (*ConfirmAssetUploadResponse) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{46}
+}
+
+func (x *ConfirmAssetUploadResponse) GetAsset() *GtmAsset {
+	if x != nil {
+		return x.Asset
+	}
+	return nil
+}
+
+type GetAssetDownloadRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	OrgId         string                 `protobuf:"bytes,1,opt,name=org_id,json=orgId,proto3" json:"org_id,omitempty"`
+	AssetId       string                 `protobuf:"bytes,2,opt,name=asset_id,json=assetId,proto3" json:"asset_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetAssetDownloadRequest) Reset() {
+	*x = GetAssetDownloadRequest{}
+	mi := &file_reliant_v1_gtm_proto_msgTypes[47]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetAssetDownloadRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetAssetDownloadRequest) ProtoMessage() {}
+
+func (x *GetAssetDownloadRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_gtm_proto_msgTypes[47]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetAssetDownloadRequest.ProtoReflect.Descriptor instead.
+func (*GetAssetDownloadRequest) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{47}
+}
+
+func (x *GetAssetDownloadRequest) GetOrgId() string {
+	if x != nil {
+		return x.OrgId
+	}
+	return ""
+}
+
+func (x *GetAssetDownloadRequest) GetAssetId() string {
+	if x != nil {
+		return x.AssetId
+	}
+	return ""
+}
+
+type GetAssetDownloadResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Url           string                 `protobuf:"bytes,1,opt,name=url,proto3" json:"url,omitempty"`
+	ExpiresAt     *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetAssetDownloadResponse) Reset() {
+	*x = GetAssetDownloadResponse{}
+	mi := &file_reliant_v1_gtm_proto_msgTypes[48]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetAssetDownloadResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetAssetDownloadResponse) ProtoMessage() {}
+
+func (x *GetAssetDownloadResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_gtm_proto_msgTypes[48]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetAssetDownloadResponse.ProtoReflect.Descriptor instead.
+func (*GetAssetDownloadResponse) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{48}
+}
+
+func (x *GetAssetDownloadResponse) GetUrl() string {
+	if x != nil {
+		return x.Url
+	}
+	return ""
+}
+
+func (x *GetAssetDownloadResponse) GetExpiresAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.ExpiresAt
+	}
+	return nil
+}
+
+type DeleteAssetRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	OrgId         string                 `protobuf:"bytes,1,opt,name=org_id,json=orgId,proto3" json:"org_id,omitempty"`
+	AssetId       string                 `protobuf:"bytes,2,opt,name=asset_id,json=assetId,proto3" json:"asset_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeleteAssetRequest) Reset() {
+	*x = DeleteAssetRequest{}
+	mi := &file_reliant_v1_gtm_proto_msgTypes[49]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeleteAssetRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeleteAssetRequest) ProtoMessage() {}
+
+func (x *DeleteAssetRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_gtm_proto_msgTypes[49]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeleteAssetRequest.ProtoReflect.Descriptor instead.
+func (*DeleteAssetRequest) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{49}
+}
+
+func (x *DeleteAssetRequest) GetOrgId() string {
+	if x != nil {
+		return x.OrgId
+	}
+	return ""
+}
+
+func (x *DeleteAssetRequest) GetAssetId() string {
+	if x != nil {
+		return x.AssetId
+	}
+	return ""
+}
+
+type DeleteAssetResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeleteAssetResponse) Reset() {
+	*x = DeleteAssetResponse{}
+	mi := &file_reliant_v1_gtm_proto_msgTypes[50]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeleteAssetResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeleteAssetResponse) ProtoMessage() {}
+
+func (x *DeleteAssetResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_gtm_proto_msgTypes[50]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeleteAssetResponse.ProtoReflect.Descriptor instead.
+func (*DeleteAssetResponse) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{50}
+}
+
+type ListStrategyLibraryRequest struct {
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	OrgId      string                 `protobuf:"bytes,1,opt,name=org_id,json=orgId,proto3" json:"org_id,omitempty"`
+	Category   *GtmStrategyCategory   `protobuf:"varint,2,opt,name=category,proto3,enum=reliant.v1.GtmStrategyCategory,oneof" json:"category,omitempty"`
+	Depth      *GtmLibraryDepth       `protobuf:"varint,3,opt,name=depth,proto3,enum=reliant.v1.GtmLibraryDepth,oneof" json:"depth,omitempty"`
+	Stage      *string                `protobuf:"bytes,4,opt,name=stage,proto3,oneof" json:"stage,omitempty"`
+	Cost       *string                `protobuf:"bytes,5,opt,name=cost,proto3,oneof" json:"cost,omitempty"`
+	Difficulty *string                `protobuf:"bytes,6,opt,name=difficulty,proto3,oneof" json:"difficulty,omitempty"`
+	// Entries whose fits include it.
+	Fit *string `protobuf:"bytes,7,opt,name=fit,proto3,oneof" json:"fit,omitempty"`
+	// Matches name and summary_md (case-insensitive substring).
+	Query *string `protobuf:"bytes,8,opt,name=query,proto3,oneof" json:"query,omitempty"`
+	// page_size is at most 200; 0 is 50.
+	PageSize      int32  `protobuf:"varint,9,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
+	PageToken     string `protobuf:"bytes,10,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListStrategyLibraryRequest) Reset() {
+	*x = ListStrategyLibraryRequest{}
+	mi := &file_reliant_v1_gtm_proto_msgTypes[51]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListStrategyLibraryRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListStrategyLibraryRequest) ProtoMessage() {}
+
+func (x *ListStrategyLibraryRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_gtm_proto_msgTypes[51]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListStrategyLibraryRequest.ProtoReflect.Descriptor instead.
+func (*ListStrategyLibraryRequest) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{51}
+}
+
+func (x *ListStrategyLibraryRequest) GetOrgId() string {
+	if x != nil {
+		return x.OrgId
+	}
+	return ""
+}
+
+func (x *ListStrategyLibraryRequest) GetCategory() GtmStrategyCategory {
+	if x != nil && x.Category != nil {
+		return *x.Category
+	}
+	return GtmStrategyCategory_GTM_STRATEGY_CATEGORY_UNSPECIFIED
+}
+
+func (x *ListStrategyLibraryRequest) GetDepth() GtmLibraryDepth {
+	if x != nil && x.Depth != nil {
+		return *x.Depth
+	}
+	return GtmLibraryDepth_GTM_LIBRARY_DEPTH_UNSPECIFIED
+}
+
+func (x *ListStrategyLibraryRequest) GetStage() string {
+	if x != nil && x.Stage != nil {
+		return *x.Stage
+	}
+	return ""
+}
+
+func (x *ListStrategyLibraryRequest) GetCost() string {
+	if x != nil && x.Cost != nil {
+		return *x.Cost
+	}
+	return ""
+}
+
+func (x *ListStrategyLibraryRequest) GetDifficulty() string {
+	if x != nil && x.Difficulty != nil {
+		return *x.Difficulty
+	}
+	return ""
+}
+
+func (x *ListStrategyLibraryRequest) GetFit() string {
+	if x != nil && x.Fit != nil {
+		return *x.Fit
+	}
+	return ""
+}
+
+func (x *ListStrategyLibraryRequest) GetQuery() string {
+	if x != nil && x.Query != nil {
+		return *x.Query
+	}
+	return ""
+}
+
+func (x *ListStrategyLibraryRequest) GetPageSize() int32 {
+	if x != nil {
+		return x.PageSize
+	}
+	return 0
+}
+
+func (x *ListStrategyLibraryRequest) GetPageToken() string {
+	if x != nil {
+		return x.PageToken
+	}
+	return ""
+}
+
+type ListStrategyLibraryResponse struct {
+	state         protoimpl.MessageState     `protogen:"open.v1"`
+	Entries       []*GtmStrategyLibraryEntry `protobuf:"bytes,1,rep,name=entries,proto3" json:"entries,omitempty"`
+	NextPageToken string                     `protobuf:"bytes,2,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListStrategyLibraryResponse) Reset() {
+	*x = ListStrategyLibraryResponse{}
+	mi := &file_reliant_v1_gtm_proto_msgTypes[52]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListStrategyLibraryResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListStrategyLibraryResponse) ProtoMessage() {}
+
+func (x *ListStrategyLibraryResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_gtm_proto_msgTypes[52]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListStrategyLibraryResponse.ProtoReflect.Descriptor instead.
+func (*ListStrategyLibraryResponse) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{52}
+}
+
+func (x *ListStrategyLibraryResponse) GetEntries() []*GtmStrategyLibraryEntry {
+	if x != nil {
+		return x.Entries
+	}
+	return nil
+}
+
+func (x *ListStrategyLibraryResponse) GetNextPageToken() string {
+	if x != nil {
+		return x.NextPageToken
+	}
+	return ""
+}
+
+type GetStrategyLibraryEntryRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	OrgId         string                 `protobuf:"bytes,1,opt,name=org_id,json=orgId,proto3" json:"org_id,omitempty"`
+	Key           string                 `protobuf:"bytes,2,opt,name=key,proto3" json:"key,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetStrategyLibraryEntryRequest) Reset() {
+	*x = GetStrategyLibraryEntryRequest{}
+	mi := &file_reliant_v1_gtm_proto_msgTypes[53]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetStrategyLibraryEntryRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetStrategyLibraryEntryRequest) ProtoMessage() {}
+
+func (x *GetStrategyLibraryEntryRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_gtm_proto_msgTypes[53]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetStrategyLibraryEntryRequest.ProtoReflect.Descriptor instead.
+func (*GetStrategyLibraryEntryRequest) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{53}
+}
+
+func (x *GetStrategyLibraryEntryRequest) GetOrgId() string {
+	if x != nil {
+		return x.OrgId
+	}
+	return ""
+}
+
+func (x *GetStrategyLibraryEntryRequest) GetKey() string {
+	if x != nil {
+		return x.Key
+	}
+	return ""
+}
+
+type GetStrategyLibraryEntryResponse struct {
+	state         protoimpl.MessageState   `protogen:"open.v1"`
+	Entry         *GtmStrategyLibraryEntry `protobuf:"bytes,1,opt,name=entry,proto3" json:"entry,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetStrategyLibraryEntryResponse) Reset() {
+	*x = GetStrategyLibraryEntryResponse{}
+	mi := &file_reliant_v1_gtm_proto_msgTypes[54]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetStrategyLibraryEntryResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetStrategyLibraryEntryResponse) ProtoMessage() {}
+
+func (x *GetStrategyLibraryEntryResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_gtm_proto_msgTypes[54]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetStrategyLibraryEntryResponse.ProtoReflect.Descriptor instead.
+func (*GetStrategyLibraryEntryResponse) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{54}
+}
+
+func (x *GetStrategyLibraryEntryResponse) GetEntry() *GtmStrategyLibraryEntry {
+	if x != nil {
+		return x.Entry
+	}
+	return nil
+}
+
+type ImportStrategyLibraryRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	OrgId string                 `protobuf:"bytes,1,opt,name=org_id,json=orgId,proto3" json:"org_id,omitempty"`
+	// At most 500 per call; every key once.
+	Entries []*GtmStrategyLibraryEntry `protobuf:"bytes,2,rep,name=entries,proto3" json:"entries,omitempty"`
+	// What the entries were exported from, e.g. the source commit SHA.
+	SourceRevision string `protobuf:"bytes,3,opt,name=source_revision,json=sourceRevision,proto3" json:"source_revision,omitempty"`
+	// Remove the org's entries whose key is not in all_keys (over a token:
+	// stage a prune request instead).
+	Prune bool `protobuf:"varint,4,opt,name=prune,proto3" json:"prune,omitempty"`
+	// With prune (required then): the complete key set of the library being
+	// imported, across all batches, at most 5000; every key of entries must be
+	// in it (InvalidArgument otherwise). Ignored without prune.
+	AllKeys       []string `protobuf:"bytes,5,rep,name=all_keys,json=allKeys,proto3" json:"all_keys,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ImportStrategyLibraryRequest) Reset() {
+	*x = ImportStrategyLibraryRequest{}
+	mi := &file_reliant_v1_gtm_proto_msgTypes[55]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ImportStrategyLibraryRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ImportStrategyLibraryRequest) ProtoMessage() {}
+
+func (x *ImportStrategyLibraryRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_gtm_proto_msgTypes[55]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ImportStrategyLibraryRequest.ProtoReflect.Descriptor instead.
+func (*ImportStrategyLibraryRequest) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{55}
+}
+
+func (x *ImportStrategyLibraryRequest) GetOrgId() string {
+	if x != nil {
+		return x.OrgId
+	}
+	return ""
+}
+
+func (x *ImportStrategyLibraryRequest) GetEntries() []*GtmStrategyLibraryEntry {
+	if x != nil {
+		return x.Entries
+	}
+	return nil
+}
+
+func (x *ImportStrategyLibraryRequest) GetSourceRevision() string {
+	if x != nil {
+		return x.SourceRevision
+	}
+	return ""
+}
+
+func (x *ImportStrategyLibraryRequest) GetPrune() bool {
+	if x != nil {
+		return x.Prune
+	}
+	return false
+}
+
+func (x *ImportStrategyLibraryRequest) GetAllKeys() []string {
+	if x != nil {
+		return x.AllKeys
+	}
+	return nil
+}
+
+type ImportStrategyLibraryResponse struct {
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	Created   int32                  `protobuf:"varint,1,opt,name=created,proto3" json:"created,omitempty"`
+	Updated   int32                  `protobuf:"varint,2,opt,name=updated,proto3" json:"updated,omitempty"`
+	Unchanged int32                  `protobuf:"varint,3,opt,name=unchanged,proto3" json:"unchanged,omitempty"`
+	// Entries removed now (prune over a person-class credential); 0 over a
+	// token.
+	Pruned int32 `protobuf:"varint,4,opt,name=pruned,proto3" json:"pruned,omitempty"`
+	// Over a token with prune: the staged request a person confirms; empty
+	// when none was staged (no prune, a person-class credential, or nothing to
+	// remove).
+	PruneRequestId string `protobuf:"bytes,5,opt,name=prune_request_id,json=pruneRequestId,proto3" json:"prune_request_id,omitempty"`
+	// The keys that request would remove.
+	WouldRemove   []string `protobuf:"bytes,6,rep,name=would_remove,json=wouldRemove,proto3" json:"would_remove,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ImportStrategyLibraryResponse) Reset() {
+	*x = ImportStrategyLibraryResponse{}
+	mi := &file_reliant_v1_gtm_proto_msgTypes[56]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ImportStrategyLibraryResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ImportStrategyLibraryResponse) ProtoMessage() {}
+
+func (x *ImportStrategyLibraryResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_gtm_proto_msgTypes[56]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ImportStrategyLibraryResponse.ProtoReflect.Descriptor instead.
+func (*ImportStrategyLibraryResponse) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{56}
+}
+
+func (x *ImportStrategyLibraryResponse) GetCreated() int32 {
+	if x != nil {
+		return x.Created
+	}
+	return 0
+}
+
+func (x *ImportStrategyLibraryResponse) GetUpdated() int32 {
+	if x != nil {
+		return x.Updated
+	}
+	return 0
+}
+
+func (x *ImportStrategyLibraryResponse) GetUnchanged() int32 {
+	if x != nil {
+		return x.Unchanged
+	}
+	return 0
+}
+
+func (x *ImportStrategyLibraryResponse) GetPruned() int32 {
+	if x != nil {
+		return x.Pruned
+	}
+	return 0
+}
+
+func (x *ImportStrategyLibraryResponse) GetPruneRequestId() string {
+	if x != nil {
+		return x.PruneRequestId
+	}
+	return ""
+}
+
+func (x *ImportStrategyLibraryResponse) GetWouldRemove() []string {
+	if x != nil {
+		return x.WouldRemove
+	}
+	return nil
+}
+
+type ListLibraryImportsRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	OrgId string                 `protobuf:"bytes,1,opt,name=org_id,json=orgId,proto3" json:"org_id,omitempty"`
+	// page_size is at most 200; 0 is 50.
+	PageSize      int32  `protobuf:"varint,2,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
+	PageToken     string `protobuf:"bytes,3,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListLibraryImportsRequest) Reset() {
+	*x = ListLibraryImportsRequest{}
+	mi := &file_reliant_v1_gtm_proto_msgTypes[57]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListLibraryImportsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListLibraryImportsRequest) ProtoMessage() {}
+
+func (x *ListLibraryImportsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_gtm_proto_msgTypes[57]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListLibraryImportsRequest.ProtoReflect.Descriptor instead.
+func (*ListLibraryImportsRequest) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{57}
+}
+
+func (x *ListLibraryImportsRequest) GetOrgId() string {
+	if x != nil {
+		return x.OrgId
+	}
+	return ""
+}
+
+func (x *ListLibraryImportsRequest) GetPageSize() int32 {
+	if x != nil {
+		return x.PageSize
+	}
+	return 0
+}
+
+func (x *ListLibraryImportsRequest) GetPageToken() string {
+	if x != nil {
+		return x.PageToken
+	}
+	return ""
+}
+
+type ListLibraryImportsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Imports       []*GtmLibraryImport    `protobuf:"bytes,1,rep,name=imports,proto3" json:"imports,omitempty"`
+	NextPageToken string                 `protobuf:"bytes,2,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListLibraryImportsResponse) Reset() {
+	*x = ListLibraryImportsResponse{}
+	mi := &file_reliant_v1_gtm_proto_msgTypes[58]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListLibraryImportsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListLibraryImportsResponse) ProtoMessage() {}
+
+func (x *ListLibraryImportsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_gtm_proto_msgTypes[58]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListLibraryImportsResponse.ProtoReflect.Descriptor instead.
+func (*ListLibraryImportsResponse) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{58}
+}
+
+func (x *ListLibraryImportsResponse) GetImports() []*GtmLibraryImport {
+	if x != nil {
+		return x.Imports
+	}
+	return nil
+}
+
+func (x *ListLibraryImportsResponse) GetNextPageToken() string {
+	if x != nil {
+		return x.NextPageToken
+	}
+	return ""
+}
+
+type ListLibraryPruneRequestsRequest struct {
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	OrgId  string                 `protobuf:"bytes,1,opt,name=org_id,json=orgId,proto3" json:"org_id,omitempty"`
+	Status *GtmPruneRequestStatus `protobuf:"varint,2,opt,name=status,proto3,enum=reliant.v1.GtmPruneRequestStatus,oneof" json:"status,omitempty"`
+	// page_size is at most 200; 0 is 50.
+	PageSize      int32  `protobuf:"varint,3,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
+	PageToken     string `protobuf:"bytes,4,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListLibraryPruneRequestsRequest) Reset() {
+	*x = ListLibraryPruneRequestsRequest{}
+	mi := &file_reliant_v1_gtm_proto_msgTypes[59]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListLibraryPruneRequestsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListLibraryPruneRequestsRequest) ProtoMessage() {}
+
+func (x *ListLibraryPruneRequestsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_gtm_proto_msgTypes[59]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListLibraryPruneRequestsRequest.ProtoReflect.Descriptor instead.
+func (*ListLibraryPruneRequestsRequest) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{59}
+}
+
+func (x *ListLibraryPruneRequestsRequest) GetOrgId() string {
+	if x != nil {
+		return x.OrgId
+	}
+	return ""
+}
+
+func (x *ListLibraryPruneRequestsRequest) GetStatus() GtmPruneRequestStatus {
+	if x != nil && x.Status != nil {
+		return *x.Status
+	}
+	return GtmPruneRequestStatus_GTM_PRUNE_REQUEST_STATUS_UNSPECIFIED
+}
+
+func (x *ListLibraryPruneRequestsRequest) GetPageSize() int32 {
+	if x != nil {
+		return x.PageSize
+	}
+	return 0
+}
+
+func (x *ListLibraryPruneRequestsRequest) GetPageToken() string {
+	if x != nil {
+		return x.PageToken
+	}
+	return ""
+}
+
+type ListLibraryPruneRequestsResponse struct {
+	state         protoimpl.MessageState    `protogen:"open.v1"`
+	Requests      []*GtmLibraryPruneRequest `protobuf:"bytes,1,rep,name=requests,proto3" json:"requests,omitempty"`
+	NextPageToken string                    `protobuf:"bytes,2,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListLibraryPruneRequestsResponse) Reset() {
+	*x = ListLibraryPruneRequestsResponse{}
+	mi := &file_reliant_v1_gtm_proto_msgTypes[60]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListLibraryPruneRequestsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListLibraryPruneRequestsResponse) ProtoMessage() {}
+
+func (x *ListLibraryPruneRequestsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_gtm_proto_msgTypes[60]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListLibraryPruneRequestsResponse.ProtoReflect.Descriptor instead.
+func (*ListLibraryPruneRequestsResponse) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{60}
+}
+
+func (x *ListLibraryPruneRequestsResponse) GetRequests() []*GtmLibraryPruneRequest {
+	if x != nil {
+		return x.Requests
+	}
+	return nil
+}
+
+func (x *ListLibraryPruneRequestsResponse) GetNextPageToken() string {
+	if x != nil {
+		return x.NextPageToken
+	}
+	return ""
+}
+
+type ConfirmLibraryPruneRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	OrgId         string                 `protobuf:"bytes,1,opt,name=org_id,json=orgId,proto3" json:"org_id,omitempty"`
+	RequestId     string                 `protobuf:"bytes,2,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ConfirmLibraryPruneRequest) Reset() {
+	*x = ConfirmLibraryPruneRequest{}
+	mi := &file_reliant_v1_gtm_proto_msgTypes[61]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ConfirmLibraryPruneRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ConfirmLibraryPruneRequest) ProtoMessage() {}
+
+func (x *ConfirmLibraryPruneRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_gtm_proto_msgTypes[61]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ConfirmLibraryPruneRequest.ProtoReflect.Descriptor instead.
+func (*ConfirmLibraryPruneRequest) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{61}
+}
+
+func (x *ConfirmLibraryPruneRequest) GetOrgId() string {
+	if x != nil {
+		return x.OrgId
+	}
+	return ""
+}
+
+func (x *ConfirmLibraryPruneRequest) GetRequestId() string {
+	if x != nil {
+		return x.RequestId
+	}
+	return ""
+}
+
+type ConfirmLibraryPruneResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// How many entries it removed (the request's keys still present and not
+	// imported again since).
+	Removed int32 `protobuf:"varint,1,opt,name=removed,proto3" json:"removed,omitempty"`
+	// The request, now CONFIRMED.
+	Request       *GtmLibraryPruneRequest `protobuf:"bytes,2,opt,name=request,proto3" json:"request,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ConfirmLibraryPruneResponse) Reset() {
+	*x = ConfirmLibraryPruneResponse{}
+	mi := &file_reliant_v1_gtm_proto_msgTypes[62]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ConfirmLibraryPruneResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ConfirmLibraryPruneResponse) ProtoMessage() {}
+
+func (x *ConfirmLibraryPruneResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_gtm_proto_msgTypes[62]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ConfirmLibraryPruneResponse.ProtoReflect.Descriptor instead.
+func (*ConfirmLibraryPruneResponse) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{62}
+}
+
+func (x *ConfirmLibraryPruneResponse) GetRemoved() int32 {
+	if x != nil {
+		return x.Removed
+	}
+	return 0
+}
+
+func (x *ConfirmLibraryPruneResponse) GetRequest() *GtmLibraryPruneRequest {
+	if x != nil {
+		return x.Request
+	}
+	return nil
+}
+
+type CancelLibraryPruneRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	OrgId         string                 `protobuf:"bytes,1,opt,name=org_id,json=orgId,proto3" json:"org_id,omitempty"`
+	RequestId     string                 `protobuf:"bytes,2,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CancelLibraryPruneRequest) Reset() {
+	*x = CancelLibraryPruneRequest{}
+	mi := &file_reliant_v1_gtm_proto_msgTypes[63]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CancelLibraryPruneRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CancelLibraryPruneRequest) ProtoMessage() {}
+
+func (x *CancelLibraryPruneRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_gtm_proto_msgTypes[63]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CancelLibraryPruneRequest.ProtoReflect.Descriptor instead.
+func (*CancelLibraryPruneRequest) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{63}
+}
+
+func (x *CancelLibraryPruneRequest) GetOrgId() string {
+	if x != nil {
+		return x.OrgId
+	}
+	return ""
+}
+
+func (x *CancelLibraryPruneRequest) GetRequestId() string {
+	if x != nil {
+		return x.RequestId
+	}
+	return ""
+}
+
+type CancelLibraryPruneResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The request, now CANCELLED.
+	Request       *GtmLibraryPruneRequest `protobuf:"bytes,1,opt,name=request,proto3" json:"request,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CancelLibraryPruneResponse) Reset() {
+	*x = CancelLibraryPruneResponse{}
+	mi := &file_reliant_v1_gtm_proto_msgTypes[64]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CancelLibraryPruneResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CancelLibraryPruneResponse) ProtoMessage() {}
+
+func (x *CancelLibraryPruneResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_gtm_proto_msgTypes[64]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CancelLibraryPruneResponse.ProtoReflect.Descriptor instead.
+func (*CancelLibraryPruneResponse) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{64}
+}
+
+func (x *CancelLibraryPruneResponse) GetRequest() *GtmLibraryPruneRequest {
+	if x != nil {
+		return x.Request
+	}
+	return nil
+}
+
+type UseLibraryStrategyRequest struct {
+	state               protoimpl.MessageState `protogen:"open.v1"`
+	OrgId               string                 `protobuf:"bytes,1,opt,name=org_id,json=orgId,proto3" json:"org_id,omitempty"`
+	LibraryKey          string                 `protobuf:"bytes,2,opt,name=library_key,json=libraryKey,proto3" json:"library_key,omitempty"`
+	CreateFirstCampaign bool                   `protobuf:"varint,3,opt,name=create_first_campaign,json=createFirstCampaign,proto3" json:"create_first_campaign,omitempty"`
+	// The first campaign's name; unset: the entry's name.
+	CampaignName  *string `protobuf:"bytes,4,opt,name=campaign_name,json=campaignName,proto3,oneof" json:"campaign_name,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UseLibraryStrategyRequest) Reset() {
+	*x = UseLibraryStrategyRequest{}
+	mi := &file_reliant_v1_gtm_proto_msgTypes[65]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UseLibraryStrategyRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UseLibraryStrategyRequest) ProtoMessage() {}
+
+func (x *UseLibraryStrategyRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_gtm_proto_msgTypes[65]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UseLibraryStrategyRequest.ProtoReflect.Descriptor instead.
+func (*UseLibraryStrategyRequest) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{65}
+}
+
+func (x *UseLibraryStrategyRequest) GetOrgId() string {
+	if x != nil {
+		return x.OrgId
+	}
+	return ""
+}
+
+func (x *UseLibraryStrategyRequest) GetLibraryKey() string {
+	if x != nil {
+		return x.LibraryKey
+	}
+	return ""
+}
+
+func (x *UseLibraryStrategyRequest) GetCreateFirstCampaign() bool {
+	if x != nil {
+		return x.CreateFirstCampaign
+	}
+	return false
+}
+
+func (x *UseLibraryStrategyRequest) GetCampaignName() string {
+	if x != nil && x.CampaignName != nil {
+		return *x.CampaignName
+	}
+	return ""
+}
+
+type UseLibraryStrategyResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The DRAFT strategy.
+	Strategy *GtmStrategy `protobuf:"bytes,1,opt,name=strategy,proto3" json:"strategy,omitempty"`
+	// The DRAFT first campaign; unset when none was asked for.
+	Campaign      *GtmCampaign `protobuf:"bytes,2,opt,name=campaign,proto3" json:"campaign,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UseLibraryStrategyResponse) Reset() {
+	*x = UseLibraryStrategyResponse{}
+	mi := &file_reliant_v1_gtm_proto_msgTypes[66]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UseLibraryStrategyResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UseLibraryStrategyResponse) ProtoMessage() {}
+
+func (x *UseLibraryStrategyResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_gtm_proto_msgTypes[66]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UseLibraryStrategyResponse.ProtoReflect.Descriptor instead.
+func (*UseLibraryStrategyResponse) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{66}
+}
+
+func (x *UseLibraryStrategyResponse) GetStrategy() *GtmStrategy {
+	if x != nil {
+		return x.Strategy
+	}
+	return nil
+}
+
+func (x *UseLibraryStrategyResponse) GetCampaign() *GtmCampaign {
+	if x != nil {
+		return x.Campaign
+	}
+	return nil
 }
 
 type ListIdeasRequest struct {
@@ -1754,7 +6661,7 @@ type ListIdeasRequest struct {
 
 func (x *ListIdeasRequest) Reset() {
 	*x = ListIdeasRequest{}
-	mi := &file_reliant_v1_gtm_proto_msgTypes[11]
+	mi := &file_reliant_v1_gtm_proto_msgTypes[67]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1766,7 +6673,7 @@ func (x *ListIdeasRequest) String() string {
 func (*ListIdeasRequest) ProtoMessage() {}
 
 func (x *ListIdeasRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_gtm_proto_msgTypes[11]
+	mi := &file_reliant_v1_gtm_proto_msgTypes[67]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1779,7 +6686,7 @@ func (x *ListIdeasRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListIdeasRequest.ProtoReflect.Descriptor instead.
 func (*ListIdeasRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{11}
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{67}
 }
 
 func (x *ListIdeasRequest) GetOrgId() string {
@@ -1835,7 +6742,7 @@ type ListIdeasResponse struct {
 
 func (x *ListIdeasResponse) Reset() {
 	*x = ListIdeasResponse{}
-	mi := &file_reliant_v1_gtm_proto_msgTypes[12]
+	mi := &file_reliant_v1_gtm_proto_msgTypes[68]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1847,7 +6754,7 @@ func (x *ListIdeasResponse) String() string {
 func (*ListIdeasResponse) ProtoMessage() {}
 
 func (x *ListIdeasResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_gtm_proto_msgTypes[12]
+	mi := &file_reliant_v1_gtm_proto_msgTypes[68]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1860,7 +6767,7 @@ func (x *ListIdeasResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListIdeasResponse.ProtoReflect.Descriptor instead.
 func (*ListIdeasResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{12}
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{68}
 }
 
 func (x *ListIdeasResponse) GetIdeas() []*GtmIdea {
@@ -1887,7 +6794,7 @@ type GetIdeaRequest struct {
 
 func (x *GetIdeaRequest) Reset() {
 	*x = GetIdeaRequest{}
-	mi := &file_reliant_v1_gtm_proto_msgTypes[13]
+	mi := &file_reliant_v1_gtm_proto_msgTypes[69]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1899,7 +6806,7 @@ func (x *GetIdeaRequest) String() string {
 func (*GetIdeaRequest) ProtoMessage() {}
 
 func (x *GetIdeaRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_gtm_proto_msgTypes[13]
+	mi := &file_reliant_v1_gtm_proto_msgTypes[69]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1912,7 +6819,7 @@ func (x *GetIdeaRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetIdeaRequest.ProtoReflect.Descriptor instead.
 func (*GetIdeaRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{13}
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{69}
 }
 
 func (x *GetIdeaRequest) GetOrgId() string {
@@ -1938,7 +6845,7 @@ type GetIdeaResponse struct {
 
 func (x *GetIdeaResponse) Reset() {
 	*x = GetIdeaResponse{}
-	mi := &file_reliant_v1_gtm_proto_msgTypes[14]
+	mi := &file_reliant_v1_gtm_proto_msgTypes[70]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1950,7 +6857,7 @@ func (x *GetIdeaResponse) String() string {
 func (*GetIdeaResponse) ProtoMessage() {}
 
 func (x *GetIdeaResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_gtm_proto_msgTypes[14]
+	mi := &file_reliant_v1_gtm_proto_msgTypes[70]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1963,7 +6870,7 @@ func (x *GetIdeaResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetIdeaResponse.ProtoReflect.Descriptor instead.
 func (*GetIdeaResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{14}
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{70}
 }
 
 func (x *GetIdeaResponse) GetIdea() *GtmIdea {
@@ -1990,7 +6897,7 @@ type CreateIdeaRequest struct {
 
 func (x *CreateIdeaRequest) Reset() {
 	*x = CreateIdeaRequest{}
-	mi := &file_reliant_v1_gtm_proto_msgTypes[15]
+	mi := &file_reliant_v1_gtm_proto_msgTypes[71]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2002,7 +6909,7 @@ func (x *CreateIdeaRequest) String() string {
 func (*CreateIdeaRequest) ProtoMessage() {}
 
 func (x *CreateIdeaRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_gtm_proto_msgTypes[15]
+	mi := &file_reliant_v1_gtm_proto_msgTypes[71]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2015,7 +6922,7 @@ func (x *CreateIdeaRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateIdeaRequest.ProtoReflect.Descriptor instead.
 func (*CreateIdeaRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{15}
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{71}
 }
 
 func (x *CreateIdeaRequest) GetOrgId() string {
@@ -2076,7 +6983,7 @@ type CreateIdeaResponse struct {
 
 func (x *CreateIdeaResponse) Reset() {
 	*x = CreateIdeaResponse{}
-	mi := &file_reliant_v1_gtm_proto_msgTypes[16]
+	mi := &file_reliant_v1_gtm_proto_msgTypes[72]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2088,7 +6995,7 @@ func (x *CreateIdeaResponse) String() string {
 func (*CreateIdeaResponse) ProtoMessage() {}
 
 func (x *CreateIdeaResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_gtm_proto_msgTypes[16]
+	mi := &file_reliant_v1_gtm_proto_msgTypes[72]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2101,7 +7008,7 @@ func (x *CreateIdeaResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateIdeaResponse.ProtoReflect.Descriptor instead.
 func (*CreateIdeaResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{16}
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{72}
 }
 
 func (x *CreateIdeaResponse) GetIdea() *GtmIdea {
@@ -2130,7 +7037,7 @@ type UpdateIdeaRequest struct {
 
 func (x *UpdateIdeaRequest) Reset() {
 	*x = UpdateIdeaRequest{}
-	mi := &file_reliant_v1_gtm_proto_msgTypes[17]
+	mi := &file_reliant_v1_gtm_proto_msgTypes[73]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2142,7 +7049,7 @@ func (x *UpdateIdeaRequest) String() string {
 func (*UpdateIdeaRequest) ProtoMessage() {}
 
 func (x *UpdateIdeaRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_gtm_proto_msgTypes[17]
+	mi := &file_reliant_v1_gtm_proto_msgTypes[73]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2155,7 +7062,7 @@ func (x *UpdateIdeaRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateIdeaRequest.ProtoReflect.Descriptor instead.
 func (*UpdateIdeaRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{17}
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{73}
 }
 
 func (x *UpdateIdeaRequest) GetOrgId() string {
@@ -2223,7 +7130,7 @@ type UpdateIdeaResponse struct {
 
 func (x *UpdateIdeaResponse) Reset() {
 	*x = UpdateIdeaResponse{}
-	mi := &file_reliant_v1_gtm_proto_msgTypes[18]
+	mi := &file_reliant_v1_gtm_proto_msgTypes[74]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2235,7 +7142,7 @@ func (x *UpdateIdeaResponse) String() string {
 func (*UpdateIdeaResponse) ProtoMessage() {}
 
 func (x *UpdateIdeaResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_gtm_proto_msgTypes[18]
+	mi := &file_reliant_v1_gtm_proto_msgTypes[74]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2248,7 +7155,7 @@ func (x *UpdateIdeaResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateIdeaResponse.ProtoReflect.Descriptor instead.
 func (*UpdateIdeaResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{18}
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{74}
 }
 
 func (x *UpdateIdeaResponse) GetIdea() *GtmIdea {
@@ -2270,7 +7177,7 @@ type SetIdeaStatusRequest struct {
 
 func (x *SetIdeaStatusRequest) Reset() {
 	*x = SetIdeaStatusRequest{}
-	mi := &file_reliant_v1_gtm_proto_msgTypes[19]
+	mi := &file_reliant_v1_gtm_proto_msgTypes[75]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2282,7 +7189,7 @@ func (x *SetIdeaStatusRequest) String() string {
 func (*SetIdeaStatusRequest) ProtoMessage() {}
 
 func (x *SetIdeaStatusRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_gtm_proto_msgTypes[19]
+	mi := &file_reliant_v1_gtm_proto_msgTypes[75]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2295,7 +7202,7 @@ func (x *SetIdeaStatusRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetIdeaStatusRequest.ProtoReflect.Descriptor instead.
 func (*SetIdeaStatusRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{19}
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{75}
 }
 
 func (x *SetIdeaStatusRequest) GetOrgId() string {
@@ -2335,7 +7242,7 @@ type SetIdeaStatusResponse struct {
 
 func (x *SetIdeaStatusResponse) Reset() {
 	*x = SetIdeaStatusResponse{}
-	mi := &file_reliant_v1_gtm_proto_msgTypes[20]
+	mi := &file_reliant_v1_gtm_proto_msgTypes[76]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2347,7 +7254,7 @@ func (x *SetIdeaStatusResponse) String() string {
 func (*SetIdeaStatusResponse) ProtoMessage() {}
 
 func (x *SetIdeaStatusResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_gtm_proto_msgTypes[20]
+	mi := &file_reliant_v1_gtm_proto_msgTypes[76]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2360,7 +7267,7 @@ func (x *SetIdeaStatusResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetIdeaStatusResponse.ProtoReflect.Descriptor instead.
 func (*SetIdeaStatusResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{20}
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{76}
 }
 
 func (x *SetIdeaStatusResponse) GetIdea() *GtmIdea {
@@ -2375,15 +7282,16 @@ type ListCampaignsRequest struct {
 	OrgId  string                 `protobuf:"bytes,1,opt,name=org_id,json=orgId,proto3" json:"org_id,omitempty"`
 	Status *GtmCampaignStatus     `protobuf:"varint,2,opt,name=status,proto3,enum=reliant.v1.GtmCampaignStatus,oneof" json:"status,omitempty"`
 	// page_size is at most 200; 0 is 50.
-	PageSize      int32  `protobuf:"varint,3,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
-	PageToken     string `protobuf:"bytes,4,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
+	PageSize      int32   `protobuf:"varint,3,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
+	PageToken     string  `protobuf:"bytes,4,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
+	StrategyId    *string `protobuf:"bytes,5,opt,name=strategy_id,json=strategyId,proto3,oneof" json:"strategy_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ListCampaignsRequest) Reset() {
 	*x = ListCampaignsRequest{}
-	mi := &file_reliant_v1_gtm_proto_msgTypes[21]
+	mi := &file_reliant_v1_gtm_proto_msgTypes[77]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2395,7 +7303,7 @@ func (x *ListCampaignsRequest) String() string {
 func (*ListCampaignsRequest) ProtoMessage() {}
 
 func (x *ListCampaignsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_gtm_proto_msgTypes[21]
+	mi := &file_reliant_v1_gtm_proto_msgTypes[77]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2408,7 +7316,7 @@ func (x *ListCampaignsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListCampaignsRequest.ProtoReflect.Descriptor instead.
 func (*ListCampaignsRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{21}
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{77}
 }
 
 func (x *ListCampaignsRequest) GetOrgId() string {
@@ -2439,6 +7347,13 @@ func (x *ListCampaignsRequest) GetPageToken() string {
 	return ""
 }
 
+func (x *ListCampaignsRequest) GetStrategyId() string {
+	if x != nil && x.StrategyId != nil {
+		return *x.StrategyId
+	}
+	return ""
+}
+
 type ListCampaignsResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Campaigns     []*GtmCampaign         `protobuf:"bytes,1,rep,name=campaigns,proto3" json:"campaigns,omitempty"`
@@ -2449,7 +7364,7 @@ type ListCampaignsResponse struct {
 
 func (x *ListCampaignsResponse) Reset() {
 	*x = ListCampaignsResponse{}
-	mi := &file_reliant_v1_gtm_proto_msgTypes[22]
+	mi := &file_reliant_v1_gtm_proto_msgTypes[78]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2461,7 +7376,7 @@ func (x *ListCampaignsResponse) String() string {
 func (*ListCampaignsResponse) ProtoMessage() {}
 
 func (x *ListCampaignsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_gtm_proto_msgTypes[22]
+	mi := &file_reliant_v1_gtm_proto_msgTypes[78]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2474,7 +7389,7 @@ func (x *ListCampaignsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListCampaignsResponse.ProtoReflect.Descriptor instead.
 func (*ListCampaignsResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{22}
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{78}
 }
 
 func (x *ListCampaignsResponse) GetCampaigns() []*GtmCampaign {
@@ -2501,7 +7416,7 @@ type GetCampaignRequest struct {
 
 func (x *GetCampaignRequest) Reset() {
 	*x = GetCampaignRequest{}
-	mi := &file_reliant_v1_gtm_proto_msgTypes[23]
+	mi := &file_reliant_v1_gtm_proto_msgTypes[79]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2513,7 +7428,7 @@ func (x *GetCampaignRequest) String() string {
 func (*GetCampaignRequest) ProtoMessage() {}
 
 func (x *GetCampaignRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_gtm_proto_msgTypes[23]
+	mi := &file_reliant_v1_gtm_proto_msgTypes[79]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2526,7 +7441,7 @@ func (x *GetCampaignRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetCampaignRequest.ProtoReflect.Descriptor instead.
 func (*GetCampaignRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{23}
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{79}
 }
 
 func (x *GetCampaignRequest) GetOrgId() string {
@@ -2552,14 +7467,23 @@ type GetCampaignResponse struct {
 	// newest first.
 	Items []*GtmItem `protobuf:"bytes,3,rep,name=items,proto3" json:"items,omitempty"`
 	// ideas and items each hold at most 200 rows; true when either was cut.
-	Truncated     bool `protobuf:"varint,4,opt,name=truncated,proto3" json:"truncated,omitempty"`
+	Truncated bool `protobuf:"varint,4,opt,name=truncated,proto3" json:"truncated,omitempty"`
+	// Planned against actual, over ALL its items (not only those above):
+	// planned rows first, then one row per unplanned (channel, format) pair its
+	// items use. The planned rows are planned_channel_ids x planned_formats,
+	// in that order. A one-sided plan leaves the other side unset: planned
+	// channels only give one row per channel with format UNSPECIFIED (any
+	// format), planned formats only give one row per format with channel_id
+	// empty (any channel). An item counts in the first planned row it matches,
+	// else in its unplanned pair.
+	Coverage      []*GtmCoverageRow `protobuf:"bytes,5,rep,name=coverage,proto3" json:"coverage,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *GetCampaignResponse) Reset() {
 	*x = GetCampaignResponse{}
-	mi := &file_reliant_v1_gtm_proto_msgTypes[24]
+	mi := &file_reliant_v1_gtm_proto_msgTypes[80]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2571,7 +7495,7 @@ func (x *GetCampaignResponse) String() string {
 func (*GetCampaignResponse) ProtoMessage() {}
 
 func (x *GetCampaignResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_gtm_proto_msgTypes[24]
+	mi := &file_reliant_v1_gtm_proto_msgTypes[80]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2584,7 +7508,7 @@ func (x *GetCampaignResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetCampaignResponse.ProtoReflect.Descriptor instead.
 func (*GetCampaignResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{24}
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{80}
 }
 
 func (x *GetCampaignResponse) GetCampaign() *GtmCampaign {
@@ -2615,6 +7539,13 @@ func (x *GetCampaignResponse) GetTruncated() bool {
 	return false
 }
 
+func (x *GetCampaignResponse) GetCoverage() []*GtmCoverageRow {
+	if x != nil {
+		return x.Coverage
+	}
+	return nil
+}
+
 type CreateCampaignRequest struct {
 	state       protoimpl.MessageState `protogen:"open.v1"`
 	OrgId       string                 `protobuf:"bytes,1,opt,name=org_id,json=orgId,proto3" json:"org_id,omitempty"`
@@ -2623,14 +7554,18 @@ type CreateCampaignRequest struct {
 	PeriodStart *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=period_start,json=periodStart,proto3" json:"period_start,omitempty"`
 	PeriodEnd   *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=period_end,json=periodEnd,proto3" json:"period_end,omitempty"`
 	// Unset: DRAFT.
-	Status        *GtmCampaignStatus `protobuf:"varint,6,opt,name=status,proto3,enum=reliant.v1.GtmCampaignStatus,oneof" json:"status,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Status *GtmCampaignStatus `protobuf:"varint,6,opt,name=status,proto3,enum=reliant.v1.GtmCampaignStatus,oneof" json:"status,omitempty"`
+	// The strategy it belongs to, in the same org.
+	StrategyId        string          `protobuf:"bytes,7,opt,name=strategy_id,json=strategyId,proto3" json:"strategy_id,omitempty"`
+	PlannedChannelIds []string        `protobuf:"bytes,8,rep,name=planned_channel_ids,json=plannedChannelIds,proto3" json:"planned_channel_ids,omitempty"`
+	PlannedFormats    []GtmItemFormat `protobuf:"varint,9,rep,packed,name=planned_formats,json=plannedFormats,proto3,enum=reliant.v1.GtmItemFormat" json:"planned_formats,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *CreateCampaignRequest) Reset() {
 	*x = CreateCampaignRequest{}
-	mi := &file_reliant_v1_gtm_proto_msgTypes[25]
+	mi := &file_reliant_v1_gtm_proto_msgTypes[81]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2642,7 +7577,7 @@ func (x *CreateCampaignRequest) String() string {
 func (*CreateCampaignRequest) ProtoMessage() {}
 
 func (x *CreateCampaignRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_gtm_proto_msgTypes[25]
+	mi := &file_reliant_v1_gtm_proto_msgTypes[81]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2655,7 +7590,7 @@ func (x *CreateCampaignRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateCampaignRequest.ProtoReflect.Descriptor instead.
 func (*CreateCampaignRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{25}
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{81}
 }
 
 func (x *CreateCampaignRequest) GetOrgId() string {
@@ -2700,6 +7635,27 @@ func (x *CreateCampaignRequest) GetStatus() GtmCampaignStatus {
 	return GtmCampaignStatus_GTM_CAMPAIGN_STATUS_UNSPECIFIED
 }
 
+func (x *CreateCampaignRequest) GetStrategyId() string {
+	if x != nil {
+		return x.StrategyId
+	}
+	return ""
+}
+
+func (x *CreateCampaignRequest) GetPlannedChannelIds() []string {
+	if x != nil {
+		return x.PlannedChannelIds
+	}
+	return nil
+}
+
+func (x *CreateCampaignRequest) GetPlannedFormats() []GtmItemFormat {
+	if x != nil {
+		return x.PlannedFormats
+	}
+	return nil
+}
+
 type CreateCampaignResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Campaign      *GtmCampaign           `protobuf:"bytes,1,opt,name=campaign,proto3" json:"campaign,omitempty"`
@@ -2709,7 +7665,7 @@ type CreateCampaignResponse struct {
 
 func (x *CreateCampaignResponse) Reset() {
 	*x = CreateCampaignResponse{}
-	mi := &file_reliant_v1_gtm_proto_msgTypes[26]
+	mi := &file_reliant_v1_gtm_proto_msgTypes[82]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2721,7 +7677,7 @@ func (x *CreateCampaignResponse) String() string {
 func (*CreateCampaignResponse) ProtoMessage() {}
 
 func (x *CreateCampaignResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_gtm_proto_msgTypes[26]
+	mi := &file_reliant_v1_gtm_proto_msgTypes[82]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2734,7 +7690,7 @@ func (x *CreateCampaignResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateCampaignResponse.ProtoReflect.Descriptor instead.
 func (*CreateCampaignResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{26}
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{82}
 }
 
 func (x *CreateCampaignResponse) GetCampaign() *GtmCampaign {
@@ -2757,13 +7713,18 @@ type UpdateCampaignRequest struct {
 	ClearPeriodStart bool               `protobuf:"varint,8,opt,name=clear_period_start,json=clearPeriodStart,proto3" json:"clear_period_start,omitempty"`
 	ClearPeriodEnd   bool               `protobuf:"varint,9,opt,name=clear_period_end,json=clearPeriodEnd,proto3" json:"clear_period_end,omitempty"`
 	Status           *GtmCampaignStatus `protobuf:"varint,10,opt,name=status,proto3,enum=reliant.v1.GtmCampaignStatus,oneof" json:"status,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	// Set: moves the campaign to this strategy of the same org.
+	StrategyId *string `protobuf:"bytes,11,opt,name=strategy_id,json=strategyId,proto3,oneof" json:"strategy_id,omitempty"`
+	// Set: replaces the planned channels / formats (empty clears them).
+	PlannedChannelIds *GtmChannelIdList  `protobuf:"bytes,12,opt,name=planned_channel_ids,json=plannedChannelIds,proto3" json:"planned_channel_ids,omitempty"`
+	PlannedFormats    *GtmItemFormatList `protobuf:"bytes,13,opt,name=planned_formats,json=plannedFormats,proto3" json:"planned_formats,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *UpdateCampaignRequest) Reset() {
 	*x = UpdateCampaignRequest{}
-	mi := &file_reliant_v1_gtm_proto_msgTypes[27]
+	mi := &file_reliant_v1_gtm_proto_msgTypes[83]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2775,7 +7736,7 @@ func (x *UpdateCampaignRequest) String() string {
 func (*UpdateCampaignRequest) ProtoMessage() {}
 
 func (x *UpdateCampaignRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_gtm_proto_msgTypes[27]
+	mi := &file_reliant_v1_gtm_proto_msgTypes[83]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2788,7 +7749,7 @@ func (x *UpdateCampaignRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateCampaignRequest.ProtoReflect.Descriptor instead.
 func (*UpdateCampaignRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{27}
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{83}
 }
 
 func (x *UpdateCampaignRequest) GetOrgId() string {
@@ -2861,6 +7822,27 @@ func (x *UpdateCampaignRequest) GetStatus() GtmCampaignStatus {
 	return GtmCampaignStatus_GTM_CAMPAIGN_STATUS_UNSPECIFIED
 }
 
+func (x *UpdateCampaignRequest) GetStrategyId() string {
+	if x != nil && x.StrategyId != nil {
+		return *x.StrategyId
+	}
+	return ""
+}
+
+func (x *UpdateCampaignRequest) GetPlannedChannelIds() *GtmChannelIdList {
+	if x != nil {
+		return x.PlannedChannelIds
+	}
+	return nil
+}
+
+func (x *UpdateCampaignRequest) GetPlannedFormats() *GtmItemFormatList {
+	if x != nil {
+		return x.PlannedFormats
+	}
+	return nil
+}
+
 type UpdateCampaignResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Campaign      *GtmCampaign           `protobuf:"bytes,1,opt,name=campaign,proto3" json:"campaign,omitempty"`
@@ -2870,7 +7852,7 @@ type UpdateCampaignResponse struct {
 
 func (x *UpdateCampaignResponse) Reset() {
 	*x = UpdateCampaignResponse{}
-	mi := &file_reliant_v1_gtm_proto_msgTypes[28]
+	mi := &file_reliant_v1_gtm_proto_msgTypes[84]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2882,7 +7864,7 @@ func (x *UpdateCampaignResponse) String() string {
 func (*UpdateCampaignResponse) ProtoMessage() {}
 
 func (x *UpdateCampaignResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_gtm_proto_msgTypes[28]
+	mi := &file_reliant_v1_gtm_proto_msgTypes[84]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2895,7 +7877,7 @@ func (x *UpdateCampaignResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateCampaignResponse.ProtoReflect.Descriptor instead.
 func (*UpdateCampaignResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{28}
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{84}
 }
 
 func (x *UpdateCampaignResponse) GetCampaign() *GtmCampaign {
@@ -2909,22 +7891,23 @@ type ListItemsRequest struct {
 	state      protoimpl.MessageState `protogen:"open.v1"`
 	OrgId      string                 `protobuf:"bytes,1,opt,name=org_id,json=orgId,proto3" json:"org_id,omitempty"`
 	CampaignId *string                `protobuf:"bytes,2,opt,name=campaign_id,json=campaignId,proto3,oneof" json:"campaign_id,omitempty"`
-	Kind       *GtmItemKind           `protobuf:"varint,3,opt,name=kind,proto3,enum=reliant.v1.GtmItemKind,oneof" json:"kind,omitempty"`
+	Format     *GtmItemFormat         `protobuf:"varint,3,opt,name=format,proto3,enum=reliant.v1.GtmItemFormat,oneof" json:"format,omitempty"`
 	Status     *GtmItemStatus         `protobuf:"varint,4,opt,name=status,proto3,enum=reliant.v1.GtmItemStatus,oneof" json:"status,omitempty"`
 	// The scheduled range, half-open: scheduled_from <= scheduled_at <
 	// scheduled_to. Either bound set lists only scheduled items.
 	ScheduledFrom *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=scheduled_from,json=scheduledFrom,proto3" json:"scheduled_from,omitempty"`
 	ScheduledTo   *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=scheduled_to,json=scheduledTo,proto3" json:"scheduled_to,omitempty"`
 	// page_size is at most 500; 0 is 100.
-	PageSize      int32  `protobuf:"varint,7,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
-	PageToken     string `protobuf:"bytes,8,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
+	PageSize      int32   `protobuf:"varint,7,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
+	PageToken     string  `protobuf:"bytes,8,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
+	ChannelId     *string `protobuf:"bytes,9,opt,name=channel_id,json=channelId,proto3,oneof" json:"channel_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ListItemsRequest) Reset() {
 	*x = ListItemsRequest{}
-	mi := &file_reliant_v1_gtm_proto_msgTypes[29]
+	mi := &file_reliant_v1_gtm_proto_msgTypes[85]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2936,7 +7919,7 @@ func (x *ListItemsRequest) String() string {
 func (*ListItemsRequest) ProtoMessage() {}
 
 func (x *ListItemsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_gtm_proto_msgTypes[29]
+	mi := &file_reliant_v1_gtm_proto_msgTypes[85]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2949,7 +7932,7 @@ func (x *ListItemsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListItemsRequest.ProtoReflect.Descriptor instead.
 func (*ListItemsRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{29}
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{85}
 }
 
 func (x *ListItemsRequest) GetOrgId() string {
@@ -2966,11 +7949,11 @@ func (x *ListItemsRequest) GetCampaignId() string {
 	return ""
 }
 
-func (x *ListItemsRequest) GetKind() GtmItemKind {
-	if x != nil && x.Kind != nil {
-		return *x.Kind
+func (x *ListItemsRequest) GetFormat() GtmItemFormat {
+	if x != nil && x.Format != nil {
+		return *x.Format
 	}
-	return GtmItemKind_GTM_ITEM_KIND_UNSPECIFIED
+	return GtmItemFormat_GTM_ITEM_FORMAT_UNSPECIFIED
 }
 
 func (x *ListItemsRequest) GetStatus() GtmItemStatus {
@@ -3008,6 +7991,13 @@ func (x *ListItemsRequest) GetPageToken() string {
 	return ""
 }
 
+func (x *ListItemsRequest) GetChannelId() string {
+	if x != nil && x.ChannelId != nil {
+		return *x.ChannelId
+	}
+	return ""
+}
+
 type ListItemsResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Items         []*GtmItem             `protobuf:"bytes,1,rep,name=items,proto3" json:"items,omitempty"`
@@ -3018,7 +8008,7 @@ type ListItemsResponse struct {
 
 func (x *ListItemsResponse) Reset() {
 	*x = ListItemsResponse{}
-	mi := &file_reliant_v1_gtm_proto_msgTypes[30]
+	mi := &file_reliant_v1_gtm_proto_msgTypes[86]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3030,7 +8020,7 @@ func (x *ListItemsResponse) String() string {
 func (*ListItemsResponse) ProtoMessage() {}
 
 func (x *ListItemsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_gtm_proto_msgTypes[30]
+	mi := &file_reliant_v1_gtm_proto_msgTypes[86]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3043,7 +8033,7 @@ func (x *ListItemsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListItemsResponse.ProtoReflect.Descriptor instead.
 func (*ListItemsResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{30}
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{86}
 }
 
 func (x *ListItemsResponse) GetItems() []*GtmItem {
@@ -3070,7 +8060,7 @@ type GetItemRequest struct {
 
 func (x *GetItemRequest) Reset() {
 	*x = GetItemRequest{}
-	mi := &file_reliant_v1_gtm_proto_msgTypes[31]
+	mi := &file_reliant_v1_gtm_proto_msgTypes[87]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3082,7 +8072,7 @@ func (x *GetItemRequest) String() string {
 func (*GetItemRequest) ProtoMessage() {}
 
 func (x *GetItemRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_gtm_proto_msgTypes[31]
+	mi := &file_reliant_v1_gtm_proto_msgTypes[87]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3095,7 +8085,7 @@ func (x *GetItemRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetItemRequest.ProtoReflect.Descriptor instead.
 func (*GetItemRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{31}
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{87}
 }
 
 func (x *GetItemRequest) GetOrgId() string {
@@ -3121,7 +8111,7 @@ type GetItemResponse struct {
 
 func (x *GetItemResponse) Reset() {
 	*x = GetItemResponse{}
-	mi := &file_reliant_v1_gtm_proto_msgTypes[32]
+	mi := &file_reliant_v1_gtm_proto_msgTypes[88]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3133,7 +8123,7 @@ func (x *GetItemResponse) String() string {
 func (*GetItemResponse) ProtoMessage() {}
 
 func (x *GetItemResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_gtm_proto_msgTypes[32]
+	mi := &file_reliant_v1_gtm_proto_msgTypes[88]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3146,7 +8136,7 @@ func (x *GetItemResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetItemResponse.ProtoReflect.Descriptor instead.
 func (*GetItemResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{32}
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{88}
 }
 
 func (x *GetItemResponse) GetItem() *GtmItem {
@@ -3157,17 +8147,18 @@ func (x *GetItemResponse) GetItem() *GtmItem {
 }
 
 type CreateItemRequest struct {
-	state   protoimpl.MessageState `protogen:"open.v1"`
-	OrgId   string                 `protobuf:"bytes,1,opt,name=org_id,json=orgId,proto3" json:"org_id,omitempty"`
-	Kind    GtmItemKind            `protobuf:"varint,2,opt,name=kind,proto3,enum=reliant.v1.GtmItemKind" json:"kind,omitempty"`
-	Title   string                 `protobuf:"bytes,3,opt,name=title,proto3" json:"title,omitempty"`
-	BodyMd  string                 `protobuf:"bytes,4,opt,name=body_md,json=bodyMd,proto3" json:"body_md,omitempty"`
-	Channel string                 `protobuf:"bytes,5,opt,name=channel,proto3" json:"channel,omitempty"`
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	OrgId  string                 `protobuf:"bytes,1,opt,name=org_id,json=orgId,proto3" json:"org_id,omitempty"`
+	Format GtmItemFormat          `protobuf:"varint,2,opt,name=format,proto3,enum=reliant.v1.GtmItemFormat" json:"format,omitempty"`
+	Title  string                 `protobuf:"bytes,3,opt,name=title,proto3" json:"title,omitempty"`
+	BodyMd string                 `protobuf:"bytes,4,opt,name=body_md,json=bodyMd,proto3" json:"body_md,omitempty"`
+	// The channel (GtmChannel.id) it goes out on; empty for none yet.
+	ChannelId string `protobuf:"bytes,5,opt,name=channel_id,json=channelId,proto3" json:"channel_id,omitempty"`
 	// Empty: no campaign / idea.
 	CampaignId  string                 `protobuf:"bytes,6,opt,name=campaign_id,json=campaignId,proto3" json:"campaign_id,omitempty"`
 	IdeaId      string                 `protobuf:"bytes,7,opt,name=idea_id,json=ideaId,proto3" json:"idea_id,omitempty"`
 	ScheduledAt *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=scheduled_at,json=scheduledAt,proto3" json:"scheduled_at,omitempty"`
-	// EMAIL only.
+	// Email-type only.
 	EmailTo      []string `protobuf:"bytes,9,rep,name=email_to,json=emailTo,proto3" json:"email_to,omitempty"`
 	EmailSubject string   `protobuf:"bytes,10,opt,name=email_subject,json=emailSubject,proto3" json:"email_subject,omitempty"`
 	// DRAFT or REVIEW; unset: DRAFT.
@@ -3178,7 +8169,7 @@ type CreateItemRequest struct {
 
 func (x *CreateItemRequest) Reset() {
 	*x = CreateItemRequest{}
-	mi := &file_reliant_v1_gtm_proto_msgTypes[33]
+	mi := &file_reliant_v1_gtm_proto_msgTypes[89]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3190,7 +8181,7 @@ func (x *CreateItemRequest) String() string {
 func (*CreateItemRequest) ProtoMessage() {}
 
 func (x *CreateItemRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_gtm_proto_msgTypes[33]
+	mi := &file_reliant_v1_gtm_proto_msgTypes[89]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3203,7 +8194,7 @@ func (x *CreateItemRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateItemRequest.ProtoReflect.Descriptor instead.
 func (*CreateItemRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{33}
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{89}
 }
 
 func (x *CreateItemRequest) GetOrgId() string {
@@ -3213,11 +8204,11 @@ func (x *CreateItemRequest) GetOrgId() string {
 	return ""
 }
 
-func (x *CreateItemRequest) GetKind() GtmItemKind {
+func (x *CreateItemRequest) GetFormat() GtmItemFormat {
 	if x != nil {
-		return x.Kind
+		return x.Format
 	}
-	return GtmItemKind_GTM_ITEM_KIND_UNSPECIFIED
+	return GtmItemFormat_GTM_ITEM_FORMAT_UNSPECIFIED
 }
 
 func (x *CreateItemRequest) GetTitle() string {
@@ -3234,9 +8225,9 @@ func (x *CreateItemRequest) GetBodyMd() string {
 	return ""
 }
 
-func (x *CreateItemRequest) GetChannel() string {
+func (x *CreateItemRequest) GetChannelId() string {
 	if x != nil {
-		return x.Channel
+		return x.ChannelId
 	}
 	return ""
 }
@@ -3292,7 +8283,7 @@ type CreateItemResponse struct {
 
 func (x *CreateItemResponse) Reset() {
 	*x = CreateItemResponse{}
-	mi := &file_reliant_v1_gtm_proto_msgTypes[34]
+	mi := &file_reliant_v1_gtm_proto_msgTypes[90]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3304,7 +8295,7 @@ func (x *CreateItemResponse) String() string {
 func (*CreateItemResponse) ProtoMessage() {}
 
 func (x *CreateItemResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_gtm_proto_msgTypes[34]
+	mi := &file_reliant_v1_gtm_proto_msgTypes[90]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3317,7 +8308,7 @@ func (x *CreateItemResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateItemResponse.ProtoReflect.Descriptor instead.
 func (*CreateItemResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{34}
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{90}
 }
 
 func (x *CreateItemResponse) GetItem() *GtmItem {
@@ -3338,7 +8329,7 @@ type GtmEmailRecipients struct {
 
 func (x *GtmEmailRecipients) Reset() {
 	*x = GtmEmailRecipients{}
-	mi := &file_reliant_v1_gtm_proto_msgTypes[35]
+	mi := &file_reliant_v1_gtm_proto_msgTypes[91]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3350,7 +8341,7 @@ func (x *GtmEmailRecipients) String() string {
 func (*GtmEmailRecipients) ProtoMessage() {}
 
 func (x *GtmEmailRecipients) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_gtm_proto_msgTypes[35]
+	mi := &file_reliant_v1_gtm_proto_msgTypes[91]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3363,7 +8354,7 @@ func (x *GtmEmailRecipients) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GtmEmailRecipients.ProtoReflect.Descriptor instead.
 func (*GtmEmailRecipients) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{35}
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{91}
 }
 
 func (x *GtmEmailRecipients) GetAddresses() []string {
@@ -3378,10 +8369,11 @@ type UpdateItemRequest struct {
 	OrgId            string                 `protobuf:"bytes,1,opt,name=org_id,json=orgId,proto3" json:"org_id,omitempty"`
 	Id               string                 `protobuf:"bytes,2,opt,name=id,proto3" json:"id,omitempty"`
 	ExpectedRevision int32                  `protobuf:"varint,3,opt,name=expected_revision,json=expectedRevision,proto3" json:"expected_revision,omitempty"`
-	Kind             *GtmItemKind           `protobuf:"varint,4,opt,name=kind,proto3,enum=reliant.v1.GtmItemKind,oneof" json:"kind,omitempty"`
+	Format           *GtmItemFormat         `protobuf:"varint,4,opt,name=format,proto3,enum=reliant.v1.GtmItemFormat,oneof" json:"format,omitempty"`
 	Title            *string                `protobuf:"bytes,5,opt,name=title,proto3,oneof" json:"title,omitempty"`
 	BodyMd           *string                `protobuf:"bytes,6,opt,name=body_md,json=bodyMd,proto3,oneof" json:"body_md,omitempty"`
-	Channel          *string                `protobuf:"bytes,7,opt,name=channel,proto3,oneof" json:"channel,omitempty"`
+	// Set: moves it to this channel; empty takes it off any channel.
+	ChannelId *string `protobuf:"bytes,7,opt,name=channel_id,json=channelId,proto3,oneof" json:"channel_id,omitempty"`
 	// Set: links the campaign / idea; empty unlinks it.
 	CampaignId  *string                `protobuf:"bytes,8,opt,name=campaign_id,json=campaignId,proto3,oneof" json:"campaign_id,omitempty"`
 	IdeaId      *string                `protobuf:"bytes,9,opt,name=idea_id,json=ideaId,proto3,oneof" json:"idea_id,omitempty"`
@@ -3392,14 +8384,17 @@ type UpdateItemRequest struct {
 	EmailTo      *GtmEmailRecipients `protobuf:"bytes,12,opt,name=email_to,json=emailTo,proto3" json:"email_to,omitempty"`
 	EmailSubject *string             `protobuf:"bytes,13,opt,name=email_subject,json=emailSubject,proto3,oneof" json:"email_subject,omitempty"`
 	// The status to move to, along the lifecycle on GtmItemStatus. Never SENT.
-	Status        *GtmItemStatus `protobuf:"varint,14,opt,name=status,proto3,enum=reliant.v1.GtmItemStatus,oneof" json:"status,omitempty"`
+	Status *GtmItemStatus `protobuf:"varint,14,opt,name=status,proto3,enum=reliant.v1.GtmItemStatus,oneof" json:"status,omitempty"`
+	// Set: records where it went out (http or https); empty clears it. Not a
+	// content edit. A person's act.
+	PublishedUrl  *string `protobuf:"bytes,15,opt,name=published_url,json=publishedUrl,proto3,oneof" json:"published_url,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *UpdateItemRequest) Reset() {
 	*x = UpdateItemRequest{}
-	mi := &file_reliant_v1_gtm_proto_msgTypes[36]
+	mi := &file_reliant_v1_gtm_proto_msgTypes[92]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3411,7 +8406,7 @@ func (x *UpdateItemRequest) String() string {
 func (*UpdateItemRequest) ProtoMessage() {}
 
 func (x *UpdateItemRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_gtm_proto_msgTypes[36]
+	mi := &file_reliant_v1_gtm_proto_msgTypes[92]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3424,7 +8419,7 @@ func (x *UpdateItemRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateItemRequest.ProtoReflect.Descriptor instead.
 func (*UpdateItemRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{36}
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{92}
 }
 
 func (x *UpdateItemRequest) GetOrgId() string {
@@ -3448,11 +8443,11 @@ func (x *UpdateItemRequest) GetExpectedRevision() int32 {
 	return 0
 }
 
-func (x *UpdateItemRequest) GetKind() GtmItemKind {
-	if x != nil && x.Kind != nil {
-		return *x.Kind
+func (x *UpdateItemRequest) GetFormat() GtmItemFormat {
+	if x != nil && x.Format != nil {
+		return *x.Format
 	}
-	return GtmItemKind_GTM_ITEM_KIND_UNSPECIFIED
+	return GtmItemFormat_GTM_ITEM_FORMAT_UNSPECIFIED
 }
 
 func (x *UpdateItemRequest) GetTitle() string {
@@ -3469,9 +8464,9 @@ func (x *UpdateItemRequest) GetBodyMd() string {
 	return ""
 }
 
-func (x *UpdateItemRequest) GetChannel() string {
-	if x != nil && x.Channel != nil {
-		return *x.Channel
+func (x *UpdateItemRequest) GetChannelId() string {
+	if x != nil && x.ChannelId != nil {
+		return *x.ChannelId
 	}
 	return ""
 }
@@ -3525,6 +8520,13 @@ func (x *UpdateItemRequest) GetStatus() GtmItemStatus {
 	return GtmItemStatus_GTM_ITEM_STATUS_UNSPECIFIED
 }
 
+func (x *UpdateItemRequest) GetPublishedUrl() string {
+	if x != nil && x.PublishedUrl != nil {
+		return *x.PublishedUrl
+	}
+	return ""
+}
+
 type UpdateItemResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Item          *GtmItem               `protobuf:"bytes,1,opt,name=item,proto3" json:"item,omitempty"`
@@ -3534,7 +8536,7 @@ type UpdateItemResponse struct {
 
 func (x *UpdateItemResponse) Reset() {
 	*x = UpdateItemResponse{}
-	mi := &file_reliant_v1_gtm_proto_msgTypes[37]
+	mi := &file_reliant_v1_gtm_proto_msgTypes[93]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3546,7 +8548,7 @@ func (x *UpdateItemResponse) String() string {
 func (*UpdateItemResponse) ProtoMessage() {}
 
 func (x *UpdateItemResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_gtm_proto_msgTypes[37]
+	mi := &file_reliant_v1_gtm_proto_msgTypes[93]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3559,10 +8561,125 @@ func (x *UpdateItemResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateItemResponse.ProtoReflect.Descriptor instead.
 func (*UpdateItemResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{37}
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{93}
 }
 
 func (x *UpdateItemResponse) GetItem() *GtmItem {
+	if x != nil {
+		return x.Item
+	}
+	return nil
+}
+
+type ResolveItemSendRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	OrgId string                 `protobuf:"bytes,1,opt,name=org_id,json=orgId,proto3" json:"org_id,omitempty"`
+	Id    string                 `protobuf:"bytes,2,opt,name=id,proto3" json:"id,omitempty"`
+	// The held send's approval hash (GtmItem.approval_hash), as the person saw it.
+	ApprovalHash string `protobuf:"bytes,3,opt,name=approval_hash,json=approvalHash,proto3" json:"approval_hash,omitempty"`
+	// Set: the email went out, with this Gmail message id; the item becomes
+	// SENT. Unset: it did not go out; the hold is released.
+	GmailMessageId *string `protobuf:"bytes,4,opt,name=gmail_message_id,json=gmailMessageId,proto3,oneof" json:"gmail_message_id,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *ResolveItemSendRequest) Reset() {
+	*x = ResolveItemSendRequest{}
+	mi := &file_reliant_v1_gtm_proto_msgTypes[94]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ResolveItemSendRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ResolveItemSendRequest) ProtoMessage() {}
+
+func (x *ResolveItemSendRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_gtm_proto_msgTypes[94]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ResolveItemSendRequest.ProtoReflect.Descriptor instead.
+func (*ResolveItemSendRequest) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{94}
+}
+
+func (x *ResolveItemSendRequest) GetOrgId() string {
+	if x != nil {
+		return x.OrgId
+	}
+	return ""
+}
+
+func (x *ResolveItemSendRequest) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *ResolveItemSendRequest) GetApprovalHash() string {
+	if x != nil {
+		return x.ApprovalHash
+	}
+	return ""
+}
+
+func (x *ResolveItemSendRequest) GetGmailMessageId() string {
+	if x != nil && x.GmailMessageId != nil {
+		return *x.GmailMessageId
+	}
+	return ""
+}
+
+type ResolveItemSendResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Item          *GtmItem               `protobuf:"bytes,1,opt,name=item,proto3" json:"item,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ResolveItemSendResponse) Reset() {
+	*x = ResolveItemSendResponse{}
+	mi := &file_reliant_v1_gtm_proto_msgTypes[95]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ResolveItemSendResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ResolveItemSendResponse) ProtoMessage() {}
+
+func (x *ResolveItemSendResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_gtm_proto_msgTypes[95]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ResolveItemSendResponse.ProtoReflect.Descriptor instead.
+func (*ResolveItemSendResponse) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{95}
+}
+
+func (x *ResolveItemSendResponse) GetItem() *GtmItem {
 	if x != nil {
 		return x.Item
 	}
@@ -3578,7 +8695,7 @@ type GetPositioningRequest struct {
 
 func (x *GetPositioningRequest) Reset() {
 	*x = GetPositioningRequest{}
-	mi := &file_reliant_v1_gtm_proto_msgTypes[38]
+	mi := &file_reliant_v1_gtm_proto_msgTypes[96]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3590,7 +8707,7 @@ func (x *GetPositioningRequest) String() string {
 func (*GetPositioningRequest) ProtoMessage() {}
 
 func (x *GetPositioningRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_gtm_proto_msgTypes[38]
+	mi := &file_reliant_v1_gtm_proto_msgTypes[96]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3603,7 +8720,7 @@ func (x *GetPositioningRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetPositioningRequest.ProtoReflect.Descriptor instead.
 func (*GetPositioningRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{38}
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{96}
 }
 
 func (x *GetPositioningRequest) GetOrgId() string {
@@ -3622,7 +8739,7 @@ type GetPositioningResponse struct {
 
 func (x *GetPositioningResponse) Reset() {
 	*x = GetPositioningResponse{}
-	mi := &file_reliant_v1_gtm_proto_msgTypes[39]
+	mi := &file_reliant_v1_gtm_proto_msgTypes[97]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3634,7 +8751,7 @@ func (x *GetPositioningResponse) String() string {
 func (*GetPositioningResponse) ProtoMessage() {}
 
 func (x *GetPositioningResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_gtm_proto_msgTypes[39]
+	mi := &file_reliant_v1_gtm_proto_msgTypes[97]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3647,7 +8764,7 @@ func (x *GetPositioningResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetPositioningResponse.ProtoReflect.Descriptor instead.
 func (*GetPositioningResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{39}
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{97}
 }
 
 func (x *GetPositioningResponse) GetPositioning() *GtmPositioning {
@@ -3670,7 +8787,7 @@ type UpdatePositioningRequest struct {
 
 func (x *UpdatePositioningRequest) Reset() {
 	*x = UpdatePositioningRequest{}
-	mi := &file_reliant_v1_gtm_proto_msgTypes[40]
+	mi := &file_reliant_v1_gtm_proto_msgTypes[98]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3682,7 +8799,7 @@ func (x *UpdatePositioningRequest) String() string {
 func (*UpdatePositioningRequest) ProtoMessage() {}
 
 func (x *UpdatePositioningRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_gtm_proto_msgTypes[40]
+	mi := &file_reliant_v1_gtm_proto_msgTypes[98]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3695,7 +8812,7 @@ func (x *UpdatePositioningRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdatePositioningRequest.ProtoReflect.Descriptor instead.
 func (*UpdatePositioningRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{40}
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{98}
 }
 
 func (x *UpdatePositioningRequest) GetOrgId() string {
@@ -3735,7 +8852,7 @@ type UpdatePositioningResponse struct {
 
 func (x *UpdatePositioningResponse) Reset() {
 	*x = UpdatePositioningResponse{}
-	mi := &file_reliant_v1_gtm_proto_msgTypes[41]
+	mi := &file_reliant_v1_gtm_proto_msgTypes[99]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3747,7 +8864,7 @@ func (x *UpdatePositioningResponse) String() string {
 func (*UpdatePositioningResponse) ProtoMessage() {}
 
 func (x *UpdatePositioningResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_gtm_proto_msgTypes[41]
+	mi := &file_reliant_v1_gtm_proto_msgTypes[99]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3760,7 +8877,7 @@ func (x *UpdatePositioningResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdatePositioningResponse.ProtoReflect.Descriptor instead.
 func (*UpdatePositioningResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{41}
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{99}
 }
 
 func (x *UpdatePositioningResponse) GetPositioning() *GtmPositioning {
@@ -3786,7 +8903,7 @@ type ListClaimsRequest struct {
 
 func (x *ListClaimsRequest) Reset() {
 	*x = ListClaimsRequest{}
-	mi := &file_reliant_v1_gtm_proto_msgTypes[42]
+	mi := &file_reliant_v1_gtm_proto_msgTypes[100]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3798,7 +8915,7 @@ func (x *ListClaimsRequest) String() string {
 func (*ListClaimsRequest) ProtoMessage() {}
 
 func (x *ListClaimsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_gtm_proto_msgTypes[42]
+	mi := &file_reliant_v1_gtm_proto_msgTypes[100]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3811,7 +8928,7 @@ func (x *ListClaimsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListClaimsRequest.ProtoReflect.Descriptor instead.
 func (*ListClaimsRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{42}
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{100}
 }
 
 func (x *ListClaimsRequest) GetOrgId() string {
@@ -3866,7 +8983,7 @@ type ListClaimsResponse struct {
 
 func (x *ListClaimsResponse) Reset() {
 	*x = ListClaimsResponse{}
-	mi := &file_reliant_v1_gtm_proto_msgTypes[43]
+	mi := &file_reliant_v1_gtm_proto_msgTypes[101]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3878,7 +8995,7 @@ func (x *ListClaimsResponse) String() string {
 func (*ListClaimsResponse) ProtoMessage() {}
 
 func (x *ListClaimsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_gtm_proto_msgTypes[43]
+	mi := &file_reliant_v1_gtm_proto_msgTypes[101]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3891,7 +9008,7 @@ func (x *ListClaimsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListClaimsResponse.ProtoReflect.Descriptor instead.
 func (*ListClaimsResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{43}
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{101}
 }
 
 func (x *ListClaimsResponse) GetClaims() []*GtmClaim {
@@ -3933,7 +9050,7 @@ type UpsertClaimRequest struct {
 
 func (x *UpsertClaimRequest) Reset() {
 	*x = UpsertClaimRequest{}
-	mi := &file_reliant_v1_gtm_proto_msgTypes[44]
+	mi := &file_reliant_v1_gtm_proto_msgTypes[102]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3945,7 +9062,7 @@ func (x *UpsertClaimRequest) String() string {
 func (*UpsertClaimRequest) ProtoMessage() {}
 
 func (x *UpsertClaimRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_gtm_proto_msgTypes[44]
+	mi := &file_reliant_v1_gtm_proto_msgTypes[102]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3958,7 +9075,7 @@ func (x *UpsertClaimRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpsertClaimRequest.ProtoReflect.Descriptor instead.
 func (*UpsertClaimRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{44}
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{102}
 }
 
 func (x *UpsertClaimRequest) GetOrgId() string {
@@ -4049,7 +9166,7 @@ type UpsertClaimResponse struct {
 
 func (x *UpsertClaimResponse) Reset() {
 	*x = UpsertClaimResponse{}
-	mi := &file_reliant_v1_gtm_proto_msgTypes[45]
+	mi := &file_reliant_v1_gtm_proto_msgTypes[103]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4061,7 +9178,7 @@ func (x *UpsertClaimResponse) String() string {
 func (*UpsertClaimResponse) ProtoMessage() {}
 
 func (x *UpsertClaimResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_gtm_proto_msgTypes[45]
+	mi := &file_reliant_v1_gtm_proto_msgTypes[103]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4074,7 +9191,7 @@ func (x *UpsertClaimResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpsertClaimResponse.ProtoReflect.Descriptor instead.
 func (*UpsertClaimResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{45}
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{103}
 }
 
 func (x *UpsertClaimResponse) GetClaim() *GtmClaim {
@@ -4102,7 +9219,7 @@ type CheckClaimsRequest struct {
 
 func (x *CheckClaimsRequest) Reset() {
 	*x = CheckClaimsRequest{}
-	mi := &file_reliant_v1_gtm_proto_msgTypes[46]
+	mi := &file_reliant_v1_gtm_proto_msgTypes[104]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4114,7 +9231,7 @@ func (x *CheckClaimsRequest) String() string {
 func (*CheckClaimsRequest) ProtoMessage() {}
 
 func (x *CheckClaimsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_gtm_proto_msgTypes[46]
+	mi := &file_reliant_v1_gtm_proto_msgTypes[104]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4127,7 +9244,7 @@ func (x *CheckClaimsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CheckClaimsRequest.ProtoReflect.Descriptor instead.
 func (*CheckClaimsRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{46}
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{104}
 }
 
 func (x *CheckClaimsRequest) GetOrgId() string {
@@ -4155,7 +9272,7 @@ type CheckClaimsResponse struct {
 
 func (x *CheckClaimsResponse) Reset() {
 	*x = CheckClaimsResponse{}
-	mi := &file_reliant_v1_gtm_proto_msgTypes[47]
+	mi := &file_reliant_v1_gtm_proto_msgTypes[105]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4167,7 +9284,7 @@ func (x *CheckClaimsResponse) String() string {
 func (*CheckClaimsResponse) ProtoMessage() {}
 
 func (x *CheckClaimsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_gtm_proto_msgTypes[47]
+	mi := &file_reliant_v1_gtm_proto_msgTypes[105]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4180,7 +9297,7 @@ func (x *CheckClaimsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CheckClaimsResponse.ProtoReflect.Descriptor instead.
 func (*CheckClaimsResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{47}
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{105}
 }
 
 func (x *CheckClaimsResponse) GetFindings() []*GtmClaimFinding {
@@ -4202,7 +9319,152 @@ var File_reliant_v1_gtm_proto protoreflect.FileDescriptor
 const file_reliant_v1_gtm_proto_rawDesc = "" +
 	"\n" +
 	"\x14reliant/v1/gtm.proto\x12\n" +
-	"reliant.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xa5\x01\n" +
+	"reliant.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xad\x04\n" +
+	"\vGtmStrategy\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x15\n" +
+	"\x06org_id\x18\x02 \x01(\tR\x05orgId\x12\x12\n" +
+	"\x04name\x18\x03 \x01(\tR\x04name\x12\x17\n" +
+	"\agoal_md\x18\x04 \x01(\tR\x06goalMd\x12#\n" +
+	"\rtarget_metric\x18\x05 \x01(\tR\ftargetMetric\x12!\n" +
+	"\fperiod_start\x18\x06 \x01(\tR\vperiodStart\x12\x1d\n" +
+	"\n" +
+	"period_end\x18\a \x01(\tR\tperiodEnd\x125\n" +
+	"\x06status\x18\b \x01(\x0e2\x1d.reliant.v1.GtmStrategyStatusR\x06status\x12\x1a\n" +
+	"\brevision\x18\t \x01(\x05R\brevision\x12\x1d\n" +
+	"\n" +
+	"created_by\x18\n" +
+	" \x01(\tR\tcreatedBy\x12\x1d\n" +
+	"\n" +
+	"updated_by\x18\v \x01(\tR\tupdatedBy\x129\n" +
+	"\n" +
+	"created_at\x18\f \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
+	"\n" +
+	"updated_at\x18\r \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x12;\n" +
+	"\bcategory\x18\x0e \x01(\x0e2\x1f.reliant.v1.GtmStrategyCategoryR\bcategory\x12\x1f\n" +
+	"\vlibrary_key\x18\x0f \x01(\tR\n" +
+	"libraryKey\"\x9c\x05\n" +
+	"\n" +
+	"GtmChannel\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x15\n" +
+	"\x06org_id\x18\x02 \x01(\tR\x05orgId\x12\x10\n" +
+	"\x03key\x18\x03 \x01(\tR\x03key\x12\x12\n" +
+	"\x04name\x18\x04 \x01(\tR\x04name\x12.\n" +
+	"\x04mode\x18\x05 \x01(\x0e2\x1a.reliant.v1.GtmChannelModeR\x04mode\x12)\n" +
+	"\x10integration_kind\x18\x06 \x01(\tR\x0fintegrationKind\x12#\n" +
+	"\rconnection_id\x18\a \x01(\tR\fconnectionId\x124\n" +
+	"\x16manual_instructions_md\x18\b \x01(\tR\x14manualInstructionsMd\x124\n" +
+	"\x06status\x18\t \x01(\x0e2\x1c.reliant.v1.GtmChannelStatusR\x06status\x12I\n" +
+	"\x10connection_state\x18\n" +
+	" \x01(\x0e2\x1e.reliant.v1.GtmConnectionStateR\x0fconnectionState\x12\x1a\n" +
+	"\brevision\x18\v \x01(\x05R\brevision\x129\n" +
+	"\n" +
+	"created_at\x18\f \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
+	"\n" +
+	"updated_at\x18\r \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x124\n" +
+	"\x06source\x18\x0e \x01(\x0e2\x1c.reliant.v1.GtmChannelSourceR\x06source\x12\x1d\n" +
+	"\n" +
+	"created_by\x18\x0f \x01(\tR\tcreatedBy\x12#\n" +
+	"\rchannel_types\x18\x10 \x03(\tR\fchannelTypes\"K\n" +
+	"\x12GtmChannelTypeList\x125\n" +
+	"\x05types\x18\x01 \x03(\tB\x1f\xbaH\x1c\x92\x01\x19\x10 \"\x15r\x132\x11^[a-z0-9-]{1,32}$R\x05types\"\x9d\x03\n" +
+	"\x10GtmLibraryImport\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x15\n" +
+	"\x06org_id\x18\x02 \x01(\tR\x05orgId\x12\"\n" +
+	"\ractor_user_id\x18\x03 \x01(\tR\vactorUserId\x12F\n" +
+	"\x0fcredential_kind\x18\x04 \x01(\x0e2\x1d.reliant.v1.GtmCredentialKindR\x0ecredentialKind\x12'\n" +
+	"\x0fsource_revision\x18\x05 \x01(\tR\x0esourceRevision\x12\x18\n" +
+	"\acreated\x18\x06 \x01(\x05R\acreated\x12\x18\n" +
+	"\aupdated\x18\a \x01(\x05R\aupdated\x12\x1c\n" +
+	"\tunchanged\x18\b \x01(\x05R\tunchanged\x12\x16\n" +
+	"\x06pruned\x18\t \x01(\x05R\x06pruned\x12(\n" +
+	"\x10prune_request_id\x18\n" +
+	" \x01(\tR\x0epruneRequestId\x129\n" +
+	"\n" +
+	"created_at\x18\v \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\"\xff\x03\n" +
+	"\x16GtmLibraryPruneRequest\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x15\n" +
+	"\x06org_id\x18\x02 \x01(\tR\x05orgId\x12!\n" +
+	"\frequested_by\x18\x03 \x01(\tR\vrequestedBy\x12F\n" +
+	"\x0fcredential_kind\x18\x04 \x01(\x0e2\x1d.reliant.v1.GtmCredentialKindR\x0ecredentialKind\x12'\n" +
+	"\x0fsource_revision\x18\x05 \x01(\tR\x0esourceRevision\x12\x1f\n" +
+	"\vremove_keys\x18\x06 \x03(\tR\n" +
+	"removeKeys\x129\n" +
+	"\x06status\x18\a \x01(\x0e2!.reliant.v1.GtmPruneRequestStatusR\x06status\x12\x1d\n" +
+	"\n" +
+	"decided_by\x18\b \x01(\tR\tdecidedBy\x129\n" +
+	"\n" +
+	"decided_at\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\tdecidedAt\x129\n" +
+	"\n" +
+	"created_at\x18\n" +
+	" \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
+	"\n" +
+	"expires_at\x18\v \x01(\v2\x1a.google.protobuf.TimestampR\texpiresAt\"8\n" +
+	"\x0eGtmLibraryStep\x12\x10\n" +
+	"\x03who\x18\x01 \x01(\tR\x03who\x12\x14\n" +
+	"\x05title\x18\x02 \x01(\tR\x05title\"\xf5\b\n" +
+	"\x17GtmStrategyLibraryEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12;\n" +
+	"\bcategory\x18\x02 \x01(\x0e2\x1f.reliant.v1.GtmStrategyCategoryR\bcategory\x121\n" +
+	"\x05depth\x18\x03 \x01(\x0e2\x1b.reliant.v1.GtmLibraryDepthR\x05depth\x12\x12\n" +
+	"\x04name\x18\x04 \x01(\tR\x04name\x12\x1d\n" +
+	"\n" +
+	"summary_md\x18\x05 \x01(\tR\tsummaryMd\x12\x12\n" +
+	"\x04icon\x18\x06 \x01(\tR\x04icon\x12\x14\n" +
+	"\x05stage\x18\a \x01(\tR\x05stage\x12\x12\n" +
+	"\x04cost\x18\b \x01(\tR\x04cost\x12\x1b\n" +
+	"\tcost_note\x18\t \x01(\tR\bcostNote\x12\x1e\n" +
+	"\n" +
+	"difficulty\x18\n" +
+	" \x01(\tR\n" +
+	"difficulty\x12\x14\n" +
+	"\x05level\x18\v \x01(\tR\x05level\x12\x1c\n" +
+	"\tobjective\x18\f \x01(\tR\tobjective\x12\x1d\n" +
+	"\n" +
+	"north_star\x18\r \x01(\tR\tnorthStar\x12#\n" +
+	"\rhypothesis_md\x18\x0e \x01(\tR\fhypothesisMd\x12\x14\n" +
+	"\x05hours\x18\x0f \x01(\x05R\x05hours\x12\x1f\n" +
+	"\vsignal_days\x18\x10 \x01(\x05R\n" +
+	"signalDays\x12\x1f\n" +
+	"\vwindow_days\x18\x11 \x01(\x05R\n" +
+	"windowDays\x12\x1f\n" +
+	"\vlaunch_days\x18\x12 \x01(\x05R\n" +
+	"launchDays\x12%\n" +
+	"\x0eexpected_delta\x18\x13 \x01(\x01R\rexpectedDelta\x12\x1c\n" +
+	"\tlifecycle\x18\x14 \x03(\tR\tlifecycle\x12#\n" +
+	"\rchannel_types\x18\x15 \x03(\tR\fchannelTypes\x12\"\n" +
+	"\fintegrations\x18\x16 \x03(\tR\fintegrations\x12\x12\n" +
+	"\x04fits\x18\x17 \x03(\tR\x04fits\x12$\n" +
+	"\rprerequisites\x18\x18 \x03(\tR\rprerequisites\x12\x12\n" +
+	"\x04kpis\x18\x19 \x03(\tR\x04kpis\x12\x18\n" +
+	"\atactics\x18\x1a \x03(\tR\atactics\x12\x1c\n" +
+	"\tautomates\x18\x1b \x03(\tR\tautomates\x12 \n" +
+	"\vexperiments\x18\x1c \x03(\tR\vexperiments\x12\x1b\n" +
+	"\tstop_when\x18\x1d \x03(\tR\bstopWhen\x120\n" +
+	"\x05steps\x18\x1e \x03(\v2\x1a.reliant.v1.GtmLibraryStepR\x05steps\x12-\n" +
+	"\x05extra\x18\x1f \x01(\v2\x17.google.protobuf.StructR\x05extra\x12'\n" +
+	"\x0fsource_revision\x18  \x01(\tR\x0esourceRevision\x12;\n" +
+	"\vimported_at\x18! \x01(\v2\x1a.google.protobuf.TimestampR\n" +
+	"importedAt\x12\x1f\n" +
+	"\vimported_by\x18\" \x01(\tR\n" +
+	"importedBy\"\xa5\x03\n" +
+	"\bGtmAsset\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x15\n" +
+	"\x06org_id\x18\x02 \x01(\tR\x05orgId\x12\x17\n" +
+	"\aitem_id\x18\x03 \x01(\tR\x06itemId\x12\x1f\n" +
+	"\vcampaign_id\x18\x04 \x01(\tR\n" +
+	"campaignId\x12\x1a\n" +
+	"\bfilename\x18\x05 \x01(\tR\bfilename\x12!\n" +
+	"\fcontent_type\x18\x06 \x01(\tR\vcontentType\x12\x1d\n" +
+	"\n" +
+	"size_bytes\x18\a \x01(\x03R\tsizeBytes\x12\x16\n" +
+	"\x06sha256\x18\b \x01(\tR\x06sha256\x12\x1f\n" +
+	"\vuploaded_by\x18\t \x01(\tR\n" +
+	"uploadedBy\x122\n" +
+	"\x06source\x18\n" +
+	" \x01(\x0e2\x1a.reliant.v1.GtmAssetSourceR\x06source\x129\n" +
+	"\n" +
+	"created_at\x18\v \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x122\n" +
+	"\x06status\x18\f \x01(\x0e2\x1a.reliant.v1.GtmAssetStatusR\x06status\"\xa5\x01\n" +
 	"\vGtmEvidence\x12\x12\n" +
 	"\x04kind\x18\x01 \x01(\tR\x04kind\x12\x14\n" +
 	"\x05title\x18\x02 \x01(\tR\x05title\x12\x10\n" +
@@ -4232,7 +9494,7 @@ const file_reliant_v1_gtm_proto_rawDesc = "" +
 	"\n" +
 	"created_at\x18\r \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
 	"\n" +
-	"updated_at\x18\x0e \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\"\x9f\x03\n" +
+	"updated_at\x18\x0e \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\"\xb4\x04\n" +
 	"\vGtmCampaign\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x15\n" +
 	"\x06org_id\x18\x02 \x01(\tR\x05orgId\x12\x12\n" +
@@ -4247,15 +9509,34 @@ const file_reliant_v1_gtm_proto_rawDesc = "" +
 	"created_at\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
 	"\n" +
 	"updated_at\x18\n" +
-	" \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\"\xc1\x05\n" +
+	" \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x12\x1f\n" +
+	"\vstrategy_id\x18\v \x01(\tR\n" +
+	"strategyId\x12.\n" +
+	"\x13planned_channel_ids\x18\f \x03(\tR\x11plannedChannelIds\x12B\n" +
+	"\x0fplanned_formats\x18\r \x03(\x0e2\x19.reliant.v1.GtmItemFormatR\x0eplannedFormats\"$\n" +
+	"\x10GtmChannelIdList\x12\x10\n" +
+	"\x03ids\x18\x01 \x03(\tR\x03ids\"Y\n" +
+	"\x11GtmItemFormatList\x12D\n" +
+	"\aformats\x18\x01 \x03(\x0e2\x19.reliant.v1.GtmItemFormatB\x0f\xbaH\f\x92\x01\t\"\a\x82\x01\x04\x10\x01 \x00R\aformats\"]\n" +
+	"\x12GtmItemStatusCount\x121\n" +
+	"\x06status\x18\x01 \x01(\x0e2\x19.reliant.v1.GtmItemStatusR\x06status\x12\x14\n" +
+	"\x05count\x18\x02 \x01(\x05R\x05count\"\xca\x01\n" +
+	"\x0eGtmCoverageRow\x12\x1d\n" +
+	"\n" +
+	"channel_id\x18\x01 \x01(\tR\tchannelId\x121\n" +
+	"\x06format\x18\x02 \x01(\x0e2\x19.reliant.v1.GtmItemFormatR\x06format\x12\x18\n" +
+	"\aplanned\x18\x03 \x01(\bR\aplanned\x126\n" +
+	"\x06counts\x18\x04 \x03(\v2\x1e.reliant.v1.GtmItemStatusCountR\x06counts\x12\x14\n" +
+	"\x05total\x18\x05 \x01(\x05R\x05total\"\xf1\x05\n" +
 	"\aGtmItem\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x15\n" +
 	"\x06org_id\x18\x02 \x01(\tR\x05orgId\x12\x1f\n" +
 	"\vcampaign_id\x18\x03 \x01(\tR\n" +
 	"campaignId\x12\x17\n" +
-	"\aidea_id\x18\x04 \x01(\tR\x06ideaId\x12+\n" +
-	"\x04kind\x18\x05 \x01(\x0e2\x17.reliant.v1.GtmItemKindR\x04kind\x12\x18\n" +
-	"\achannel\x18\x06 \x01(\tR\achannel\x12\x14\n" +
+	"\aidea_id\x18\x04 \x01(\tR\x06ideaId\x121\n" +
+	"\x06format\x18\x05 \x01(\x0e2\x19.reliant.v1.GtmItemFormatR\x06format\x12\x1d\n" +
+	"\n" +
+	"channel_id\x18\x06 \x01(\tR\tchannelId\x12\x14\n" +
 	"\x05title\x18\a \x01(\tR\x05title\x12\x17\n" +
 	"\abody_md\x18\b \x01(\tR\x06bodyMd\x121\n" +
 	"\x06status\x18\t \x01(\x0e2\x19.reliant.v1.GtmItemStatusR\x06status\x12=\n" +
@@ -4271,7 +9552,8 @@ const file_reliant_v1_gtm_proto_rawDesc = "" +
 	"\n" +
 	"created_at\x18\x12 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
 	"\n" +
-	"updated_at\x18\x13 \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\"\xe2\x01\n" +
+	"updated_at\x18\x13 \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x12#\n" +
+	"\rpublished_url\x18\x14 \x01(\tR\fpublishedUrl\"\xe2\x01\n" +
 	"\x0eGtmPositioning\x12\x15\n" +
 	"\x06org_id\x18\x01 \x01(\tR\x05orgId\x12%\n" +
 	"\x0epositioning_md\x18\x02 \x01(\tR\rpositioningMd\x12\x1c\n" +
@@ -4321,7 +9603,273 @@ const file_reliant_v1_gtm_proto_rawDesc = "" +
 	"\x13GetGtmAccessRequest\x12\x1d\n" +
 	"\x06org_id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\x05orgId\"0\n" +
 	"\x14GetGtmAccessResponse\x12\x18\n" +
-	"\aenabled\x18\x01 \x01(\bR\aenabled\"\xad\x02\n" +
+	"\aenabled\x18\x01 \x01(\bR\aenabled\"\xc5\x01\n" +
+	"\x15ListStrategiesRequest\x12\x1d\n" +
+	"\x06org_id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\x05orgId\x12:\n" +
+	"\x06status\x18\x02 \x01(\x0e2\x1d.reliant.v1.GtmStrategyStatusH\x00R\x06status\x88\x01\x01\x12'\n" +
+	"\tpage_size\x18\x03 \x01(\x05B\n" +
+	"\xbaH\a\x1a\x05\x18\xc8\x01(\x00R\bpageSize\x12\x1d\n" +
+	"\n" +
+	"page_token\x18\x04 \x01(\tR\tpageTokenB\t\n" +
+	"\a_status\"y\n" +
+	"\x16ListStrategiesResponse\x127\n" +
+	"\n" +
+	"strategies\x18\x01 \x03(\v2\x17.reliant.v1.GtmStrategyR\n" +
+	"strategies\x12&\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"K\n" +
+	"\x12GetStrategyRequest\x12\x1d\n" +
+	"\x06org_id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\x05orgId\x12\x16\n" +
+	"\x02id\x18\x02 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\x02id\"\x9f\x01\n" +
+	"\x13GetStrategyResponse\x123\n" +
+	"\bstrategy\x18\x01 \x01(\v2\x17.reliant.v1.GtmStrategyR\bstrategy\x125\n" +
+	"\tcampaigns\x18\x02 \x03(\v2\x17.reliant.v1.GtmCampaignR\tcampaigns\x12\x1c\n" +
+	"\ttruncated\x18\x03 \x01(\bR\ttruncated\"\x85\x05\n" +
+	"\x15CreateStrategyRequest\x12\x1d\n" +
+	"\x06org_id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\x05orgId\x12\x1e\n" +
+	"\x04name\x18\x02 \x01(\tB\n" +
+	"\xbaH\ar\x05\x10\x01\x18\xc8\x01R\x04name\x12\x17\n" +
+	"\agoal_md\x18\x03 \x01(\tR\x06goalMd\x12-\n" +
+	"\rtarget_metric\x18\x04 \x01(\tB\b\xbaH\x05r\x03\x18\xf4\x03R\ftargetMetric\x12I\n" +
+	"\fperiod_start\x18\x05 \x01(\tB&\xbaH#r!2\x1f^([0-9]{4}-[0-9]{2}-[0-9]{2})?$R\vperiodStart\x12E\n" +
+	"\n" +
+	"period_end\x18\x06 \x01(\tB&\xbaH#r!2\x1f^([0-9]{4}-[0-9]{2}-[0-9]{2})?$R\tperiodEnd\x12F\n" +
+	"\x06status\x18\a \x01(\x0e2\x1d.reliant.v1.GtmStrategyStatusB\n" +
+	"\xbaH\a\x82\x01\x04\x10\x01 \x00H\x00R\x06status\x88\x01\x01\x12L\n" +
+	"\bcategory\x18\b \x01(\x0e2\x1f.reliant.v1.GtmStrategyCategoryB\n" +
+	"\xbaH\a\x82\x01\x04\x10\x01 \x00H\x01R\bcategory\x88\x01\x01:\xa4\x01\xbaH\xa0\x01\x1a\x9d\x01\n" +
+	"\x15strategy_period_order\x12*period_end must not be before period_start\x1aXthis.period_start == '' || this.period_end == '' || this.period_end >= this.period_startB\t\n" +
+	"\a_statusB\v\n" +
+	"\t_category\"M\n" +
+	"\x16CreateStrategyResponse\x123\n" +
+	"\bstrategy\x18\x01 \x01(\v2\x17.reliant.v1.GtmStrategyR\bstrategy\"\x8a\x05\n" +
+	"\x15UpdateStrategyRequest\x12\x1d\n" +
+	"\x06org_id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\x05orgId\x12\x16\n" +
+	"\x02id\x18\x02 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\x02id\x124\n" +
+	"\x11expected_revision\x18\x03 \x01(\x05B\a\xbaH\x04\x1a\x02 \x00R\x10expectedRevision\x12#\n" +
+	"\x04name\x18\x04 \x01(\tB\n" +
+	"\xbaH\ar\x05\x10\x01\x18\xc8\x01H\x00R\x04name\x88\x01\x01\x12\x1c\n" +
+	"\agoal_md\x18\x05 \x01(\tH\x01R\x06goalMd\x88\x01\x01\x122\n" +
+	"\rtarget_metric\x18\x06 \x01(\tB\b\xbaH\x05r\x03\x18\xf4\x03H\x02R\ftargetMetric\x88\x01\x01\x12N\n" +
+	"\fperiod_start\x18\a \x01(\tB&\xbaH#r!2\x1f^([0-9]{4}-[0-9]{2}-[0-9]{2})?$H\x03R\vperiodStart\x88\x01\x01\x12J\n" +
+	"\n" +
+	"period_end\x18\b \x01(\tB&\xbaH#r!2\x1f^([0-9]{4}-[0-9]{2}-[0-9]{2})?$H\x04R\tperiodEnd\x88\x01\x01\x12F\n" +
+	"\x06status\x18\t \x01(\x0e2\x1d.reliant.v1.GtmStrategyStatusB\n" +
+	"\xbaH\a\x82\x01\x04\x10\x01 \x00H\x05R\x06status\x88\x01\x01\x12J\n" +
+	"\bcategory\x18\n" +
+	" \x01(\x0e2\x1f.reliant.v1.GtmStrategyCategoryB\b\xbaH\x05\x82\x01\x02\x10\x01H\x06R\bcategory\x88\x01\x01B\a\n" +
+	"\x05_nameB\n" +
+	"\n" +
+	"\b_goal_mdB\x10\n" +
+	"\x0e_target_metricB\x0f\n" +
+	"\r_period_startB\r\n" +
+	"\v_period_endB\t\n" +
+	"\a_statusB\v\n" +
+	"\t_category\"M\n" +
+	"\x16UpdateStrategyResponse\x123\n" +
+	"\bstrategy\x18\x01 \x01(\v2\x17.reliant.v1.GtmStrategyR\bstrategy\"\xb8\x01\n" +
+	"\x13ListChannelsRequest\x12\x1d\n" +
+	"\x06org_id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\x05orgId\x129\n" +
+	"\x06status\x18\x02 \x01(\x0e2\x1c.reliant.v1.GtmChannelStatusH\x00R\x06status\x88\x01\x01\x123\n" +
+	"\x04mode\x18\x03 \x01(\x0e2\x1a.reliant.v1.GtmChannelModeH\x01R\x04mode\x88\x01\x01B\t\n" +
+	"\a_statusB\a\n" +
+	"\x05_mode\"J\n" +
+	"\x14ListChannelsResponse\x122\n" +
+	"\bchannels\x18\x01 \x03(\v2\x16.reliant.v1.GtmChannelR\bchannels\"J\n" +
+	"\x11GetChannelRequest\x12\x1d\n" +
+	"\x06org_id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\x05orgId\x12\x16\n" +
+	"\x02id\x18\x02 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\x02id\"F\n" +
+	"\x12GetChannelResponse\x120\n" +
+	"\achannel\x18\x01 \x01(\v2\x16.reliant.v1.GtmChannelR\achannel\"\xd5\x05\n" +
+	"\x14CreateChannelRequest\x12\x1d\n" +
+	"\x06org_id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\x05orgId\x12*\n" +
+	"\x03key\x18\x02 \x01(\tB\x18\xbaH\x15r\x132\x11^[a-z0-9-]{1,32}$R\x03key\x12\x1d\n" +
+	"\x04name\x18\x03 \x01(\tB\t\xbaH\x06r\x04\x10\x01\x18dR\x04name\x12:\n" +
+	"\x04mode\x18\x04 \x01(\x0e2\x1a.reliant.v1.GtmChannelModeB\n" +
+	"\xbaH\a\x82\x01\x04\x10\x01 \x00R\x04mode\x12)\n" +
+	"\x10integration_kind\x18\x05 \x01(\tR\x0fintegrationKind\x12#\n" +
+	"\rconnection_id\x18\x06 \x01(\tR\fconnectionId\x124\n" +
+	"\x16manual_instructions_md\x18\a \x01(\tR\x14manualInstructionsMd\x12E\n" +
+	"\x06status\x18\b \x01(\x0e2\x1c.reliant.v1.GtmChannelStatusB\n" +
+	"\xbaH\a\x82\x01\x04\x10\x01 \x00H\x00R\x06status\x88\x01\x01\x12D\n" +
+	"\rchannel_types\x18\t \x03(\tB\x1f\xbaH\x1c\x92\x01\x19\x10 \"\x15r\x132\x11^[a-z0-9-]{1,32}$R\fchannelTypes:\xf8\x01\xbaH\xf4\x01\x1a\xf1\x01\n" +
+	"\x18channel_mode_integration\x12kan INTEGRATED channel needs integration_kind; a MANUAL one takes neither integration_kind nor connection_id\x1ahthis.mode == 1 ? this.integration_kind != '' : (this.integration_kind == '' && this.connection_id == '')B\t\n" +
+	"\a_status\"I\n" +
+	"\x15CreateChannelResponse\x120\n" +
+	"\achannel\x18\x01 \x01(\v2\x16.reliant.v1.GtmChannelR\achannel\"\xa1\x05\n" +
+	"\x14UpdateChannelRequest\x12\x1d\n" +
+	"\x06org_id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\x05orgId\x12\x16\n" +
+	"\x02id\x18\x02 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\x02id\x124\n" +
+	"\x11expected_revision\x18\x03 \x01(\x05B\a\xbaH\x04\x1a\x02 \x00R\x10expectedRevision\x12\"\n" +
+	"\x04name\x18\x04 \x01(\tB\t\xbaH\x06r\x04\x10\x01\x18dH\x00R\x04name\x88\x01\x01\x12?\n" +
+	"\x04mode\x18\x05 \x01(\x0e2\x1a.reliant.v1.GtmChannelModeB\n" +
+	"\xbaH\a\x82\x01\x04\x10\x01 \x00H\x01R\x04mode\x88\x01\x01\x12.\n" +
+	"\x10integration_kind\x18\x06 \x01(\tH\x02R\x0fintegrationKind\x88\x01\x01\x12(\n" +
+	"\rconnection_id\x18\a \x01(\tH\x03R\fconnectionId\x88\x01\x01\x129\n" +
+	"\x16manual_instructions_md\x18\b \x01(\tH\x04R\x14manualInstructionsMd\x88\x01\x01\x12E\n" +
+	"\x06status\x18\t \x01(\x0e2\x1c.reliant.v1.GtmChannelStatusB\n" +
+	"\xbaH\a\x82\x01\x04\x10\x01 \x00H\x05R\x06status\x88\x01\x01\x12/\n" +
+	"\x03key\x18\n" +
+	" \x01(\tB\x18\xbaH\x15r\x132\x11^[a-z0-9-]{1,32}$H\x06R\x03key\x88\x01\x01\x12C\n" +
+	"\rchannel_types\x18\v \x01(\v2\x1e.reliant.v1.GtmChannelTypeListR\fchannelTypesB\a\n" +
+	"\x05_nameB\a\n" +
+	"\x05_modeB\x13\n" +
+	"\x11_integration_kindB\x10\n" +
+	"\x0e_connection_idB\x19\n" +
+	"\x17_manual_instructions_mdB\t\n" +
+	"\a_statusB\x06\n" +
+	"\x04_key\"I\n" +
+	"\x15UpdateChannelResponse\x120\n" +
+	"\achannel\x18\x01 \x01(\v2\x16.reliant.v1.GtmChannelR\achannel\"\xd6\x02\n" +
+	"\x11ListAssetsRequest\x12\x1d\n" +
+	"\x06org_id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\x05orgId\x12%\n" +
+	"\aitem_id\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01H\x00R\x06itemId\x88\x01\x01\x12-\n" +
+	"\vcampaign_id\x18\x03 \x01(\tB\a\xbaH\x04r\x02\x10\x01H\x01R\n" +
+	"campaignId\x88\x01\x01\x12'\n" +
+	"\tpage_size\x18\x04 \x01(\x05B\n" +
+	"\xbaH\a\x1a\x05\x18\xc8\x01(\x00R\bpageSize\x12\x1d\n" +
+	"\n" +
+	"page_token\x18\x05 \x01(\tR\tpageToken:h\xbaHe\x1ac\n" +
+	"\rassets_of_one\x12&exactly one of item_id and campaign_id\x1a*has(this.item_id) != has(this.campaign_id)B\n" +
+	"\n" +
+	"\b_item_idB\x0e\n" +
+	"\f_campaign_id\"j\n" +
+	"\x12ListAssetsResponse\x12,\n" +
+	"\x06assets\x18\x01 \x03(\v2\x14.reliant.v1.GtmAssetR\x06assets\x12&\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"H\n" +
+	"\x0fGetAssetRequest\x12\x1d\n" +
+	"\x06org_id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\x05orgId\x12\x16\n" +
+	"\x02id\x18\x02 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\x02id\">\n" +
+	"\x10GetAssetResponse\x12*\n" +
+	"\x05asset\x18\x01 \x01(\v2\x14.reliant.v1.GtmAssetR\x05asset\"\x9e\x02\n" +
+	"\x18CreateAssetUploadRequest\x12\x1d\n" +
+	"\x06org_id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\x05orgId\x12\"\n" +
+	"\aitem_id\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01H\x00R\x06itemId\x12*\n" +
+	"\vcampaign_id\x18\x03 \x01(\tB\a\xbaH\x04r\x02\x10\x01H\x00R\n" +
+	"campaignId\x12&\n" +
+	"\bfilename\x18\x04 \x01(\tB\n" +
+	"\xbaH\ar\x05\x10\x01\x18\xff\x01R\bfilename\x12-\n" +
+	"\fcontent_type\x18\x05 \x01(\tB\n" +
+	"\xbaH\ar\x05\x10\x01\x18\xff\x01R\vcontentType\x12+\n" +
+	"\n" +
+	"size_bytes\x18\x06 \x01(\x03B\f\xbaH\t\"\a\x18\x80\x80\x80  \x00R\tsizeBytesB\x0f\n" +
+	"\x06target\x12\x05\xbaH\x02\b\x01\"\xcc\x02\n" +
+	"\x19CreateAssetUploadResponse\x12*\n" +
+	"\x05asset\x18\x01 \x01(\v2\x14.reliant.v1.GtmAssetR\x05asset\x12\x1d\n" +
+	"\n" +
+	"upload_url\x18\x02 \x01(\tR\tuploadUrl\x12e\n" +
+	"\x10required_headers\x18\x03 \x03(\v2:.reliant.v1.CreateAssetUploadResponse.RequiredHeadersEntryR\x0frequiredHeaders\x129\n" +
+	"\n" +
+	"expires_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\texpiresAt\x1aB\n" +
+	"\x14RequiredHeadersEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"]\n" +
+	"\x19ConfirmAssetUploadRequest\x12\x1d\n" +
+	"\x06org_id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\x05orgId\x12!\n" +
+	"\basset_id\x18\x02 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\aassetId\"H\n" +
+	"\x1aConfirmAssetUploadResponse\x12*\n" +
+	"\x05asset\x18\x01 \x01(\v2\x14.reliant.v1.GtmAssetR\x05asset\"[\n" +
+	"\x17GetAssetDownloadRequest\x12\x1d\n" +
+	"\x06org_id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\x05orgId\x12!\n" +
+	"\basset_id\x18\x02 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\aassetId\"g\n" +
+	"\x18GetAssetDownloadResponse\x12\x10\n" +
+	"\x03url\x18\x01 \x01(\tR\x03url\x129\n" +
+	"\n" +
+	"expires_at\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\texpiresAt\"V\n" +
+	"\x12DeleteAssetRequest\x12\x1d\n" +
+	"\x06org_id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\x05orgId\x12!\n" +
+	"\basset_id\x18\x02 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\aassetId\"\x15\n" +
+	"\x13DeleteAssetResponse\"\xdd\x03\n" +
+	"\x1aListStrategyLibraryRequest\x12\x1d\n" +
+	"\x06org_id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\x05orgId\x12@\n" +
+	"\bcategory\x18\x02 \x01(\x0e2\x1f.reliant.v1.GtmStrategyCategoryH\x00R\bcategory\x88\x01\x01\x126\n" +
+	"\x05depth\x18\x03 \x01(\x0e2\x1b.reliant.v1.GtmLibraryDepthH\x01R\x05depth\x88\x01\x01\x12\x19\n" +
+	"\x05stage\x18\x04 \x01(\tH\x02R\x05stage\x88\x01\x01\x12\x17\n" +
+	"\x04cost\x18\x05 \x01(\tH\x03R\x04cost\x88\x01\x01\x12#\n" +
+	"\n" +
+	"difficulty\x18\x06 \x01(\tH\x04R\n" +
+	"difficulty\x88\x01\x01\x12\x15\n" +
+	"\x03fit\x18\a \x01(\tH\x05R\x03fit\x88\x01\x01\x12#\n" +
+	"\x05query\x18\b \x01(\tB\b\xbaH\x05r\x03\x18\xc8\x01H\x06R\x05query\x88\x01\x01\x12'\n" +
+	"\tpage_size\x18\t \x01(\x05B\n" +
+	"\xbaH\a\x1a\x05\x18\xc8\x01(\x00R\bpageSize\x12\x1d\n" +
+	"\n" +
+	"page_token\x18\n" +
+	" \x01(\tR\tpageTokenB\v\n" +
+	"\t_categoryB\b\n" +
+	"\x06_depthB\b\n" +
+	"\x06_stageB\a\n" +
+	"\x05_costB\r\n" +
+	"\v_difficultyB\x06\n" +
+	"\x04_fitB\b\n" +
+	"\x06_query\"\x84\x01\n" +
+	"\x1bListStrategyLibraryResponse\x12=\n" +
+	"\aentries\x18\x01 \x03(\v2#.reliant.v1.GtmStrategyLibraryEntryR\aentries\x12&\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"Y\n" +
+	"\x1eGetStrategyLibraryEntryRequest\x12\x1d\n" +
+	"\x06org_id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\x05orgId\x12\x18\n" +
+	"\x03key\x18\x02 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\x03key\"\\\n" +
+	"\x1fGetStrategyLibraryEntryResponse\x129\n" +
+	"\x05entry\x18\x01 \x01(\v2#.reliant.v1.GtmStrategyLibraryEntryR\x05entry\"\xad\x04\n" +
+	"\x1cImportStrategyLibraryRequest\x12\x1d\n" +
+	"\x06org_id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\x05orgId\x12J\n" +
+	"\aentries\x18\x02 \x03(\v2#.reliant.v1.GtmStrategyLibraryEntryB\v\xbaH\b\x92\x01\x05\b\x01\x10\xf4\x03R\aentries\x123\n" +
+	"\x0fsource_revision\x18\x03 \x01(\tB\n" +
+	"\xbaH\ar\x05\x10\x01\x18\xc8\x01R\x0esourceRevision\x12\x14\n" +
+	"\x05prune\x18\x04 \x01(\bR\x05prune\x12E\n" +
+	"\ball_keys\x18\x05 \x03(\tB*\xbaH'\x92\x01$\x10\x88'\"\x1fr\x1d2\x1b^[a-z0-9][a-z0-9_-]{0,127}$R\aallKeys:\x8f\x02\xbaH\x8b\x02\x1ay\n" +
+	"\x14prune_needs_all_keys\x129prune needs all_keys: the complete key set of the library\x1a&!this.prune || size(this.all_keys) > 0\x1a\x8d\x01\n" +
+	"\x1cprune_all_keys_cover_entries\x121with prune, every entry's key must be in all_keys\x1a:!this.prune || this.entries.all(e, e.key in this.all_keys)\"\xd6\x01\n" +
+	"\x1dImportStrategyLibraryResponse\x12\x18\n" +
+	"\acreated\x18\x01 \x01(\x05R\acreated\x12\x18\n" +
+	"\aupdated\x18\x02 \x01(\x05R\aupdated\x12\x1c\n" +
+	"\tunchanged\x18\x03 \x01(\x05R\tunchanged\x12\x16\n" +
+	"\x06pruned\x18\x04 \x01(\x05R\x06pruned\x12(\n" +
+	"\x10prune_request_id\x18\x05 \x01(\tR\x0epruneRequestId\x12!\n" +
+	"\fwould_remove\x18\x06 \x03(\tR\vwouldRemove\"\x82\x01\n" +
+	"\x19ListLibraryImportsRequest\x12\x1d\n" +
+	"\x06org_id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\x05orgId\x12'\n" +
+	"\tpage_size\x18\x02 \x01(\x05B\n" +
+	"\xbaH\a\x1a\x05\x18\xc8\x01(\x00R\bpageSize\x12\x1d\n" +
+	"\n" +
+	"page_token\x18\x03 \x01(\tR\tpageToken\"|\n" +
+	"\x1aListLibraryImportsResponse\x126\n" +
+	"\aimports\x18\x01 \x03(\v2\x1c.reliant.v1.GtmLibraryImportR\aimports\x12&\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"\xd3\x01\n" +
+	"\x1fListLibraryPruneRequestsRequest\x12\x1d\n" +
+	"\x06org_id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\x05orgId\x12>\n" +
+	"\x06status\x18\x02 \x01(\x0e2!.reliant.v1.GtmPruneRequestStatusH\x00R\x06status\x88\x01\x01\x12'\n" +
+	"\tpage_size\x18\x03 \x01(\x05B\n" +
+	"\xbaH\a\x1a\x05\x18\xc8\x01(\x00R\bpageSize\x12\x1d\n" +
+	"\n" +
+	"page_token\x18\x04 \x01(\tR\tpageTokenB\t\n" +
+	"\a_status\"\x8a\x01\n" +
+	" ListLibraryPruneRequestsResponse\x12>\n" +
+	"\brequests\x18\x01 \x03(\v2\".reliant.v1.GtmLibraryPruneRequestR\brequests\x12&\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"b\n" +
+	"\x1aConfirmLibraryPruneRequest\x12\x1d\n" +
+	"\x06org_id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\x05orgId\x12%\n" +
+	"\n" +
+	"request_id\x18\x02 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\trequestId\"u\n" +
+	"\x1bConfirmLibraryPruneResponse\x12\x18\n" +
+	"\aremoved\x18\x01 \x01(\x05R\aremoved\x12<\n" +
+	"\arequest\x18\x02 \x01(\v2\".reliant.v1.GtmLibraryPruneRequestR\arequest\"a\n" +
+	"\x19CancelLibraryPruneRequest\x12\x1d\n" +
+	"\x06org_id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\x05orgId\x12%\n" +
+	"\n" +
+	"request_id\x18\x02 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\trequestId\"Z\n" +
+	"\x1aCancelLibraryPruneResponse\x12<\n" +
+	"\arequest\x18\x01 \x01(\v2\".reliant.v1.GtmLibraryPruneRequestR\arequest\"\xdf\x01\n" +
+	"\x19UseLibraryStrategyRequest\x12\x1d\n" +
+	"\x06org_id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\x05orgId\x12'\n" +
+	"\vlibrary_key\x18\x02 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\n" +
+	"libraryKey\x122\n" +
+	"\x15create_first_campaign\x18\x03 \x01(\bR\x13createFirstCampaign\x124\n" +
+	"\rcampaign_name\x18\x04 \x01(\tB\n" +
+	"\xbaH\ar\x05\x10\x01\x18\xc8\x01H\x00R\fcampaignName\x88\x01\x01B\x10\n" +
+	"\x0e_campaign_name\"\x86\x01\n" +
+	"\x1aUseLibraryStrategyResponse\x123\n" +
+	"\bstrategy\x18\x01 \x01(\v2\x17.reliant.v1.GtmStrategyR\bstrategy\x123\n" +
+	"\bcampaign\x18\x02 \x01(\v2\x17.reliant.v1.GtmCampaignR\bcampaign\"\xad\x02\n" +
 	"\x10ListIdeasRequest\x12\x1d\n" +
 	"\x06org_id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\x05orgId\x120\n" +
 	"\x04kind\x18\x02 \x01(\x0e2\x17.reliant.v1.GtmIdeaKindH\x00R\x04kind\x88\x01\x01\x126\n" +
@@ -4382,26 +9930,30 @@ const file_reliant_v1_gtm_proto_rawDesc = "" +
 	"\x06status\x18\x04 \x01(\x0e2\x19.reliant.v1.GtmIdeaStatusB\n" +
 	"\xbaH\a\x82\x01\x04\x10\x01 \x00R\x06status\"@\n" +
 	"\x15SetIdeaStatusResponse\x12'\n" +
-	"\x04idea\x18\x01 \x01(\v2\x13.reliant.v1.GtmIdeaR\x04idea\"\xc4\x01\n" +
+	"\x04idea\x18\x01 \x01(\v2\x13.reliant.v1.GtmIdeaR\x04idea\"\xfa\x01\n" +
 	"\x14ListCampaignsRequest\x12\x1d\n" +
 	"\x06org_id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\x05orgId\x12:\n" +
 	"\x06status\x18\x02 \x01(\x0e2\x1d.reliant.v1.GtmCampaignStatusH\x00R\x06status\x88\x01\x01\x12'\n" +
 	"\tpage_size\x18\x03 \x01(\x05B\n" +
 	"\xbaH\a\x1a\x05\x18\xc8\x01(\x00R\bpageSize\x12\x1d\n" +
 	"\n" +
-	"page_token\x18\x04 \x01(\tR\tpageTokenB\t\n" +
-	"\a_status\"v\n" +
+	"page_token\x18\x04 \x01(\tR\tpageToken\x12$\n" +
+	"\vstrategy_id\x18\x05 \x01(\tH\x01R\n" +
+	"strategyId\x88\x01\x01B\t\n" +
+	"\a_statusB\x0e\n" +
+	"\f_strategy_id\"v\n" +
 	"\x15ListCampaignsResponse\x125\n" +
 	"\tcampaigns\x18\x01 \x03(\v2\x17.reliant.v1.GtmCampaignR\tcampaigns\x12&\n" +
 	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"K\n" +
 	"\x12GetCampaignRequest\x12\x1d\n" +
 	"\x06org_id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\x05orgId\x12\x16\n" +
-	"\x02id\x18\x02 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\x02id\"\xbe\x01\n" +
+	"\x02id\x18\x02 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\x02id\"\xf6\x01\n" +
 	"\x13GetCampaignResponse\x123\n" +
 	"\bcampaign\x18\x01 \x01(\v2\x17.reliant.v1.GtmCampaignR\bcampaign\x12)\n" +
 	"\x05ideas\x18\x02 \x03(\v2\x13.reliant.v1.GtmIdeaR\x05ideas\x12)\n" +
 	"\x05items\x18\x03 \x03(\v2\x13.reliant.v1.GtmItemR\x05items\x12\x1c\n" +
-	"\ttruncated\x18\x04 \x01(\bR\ttruncated\"\xb7\x02\n" +
+	"\ttruncated\x18\x04 \x01(\bR\ttruncated\x126\n" +
+	"\bcoverage\x18\x05 \x03(\v2\x1a.reliant.v1.GtmCoverageRowR\bcoverage\"\xe5\x03\n" +
 	"\x15CreateCampaignRequest\x12\x1d\n" +
 	"\x06org_id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\x05orgId\x12\x1e\n" +
 	"\x04name\x18\x02 \x01(\tB\n" +
@@ -4411,10 +9963,14 @@ const file_reliant_v1_gtm_proto_rawDesc = "" +
 	"\n" +
 	"period_end\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\tperiodEnd\x12F\n" +
 	"\x06status\x18\x06 \x01(\x0e2\x1d.reliant.v1.GtmCampaignStatusB\n" +
-	"\xbaH\a\x82\x01\x04\x10\x01 \x00H\x00R\x06status\x88\x01\x01B\t\n" +
+	"\xbaH\a\x82\x01\x04\x10\x01 \x00H\x00R\x06status\x88\x01\x01\x12'\n" +
+	"\vstrategy_id\x18\a \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\n" +
+	"strategyId\x12.\n" +
+	"\x13planned_channel_ids\x18\b \x03(\tR\x11plannedChannelIds\x12S\n" +
+	"\x0fplanned_formats\x18\t \x03(\x0e2\x19.reliant.v1.GtmItemFormatB\x0f\xbaH\f\x92\x01\t\"\a\x82\x01\x04\x10\x01 \x00R\x0eplannedFormatsB\t\n" +
 	"\a_status\"M\n" +
 	"\x16CreateCampaignResponse\x123\n" +
-	"\bcampaign\x18\x01 \x01(\v2\x17.reliant.v1.GtmCampaignR\bcampaign\"\xf9\x03\n" +
+	"\bcampaign\x18\x01 \x01(\v2\x17.reliant.v1.GtmCampaignR\bcampaign\"\xce\x05\n" +
 	"\x15UpdateCampaignRequest\x12\x1d\n" +
 	"\x06org_id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\x05orgId\x12\x16\n" +
 	"\x02id\x18\x02 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\x02id\x124\n" +
@@ -4429,28 +9985,36 @@ const file_reliant_v1_gtm_proto_rawDesc = "" +
 	"\x10clear_period_end\x18\t \x01(\bR\x0eclearPeriodEnd\x12F\n" +
 	"\x06status\x18\n" +
 	" \x01(\x0e2\x1d.reliant.v1.GtmCampaignStatusB\n" +
-	"\xbaH\a\x82\x01\x04\x10\x01 \x00H\x02R\x06status\x88\x01\x01B\a\n" +
+	"\xbaH\a\x82\x01\x04\x10\x01 \x00H\x02R\x06status\x88\x01\x01\x12-\n" +
+	"\vstrategy_id\x18\v \x01(\tB\a\xbaH\x04r\x02\x10\x01H\x03R\n" +
+	"strategyId\x88\x01\x01\x12L\n" +
+	"\x13planned_channel_ids\x18\f \x01(\v2\x1c.reliant.v1.GtmChannelIdListR\x11plannedChannelIds\x12F\n" +
+	"\x0fplanned_formats\x18\r \x01(\v2\x1d.reliant.v1.GtmItemFormatListR\x0eplannedFormatsB\a\n" +
 	"\x05_nameB\a\n" +
 	"\x05_goalB\t\n" +
-	"\a_status\"M\n" +
+	"\a_statusB\x0e\n" +
+	"\f_strategy_id\"M\n" +
 	"\x16UpdateCampaignResponse\x123\n" +
-	"\bcampaign\x18\x01 \x01(\v2\x17.reliant.v1.GtmCampaignR\bcampaign\"\xdc\x04\n" +
+	"\bcampaign\x18\x01 \x01(\v2\x17.reliant.v1.GtmCampaignR\bcampaign\"\x97\x05\n" +
 	"\x10ListItemsRequest\x12\x1d\n" +
 	"\x06org_id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\x05orgId\x12$\n" +
 	"\vcampaign_id\x18\x02 \x01(\tH\x00R\n" +
-	"campaignId\x88\x01\x01\x120\n" +
-	"\x04kind\x18\x03 \x01(\x0e2\x17.reliant.v1.GtmItemKindH\x01R\x04kind\x88\x01\x01\x126\n" +
+	"campaignId\x88\x01\x01\x126\n" +
+	"\x06format\x18\x03 \x01(\x0e2\x19.reliant.v1.GtmItemFormatH\x01R\x06format\x88\x01\x01\x126\n" +
 	"\x06status\x18\x04 \x01(\x0e2\x19.reliant.v1.GtmItemStatusH\x02R\x06status\x88\x01\x01\x12A\n" +
 	"\x0escheduled_from\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\rscheduledFrom\x12=\n" +
 	"\fscheduled_to\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\vscheduledTo\x12'\n" +
 	"\tpage_size\x18\a \x01(\x05B\n" +
 	"\xbaH\a\x1a\x05\x18\xf4\x03(\x00R\bpageSize\x12\x1d\n" +
 	"\n" +
-	"page_token\x18\b \x01(\tR\tpageToken:\xaa\x01\xbaH\xa6\x01\x1a\xa3\x01\n" +
+	"page_token\x18\b \x01(\tR\tpageToken\x12\"\n" +
+	"\n" +
+	"channel_id\x18\t \x01(\tH\x03R\tchannelId\x88\x01\x01:\xaa\x01\xbaH\xa6\x01\x1a\xa3\x01\n" +
 	"\x15scheduled_range_order\x12)scheduled_to must be after scheduled_from\x1a_!has(this.scheduled_from) || !has(this.scheduled_to) || this.scheduled_to > this.scheduled_fromB\x0e\n" +
-	"\f_campaign_idB\a\n" +
-	"\x05_kindB\t\n" +
-	"\a_status\"f\n" +
+	"\f_campaign_idB\t\n" +
+	"\a_formatB\t\n" +
+	"\a_statusB\r\n" +
+	"\v_channel_id\"f\n" +
 	"\x11ListItemsResponse\x12)\n" +
 	"\x05items\x18\x01 \x03(\v2\x13.reliant.v1.GtmItemR\x05items\x12&\n" +
 	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"G\n" +
@@ -4458,15 +10022,16 @@ const file_reliant_v1_gtm_proto_rawDesc = "" +
 	"\x06org_id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\x05orgId\x12\x16\n" +
 	"\x02id\x18\x02 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\x02id\":\n" +
 	"\x0fGetItemResponse\x12'\n" +
-	"\x04item\x18\x01 \x01(\v2\x13.reliant.v1.GtmItemR\x04item\"\xc8\x03\n" +
+	"\x04item\x18\x01 \x01(\v2\x13.reliant.v1.GtmItemR\x04item\"\xd3\x03\n" +
 	"\x11CreateItemRequest\x12\x1d\n" +
-	"\x06org_id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\x05orgId\x127\n" +
-	"\x04kind\x18\x02 \x01(\x0e2\x17.reliant.v1.GtmItemKindB\n" +
-	"\xbaH\a\x82\x01\x04\x10\x01 \x00R\x04kind\x12 \n" +
+	"\x06org_id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\x05orgId\x12=\n" +
+	"\x06format\x18\x02 \x01(\x0e2\x19.reliant.v1.GtmItemFormatB\n" +
+	"\xbaH\a\x82\x01\x04\x10\x01 \x00R\x06format\x12 \n" +
 	"\x05title\x18\x03 \x01(\tB\n" +
 	"\xbaH\ar\x05\x10\x01\x18\xac\x02R\x05title\x12\x17\n" +
-	"\abody_md\x18\x04 \x01(\tR\x06bodyMd\x12\x18\n" +
-	"\achannel\x18\x05 \x01(\tR\achannel\x12\x1f\n" +
+	"\abody_md\x18\x04 \x01(\tR\x06bodyMd\x12\x1d\n" +
+	"\n" +
+	"channel_id\x18\x05 \x01(\tR\tchannelId\x12\x1f\n" +
 	"\vcampaign_id\x18\x06 \x01(\tR\n" +
 	"campaignId\x12\x17\n" +
 	"\aidea_id\x18\a \x01(\tR\x06ideaId\x12=\n" +
@@ -4480,17 +10045,18 @@ const file_reliant_v1_gtm_proto_rawDesc = "" +
 	"\x12CreateItemResponse\x12'\n" +
 	"\x04item\x18\x01 \x01(\v2\x13.reliant.v1.GtmItemR\x04item\"2\n" +
 	"\x12GtmEmailRecipients\x12\x1c\n" +
-	"\taddresses\x18\x01 \x03(\tR\taddresses\"\xe0\x05\n" +
+	"\taddresses\x18\x01 \x03(\tR\taddresses\"\xc8\x06\n" +
 	"\x11UpdateItemRequest\x12\x1d\n" +
 	"\x06org_id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\x05orgId\x12\x16\n" +
 	"\x02id\x18\x02 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\x02id\x124\n" +
-	"\x11expected_revision\x18\x03 \x01(\x05B\a\xbaH\x04\x1a\x02 \x00R\x10expectedRevision\x12<\n" +
-	"\x04kind\x18\x04 \x01(\x0e2\x17.reliant.v1.GtmItemKindB\n" +
-	"\xbaH\a\x82\x01\x04\x10\x01 \x00H\x00R\x04kind\x88\x01\x01\x12%\n" +
+	"\x11expected_revision\x18\x03 \x01(\x05B\a\xbaH\x04\x1a\x02 \x00R\x10expectedRevision\x12B\n" +
+	"\x06format\x18\x04 \x01(\x0e2\x19.reliant.v1.GtmItemFormatB\n" +
+	"\xbaH\a\x82\x01\x04\x10\x01 \x00H\x00R\x06format\x88\x01\x01\x12%\n" +
 	"\x05title\x18\x05 \x01(\tB\n" +
 	"\xbaH\ar\x05\x10\x01\x18\xac\x02H\x01R\x05title\x88\x01\x01\x12\x1c\n" +
-	"\abody_md\x18\x06 \x01(\tH\x02R\x06bodyMd\x88\x01\x01\x12\x1d\n" +
-	"\achannel\x18\a \x01(\tH\x03R\achannel\x88\x01\x01\x12$\n" +
+	"\abody_md\x18\x06 \x01(\tH\x02R\x06bodyMd\x88\x01\x01\x12\"\n" +
+	"\n" +
+	"channel_id\x18\a \x01(\tH\x03R\tchannelId\x88\x01\x01\x12$\n" +
 	"\vcampaign_id\x18\b \x01(\tH\x04R\n" +
 	"campaignId\x88\x01\x01\x12\x1c\n" +
 	"\aidea_id\x18\t \x01(\tH\x05R\x06ideaId\x88\x01\x01\x12=\n" +
@@ -4500,19 +10066,28 @@ const file_reliant_v1_gtm_proto_rawDesc = "" +
 	"\bemail_to\x18\f \x01(\v2\x1e.reliant.v1.GtmEmailRecipientsR\aemailTo\x12(\n" +
 	"\remail_subject\x18\r \x01(\tH\x06R\femailSubject\x88\x01\x01\x12B\n" +
 	"\x06status\x18\x0e \x01(\x0e2\x19.reliant.v1.GtmItemStatusB\n" +
-	"\xbaH\a\x82\x01\x04\x10\x01 \x00H\aR\x06status\x88\x01\x01B\a\n" +
-	"\x05_kindB\b\n" +
+	"\xbaH\a\x82\x01\x04\x10\x01 \x00H\aR\x06status\x88\x01\x01\x12D\n" +
+	"\rpublished_url\x18\x0f \x01(\tB\x1a\xbaH\x17r\x15\x18\x80\x102\x10^(https?://.+)?$H\bR\fpublishedUrl\x88\x01\x01B\t\n" +
+	"\a_formatB\b\n" +
 	"\x06_titleB\n" +
 	"\n" +
-	"\b_body_mdB\n" +
-	"\n" +
-	"\b_channelB\x0e\n" +
+	"\b_body_mdB\r\n" +
+	"\v_channel_idB\x0e\n" +
 	"\f_campaign_idB\n" +
 	"\n" +
 	"\b_idea_idB\x10\n" +
 	"\x0e_email_subjectB\t\n" +
-	"\a_status\"=\n" +
+	"\a_statusB\x10\n" +
+	"\x0e_published_url\"=\n" +
 	"\x12UpdateItemResponse\x12'\n" +
+	"\x04item\x18\x01 \x01(\v2\x13.reliant.v1.GtmItemR\x04item\"\xc9\x01\n" +
+	"\x16ResolveItemSendRequest\x12\x1d\n" +
+	"\x06org_id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\x05orgId\x12\x16\n" +
+	"\x02id\x18\x02 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\x02id\x12+\n" +
+	"\rapproval_hash\x18\x03 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\fapprovalHash\x126\n" +
+	"\x10gmail_message_id\x18\x04 \x01(\tB\a\xbaH\x04r\x02\x10\x01H\x00R\x0egmailMessageId\x88\x01\x01B\x13\n" +
+	"\x11_gmail_message_id\"B\n" +
+	"\x17ResolveItemSendResponse\x12'\n" +
 	"\x04item\x18\x01 \x01(\v2\x13.reliant.v1.GtmItemR\x04item\"6\n" +
 	"\x15GetPositioningRequest\x12\x1d\n" +
 	"\x06org_id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\x05orgId\"V\n" +
@@ -4594,14 +10169,81 @@ const file_reliant_v1_gtm_proto_rawDesc = "" +
 	"\x19GTM_CAMPAIGN_STATUS_DRAFT\x10\x01\x12\x1e\n" +
 	"\x1aGTM_CAMPAIGN_STATUS_ACTIVE\x10\x02\x12\x1c\n" +
 	"\x18GTM_CAMPAIGN_STATUS_DONE\x10\x03\x12 \n" +
-	"\x1cGTM_CAMPAIGN_STATUS_ARCHIVED\x10\x04*\xb4\x01\n" +
-	"\vGtmItemKind\x12\x1d\n" +
-	"\x19GTM_ITEM_KIND_UNSPECIFIED\x10\x00\x12\x1b\n" +
-	"\x17GTM_ITEM_KIND_BLOG_POST\x10\x01\x12\x1d\n" +
-	"\x19GTM_ITEM_KIND_SOCIAL_POST\x10\x02\x12\x17\n" +
-	"\x13GTM_ITEM_KIND_EMAIL\x10\x03\x12\x18\n" +
-	"\x14GTM_ITEM_KIND_LAUNCH\x10\x04\x12\x17\n" +
-	"\x13GTM_ITEM_KIND_OTHER\x10\x05*\xf9\x01\n" +
+	"\x1cGTM_CAMPAIGN_STATUS_ARCHIVED\x10\x04*\xb7\x01\n" +
+	"\x11GtmStrategyStatus\x12#\n" +
+	"\x1fGTM_STRATEGY_STATUS_UNSPECIFIED\x10\x00\x12\x1d\n" +
+	"\x19GTM_STRATEGY_STATUS_DRAFT\x10\x01\x12\x1e\n" +
+	"\x1aGTM_STRATEGY_STATUS_ACTIVE\x10\x02\x12\x1c\n" +
+	"\x18GTM_STRATEGY_STATUS_DONE\x10\x03\x12 \n" +
+	"\x1cGTM_STRATEGY_STATUS_ARCHIVED\x10\x04*p\n" +
+	"\x0eGtmChannelMode\x12 \n" +
+	"\x1cGTM_CHANNEL_MODE_UNSPECIFIED\x10\x00\x12\x1f\n" +
+	"\x1bGTM_CHANNEL_MODE_INTEGRATED\x10\x01\x12\x1b\n" +
+	"\x17GTM_CHANNEL_MODE_MANUAL\x10\x02*\x95\x01\n" +
+	"\x10GtmChannelStatus\x12\"\n" +
+	"\x1eGTM_CHANNEL_STATUS_UNSPECIFIED\x10\x00\x12\x1d\n" +
+	"\x19GTM_CHANNEL_STATUS_ACTIVE\x10\x01\x12\x1d\n" +
+	"\x19GTM_CHANNEL_STATUS_PAUSED\x10\x02\x12\x1f\n" +
+	"\x1bGTM_CHANNEL_STATUS_ARCHIVED\x10\x03*\xa8\x01\n" +
+	"\x12GtmConnectionState\x12$\n" +
+	" GTM_CONNECTION_STATE_UNSPECIFIED\x10\x00\x12\"\n" +
+	"\x1eGTM_CONNECTION_STATE_CONNECTED\x10\x01\x12&\n" +
+	"\"GTM_CONNECTION_STATE_NOT_CONNECTED\x10\x02\x12 \n" +
+	"\x1cGTM_CONNECTION_STATE_UNKNOWN\x10\x03*\x9c\x02\n" +
+	"\rGtmItemFormat\x12\x1f\n" +
+	"\x1bGTM_ITEM_FORMAT_UNSPECIFIED\x10\x00\x12\x1e\n" +
+	"\x1aGTM_ITEM_FORMAT_SHORT_POST\x10\x01\x12\x1d\n" +
+	"\x19GTM_ITEM_FORMAT_LONG_POST\x10\x02\x12\x19\n" +
+	"\x15GTM_ITEM_FORMAT_EMAIL\x10\x03\x12!\n" +
+	"\x1dGTM_ITEM_FORMAT_COLD_OUTREACH\x10\x04\x12\x19\n" +
+	"\x15GTM_ITEM_FORMAT_VIDEO\x10\x05\x12\x1f\n" +
+	"\x1bGTM_ITEM_FORMAT_MEDIA_PITCH\x10\x06\x12\x16\n" +
+	"\x12GTM_ITEM_FORMAT_AD\x10\a\x12\x19\n" +
+	"\x15GTM_ITEM_FORMAT_OTHER\x10\b*l\n" +
+	"\x0eGtmAssetStatus\x12 \n" +
+	"\x1cGTM_ASSET_STATUS_UNSPECIFIED\x10\x00\x12\x1c\n" +
+	"\x18GTM_ASSET_STATUS_PENDING\x10\x01\x12\x1a\n" +
+	"\x16GTM_ASSET_STATUS_READY\x10\x02*\x90\x01\n" +
+	"\x10GtmChannelSource\x12\"\n" +
+	"\x1eGTM_CHANNEL_SOURCE_UNSPECIFIED\x10\x00\x12\x1b\n" +
+	"\x17GTM_CHANNEL_SOURCE_SEED\x10\x01\x12\x1c\n" +
+	"\x18GTM_CHANNEL_SOURCE_AGENT\x10\x02\x12\x1d\n" +
+	"\x19GTM_CHANNEL_SOURCE_PERSON\x10\x03*\xae\x05\n" +
+	"\x13GtmStrategyCategory\x12%\n" +
+	"!GTM_STRATEGY_CATEGORY_UNSPECIFIED\x10\x00\x123\n" +
+	"/GTM_STRATEGY_CATEGORY_PRICING_OFFERS_INCENTIVES\x10\x01\x12/\n" +
+	"+GTM_STRATEGY_CATEGORY_REFERRAL_VIRAL_GROWTH\x10\x02\x12*\n" +
+	"&GTM_STRATEGY_CATEGORY_PAID_ACQUISITION\x10\x03\x12-\n" +
+	")GTM_STRATEGY_CATEGORY_ORGANIC_CONTENT_SEO\x10\x04\x124\n" +
+	"0GTM_STRATEGY_CATEGORY_OUTBOUND_SALES_PROSPECTING\x10\x05\x123\n" +
+	"/GTM_STRATEGY_CATEGORY_PARTNERSHIPS_DISTRIBUTION\x10\x06\x12%\n" +
+	"!GTM_STRATEGY_CATEGORY_LAUNCHES_PR\x10\a\x12*\n" +
+	"&GTM_STRATEGY_CATEGORY_COMMUNITY_EVENTS\x10\b\x12,\n" +
+	"(GTM_STRATEGY_CATEGORY_PRODUCT_LED_GROWTH\x10\t\x121\n" +
+	"-GTM_STRATEGY_CATEGORY_CONVERSION_OPTIMIZATION\x10\n" +
+	"\x12-\n" +
+	")GTM_STRATEGY_CATEGORY_RETENTION_EXPANSION\x10\v\x12*\n" +
+	"&GTM_STRATEGY_CATEGORY_TRUST_REPUTATION\x10\f\x125\n" +
+	"1GTM_STRATEGY_CATEGORY_MARKET_RESEARCH_POSITIONING\x10\r*w\n" +
+	"\x11GtmCredentialKind\x12#\n" +
+	"\x1fGTM_CREDENTIAL_KIND_UNSPECIFIED\x10\x00\x12\x1e\n" +
+	"\x1aGTM_CREDENTIAL_KIND_PERSON\x10\x01\x12\x1d\n" +
+	"\x19GTM_CREDENTIAL_KIND_TOKEN\x10\x02*\xdd\x01\n" +
+	"\x15GtmPruneRequestStatus\x12(\n" +
+	"$GTM_PRUNE_REQUEST_STATUS_UNSPECIFIED\x10\x00\x12$\n" +
+	" GTM_PRUNE_REQUEST_STATUS_PENDING\x10\x01\x12&\n" +
+	"\"GTM_PRUNE_REQUEST_STATUS_CONFIRMED\x10\x02\x12&\n" +
+	"\"GTM_PRUNE_REQUEST_STATUS_CANCELLED\x10\x03\x12$\n" +
+	" GTM_PRUNE_REQUEST_STATUS_EXPIRED\x10\x04*n\n" +
+	"\x0fGtmLibraryDepth\x12!\n" +
+	"\x1dGTM_LIBRARY_DEPTH_UNSPECIFIED\x10\x00\x12\x1a\n" +
+	"\x16GTM_LIBRARY_DEPTH_PLAY\x10\x01\x12\x1c\n" +
+	"\x18GTM_LIBRARY_DEPTH_TACTIC\x10\x02*\x89\x01\n" +
+	"\x0eGtmAssetSource\x12 \n" +
+	"\x1cGTM_ASSET_SOURCE_UNSPECIFIED\x10\x00\x12\x19\n" +
+	"\x15GTM_ASSET_SOURCE_CHAT\x10\x01\x12\x1d\n" +
+	"\x19GTM_ASSET_SOURCE_WORKFLOW\x10\x02\x12\x1b\n" +
+	"\x17GTM_ASSET_SOURCE_PERSON\x10\x03*\xf9\x01\n" +
 	"\rGtmItemStatus\x12\x1f\n" +
 	"\x1bGTM_ITEM_STATUS_UNSPECIFIED\x10\x00\x12\x19\n" +
 	"\x15GTM_ITEM_STATUS_DRAFT\x10\x01\x12\x1a\n" +
@@ -4634,10 +10276,58 @@ const file_reliant_v1_gtm_proto_rawDesc = "" +
 	"\"GTM_CLAIM_FINDING_KIND_UNSPECIFIED\x10\x00\x12+\n" +
 	"'GTM_CLAIM_FINDING_KIND_MATCHED_VERIFIED\x10\x01\x12-\n" +
 	")GTM_CLAIM_FINDING_KIND_MATCHED_UNVERIFIED\x10\x02\x12*\n" +
-	"&GTM_CLAIM_FINDING_KIND_UNMATCHED_RISKY\x10\x032\xce\x13\n" +
+	"&GTM_CLAIM_FINDING_KIND_UNMATCHED_RISKY\x10\x032\xce/\n" +
 	"\n" +
 	"GtmService\x12\x8d\x01\n" +
-	"\fGetGtmAccess\x12\x1f.reliant.v1.GetGtmAccessRequest\x1a .reliant.v1.GetGtmAccessResponse\":\xa2\xbb\x183\b\x01:/:-read-only: whether GTM is enabled for the org\x90\x02\x01\x12`\n" +
+	"\fGetGtmAccess\x12\x1f.reliant.v1.GetGtmAccessRequest\x1a .reliant.v1.GetGtmAccessResponse\":\xa2\xbb\x183\b\x01:/:-read-only: whether GTM is enabled for the org\x90\x02\x01\x12o\n" +
+	"\x0eListStrategies\x12!.reliant.v1.ListStrategiesRequest\x1a\".reliant.v1.ListStrategiesResponse\"\x16\xa2\xbb\x18\x0f\b\x01:\v:\tread-only\x90\x02\x01\x12f\n" +
+	"\vGetStrategy\x12\x1e.reliant.v1.GetStrategyRequest\x1a\x1f.reliant.v1.GetStrategyResponse\"\x16\xa2\xbb\x18\x0f\b\x01:\v:\tread-only\x90\x02\x01\x12\xaf\x01\n" +
+	"\x0eCreateStrategy\x12!.reliant.v1.CreateStrategyRequest\x1a\".reliant.v1.CreateStrategyResponse\"V\xa2\xbb\x18R\b\x01:N\n" +
+	"\x06create\x12<\n" +
+	"\fgtm_strategy\x12\x14response.strategy.id\x1a\x16response.strategy.name\"\x06org_id\x12\xb7\x01\n" +
+	"\x0eUpdateStrategy\x12!.reliant.v1.UpdateStrategyRequest\x1a\".reliant.v1.UpdateStrategyResponse\"^\xa2\xbb\x18Z\b\x01:V\n" +
+	"\x06update\x12*\n" +
+	"\fgtm_strategy\x12\x02id\x1a\x16response.strategy.name\"\x06org_id*\x18response.strategy.status\x12\xa3\x01\n" +
+	"\fListChannels\x12\x1f.reliant.v1.ListChannelsRequest\x1a .reliant.v1.ListChannelsResponse\"P\xa2\xbb\x18I\b\x01:E:Cread-only (the first read seeds the default channels, idempotently)\x90\x02\x02\x12\x9d\x01\n" +
+	"\n" +
+	"GetChannel\x12\x1d.reliant.v1.GetChannelRequest\x1a\x1e.reliant.v1.GetChannelResponse\"P\xa2\xbb\x18I\b\x01:E:Cread-only (the first read seeds the default channels, idempotently)\x90\x02\x02\x12\xa9\x01\n" +
+	"\rCreateChannel\x12 .reliant.v1.CreateChannelRequest\x1a!.reliant.v1.CreateChannelResponse\"S\xa2\xbb\x18O\b\x01:K\n" +
+	"\x06create\x129\n" +
+	"\vgtm_channel\x12\x13response.channel.id\x1a\x15response.channel.name\"\x06org_id\x12\xb1\x01\n" +
+	"\rUpdateChannel\x12 .reliant.v1.UpdateChannelRequest\x1a!.reliant.v1.UpdateChannelResponse\"[\xa2\xbb\x18W\b\x01:S\n" +
+	"\x06update\x12(\n" +
+	"\vgtm_channel\x12\x02id\x1a\x15response.channel.name\"\x06org_id*\x17response.channel.status\x12c\n" +
+	"\n" +
+	"ListAssets\x12\x1d.reliant.v1.ListAssetsRequest\x1a\x1e.reliant.v1.ListAssetsResponse\"\x16\xa2\xbb\x18\x0f\b\x01:\v:\tread-only\x90\x02\x01\x12]\n" +
+	"\bGetAsset\x12\x1b.reliant.v1.GetAssetRequest\x1a\x1c.reliant.v1.GetAssetResponse\"\x16\xa2\xbb\x18\x0f\b\x01:\v:\tread-only\x90\x02\x01\x12\xb9\x01\n" +
+	"\x11CreateAssetUpload\x12$.reliant.v1.CreateAssetUploadRequest\x1a%.reliant.v1.CreateAssetUploadResponse\"W\xa2\xbb\x18S\b\x01:O\n" +
+	"\fupload_start\x127\n" +
+	"\tgtm_asset\x12\x11response.asset.id\x1a\x17response.asset.filename\"\x06org_id\x12\xad\x01\n" +
+	"\x12ConfirmAssetUpload\x12%.reliant.v1.ConfirmAssetUploadRequest\x1a&.reliant.v1.ConfirmAssetUploadResponse\"H\xa2\xbb\x18D\b\x01:@\n" +
+	"\x06upload\x12.\n" +
+	"\tgtm_asset\x12\basset_id\x1a\x17response.asset.filename\"\x06org_id\x12\x7f\n" +
+	"\vDeleteAsset\x12\x1e.reliant.v1.DeleteAssetRequest\x1a\x1f.reliant.v1.DeleteAssetResponse\"/\xa2\xbb\x18+\b\x01:'\n" +
+	"\x06delete\x12\x15\n" +
+	"\tgtm_asset\x12\basset_id\"\x06org_id\x12\x91\x01\n" +
+	"\x10GetAssetDownload\x12#.reliant.v1.GetAssetDownloadRequest\x1a$.reliant.v1.GetAssetDownloadResponse\"2\xa2\xbb\x18+\b\x01:':%read-only: a short-lived download URL\x90\x02\x01\x12~\n" +
+	"\x13ListStrategyLibrary\x12&.reliant.v1.ListStrategyLibraryRequest\x1a'.reliant.v1.ListStrategyLibraryResponse\"\x16\xa2\xbb\x18\x0f\b\x01:\v:\tread-only\x90\x02\x01\x12\x8a\x01\n" +
+	"\x17GetStrategyLibraryEntry\x12*.reliant.v1.GetStrategyLibraryEntryRequest\x1a+.reliant.v1.GetStrategyLibraryEntryResponse\"\x16\xa2\xbb\x18\x0f\b\x01:\v:\tread-only\x90\x02\x01\x12\xb7\x01\n" +
+	"\x15ImportStrategyLibrary\x12(.reliant.v1.ImportStrategyLibraryRequest\x1a).reliant.v1.ImportStrategyLibraryResponse\"I\xa2\xbb\x18E\b\x01:A\n" +
+	"\x06import\x12\x1e\n" +
+	"\x14gtm_strategy_library\x12\x06org_id\"\x06org_id*\x0fsource_revision\x12{\n" +
+	"\x12ListLibraryImports\x12%.reliant.v1.ListLibraryImportsRequest\x1a&.reliant.v1.ListLibraryImportsResponse\"\x16\xa2\xbb\x18\x0f\b\x01:\v:\tread-only\x90\x02\x01\x12\x8d\x01\n" +
+	"\x18ListLibraryPruneRequests\x12+.reliant.v1.ListLibraryPruneRequestsRequest\x1a,.reliant.v1.ListLibraryPruneRequestsResponse\"\x16\xa2\xbb\x18\x0f\b\x01:\v:\tread-only\x90\x02\x01\x12\xc2\x01\n" +
+	"\x13ConfirmLibraryPrune\x12&.reliant.v1.ConfirmLibraryPruneRequest\x1a'.reliant.v1.ConfirmLibraryPruneResponse\"Z\xa2\xbb\x18V\b\x01:R\n" +
+	"\rconfirm_prune\x12'\n" +
+	"\x19gtm_library_prune_request\x12\n" +
+	"request_id\"\x06org_id*\x10response.removed\x12\xac\x01\n" +
+	"\x12CancelLibraryPrune\x12%.reliant.v1.CancelLibraryPruneRequest\x1a&.reliant.v1.CancelLibraryPruneResponse\"G\xa2\xbb\x18C\b\x01:?\n" +
+	"\fcancel_prune\x12'\n" +
+	"\x19gtm_library_prune_request\x12\n" +
+	"request_id\"\x06org_id\x12\xcd\x01\n" +
+	"\x12UseLibraryStrategy\x12%.reliant.v1.UseLibraryStrategyRequest\x1a&.reliant.v1.UseLibraryStrategyResponse\"h\xa2\xbb\x18d\b\x01:`\n" +
+	"\vuse_library\x12<\n" +
+	"\fgtm_strategy\x12\x14response.strategy.id\x1a\x16response.strategy.name\"\x06org_id*\vlibrary_key\x12`\n" +
 	"\tListIdeas\x12\x1c.reliant.v1.ListIdeasRequest\x1a\x1d.reliant.v1.ListIdeasResponse\"\x16\xa2\xbb\x18\x0f\b\x01:\v:\tread-only\x90\x02\x01\x12Z\n" +
 	"\aGetIdea\x12\x1a.reliant.v1.GetIdeaRequest\x1a\x1b.reliant.v1.GetIdeaResponse\"\x16\xa2\xbb\x18\x0f\b\x01:\v:\tread-only\x90\x02\x01\x12\x98\x01\n" +
 	"\n" +
@@ -4669,7 +10359,10 @@ const file_reliant_v1_gtm_proto_rawDesc = "" +
 	"\n" +
 	"UpdateItem\x12\x1d.reliant.v1.UpdateItemRequest\x1a\x1e.reliant.v1.UpdateItemResponse\"E\xa2\xbb\x18A\b\x01:=\n" +
 	"\x06update\x12#\n" +
-	"\bgtm_item\x12\x02id\x1a\x13response.item.title\"\x06org_id*\x06status\x12o\n" +
+	"\bgtm_item\x12\x02id\x1a\x13response.item.title\"\x06org_id*\x06status\x12\xb5\x01\n" +
+	"\x0fResolveItemSend\x12\".reliant.v1.ResolveItemSendRequest\x1a#.reliant.v1.ResolveItemSendResponse\"Y\xa2\xbb\x18U\b\x01:Q\n" +
+	"\fresolve_send\x12#\n" +
+	"\bgtm_item\x12\x02id\x1a\x13response.item.title\"\x06org_id*\x14response.item.status\x12o\n" +
 	"\x0eGetPositioning\x12!.reliant.v1.GetPositioningRequest\x1a\".reliant.v1.GetPositioningResponse\"\x16\xa2\xbb\x18\x0f\b\x01:\v:\tread-only\x90\x02\x01\x12\x95\x01\n" +
 	"\x11UpdatePositioning\x12$.reliant.v1.UpdatePositioningRequest\x1a%.reliant.v1.UpdatePositioningResponse\"3\xa2\xbb\x18/\b\x01:+\n" +
 	"\x06update\x12\x19\n" +
@@ -4693,192 +10386,384 @@ func file_reliant_v1_gtm_proto_rawDescGZIP() []byte {
 	return file_reliant_v1_gtm_proto_rawDescData
 }
 
-var file_reliant_v1_gtm_proto_enumTypes = make([]protoimpl.EnumInfo, 10)
-var file_reliant_v1_gtm_proto_msgTypes = make([]protoimpl.MessageInfo, 48)
+var file_reliant_v1_gtm_proto_enumTypes = make([]protoimpl.EnumInfo, 21)
+var file_reliant_v1_gtm_proto_msgTypes = make([]protoimpl.MessageInfo, 107)
 var file_reliant_v1_gtm_proto_goTypes = []any{
-	(GtmIdeaKind)(0),                  // 0: reliant.v1.GtmIdeaKind
-	(GtmIdeaStatus)(0),                // 1: reliant.v1.GtmIdeaStatus
-	(GtmIdeaSource)(0),                // 2: reliant.v1.GtmIdeaSource
-	(GtmCampaignStatus)(0),            // 3: reliant.v1.GtmCampaignStatus
-	(GtmItemKind)(0),                  // 4: reliant.v1.GtmItemKind
-	(GtmItemStatus)(0),                // 5: reliant.v1.GtmItemStatus
-	(GtmClaimCategory)(0),             // 6: reliant.v1.GtmClaimCategory
-	(GtmClaimStatus)(0),               // 7: reliant.v1.GtmClaimStatus
-	(GtmClaimSourceKind)(0),           // 8: reliant.v1.GtmClaimSourceKind
-	(GtmClaimFindingKind)(0),          // 9: reliant.v1.GtmClaimFindingKind
-	(*GtmEvidence)(nil),               // 10: reliant.v1.GtmEvidence
-	(*GtmEvidenceList)(nil),           // 11: reliant.v1.GtmEvidenceList
-	(*GtmIdea)(nil),                   // 12: reliant.v1.GtmIdea
-	(*GtmCampaign)(nil),               // 13: reliant.v1.GtmCampaign
-	(*GtmItem)(nil),                   // 14: reliant.v1.GtmItem
-	(*GtmPositioning)(nil),            // 15: reliant.v1.GtmPositioning
-	(*GtmClaim)(nil),                  // 16: reliant.v1.GtmClaim
-	(*GtmClaimFinding)(nil),           // 17: reliant.v1.GtmClaimFinding
-	(*GtmRevisionConflict)(nil),       // 18: reliant.v1.GtmRevisionConflict
-	(*GetGtmAccessRequest)(nil),       // 19: reliant.v1.GetGtmAccessRequest
-	(*GetGtmAccessResponse)(nil),      // 20: reliant.v1.GetGtmAccessResponse
-	(*ListIdeasRequest)(nil),          // 21: reliant.v1.ListIdeasRequest
-	(*ListIdeasResponse)(nil),         // 22: reliant.v1.ListIdeasResponse
-	(*GetIdeaRequest)(nil),            // 23: reliant.v1.GetIdeaRequest
-	(*GetIdeaResponse)(nil),           // 24: reliant.v1.GetIdeaResponse
-	(*CreateIdeaRequest)(nil),         // 25: reliant.v1.CreateIdeaRequest
-	(*CreateIdeaResponse)(nil),        // 26: reliant.v1.CreateIdeaResponse
-	(*UpdateIdeaRequest)(nil),         // 27: reliant.v1.UpdateIdeaRequest
-	(*UpdateIdeaResponse)(nil),        // 28: reliant.v1.UpdateIdeaResponse
-	(*SetIdeaStatusRequest)(nil),      // 29: reliant.v1.SetIdeaStatusRequest
-	(*SetIdeaStatusResponse)(nil),     // 30: reliant.v1.SetIdeaStatusResponse
-	(*ListCampaignsRequest)(nil),      // 31: reliant.v1.ListCampaignsRequest
-	(*ListCampaignsResponse)(nil),     // 32: reliant.v1.ListCampaignsResponse
-	(*GetCampaignRequest)(nil),        // 33: reliant.v1.GetCampaignRequest
-	(*GetCampaignResponse)(nil),       // 34: reliant.v1.GetCampaignResponse
-	(*CreateCampaignRequest)(nil),     // 35: reliant.v1.CreateCampaignRequest
-	(*CreateCampaignResponse)(nil),    // 36: reliant.v1.CreateCampaignResponse
-	(*UpdateCampaignRequest)(nil),     // 37: reliant.v1.UpdateCampaignRequest
-	(*UpdateCampaignResponse)(nil),    // 38: reliant.v1.UpdateCampaignResponse
-	(*ListItemsRequest)(nil),          // 39: reliant.v1.ListItemsRequest
-	(*ListItemsResponse)(nil),         // 40: reliant.v1.ListItemsResponse
-	(*GetItemRequest)(nil),            // 41: reliant.v1.GetItemRequest
-	(*GetItemResponse)(nil),           // 42: reliant.v1.GetItemResponse
-	(*CreateItemRequest)(nil),         // 43: reliant.v1.CreateItemRequest
-	(*CreateItemResponse)(nil),        // 44: reliant.v1.CreateItemResponse
-	(*GtmEmailRecipients)(nil),        // 45: reliant.v1.GtmEmailRecipients
-	(*UpdateItemRequest)(nil),         // 46: reliant.v1.UpdateItemRequest
-	(*UpdateItemResponse)(nil),        // 47: reliant.v1.UpdateItemResponse
-	(*GetPositioningRequest)(nil),     // 48: reliant.v1.GetPositioningRequest
-	(*GetPositioningResponse)(nil),    // 49: reliant.v1.GetPositioningResponse
-	(*UpdatePositioningRequest)(nil),  // 50: reliant.v1.UpdatePositioningRequest
-	(*UpdatePositioningResponse)(nil), // 51: reliant.v1.UpdatePositioningResponse
-	(*ListClaimsRequest)(nil),         // 52: reliant.v1.ListClaimsRequest
-	(*ListClaimsResponse)(nil),        // 53: reliant.v1.ListClaimsResponse
-	(*UpsertClaimRequest)(nil),        // 54: reliant.v1.UpsertClaimRequest
-	(*UpsertClaimResponse)(nil),       // 55: reliant.v1.UpsertClaimResponse
-	(*CheckClaimsRequest)(nil),        // 56: reliant.v1.CheckClaimsRequest
-	(*CheckClaimsResponse)(nil),       // 57: reliant.v1.CheckClaimsResponse
-	(*timestamppb.Timestamp)(nil),     // 58: google.protobuf.Timestamp
+	(GtmIdeaKind)(0),                         // 0: reliant.v1.GtmIdeaKind
+	(GtmIdeaStatus)(0),                       // 1: reliant.v1.GtmIdeaStatus
+	(GtmIdeaSource)(0),                       // 2: reliant.v1.GtmIdeaSource
+	(GtmCampaignStatus)(0),                   // 3: reliant.v1.GtmCampaignStatus
+	(GtmStrategyStatus)(0),                   // 4: reliant.v1.GtmStrategyStatus
+	(GtmChannelMode)(0),                      // 5: reliant.v1.GtmChannelMode
+	(GtmChannelStatus)(0),                    // 6: reliant.v1.GtmChannelStatus
+	(GtmConnectionState)(0),                  // 7: reliant.v1.GtmConnectionState
+	(GtmItemFormat)(0),                       // 8: reliant.v1.GtmItemFormat
+	(GtmAssetStatus)(0),                      // 9: reliant.v1.GtmAssetStatus
+	(GtmChannelSource)(0),                    // 10: reliant.v1.GtmChannelSource
+	(GtmStrategyCategory)(0),                 // 11: reliant.v1.GtmStrategyCategory
+	(GtmCredentialKind)(0),                   // 12: reliant.v1.GtmCredentialKind
+	(GtmPruneRequestStatus)(0),               // 13: reliant.v1.GtmPruneRequestStatus
+	(GtmLibraryDepth)(0),                     // 14: reliant.v1.GtmLibraryDepth
+	(GtmAssetSource)(0),                      // 15: reliant.v1.GtmAssetSource
+	(GtmItemStatus)(0),                       // 16: reliant.v1.GtmItemStatus
+	(GtmClaimCategory)(0),                    // 17: reliant.v1.GtmClaimCategory
+	(GtmClaimStatus)(0),                      // 18: reliant.v1.GtmClaimStatus
+	(GtmClaimSourceKind)(0),                  // 19: reliant.v1.GtmClaimSourceKind
+	(GtmClaimFindingKind)(0),                 // 20: reliant.v1.GtmClaimFindingKind
+	(*GtmStrategy)(nil),                      // 21: reliant.v1.GtmStrategy
+	(*GtmChannel)(nil),                       // 22: reliant.v1.GtmChannel
+	(*GtmChannelTypeList)(nil),               // 23: reliant.v1.GtmChannelTypeList
+	(*GtmLibraryImport)(nil),                 // 24: reliant.v1.GtmLibraryImport
+	(*GtmLibraryPruneRequest)(nil),           // 25: reliant.v1.GtmLibraryPruneRequest
+	(*GtmLibraryStep)(nil),                   // 26: reliant.v1.GtmLibraryStep
+	(*GtmStrategyLibraryEntry)(nil),          // 27: reliant.v1.GtmStrategyLibraryEntry
+	(*GtmAsset)(nil),                         // 28: reliant.v1.GtmAsset
+	(*GtmEvidence)(nil),                      // 29: reliant.v1.GtmEvidence
+	(*GtmEvidenceList)(nil),                  // 30: reliant.v1.GtmEvidenceList
+	(*GtmIdea)(nil),                          // 31: reliant.v1.GtmIdea
+	(*GtmCampaign)(nil),                      // 32: reliant.v1.GtmCampaign
+	(*GtmChannelIdList)(nil),                 // 33: reliant.v1.GtmChannelIdList
+	(*GtmItemFormatList)(nil),                // 34: reliant.v1.GtmItemFormatList
+	(*GtmItemStatusCount)(nil),               // 35: reliant.v1.GtmItemStatusCount
+	(*GtmCoverageRow)(nil),                   // 36: reliant.v1.GtmCoverageRow
+	(*GtmItem)(nil),                          // 37: reliant.v1.GtmItem
+	(*GtmPositioning)(nil),                   // 38: reliant.v1.GtmPositioning
+	(*GtmClaim)(nil),                         // 39: reliant.v1.GtmClaim
+	(*GtmClaimFinding)(nil),                  // 40: reliant.v1.GtmClaimFinding
+	(*GtmRevisionConflict)(nil),              // 41: reliant.v1.GtmRevisionConflict
+	(*GetGtmAccessRequest)(nil),              // 42: reliant.v1.GetGtmAccessRequest
+	(*GetGtmAccessResponse)(nil),             // 43: reliant.v1.GetGtmAccessResponse
+	(*ListStrategiesRequest)(nil),            // 44: reliant.v1.ListStrategiesRequest
+	(*ListStrategiesResponse)(nil),           // 45: reliant.v1.ListStrategiesResponse
+	(*GetStrategyRequest)(nil),               // 46: reliant.v1.GetStrategyRequest
+	(*GetStrategyResponse)(nil),              // 47: reliant.v1.GetStrategyResponse
+	(*CreateStrategyRequest)(nil),            // 48: reliant.v1.CreateStrategyRequest
+	(*CreateStrategyResponse)(nil),           // 49: reliant.v1.CreateStrategyResponse
+	(*UpdateStrategyRequest)(nil),            // 50: reliant.v1.UpdateStrategyRequest
+	(*UpdateStrategyResponse)(nil),           // 51: reliant.v1.UpdateStrategyResponse
+	(*ListChannelsRequest)(nil),              // 52: reliant.v1.ListChannelsRequest
+	(*ListChannelsResponse)(nil),             // 53: reliant.v1.ListChannelsResponse
+	(*GetChannelRequest)(nil),                // 54: reliant.v1.GetChannelRequest
+	(*GetChannelResponse)(nil),               // 55: reliant.v1.GetChannelResponse
+	(*CreateChannelRequest)(nil),             // 56: reliant.v1.CreateChannelRequest
+	(*CreateChannelResponse)(nil),            // 57: reliant.v1.CreateChannelResponse
+	(*UpdateChannelRequest)(nil),             // 58: reliant.v1.UpdateChannelRequest
+	(*UpdateChannelResponse)(nil),            // 59: reliant.v1.UpdateChannelResponse
+	(*ListAssetsRequest)(nil),                // 60: reliant.v1.ListAssetsRequest
+	(*ListAssetsResponse)(nil),               // 61: reliant.v1.ListAssetsResponse
+	(*GetAssetRequest)(nil),                  // 62: reliant.v1.GetAssetRequest
+	(*GetAssetResponse)(nil),                 // 63: reliant.v1.GetAssetResponse
+	(*CreateAssetUploadRequest)(nil),         // 64: reliant.v1.CreateAssetUploadRequest
+	(*CreateAssetUploadResponse)(nil),        // 65: reliant.v1.CreateAssetUploadResponse
+	(*ConfirmAssetUploadRequest)(nil),        // 66: reliant.v1.ConfirmAssetUploadRequest
+	(*ConfirmAssetUploadResponse)(nil),       // 67: reliant.v1.ConfirmAssetUploadResponse
+	(*GetAssetDownloadRequest)(nil),          // 68: reliant.v1.GetAssetDownloadRequest
+	(*GetAssetDownloadResponse)(nil),         // 69: reliant.v1.GetAssetDownloadResponse
+	(*DeleteAssetRequest)(nil),               // 70: reliant.v1.DeleteAssetRequest
+	(*DeleteAssetResponse)(nil),              // 71: reliant.v1.DeleteAssetResponse
+	(*ListStrategyLibraryRequest)(nil),       // 72: reliant.v1.ListStrategyLibraryRequest
+	(*ListStrategyLibraryResponse)(nil),      // 73: reliant.v1.ListStrategyLibraryResponse
+	(*GetStrategyLibraryEntryRequest)(nil),   // 74: reliant.v1.GetStrategyLibraryEntryRequest
+	(*GetStrategyLibraryEntryResponse)(nil),  // 75: reliant.v1.GetStrategyLibraryEntryResponse
+	(*ImportStrategyLibraryRequest)(nil),     // 76: reliant.v1.ImportStrategyLibraryRequest
+	(*ImportStrategyLibraryResponse)(nil),    // 77: reliant.v1.ImportStrategyLibraryResponse
+	(*ListLibraryImportsRequest)(nil),        // 78: reliant.v1.ListLibraryImportsRequest
+	(*ListLibraryImportsResponse)(nil),       // 79: reliant.v1.ListLibraryImportsResponse
+	(*ListLibraryPruneRequestsRequest)(nil),  // 80: reliant.v1.ListLibraryPruneRequestsRequest
+	(*ListLibraryPruneRequestsResponse)(nil), // 81: reliant.v1.ListLibraryPruneRequestsResponse
+	(*ConfirmLibraryPruneRequest)(nil),       // 82: reliant.v1.ConfirmLibraryPruneRequest
+	(*ConfirmLibraryPruneResponse)(nil),      // 83: reliant.v1.ConfirmLibraryPruneResponse
+	(*CancelLibraryPruneRequest)(nil),        // 84: reliant.v1.CancelLibraryPruneRequest
+	(*CancelLibraryPruneResponse)(nil),       // 85: reliant.v1.CancelLibraryPruneResponse
+	(*UseLibraryStrategyRequest)(nil),        // 86: reliant.v1.UseLibraryStrategyRequest
+	(*UseLibraryStrategyResponse)(nil),       // 87: reliant.v1.UseLibraryStrategyResponse
+	(*ListIdeasRequest)(nil),                 // 88: reliant.v1.ListIdeasRequest
+	(*ListIdeasResponse)(nil),                // 89: reliant.v1.ListIdeasResponse
+	(*GetIdeaRequest)(nil),                   // 90: reliant.v1.GetIdeaRequest
+	(*GetIdeaResponse)(nil),                  // 91: reliant.v1.GetIdeaResponse
+	(*CreateIdeaRequest)(nil),                // 92: reliant.v1.CreateIdeaRequest
+	(*CreateIdeaResponse)(nil),               // 93: reliant.v1.CreateIdeaResponse
+	(*UpdateIdeaRequest)(nil),                // 94: reliant.v1.UpdateIdeaRequest
+	(*UpdateIdeaResponse)(nil),               // 95: reliant.v1.UpdateIdeaResponse
+	(*SetIdeaStatusRequest)(nil),             // 96: reliant.v1.SetIdeaStatusRequest
+	(*SetIdeaStatusResponse)(nil),            // 97: reliant.v1.SetIdeaStatusResponse
+	(*ListCampaignsRequest)(nil),             // 98: reliant.v1.ListCampaignsRequest
+	(*ListCampaignsResponse)(nil),            // 99: reliant.v1.ListCampaignsResponse
+	(*GetCampaignRequest)(nil),               // 100: reliant.v1.GetCampaignRequest
+	(*GetCampaignResponse)(nil),              // 101: reliant.v1.GetCampaignResponse
+	(*CreateCampaignRequest)(nil),            // 102: reliant.v1.CreateCampaignRequest
+	(*CreateCampaignResponse)(nil),           // 103: reliant.v1.CreateCampaignResponse
+	(*UpdateCampaignRequest)(nil),            // 104: reliant.v1.UpdateCampaignRequest
+	(*UpdateCampaignResponse)(nil),           // 105: reliant.v1.UpdateCampaignResponse
+	(*ListItemsRequest)(nil),                 // 106: reliant.v1.ListItemsRequest
+	(*ListItemsResponse)(nil),                // 107: reliant.v1.ListItemsResponse
+	(*GetItemRequest)(nil),                   // 108: reliant.v1.GetItemRequest
+	(*GetItemResponse)(nil),                  // 109: reliant.v1.GetItemResponse
+	(*CreateItemRequest)(nil),                // 110: reliant.v1.CreateItemRequest
+	(*CreateItemResponse)(nil),               // 111: reliant.v1.CreateItemResponse
+	(*GtmEmailRecipients)(nil),               // 112: reliant.v1.GtmEmailRecipients
+	(*UpdateItemRequest)(nil),                // 113: reliant.v1.UpdateItemRequest
+	(*UpdateItemResponse)(nil),               // 114: reliant.v1.UpdateItemResponse
+	(*ResolveItemSendRequest)(nil),           // 115: reliant.v1.ResolveItemSendRequest
+	(*ResolveItemSendResponse)(nil),          // 116: reliant.v1.ResolveItemSendResponse
+	(*GetPositioningRequest)(nil),            // 117: reliant.v1.GetPositioningRequest
+	(*GetPositioningResponse)(nil),           // 118: reliant.v1.GetPositioningResponse
+	(*UpdatePositioningRequest)(nil),         // 119: reliant.v1.UpdatePositioningRequest
+	(*UpdatePositioningResponse)(nil),        // 120: reliant.v1.UpdatePositioningResponse
+	(*ListClaimsRequest)(nil),                // 121: reliant.v1.ListClaimsRequest
+	(*ListClaimsResponse)(nil),               // 122: reliant.v1.ListClaimsResponse
+	(*UpsertClaimRequest)(nil),               // 123: reliant.v1.UpsertClaimRequest
+	(*UpsertClaimResponse)(nil),              // 124: reliant.v1.UpsertClaimResponse
+	(*CheckClaimsRequest)(nil),               // 125: reliant.v1.CheckClaimsRequest
+	(*CheckClaimsResponse)(nil),              // 126: reliant.v1.CheckClaimsResponse
+	nil,                                      // 127: reliant.v1.CreateAssetUploadResponse.RequiredHeadersEntry
+	(*timestamppb.Timestamp)(nil),            // 128: google.protobuf.Timestamp
+	(*structpb.Struct)(nil),                  // 129: google.protobuf.Struct
 }
 var file_reliant_v1_gtm_proto_depIdxs = []int32{
-	58, // 0: reliant.v1.GtmEvidence.observed_at:type_name -> google.protobuf.Timestamp
-	10, // 1: reliant.v1.GtmEvidenceList.evidence:type_name -> reliant.v1.GtmEvidence
-	0,  // 2: reliant.v1.GtmIdea.kind:type_name -> reliant.v1.GtmIdeaKind
-	10, // 3: reliant.v1.GtmIdea.evidence:type_name -> reliant.v1.GtmEvidence
-	1,  // 4: reliant.v1.GtmIdea.status:type_name -> reliant.v1.GtmIdeaStatus
-	2,  // 5: reliant.v1.GtmIdea.source:type_name -> reliant.v1.GtmIdeaSource
-	58, // 6: reliant.v1.GtmIdea.created_at:type_name -> google.protobuf.Timestamp
-	58, // 7: reliant.v1.GtmIdea.updated_at:type_name -> google.protobuf.Timestamp
-	58, // 8: reliant.v1.GtmCampaign.period_start:type_name -> google.protobuf.Timestamp
-	58, // 9: reliant.v1.GtmCampaign.period_end:type_name -> google.protobuf.Timestamp
-	3,  // 10: reliant.v1.GtmCampaign.status:type_name -> reliant.v1.GtmCampaignStatus
-	58, // 11: reliant.v1.GtmCampaign.created_at:type_name -> google.protobuf.Timestamp
-	58, // 12: reliant.v1.GtmCampaign.updated_at:type_name -> google.protobuf.Timestamp
-	4,  // 13: reliant.v1.GtmItem.kind:type_name -> reliant.v1.GtmItemKind
-	5,  // 14: reliant.v1.GtmItem.status:type_name -> reliant.v1.GtmItemStatus
-	58, // 15: reliant.v1.GtmItem.scheduled_at:type_name -> google.protobuf.Timestamp
-	58, // 16: reliant.v1.GtmItem.sent_at:type_name -> google.protobuf.Timestamp
-	58, // 17: reliant.v1.GtmItem.created_at:type_name -> google.protobuf.Timestamp
-	58, // 18: reliant.v1.GtmItem.updated_at:type_name -> google.protobuf.Timestamp
-	58, // 19: reliant.v1.GtmPositioning.updated_at:type_name -> google.protobuf.Timestamp
-	6,  // 20: reliant.v1.GtmClaim.category:type_name -> reliant.v1.GtmClaimCategory
-	7,  // 21: reliant.v1.GtmClaim.status:type_name -> reliant.v1.GtmClaimStatus
-	8,  // 22: reliant.v1.GtmClaim.source_kind:type_name -> reliant.v1.GtmClaimSourceKind
-	58, // 23: reliant.v1.GtmClaim.verified_at:type_name -> google.protobuf.Timestamp
-	58, // 24: reliant.v1.GtmClaim.expires_or_recheck_at:type_name -> google.protobuf.Timestamp
-	58, // 25: reliant.v1.GtmClaim.created_at:type_name -> google.protobuf.Timestamp
-	58, // 26: reliant.v1.GtmClaim.updated_at:type_name -> google.protobuf.Timestamp
-	9,  // 27: reliant.v1.GtmClaimFinding.kind:type_name -> reliant.v1.GtmClaimFindingKind
-	0,  // 28: reliant.v1.ListIdeasRequest.kind:type_name -> reliant.v1.GtmIdeaKind
-	1,  // 29: reliant.v1.ListIdeasRequest.status:type_name -> reliant.v1.GtmIdeaStatus
-	12, // 30: reliant.v1.ListIdeasResponse.ideas:type_name -> reliant.v1.GtmIdea
-	12, // 31: reliant.v1.GetIdeaResponse.idea:type_name -> reliant.v1.GtmIdea
-	0,  // 32: reliant.v1.CreateIdeaRequest.kind:type_name -> reliant.v1.GtmIdeaKind
-	10, // 33: reliant.v1.CreateIdeaRequest.evidence:type_name -> reliant.v1.GtmEvidence
-	12, // 34: reliant.v1.CreateIdeaResponse.idea:type_name -> reliant.v1.GtmIdea
-	0,  // 35: reliant.v1.UpdateIdeaRequest.kind:type_name -> reliant.v1.GtmIdeaKind
-	11, // 36: reliant.v1.UpdateIdeaRequest.evidence:type_name -> reliant.v1.GtmEvidenceList
-	12, // 37: reliant.v1.UpdateIdeaResponse.idea:type_name -> reliant.v1.GtmIdea
-	1,  // 38: reliant.v1.SetIdeaStatusRequest.status:type_name -> reliant.v1.GtmIdeaStatus
-	12, // 39: reliant.v1.SetIdeaStatusResponse.idea:type_name -> reliant.v1.GtmIdea
-	3,  // 40: reliant.v1.ListCampaignsRequest.status:type_name -> reliant.v1.GtmCampaignStatus
-	13, // 41: reliant.v1.ListCampaignsResponse.campaigns:type_name -> reliant.v1.GtmCampaign
-	13, // 42: reliant.v1.GetCampaignResponse.campaign:type_name -> reliant.v1.GtmCampaign
-	12, // 43: reliant.v1.GetCampaignResponse.ideas:type_name -> reliant.v1.GtmIdea
-	14, // 44: reliant.v1.GetCampaignResponse.items:type_name -> reliant.v1.GtmItem
-	58, // 45: reliant.v1.CreateCampaignRequest.period_start:type_name -> google.protobuf.Timestamp
-	58, // 46: reliant.v1.CreateCampaignRequest.period_end:type_name -> google.protobuf.Timestamp
-	3,  // 47: reliant.v1.CreateCampaignRequest.status:type_name -> reliant.v1.GtmCampaignStatus
-	13, // 48: reliant.v1.CreateCampaignResponse.campaign:type_name -> reliant.v1.GtmCampaign
-	58, // 49: reliant.v1.UpdateCampaignRequest.period_start:type_name -> google.protobuf.Timestamp
-	58, // 50: reliant.v1.UpdateCampaignRequest.period_end:type_name -> google.protobuf.Timestamp
-	3,  // 51: reliant.v1.UpdateCampaignRequest.status:type_name -> reliant.v1.GtmCampaignStatus
-	13, // 52: reliant.v1.UpdateCampaignResponse.campaign:type_name -> reliant.v1.GtmCampaign
-	4,  // 53: reliant.v1.ListItemsRequest.kind:type_name -> reliant.v1.GtmItemKind
-	5,  // 54: reliant.v1.ListItemsRequest.status:type_name -> reliant.v1.GtmItemStatus
-	58, // 55: reliant.v1.ListItemsRequest.scheduled_from:type_name -> google.protobuf.Timestamp
-	58, // 56: reliant.v1.ListItemsRequest.scheduled_to:type_name -> google.protobuf.Timestamp
-	14, // 57: reliant.v1.ListItemsResponse.items:type_name -> reliant.v1.GtmItem
-	14, // 58: reliant.v1.GetItemResponse.item:type_name -> reliant.v1.GtmItem
-	4,  // 59: reliant.v1.CreateItemRequest.kind:type_name -> reliant.v1.GtmItemKind
-	58, // 60: reliant.v1.CreateItemRequest.scheduled_at:type_name -> google.protobuf.Timestamp
-	5,  // 61: reliant.v1.CreateItemRequest.status:type_name -> reliant.v1.GtmItemStatus
-	14, // 62: reliant.v1.CreateItemResponse.item:type_name -> reliant.v1.GtmItem
-	4,  // 63: reliant.v1.UpdateItemRequest.kind:type_name -> reliant.v1.GtmItemKind
-	58, // 64: reliant.v1.UpdateItemRequest.scheduled_at:type_name -> google.protobuf.Timestamp
-	45, // 65: reliant.v1.UpdateItemRequest.email_to:type_name -> reliant.v1.GtmEmailRecipients
-	5,  // 66: reliant.v1.UpdateItemRequest.status:type_name -> reliant.v1.GtmItemStatus
-	14, // 67: reliant.v1.UpdateItemResponse.item:type_name -> reliant.v1.GtmItem
-	15, // 68: reliant.v1.GetPositioningResponse.positioning:type_name -> reliant.v1.GtmPositioning
-	15, // 69: reliant.v1.UpdatePositioningResponse.positioning:type_name -> reliant.v1.GtmPositioning
-	7,  // 70: reliant.v1.ListClaimsRequest.status:type_name -> reliant.v1.GtmClaimStatus
-	6,  // 71: reliant.v1.ListClaimsRequest.category:type_name -> reliant.v1.GtmClaimCategory
-	16, // 72: reliant.v1.ListClaimsResponse.claims:type_name -> reliant.v1.GtmClaim
-	6,  // 73: reliant.v1.UpsertClaimRequest.category:type_name -> reliant.v1.GtmClaimCategory
-	7,  // 74: reliant.v1.UpsertClaimRequest.status:type_name -> reliant.v1.GtmClaimStatus
-	8,  // 75: reliant.v1.UpsertClaimRequest.source_kind:type_name -> reliant.v1.GtmClaimSourceKind
-	58, // 76: reliant.v1.UpsertClaimRequest.expires_or_recheck_at:type_name -> google.protobuf.Timestamp
-	16, // 77: reliant.v1.UpsertClaimResponse.claim:type_name -> reliant.v1.GtmClaim
-	17, // 78: reliant.v1.CheckClaimsResponse.findings:type_name -> reliant.v1.GtmClaimFinding
-	19, // 79: reliant.v1.GtmService.GetGtmAccess:input_type -> reliant.v1.GetGtmAccessRequest
-	21, // 80: reliant.v1.GtmService.ListIdeas:input_type -> reliant.v1.ListIdeasRequest
-	23, // 81: reliant.v1.GtmService.GetIdea:input_type -> reliant.v1.GetIdeaRequest
-	25, // 82: reliant.v1.GtmService.CreateIdea:input_type -> reliant.v1.CreateIdeaRequest
-	27, // 83: reliant.v1.GtmService.UpdateIdea:input_type -> reliant.v1.UpdateIdeaRequest
-	29, // 84: reliant.v1.GtmService.SetIdeaStatus:input_type -> reliant.v1.SetIdeaStatusRequest
-	31, // 85: reliant.v1.GtmService.ListCampaigns:input_type -> reliant.v1.ListCampaignsRequest
-	33, // 86: reliant.v1.GtmService.GetCampaign:input_type -> reliant.v1.GetCampaignRequest
-	35, // 87: reliant.v1.GtmService.CreateCampaign:input_type -> reliant.v1.CreateCampaignRequest
-	37, // 88: reliant.v1.GtmService.UpdateCampaign:input_type -> reliant.v1.UpdateCampaignRequest
-	39, // 89: reliant.v1.GtmService.ListItems:input_type -> reliant.v1.ListItemsRequest
-	41, // 90: reliant.v1.GtmService.GetItem:input_type -> reliant.v1.GetItemRequest
-	43, // 91: reliant.v1.GtmService.CreateItem:input_type -> reliant.v1.CreateItemRequest
-	46, // 92: reliant.v1.GtmService.UpdateItem:input_type -> reliant.v1.UpdateItemRequest
-	48, // 93: reliant.v1.GtmService.GetPositioning:input_type -> reliant.v1.GetPositioningRequest
-	50, // 94: reliant.v1.GtmService.UpdatePositioning:input_type -> reliant.v1.UpdatePositioningRequest
-	52, // 95: reliant.v1.GtmService.ListClaims:input_type -> reliant.v1.ListClaimsRequest
-	54, // 96: reliant.v1.GtmService.UpsertClaim:input_type -> reliant.v1.UpsertClaimRequest
-	56, // 97: reliant.v1.GtmService.CheckClaims:input_type -> reliant.v1.CheckClaimsRequest
-	20, // 98: reliant.v1.GtmService.GetGtmAccess:output_type -> reliant.v1.GetGtmAccessResponse
-	22, // 99: reliant.v1.GtmService.ListIdeas:output_type -> reliant.v1.ListIdeasResponse
-	24, // 100: reliant.v1.GtmService.GetIdea:output_type -> reliant.v1.GetIdeaResponse
-	26, // 101: reliant.v1.GtmService.CreateIdea:output_type -> reliant.v1.CreateIdeaResponse
-	28, // 102: reliant.v1.GtmService.UpdateIdea:output_type -> reliant.v1.UpdateIdeaResponse
-	30, // 103: reliant.v1.GtmService.SetIdeaStatus:output_type -> reliant.v1.SetIdeaStatusResponse
-	32, // 104: reliant.v1.GtmService.ListCampaigns:output_type -> reliant.v1.ListCampaignsResponse
-	34, // 105: reliant.v1.GtmService.GetCampaign:output_type -> reliant.v1.GetCampaignResponse
-	36, // 106: reliant.v1.GtmService.CreateCampaign:output_type -> reliant.v1.CreateCampaignResponse
-	38, // 107: reliant.v1.GtmService.UpdateCampaign:output_type -> reliant.v1.UpdateCampaignResponse
-	40, // 108: reliant.v1.GtmService.ListItems:output_type -> reliant.v1.ListItemsResponse
-	42, // 109: reliant.v1.GtmService.GetItem:output_type -> reliant.v1.GetItemResponse
-	44, // 110: reliant.v1.GtmService.CreateItem:output_type -> reliant.v1.CreateItemResponse
-	47, // 111: reliant.v1.GtmService.UpdateItem:output_type -> reliant.v1.UpdateItemResponse
-	49, // 112: reliant.v1.GtmService.GetPositioning:output_type -> reliant.v1.GetPositioningResponse
-	51, // 113: reliant.v1.GtmService.UpdatePositioning:output_type -> reliant.v1.UpdatePositioningResponse
-	53, // 114: reliant.v1.GtmService.ListClaims:output_type -> reliant.v1.ListClaimsResponse
-	55, // 115: reliant.v1.GtmService.UpsertClaim:output_type -> reliant.v1.UpsertClaimResponse
-	57, // 116: reliant.v1.GtmService.CheckClaims:output_type -> reliant.v1.CheckClaimsResponse
-	98, // [98:117] is the sub-list for method output_type
-	79, // [79:98] is the sub-list for method input_type
-	79, // [79:79] is the sub-list for extension type_name
-	79, // [79:79] is the sub-list for extension extendee
-	0,  // [0:79] is the sub-list for field type_name
+	4,   // 0: reliant.v1.GtmStrategy.status:type_name -> reliant.v1.GtmStrategyStatus
+	128, // 1: reliant.v1.GtmStrategy.created_at:type_name -> google.protobuf.Timestamp
+	128, // 2: reliant.v1.GtmStrategy.updated_at:type_name -> google.protobuf.Timestamp
+	11,  // 3: reliant.v1.GtmStrategy.category:type_name -> reliant.v1.GtmStrategyCategory
+	5,   // 4: reliant.v1.GtmChannel.mode:type_name -> reliant.v1.GtmChannelMode
+	6,   // 5: reliant.v1.GtmChannel.status:type_name -> reliant.v1.GtmChannelStatus
+	7,   // 6: reliant.v1.GtmChannel.connection_state:type_name -> reliant.v1.GtmConnectionState
+	128, // 7: reliant.v1.GtmChannel.created_at:type_name -> google.protobuf.Timestamp
+	128, // 8: reliant.v1.GtmChannel.updated_at:type_name -> google.protobuf.Timestamp
+	10,  // 9: reliant.v1.GtmChannel.source:type_name -> reliant.v1.GtmChannelSource
+	12,  // 10: reliant.v1.GtmLibraryImport.credential_kind:type_name -> reliant.v1.GtmCredentialKind
+	128, // 11: reliant.v1.GtmLibraryImport.created_at:type_name -> google.protobuf.Timestamp
+	12,  // 12: reliant.v1.GtmLibraryPruneRequest.credential_kind:type_name -> reliant.v1.GtmCredentialKind
+	13,  // 13: reliant.v1.GtmLibraryPruneRequest.status:type_name -> reliant.v1.GtmPruneRequestStatus
+	128, // 14: reliant.v1.GtmLibraryPruneRequest.decided_at:type_name -> google.protobuf.Timestamp
+	128, // 15: reliant.v1.GtmLibraryPruneRequest.created_at:type_name -> google.protobuf.Timestamp
+	128, // 16: reliant.v1.GtmLibraryPruneRequest.expires_at:type_name -> google.protobuf.Timestamp
+	11,  // 17: reliant.v1.GtmStrategyLibraryEntry.category:type_name -> reliant.v1.GtmStrategyCategory
+	14,  // 18: reliant.v1.GtmStrategyLibraryEntry.depth:type_name -> reliant.v1.GtmLibraryDepth
+	26,  // 19: reliant.v1.GtmStrategyLibraryEntry.steps:type_name -> reliant.v1.GtmLibraryStep
+	129, // 20: reliant.v1.GtmStrategyLibraryEntry.extra:type_name -> google.protobuf.Struct
+	128, // 21: reliant.v1.GtmStrategyLibraryEntry.imported_at:type_name -> google.protobuf.Timestamp
+	15,  // 22: reliant.v1.GtmAsset.source:type_name -> reliant.v1.GtmAssetSource
+	128, // 23: reliant.v1.GtmAsset.created_at:type_name -> google.protobuf.Timestamp
+	9,   // 24: reliant.v1.GtmAsset.status:type_name -> reliant.v1.GtmAssetStatus
+	128, // 25: reliant.v1.GtmEvidence.observed_at:type_name -> google.protobuf.Timestamp
+	29,  // 26: reliant.v1.GtmEvidenceList.evidence:type_name -> reliant.v1.GtmEvidence
+	0,   // 27: reliant.v1.GtmIdea.kind:type_name -> reliant.v1.GtmIdeaKind
+	29,  // 28: reliant.v1.GtmIdea.evidence:type_name -> reliant.v1.GtmEvidence
+	1,   // 29: reliant.v1.GtmIdea.status:type_name -> reliant.v1.GtmIdeaStatus
+	2,   // 30: reliant.v1.GtmIdea.source:type_name -> reliant.v1.GtmIdeaSource
+	128, // 31: reliant.v1.GtmIdea.created_at:type_name -> google.protobuf.Timestamp
+	128, // 32: reliant.v1.GtmIdea.updated_at:type_name -> google.protobuf.Timestamp
+	128, // 33: reliant.v1.GtmCampaign.period_start:type_name -> google.protobuf.Timestamp
+	128, // 34: reliant.v1.GtmCampaign.period_end:type_name -> google.protobuf.Timestamp
+	3,   // 35: reliant.v1.GtmCampaign.status:type_name -> reliant.v1.GtmCampaignStatus
+	128, // 36: reliant.v1.GtmCampaign.created_at:type_name -> google.protobuf.Timestamp
+	128, // 37: reliant.v1.GtmCampaign.updated_at:type_name -> google.protobuf.Timestamp
+	8,   // 38: reliant.v1.GtmCampaign.planned_formats:type_name -> reliant.v1.GtmItemFormat
+	8,   // 39: reliant.v1.GtmItemFormatList.formats:type_name -> reliant.v1.GtmItemFormat
+	16,  // 40: reliant.v1.GtmItemStatusCount.status:type_name -> reliant.v1.GtmItemStatus
+	8,   // 41: reliant.v1.GtmCoverageRow.format:type_name -> reliant.v1.GtmItemFormat
+	35,  // 42: reliant.v1.GtmCoverageRow.counts:type_name -> reliant.v1.GtmItemStatusCount
+	8,   // 43: reliant.v1.GtmItem.format:type_name -> reliant.v1.GtmItemFormat
+	16,  // 44: reliant.v1.GtmItem.status:type_name -> reliant.v1.GtmItemStatus
+	128, // 45: reliant.v1.GtmItem.scheduled_at:type_name -> google.protobuf.Timestamp
+	128, // 46: reliant.v1.GtmItem.sent_at:type_name -> google.protobuf.Timestamp
+	128, // 47: reliant.v1.GtmItem.created_at:type_name -> google.protobuf.Timestamp
+	128, // 48: reliant.v1.GtmItem.updated_at:type_name -> google.protobuf.Timestamp
+	128, // 49: reliant.v1.GtmPositioning.updated_at:type_name -> google.protobuf.Timestamp
+	17,  // 50: reliant.v1.GtmClaim.category:type_name -> reliant.v1.GtmClaimCategory
+	18,  // 51: reliant.v1.GtmClaim.status:type_name -> reliant.v1.GtmClaimStatus
+	19,  // 52: reliant.v1.GtmClaim.source_kind:type_name -> reliant.v1.GtmClaimSourceKind
+	128, // 53: reliant.v1.GtmClaim.verified_at:type_name -> google.protobuf.Timestamp
+	128, // 54: reliant.v1.GtmClaim.expires_or_recheck_at:type_name -> google.protobuf.Timestamp
+	128, // 55: reliant.v1.GtmClaim.created_at:type_name -> google.protobuf.Timestamp
+	128, // 56: reliant.v1.GtmClaim.updated_at:type_name -> google.protobuf.Timestamp
+	20,  // 57: reliant.v1.GtmClaimFinding.kind:type_name -> reliant.v1.GtmClaimFindingKind
+	4,   // 58: reliant.v1.ListStrategiesRequest.status:type_name -> reliant.v1.GtmStrategyStatus
+	21,  // 59: reliant.v1.ListStrategiesResponse.strategies:type_name -> reliant.v1.GtmStrategy
+	21,  // 60: reliant.v1.GetStrategyResponse.strategy:type_name -> reliant.v1.GtmStrategy
+	32,  // 61: reliant.v1.GetStrategyResponse.campaigns:type_name -> reliant.v1.GtmCampaign
+	4,   // 62: reliant.v1.CreateStrategyRequest.status:type_name -> reliant.v1.GtmStrategyStatus
+	11,  // 63: reliant.v1.CreateStrategyRequest.category:type_name -> reliant.v1.GtmStrategyCategory
+	21,  // 64: reliant.v1.CreateStrategyResponse.strategy:type_name -> reliant.v1.GtmStrategy
+	4,   // 65: reliant.v1.UpdateStrategyRequest.status:type_name -> reliant.v1.GtmStrategyStatus
+	11,  // 66: reliant.v1.UpdateStrategyRequest.category:type_name -> reliant.v1.GtmStrategyCategory
+	21,  // 67: reliant.v1.UpdateStrategyResponse.strategy:type_name -> reliant.v1.GtmStrategy
+	6,   // 68: reliant.v1.ListChannelsRequest.status:type_name -> reliant.v1.GtmChannelStatus
+	5,   // 69: reliant.v1.ListChannelsRequest.mode:type_name -> reliant.v1.GtmChannelMode
+	22,  // 70: reliant.v1.ListChannelsResponse.channels:type_name -> reliant.v1.GtmChannel
+	22,  // 71: reliant.v1.GetChannelResponse.channel:type_name -> reliant.v1.GtmChannel
+	5,   // 72: reliant.v1.CreateChannelRequest.mode:type_name -> reliant.v1.GtmChannelMode
+	6,   // 73: reliant.v1.CreateChannelRequest.status:type_name -> reliant.v1.GtmChannelStatus
+	22,  // 74: reliant.v1.CreateChannelResponse.channel:type_name -> reliant.v1.GtmChannel
+	5,   // 75: reliant.v1.UpdateChannelRequest.mode:type_name -> reliant.v1.GtmChannelMode
+	6,   // 76: reliant.v1.UpdateChannelRequest.status:type_name -> reliant.v1.GtmChannelStatus
+	23,  // 77: reliant.v1.UpdateChannelRequest.channel_types:type_name -> reliant.v1.GtmChannelTypeList
+	22,  // 78: reliant.v1.UpdateChannelResponse.channel:type_name -> reliant.v1.GtmChannel
+	28,  // 79: reliant.v1.ListAssetsResponse.assets:type_name -> reliant.v1.GtmAsset
+	28,  // 80: reliant.v1.GetAssetResponse.asset:type_name -> reliant.v1.GtmAsset
+	28,  // 81: reliant.v1.CreateAssetUploadResponse.asset:type_name -> reliant.v1.GtmAsset
+	127, // 82: reliant.v1.CreateAssetUploadResponse.required_headers:type_name -> reliant.v1.CreateAssetUploadResponse.RequiredHeadersEntry
+	128, // 83: reliant.v1.CreateAssetUploadResponse.expires_at:type_name -> google.protobuf.Timestamp
+	28,  // 84: reliant.v1.ConfirmAssetUploadResponse.asset:type_name -> reliant.v1.GtmAsset
+	128, // 85: reliant.v1.GetAssetDownloadResponse.expires_at:type_name -> google.protobuf.Timestamp
+	11,  // 86: reliant.v1.ListStrategyLibraryRequest.category:type_name -> reliant.v1.GtmStrategyCategory
+	14,  // 87: reliant.v1.ListStrategyLibraryRequest.depth:type_name -> reliant.v1.GtmLibraryDepth
+	27,  // 88: reliant.v1.ListStrategyLibraryResponse.entries:type_name -> reliant.v1.GtmStrategyLibraryEntry
+	27,  // 89: reliant.v1.GetStrategyLibraryEntryResponse.entry:type_name -> reliant.v1.GtmStrategyLibraryEntry
+	27,  // 90: reliant.v1.ImportStrategyLibraryRequest.entries:type_name -> reliant.v1.GtmStrategyLibraryEntry
+	24,  // 91: reliant.v1.ListLibraryImportsResponse.imports:type_name -> reliant.v1.GtmLibraryImport
+	13,  // 92: reliant.v1.ListLibraryPruneRequestsRequest.status:type_name -> reliant.v1.GtmPruneRequestStatus
+	25,  // 93: reliant.v1.ListLibraryPruneRequestsResponse.requests:type_name -> reliant.v1.GtmLibraryPruneRequest
+	25,  // 94: reliant.v1.ConfirmLibraryPruneResponse.request:type_name -> reliant.v1.GtmLibraryPruneRequest
+	25,  // 95: reliant.v1.CancelLibraryPruneResponse.request:type_name -> reliant.v1.GtmLibraryPruneRequest
+	21,  // 96: reliant.v1.UseLibraryStrategyResponse.strategy:type_name -> reliant.v1.GtmStrategy
+	32,  // 97: reliant.v1.UseLibraryStrategyResponse.campaign:type_name -> reliant.v1.GtmCampaign
+	0,   // 98: reliant.v1.ListIdeasRequest.kind:type_name -> reliant.v1.GtmIdeaKind
+	1,   // 99: reliant.v1.ListIdeasRequest.status:type_name -> reliant.v1.GtmIdeaStatus
+	31,  // 100: reliant.v1.ListIdeasResponse.ideas:type_name -> reliant.v1.GtmIdea
+	31,  // 101: reliant.v1.GetIdeaResponse.idea:type_name -> reliant.v1.GtmIdea
+	0,   // 102: reliant.v1.CreateIdeaRequest.kind:type_name -> reliant.v1.GtmIdeaKind
+	29,  // 103: reliant.v1.CreateIdeaRequest.evidence:type_name -> reliant.v1.GtmEvidence
+	31,  // 104: reliant.v1.CreateIdeaResponse.idea:type_name -> reliant.v1.GtmIdea
+	0,   // 105: reliant.v1.UpdateIdeaRequest.kind:type_name -> reliant.v1.GtmIdeaKind
+	30,  // 106: reliant.v1.UpdateIdeaRequest.evidence:type_name -> reliant.v1.GtmEvidenceList
+	31,  // 107: reliant.v1.UpdateIdeaResponse.idea:type_name -> reliant.v1.GtmIdea
+	1,   // 108: reliant.v1.SetIdeaStatusRequest.status:type_name -> reliant.v1.GtmIdeaStatus
+	31,  // 109: reliant.v1.SetIdeaStatusResponse.idea:type_name -> reliant.v1.GtmIdea
+	3,   // 110: reliant.v1.ListCampaignsRequest.status:type_name -> reliant.v1.GtmCampaignStatus
+	32,  // 111: reliant.v1.ListCampaignsResponse.campaigns:type_name -> reliant.v1.GtmCampaign
+	32,  // 112: reliant.v1.GetCampaignResponse.campaign:type_name -> reliant.v1.GtmCampaign
+	31,  // 113: reliant.v1.GetCampaignResponse.ideas:type_name -> reliant.v1.GtmIdea
+	37,  // 114: reliant.v1.GetCampaignResponse.items:type_name -> reliant.v1.GtmItem
+	36,  // 115: reliant.v1.GetCampaignResponse.coverage:type_name -> reliant.v1.GtmCoverageRow
+	128, // 116: reliant.v1.CreateCampaignRequest.period_start:type_name -> google.protobuf.Timestamp
+	128, // 117: reliant.v1.CreateCampaignRequest.period_end:type_name -> google.protobuf.Timestamp
+	3,   // 118: reliant.v1.CreateCampaignRequest.status:type_name -> reliant.v1.GtmCampaignStatus
+	8,   // 119: reliant.v1.CreateCampaignRequest.planned_formats:type_name -> reliant.v1.GtmItemFormat
+	32,  // 120: reliant.v1.CreateCampaignResponse.campaign:type_name -> reliant.v1.GtmCampaign
+	128, // 121: reliant.v1.UpdateCampaignRequest.period_start:type_name -> google.protobuf.Timestamp
+	128, // 122: reliant.v1.UpdateCampaignRequest.period_end:type_name -> google.protobuf.Timestamp
+	3,   // 123: reliant.v1.UpdateCampaignRequest.status:type_name -> reliant.v1.GtmCampaignStatus
+	33,  // 124: reliant.v1.UpdateCampaignRequest.planned_channel_ids:type_name -> reliant.v1.GtmChannelIdList
+	34,  // 125: reliant.v1.UpdateCampaignRequest.planned_formats:type_name -> reliant.v1.GtmItemFormatList
+	32,  // 126: reliant.v1.UpdateCampaignResponse.campaign:type_name -> reliant.v1.GtmCampaign
+	8,   // 127: reliant.v1.ListItemsRequest.format:type_name -> reliant.v1.GtmItemFormat
+	16,  // 128: reliant.v1.ListItemsRequest.status:type_name -> reliant.v1.GtmItemStatus
+	128, // 129: reliant.v1.ListItemsRequest.scheduled_from:type_name -> google.protobuf.Timestamp
+	128, // 130: reliant.v1.ListItemsRequest.scheduled_to:type_name -> google.protobuf.Timestamp
+	37,  // 131: reliant.v1.ListItemsResponse.items:type_name -> reliant.v1.GtmItem
+	37,  // 132: reliant.v1.GetItemResponse.item:type_name -> reliant.v1.GtmItem
+	8,   // 133: reliant.v1.CreateItemRequest.format:type_name -> reliant.v1.GtmItemFormat
+	128, // 134: reliant.v1.CreateItemRequest.scheduled_at:type_name -> google.protobuf.Timestamp
+	16,  // 135: reliant.v1.CreateItemRequest.status:type_name -> reliant.v1.GtmItemStatus
+	37,  // 136: reliant.v1.CreateItemResponse.item:type_name -> reliant.v1.GtmItem
+	8,   // 137: reliant.v1.UpdateItemRequest.format:type_name -> reliant.v1.GtmItemFormat
+	128, // 138: reliant.v1.UpdateItemRequest.scheduled_at:type_name -> google.protobuf.Timestamp
+	112, // 139: reliant.v1.UpdateItemRequest.email_to:type_name -> reliant.v1.GtmEmailRecipients
+	16,  // 140: reliant.v1.UpdateItemRequest.status:type_name -> reliant.v1.GtmItemStatus
+	37,  // 141: reliant.v1.UpdateItemResponse.item:type_name -> reliant.v1.GtmItem
+	37,  // 142: reliant.v1.ResolveItemSendResponse.item:type_name -> reliant.v1.GtmItem
+	38,  // 143: reliant.v1.GetPositioningResponse.positioning:type_name -> reliant.v1.GtmPositioning
+	38,  // 144: reliant.v1.UpdatePositioningResponse.positioning:type_name -> reliant.v1.GtmPositioning
+	18,  // 145: reliant.v1.ListClaimsRequest.status:type_name -> reliant.v1.GtmClaimStatus
+	17,  // 146: reliant.v1.ListClaimsRequest.category:type_name -> reliant.v1.GtmClaimCategory
+	39,  // 147: reliant.v1.ListClaimsResponse.claims:type_name -> reliant.v1.GtmClaim
+	17,  // 148: reliant.v1.UpsertClaimRequest.category:type_name -> reliant.v1.GtmClaimCategory
+	18,  // 149: reliant.v1.UpsertClaimRequest.status:type_name -> reliant.v1.GtmClaimStatus
+	19,  // 150: reliant.v1.UpsertClaimRequest.source_kind:type_name -> reliant.v1.GtmClaimSourceKind
+	128, // 151: reliant.v1.UpsertClaimRequest.expires_or_recheck_at:type_name -> google.protobuf.Timestamp
+	39,  // 152: reliant.v1.UpsertClaimResponse.claim:type_name -> reliant.v1.GtmClaim
+	40,  // 153: reliant.v1.CheckClaimsResponse.findings:type_name -> reliant.v1.GtmClaimFinding
+	42,  // 154: reliant.v1.GtmService.GetGtmAccess:input_type -> reliant.v1.GetGtmAccessRequest
+	44,  // 155: reliant.v1.GtmService.ListStrategies:input_type -> reliant.v1.ListStrategiesRequest
+	46,  // 156: reliant.v1.GtmService.GetStrategy:input_type -> reliant.v1.GetStrategyRequest
+	48,  // 157: reliant.v1.GtmService.CreateStrategy:input_type -> reliant.v1.CreateStrategyRequest
+	50,  // 158: reliant.v1.GtmService.UpdateStrategy:input_type -> reliant.v1.UpdateStrategyRequest
+	52,  // 159: reliant.v1.GtmService.ListChannels:input_type -> reliant.v1.ListChannelsRequest
+	54,  // 160: reliant.v1.GtmService.GetChannel:input_type -> reliant.v1.GetChannelRequest
+	56,  // 161: reliant.v1.GtmService.CreateChannel:input_type -> reliant.v1.CreateChannelRequest
+	58,  // 162: reliant.v1.GtmService.UpdateChannel:input_type -> reliant.v1.UpdateChannelRequest
+	60,  // 163: reliant.v1.GtmService.ListAssets:input_type -> reliant.v1.ListAssetsRequest
+	62,  // 164: reliant.v1.GtmService.GetAsset:input_type -> reliant.v1.GetAssetRequest
+	64,  // 165: reliant.v1.GtmService.CreateAssetUpload:input_type -> reliant.v1.CreateAssetUploadRequest
+	66,  // 166: reliant.v1.GtmService.ConfirmAssetUpload:input_type -> reliant.v1.ConfirmAssetUploadRequest
+	70,  // 167: reliant.v1.GtmService.DeleteAsset:input_type -> reliant.v1.DeleteAssetRequest
+	68,  // 168: reliant.v1.GtmService.GetAssetDownload:input_type -> reliant.v1.GetAssetDownloadRequest
+	72,  // 169: reliant.v1.GtmService.ListStrategyLibrary:input_type -> reliant.v1.ListStrategyLibraryRequest
+	74,  // 170: reliant.v1.GtmService.GetStrategyLibraryEntry:input_type -> reliant.v1.GetStrategyLibraryEntryRequest
+	76,  // 171: reliant.v1.GtmService.ImportStrategyLibrary:input_type -> reliant.v1.ImportStrategyLibraryRequest
+	78,  // 172: reliant.v1.GtmService.ListLibraryImports:input_type -> reliant.v1.ListLibraryImportsRequest
+	80,  // 173: reliant.v1.GtmService.ListLibraryPruneRequests:input_type -> reliant.v1.ListLibraryPruneRequestsRequest
+	82,  // 174: reliant.v1.GtmService.ConfirmLibraryPrune:input_type -> reliant.v1.ConfirmLibraryPruneRequest
+	84,  // 175: reliant.v1.GtmService.CancelLibraryPrune:input_type -> reliant.v1.CancelLibraryPruneRequest
+	86,  // 176: reliant.v1.GtmService.UseLibraryStrategy:input_type -> reliant.v1.UseLibraryStrategyRequest
+	88,  // 177: reliant.v1.GtmService.ListIdeas:input_type -> reliant.v1.ListIdeasRequest
+	90,  // 178: reliant.v1.GtmService.GetIdea:input_type -> reliant.v1.GetIdeaRequest
+	92,  // 179: reliant.v1.GtmService.CreateIdea:input_type -> reliant.v1.CreateIdeaRequest
+	94,  // 180: reliant.v1.GtmService.UpdateIdea:input_type -> reliant.v1.UpdateIdeaRequest
+	96,  // 181: reliant.v1.GtmService.SetIdeaStatus:input_type -> reliant.v1.SetIdeaStatusRequest
+	98,  // 182: reliant.v1.GtmService.ListCampaigns:input_type -> reliant.v1.ListCampaignsRequest
+	100, // 183: reliant.v1.GtmService.GetCampaign:input_type -> reliant.v1.GetCampaignRequest
+	102, // 184: reliant.v1.GtmService.CreateCampaign:input_type -> reliant.v1.CreateCampaignRequest
+	104, // 185: reliant.v1.GtmService.UpdateCampaign:input_type -> reliant.v1.UpdateCampaignRequest
+	106, // 186: reliant.v1.GtmService.ListItems:input_type -> reliant.v1.ListItemsRequest
+	108, // 187: reliant.v1.GtmService.GetItem:input_type -> reliant.v1.GetItemRequest
+	110, // 188: reliant.v1.GtmService.CreateItem:input_type -> reliant.v1.CreateItemRequest
+	113, // 189: reliant.v1.GtmService.UpdateItem:input_type -> reliant.v1.UpdateItemRequest
+	115, // 190: reliant.v1.GtmService.ResolveItemSend:input_type -> reliant.v1.ResolveItemSendRequest
+	117, // 191: reliant.v1.GtmService.GetPositioning:input_type -> reliant.v1.GetPositioningRequest
+	119, // 192: reliant.v1.GtmService.UpdatePositioning:input_type -> reliant.v1.UpdatePositioningRequest
+	121, // 193: reliant.v1.GtmService.ListClaims:input_type -> reliant.v1.ListClaimsRequest
+	123, // 194: reliant.v1.GtmService.UpsertClaim:input_type -> reliant.v1.UpsertClaimRequest
+	125, // 195: reliant.v1.GtmService.CheckClaims:input_type -> reliant.v1.CheckClaimsRequest
+	43,  // 196: reliant.v1.GtmService.GetGtmAccess:output_type -> reliant.v1.GetGtmAccessResponse
+	45,  // 197: reliant.v1.GtmService.ListStrategies:output_type -> reliant.v1.ListStrategiesResponse
+	47,  // 198: reliant.v1.GtmService.GetStrategy:output_type -> reliant.v1.GetStrategyResponse
+	49,  // 199: reliant.v1.GtmService.CreateStrategy:output_type -> reliant.v1.CreateStrategyResponse
+	51,  // 200: reliant.v1.GtmService.UpdateStrategy:output_type -> reliant.v1.UpdateStrategyResponse
+	53,  // 201: reliant.v1.GtmService.ListChannels:output_type -> reliant.v1.ListChannelsResponse
+	55,  // 202: reliant.v1.GtmService.GetChannel:output_type -> reliant.v1.GetChannelResponse
+	57,  // 203: reliant.v1.GtmService.CreateChannel:output_type -> reliant.v1.CreateChannelResponse
+	59,  // 204: reliant.v1.GtmService.UpdateChannel:output_type -> reliant.v1.UpdateChannelResponse
+	61,  // 205: reliant.v1.GtmService.ListAssets:output_type -> reliant.v1.ListAssetsResponse
+	63,  // 206: reliant.v1.GtmService.GetAsset:output_type -> reliant.v1.GetAssetResponse
+	65,  // 207: reliant.v1.GtmService.CreateAssetUpload:output_type -> reliant.v1.CreateAssetUploadResponse
+	67,  // 208: reliant.v1.GtmService.ConfirmAssetUpload:output_type -> reliant.v1.ConfirmAssetUploadResponse
+	71,  // 209: reliant.v1.GtmService.DeleteAsset:output_type -> reliant.v1.DeleteAssetResponse
+	69,  // 210: reliant.v1.GtmService.GetAssetDownload:output_type -> reliant.v1.GetAssetDownloadResponse
+	73,  // 211: reliant.v1.GtmService.ListStrategyLibrary:output_type -> reliant.v1.ListStrategyLibraryResponse
+	75,  // 212: reliant.v1.GtmService.GetStrategyLibraryEntry:output_type -> reliant.v1.GetStrategyLibraryEntryResponse
+	77,  // 213: reliant.v1.GtmService.ImportStrategyLibrary:output_type -> reliant.v1.ImportStrategyLibraryResponse
+	79,  // 214: reliant.v1.GtmService.ListLibraryImports:output_type -> reliant.v1.ListLibraryImportsResponse
+	81,  // 215: reliant.v1.GtmService.ListLibraryPruneRequests:output_type -> reliant.v1.ListLibraryPruneRequestsResponse
+	83,  // 216: reliant.v1.GtmService.ConfirmLibraryPrune:output_type -> reliant.v1.ConfirmLibraryPruneResponse
+	85,  // 217: reliant.v1.GtmService.CancelLibraryPrune:output_type -> reliant.v1.CancelLibraryPruneResponse
+	87,  // 218: reliant.v1.GtmService.UseLibraryStrategy:output_type -> reliant.v1.UseLibraryStrategyResponse
+	89,  // 219: reliant.v1.GtmService.ListIdeas:output_type -> reliant.v1.ListIdeasResponse
+	91,  // 220: reliant.v1.GtmService.GetIdea:output_type -> reliant.v1.GetIdeaResponse
+	93,  // 221: reliant.v1.GtmService.CreateIdea:output_type -> reliant.v1.CreateIdeaResponse
+	95,  // 222: reliant.v1.GtmService.UpdateIdea:output_type -> reliant.v1.UpdateIdeaResponse
+	97,  // 223: reliant.v1.GtmService.SetIdeaStatus:output_type -> reliant.v1.SetIdeaStatusResponse
+	99,  // 224: reliant.v1.GtmService.ListCampaigns:output_type -> reliant.v1.ListCampaignsResponse
+	101, // 225: reliant.v1.GtmService.GetCampaign:output_type -> reliant.v1.GetCampaignResponse
+	103, // 226: reliant.v1.GtmService.CreateCampaign:output_type -> reliant.v1.CreateCampaignResponse
+	105, // 227: reliant.v1.GtmService.UpdateCampaign:output_type -> reliant.v1.UpdateCampaignResponse
+	107, // 228: reliant.v1.GtmService.ListItems:output_type -> reliant.v1.ListItemsResponse
+	109, // 229: reliant.v1.GtmService.GetItem:output_type -> reliant.v1.GetItemResponse
+	111, // 230: reliant.v1.GtmService.CreateItem:output_type -> reliant.v1.CreateItemResponse
+	114, // 231: reliant.v1.GtmService.UpdateItem:output_type -> reliant.v1.UpdateItemResponse
+	116, // 232: reliant.v1.GtmService.ResolveItemSend:output_type -> reliant.v1.ResolveItemSendResponse
+	118, // 233: reliant.v1.GtmService.GetPositioning:output_type -> reliant.v1.GetPositioningResponse
+	120, // 234: reliant.v1.GtmService.UpdatePositioning:output_type -> reliant.v1.UpdatePositioningResponse
+	122, // 235: reliant.v1.GtmService.ListClaims:output_type -> reliant.v1.ListClaimsResponse
+	124, // 236: reliant.v1.GtmService.UpsertClaim:output_type -> reliant.v1.UpsertClaimResponse
+	126, // 237: reliant.v1.GtmService.CheckClaims:output_type -> reliant.v1.CheckClaimsResponse
+	196, // [196:238] is the sub-list for method output_type
+	154, // [154:196] is the sub-list for method input_type
+	154, // [154:154] is the sub-list for extension type_name
+	154, // [154:154] is the sub-list for extension extendee
+	0,   // [0:154] is the sub-list for field type_name
 }
 
 func init() { file_reliant_v1_gtm_proto_init() }
@@ -4886,23 +10771,38 @@ func file_reliant_v1_gtm_proto_init() {
 	if File_reliant_v1_gtm_proto != nil {
 		return
 	}
-	file_reliant_v1_gtm_proto_msgTypes[11].OneofWrappers = []any{}
-	file_reliant_v1_gtm_proto_msgTypes[17].OneofWrappers = []any{}
-	file_reliant_v1_gtm_proto_msgTypes[21].OneofWrappers = []any{}
-	file_reliant_v1_gtm_proto_msgTypes[25].OneofWrappers = []any{}
+	file_reliant_v1_gtm_proto_msgTypes[23].OneofWrappers = []any{}
 	file_reliant_v1_gtm_proto_msgTypes[27].OneofWrappers = []any{}
 	file_reliant_v1_gtm_proto_msgTypes[29].OneofWrappers = []any{}
-	file_reliant_v1_gtm_proto_msgTypes[33].OneofWrappers = []any{}
-	file_reliant_v1_gtm_proto_msgTypes[36].OneofWrappers = []any{}
-	file_reliant_v1_gtm_proto_msgTypes[42].OneofWrappers = []any{}
-	file_reliant_v1_gtm_proto_msgTypes[44].OneofWrappers = []any{}
+	file_reliant_v1_gtm_proto_msgTypes[31].OneofWrappers = []any{}
+	file_reliant_v1_gtm_proto_msgTypes[35].OneofWrappers = []any{}
+	file_reliant_v1_gtm_proto_msgTypes[37].OneofWrappers = []any{}
+	file_reliant_v1_gtm_proto_msgTypes[39].OneofWrappers = []any{}
+	file_reliant_v1_gtm_proto_msgTypes[43].OneofWrappers = []any{
+		(*CreateAssetUploadRequest_ItemId)(nil),
+		(*CreateAssetUploadRequest_CampaignId)(nil),
+	}
+	file_reliant_v1_gtm_proto_msgTypes[51].OneofWrappers = []any{}
+	file_reliant_v1_gtm_proto_msgTypes[59].OneofWrappers = []any{}
+	file_reliant_v1_gtm_proto_msgTypes[65].OneofWrappers = []any{}
+	file_reliant_v1_gtm_proto_msgTypes[67].OneofWrappers = []any{}
+	file_reliant_v1_gtm_proto_msgTypes[73].OneofWrappers = []any{}
+	file_reliant_v1_gtm_proto_msgTypes[77].OneofWrappers = []any{}
+	file_reliant_v1_gtm_proto_msgTypes[81].OneofWrappers = []any{}
+	file_reliant_v1_gtm_proto_msgTypes[83].OneofWrappers = []any{}
+	file_reliant_v1_gtm_proto_msgTypes[85].OneofWrappers = []any{}
+	file_reliant_v1_gtm_proto_msgTypes[89].OneofWrappers = []any{}
+	file_reliant_v1_gtm_proto_msgTypes[92].OneofWrappers = []any{}
+	file_reliant_v1_gtm_proto_msgTypes[94].OneofWrappers = []any{}
+	file_reliant_v1_gtm_proto_msgTypes[100].OneofWrappers = []any{}
+	file_reliant_v1_gtm_proto_msgTypes[102].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_reliant_v1_gtm_proto_rawDesc), len(file_reliant_v1_gtm_proto_rawDesc)),
-			NumEnums:      10,
-			NumMessages:   48,
+			NumEnums:      21,
+			NumMessages:   107,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

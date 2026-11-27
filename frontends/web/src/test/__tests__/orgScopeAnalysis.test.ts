@@ -40,6 +40,25 @@ export async function listThings(orgId: string | null) { return client().listThi
 export async function listAnyThings() { return client().listThings({}); }
 `,
 );
+// An api module whose import name shadows a browser global (history).
+write(
+  "historyApi.ts",
+  `import { FakeService } from "@/gen/fake_pb";
+export function getItem(req: object) { return connectClient(FakeService).getItem(req); }
+`,
+);
+write(
+  "historyReads.ts",
+  `import * as history from "./historyApi";
+export function useHistoryNamespace() { return useQuery({ queryKey: ["h"], queryFn: () => history.getItem({}) }); }
+`,
+);
+write(
+  "historyPackageReads.ts",
+  `import { history } from "some-router";
+export function useHistoryPackage() { return useQuery({ queryKey: ["h"], queryFn: () => history.getItem({}) }); }
+`,
+);
 write(
   "reads.ts",
   `import { useGetThing, useListThings, fakeServiceQueries } from "./hooks/fake-service-hooks_gen";
@@ -107,6 +126,9 @@ describe("OrgScopeAnalysis", () => {
     expect(site("handwritten", "useStorageAlias")?.rpcs ?? []).toEqual([]);
     // An api object that wraps the client method by method still counts.
     expect(site("handwritten", "useWrapped")?.rpcs).toEqual(["fake.v1.FakeService.getItem"]);
+    // So does one imported under a browser global's name.
+    expect(site("handwritten", "useHistoryNamespace")?.rpcs).toEqual(["fake.v1.FakeService.getItem"]);
+    expect(site("handwritten", "useHistoryPackage")?.rpcs).toEqual(["fake.v1.FakeService.getItem"]);
   });
 
   it("records a direct client call and whether its request names the org", () => {
