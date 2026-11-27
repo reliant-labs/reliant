@@ -70,6 +70,32 @@ const IMPERATIVE_READS = new Set(["fetchQuery", "ensureQueryData", "prefetchQuer
 
 const QUERY_HOOK = /^(createQueryHook|createInfiniteQueryHook|createSuspenseQueryHook)$/;
 
+/**
+ * The browser's own objects. A member call on one (`window.sessionStorage.getItem(…)`)
+ * is never an rpc, whatever its name: an rpc named like a DOM method (GetItem) must
+ * not turn every storage read into a call of it.
+ */
+const WEB_GLOBALS = new Set([
+  "window",
+  "globalThis",
+  "self",
+  "document",
+  "navigator",
+  "location",
+  "history",
+  "localStorage",
+  "sessionStorage",
+  "indexedDB",
+  "caches",
+  "crypto",
+  "performance",
+  "console",
+  "JSON",
+  "Object",
+  "Reflect",
+  "Math",
+]);
+
 /** The rpc a `<svc>Queries` member reads: `listMembersInfinite` is ListMembers, paged. */
 const rpcOfQueriesMember = (member: string) => member.replace(/Infinite$/, "");
 
@@ -344,6 +370,22 @@ export class OrgScopeAnalysis {
     return null;
   }
 
+  /**
+   * Whether `expr` is a browser global or a member of one (`window.sessionStorage`),
+   * not shadowed locally, or a variable initialised from one (`const s = window.localStorage`).
+   */
+  private onWebGlobal(expr: ts.Expression, file: FileInfo, depth = 0): boolean {
+    if (depth > 5) return false;
+    let root = unwrap(expr);
+    while (ts.isPropertyAccessExpression(root)) root = unwrap(root.expression);
+    if (!ts.isIdentifier(root)) return false;
+    const d = this.lookup(root, file);
+    // An imported name is the module's, never the browser's, even when the
+    // import does not resolve (a package, a namespace import).
+    if (!d) return WEB_GLOBALS.has(root.text) && !file.imports.has(root.text);
+    return ts.isVariableDeclaration(d.node) && !!d.node.initializer && this.onWebGlobal(d.node.initializer, d.file, depth + 1);
+  }
+
   /** `rpc` keys of the org-scoped rpcs a client member call makes, or null when it is not one. */
   private rpcOfCall(call: ts.CallExpression, file: FileInfo): string | null {
     const callee = unwrap(call.expression);
@@ -428,7 +470,8 @@ export class OrgScopeAnalysis {
           !target &&
           ts.isPropertyAccessExpression(callee) &&
           this.scopedNames.has(callee.name.text) &&
-          !this.clientOf(callee.expression, file)
+          !this.clientOf(callee.expression, file) &&
+          !this.onWebGlobal(callee.expression, file)
         ) {
           const named = this.functionsNamed(callee.name.text);
           for (const fn of named) {
