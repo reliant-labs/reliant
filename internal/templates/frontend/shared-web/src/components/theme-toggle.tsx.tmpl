@@ -1,0 +1,74 @@
+{{if eq .Platform "nextjs"}}"use client";
+
+{{end}}// yours: scaffolded once, never touched again — forge will not overwrite this file
+//
+// ThemeToggle — one compact icon button that cycles light → dark → system.
+//
+// Signed in, the theme lives in the user menu (src/components/session_nav.tsx),
+// as three radio items; this button is what the header shows in its place
+// when there is no one signed in (a public route), and what to drop into any
+// chrome of your own that has room for an icon and not for a menu.
+//
+// Three states rather than a two-way switch, because "system" is a real
+// choice and not the absence of one: it is the only setting that keeps
+// following the OS after the user has expressed a preference. A binary
+// toggle would silently pin the app the first time it was touched.
+//
+// The icon shows the CURRENT preference, and the tooltip — which is also the
+// button's accessible name — says both what it is and what a press switches
+// to, so nobody has to press it to find out.
+//
+// Persistence and the no-flash guarantee are useTheme's: the pre-paint script
+// in the HTML shell applies the stored theme before React exists, so the
+// page never paints the wrong palette. Rendered on the server, this button
+// shows the "system" icon until hydration reads the stored choice.
+
+import { Monitor, Moon, Sun } from "lucide-react";
+
+import Tooltip from "@/components/ui/tooltip";
+import { useTheme } from "@/lib/theme/use-theme";
+
+import type { ThemePreference } from "@/lib/theme/use-theme";
+
+interface ThemeOption {
+  value: ThemePreference;
+  label: string;
+  Icon: typeof Sun;
+}
+
+const SYSTEM: ThemeOption = { value: "system", label: "System", Icon: Monitor };
+const CYCLE: ThemeOption[] = [
+  { value: "light", label: "Light", Icon: Sun },
+  { value: "dark", label: "Dark", Icon: Moon },
+  SYSTEM,
+];
+
+export function ThemeToggle({ className = "" }: { className?: string }) {
+  const { theme, setTheme } = useTheme();
+
+  const index = CYCLE.findIndex((o) => o.value === theme);
+  // Both lookups are in bounds, but noUncheckedIndexedAccess types every
+  // index read as possibly undefined and the Next.js tsconfig turns it on.
+  const current = CYCLE[index] ?? SYSTEM;
+  const next = CYCLE[(index + 1) % CYCLE.length] ?? SYSTEM;
+  const { Icon } = current;
+
+  return (
+    <Tooltip
+      content={`Theme: ${current.label}. Switch to ${next.label}`}
+      type="label"
+      side="bottom"
+    >
+      {(props) => (
+        <button
+          {...props}
+          type="button"
+          onClick={() => setTheme(next.value)}
+          className={`inline-flex h-9 w-9 items-center justify-center rounded-full text-ink-muted transition-colors hover:bg-surface-muted hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${className}`}
+        >
+          <Icon aria-hidden className="h-[18px] w-[18px]" strokeWidth={1.75} />
+        </button>
+      )}
+    </Tooltip>
+  );
+}

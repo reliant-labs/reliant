@@ -1,0 +1,20 @@
+// yours: scaffolded once, never touched again — forge will not overwrite this file
+// userCommands(deps) is your extension point for non-server commands (reports, backfills, admin
+// jobs): return cobra commands and root.go registers them. Load settings with config.Load, and
+// register only the flags a command takes with config.RegisterFieldFlags(cmd, "<field>", ...);
+// config.RegisterFlags is the server's whole surface (CORS, OIDC, TLS, pprof...) and would bury
+// your own flags in --help. forge/pkg/cmdkit has Logger, OpenDB, PrintJSON; never list services
+// here. Depth: `forge skill load binaries` ("Commands of the project binary").
+package cmd
+
+import (
+	"github.com/spf13/cobra"
+)
+
+// userCommands returns additional top-level subcommands for this binary.
+// cmd/{{.Name}}/cmd/root.go consumes it; forge never edits this file. Return
+// nil (the default) for no extra commands.
+func userCommands(deps Deps) []*cobra.Command {
+	_ = deps
+	return nil
+}

@@ -1,0 +1,332 @@
+{
+  "rules_version": "1",
+  "site": {
+    "url": "https://intl.example",
+    "host": "intl.example",
+    "score": {
+      "seo": 96,
+      "a11y": null
+    },
+    "indexing": {
+      "expected": "index"
+    },
+    "robots": {},
+    "sitemap": {
+      "files": 0,
+      "urls": 0
+    }
+  },
+  "routes": [
+    {
+      "route": "/de/",
+      "url": "https://intl.example/de/",
+      "status": 200,
+      "score": {
+        "seo": 100,
+        "a11y": null
+      },
+      "head": {
+        "title": "Intl Example — auf Deutsch",
+        "description": "Intl Example erklärt internationale Suche mit drei Sprachversionen einer Seite.",
+        "canonical": "https://intl.example/de/",
+        "lang": "de",
+        "viewport": "width=device-width, initial-scale=1",
+        "hreflang": [
+          {
+            "hreflang": "de-DE",
+            "href": "https://intl.example/de/"
+          },
+          {
+            "hreflang": "en",
+            "href": "https://intl.example/en/"
+          },
+          {
+            "hreflang": "fr",
+            "href": "https://intl.example/fr/"
+          }
+        ],
+        "indexable": true,
+        "og_complete": false
+      }
+    },
+    {
+      "route": "/en/",
+      "url": "https://intl.example/en/",
+      "status": 200,
+      "score": {
+        "seo": 100,
+        "a11y": null
+      },
+      "head": {
+        "title": "Intl Example — in English",
+        "description": "Intl Example explains international search with three language versions of one page.",
+        "canonical": "https://intl.example/en/",
+        "lang": "en",
+        "viewport": "width=device-width, initial-scale=1",
+        "hreflang": [
+          {
+            "hreflang": "en",
+            "href": "https://intl.example/en/"
+          },
+          {
+            "hreflang": "de",
+            "href": "https://intl.example/de/"
+          },
+          {
+            "hreflang": "fr",
+            "href": "https://intl.example/fr/"
+          },
+          {
+            "hreflang": "x-default",
+            "href": "https://intl.example/en/"
+          }
+        ],
+        "indexable": true,
+        "og_complete": false
+      }
+    },
+    {
+      "route": "/fr/",
+      "url": "https://intl.example/fr/",
+      "status": 200,
+      "score": {
+        "seo": 89,
+        "a11y": null
+      },
+      "head": {
+        "title": "Intl Example — en français",
+        "description": "Intl Example explique la recherche internationale avec trois versions d'une même page.",
+        "canonical": "https://intl.example/fr/",
+        "lang": "fr",
+        "viewport": "width=device-width, initial-scale=1",
+        "hreflang": [
+          {
+            "hreflang": "en_US",
+            "href": "https://intl.example/en/"
+          },
+          {
+            "hreflang": "en-UK",
+            "href": "/en/"
+          },
+          {
+            "hreflang": "x-default",
+            "href": "https://intl.example/en/"
+          }
+        ],
+        "indexable": true,
+        "og_complete": false
+      }
+    }
+  ],
+  "findings": [
+    {
+      "code": "hreflang_no_x_default",
+      "severity": "info",
+      "category": "seo",
+      "route": "/de/",
+      "ref": "x-default",
+      "fix": "Add \u003clink rel=\"alternate\" hreflang=\"x-default\" href=\"…\"\u003e for visitors no language matches."
+    },
+    {
+      "code": "hreflang_not_reciprocal",
+      "severity": "warn",
+      "category": "seo",
+      "route": "/de/",
+      "ref": "https://intl.example/fr/",
+      "evidence": {
+        "alternate": "/fr/",
+        "hreflang": "fr"
+      },
+      "fix": "Link the alternate back: search engines ignore hreflang pairs that are not reciprocal."
+    },
+    {
+      "code": "og_tag_missing",
+      "severity": "warn",
+      "category": "seo",
+      "route": "/de/",
+      "ref": "og:description",
+      "fix": "Add the Open Graph tag to the served HTML so link previews in Slack, X, LinkedIn and Facebook show the page."
+    },
+    {
+      "code": "og_tag_missing",
+      "severity": "warn",
+      "category": "seo",
+      "route": "/de/",
+      "ref": "og:image",
+      "fix": "Add the Open Graph tag to the served HTML so link previews in Slack, X, LinkedIn and Facebook show the page."
+    },
+    {
+      "code": "og_tag_missing",
+      "severity": "warn",
+      "category": "seo",
+      "route": "/de/",
+      "ref": "og:title",
+      "fix": "Add the Open Graph tag to the served HTML so link previews in Slack, X, LinkedIn and Facebook show the page."
+    },
+    {
+      "code": "og_tag_missing",
+      "severity": "info",
+      "category": "seo",
+      "route": "/de/",
+      "ref": "og:type",
+      "fix": "Add the Open Graph tag to the served HTML so link previews in Slack, X, LinkedIn and Facebook show the page."
+    },
+    {
+      "code": "og_tag_missing",
+      "severity": "info",
+      "category": "seo",
+      "route": "/de/",
+      "ref": "og:url",
+      "fix": "Add the Open Graph tag to the served HTML so link previews in Slack, X, LinkedIn and Facebook show the page."
+    },
+    {
+      "code": "twitter_card_missing",
+      "severity": "info",
+      "category": "seo",
+      "route": "/de/",
+      "ref": "twitter:card",
+      "fix": "Add \u003cmeta name=\"twitter:card\" content=\"summary_large_image\"\u003e for a large preview on X."
+    },
+    {
+      "code": "og_tag_missing",
+      "severity": "warn",
+      "category": "seo",
+      "route": "/en/",
+      "ref": "og:description",
+      "fix": "Add the Open Graph tag to the served HTML so link previews in Slack, X, LinkedIn and Facebook show the page."
+    },
+    {
+      "code": "og_tag_missing",
+      "severity": "warn",
+      "category": "seo",
+      "route": "/en/",
+      "ref": "og:image",
+      "fix": "Add the Open Graph tag to the served HTML so link previews in Slack, X, LinkedIn and Facebook show the page."
+    },
+    {
+      "code": "og_tag_missing",
+      "severity": "warn",
+      "category": "seo",
+      "route": "/en/",
+      "ref": "og:title",
+      "fix": "Add the Open Graph tag to the served HTML so link previews in Slack, X, LinkedIn and Facebook show the page."
+    },
+    {
+      "code": "og_tag_missing",
+      "severity": "info",
+      "category": "seo",
+      "route": "/en/",
+      "ref": "og:type",
+      "fix": "Add the Open Graph tag to the served HTML so link previews in Slack, X, LinkedIn and Facebook show the page."
+    },
+    {
+      "code": "og_tag_missing",
+      "severity": "info",
+      "category": "seo",
+      "route": "/en/",
+      "ref": "og:url",
+      "fix": "Add the Open Graph tag to the served HTML so link previews in Slack, X, LinkedIn and Facebook show the page."
+    },
+    {
+      "code": "twitter_card_missing",
+      "severity": "info",
+      "category": "seo",
+      "route": "/en/",
+      "ref": "twitter:card",
+      "fix": "Add \u003cmeta name=\"twitter:card\" content=\"summary_large_image\"\u003e for a large preview on X."
+    },
+    {
+      "code": "hreflang_invalid",
+      "severity": "warn",
+      "category": "seo",
+      "route": "/fr/",
+      "ref": "/en/",
+      "evidence": {
+        "href": "/en/",
+        "hreflang": "en-UK",
+        "problem": "href must be an absolute URL"
+      },
+      "fix": "Use a valid language code (en, en-GB, pt-BR, x-default) and an absolute href."
+    },
+    {
+      "code": "hreflang_invalid",
+      "severity": "warn",
+      "category": "seo",
+      "route": "/fr/",
+      "ref": "en-UK",
+      "evidence": {
+        "hreflang": "en-UK",
+        "problem": "UK is not a region code: use GB"
+      },
+      "fix": "Use a valid language code (en, en-GB, pt-BR, x-default) and an absolute href."
+    },
+    {
+      "code": "hreflang_invalid",
+      "severity": "warn",
+      "category": "seo",
+      "route": "/fr/",
+      "ref": "en_US",
+      "evidence": {
+        "hreflang": "en_US",
+        "problem": "not a language code (en, en-GB, pt-BR)"
+      },
+      "fix": "Use a valid language code (en, en-GB, pt-BR, x-default) and an absolute href."
+    },
+    {
+      "code": "hreflang_missing_self",
+      "severity": "info",
+      "category": "seo",
+      "route": "/fr/",
+      "ref": "hreflang",
+      "fix": "Include the page itself among its hreflang alternates."
+    },
+    {
+      "code": "og_tag_missing",
+      "severity": "warn",
+      "category": "seo",
+      "route": "/fr/",
+      "ref": "og:description",
+      "fix": "Add the Open Graph tag to the served HTML so link previews in Slack, X, LinkedIn and Facebook show the page."
+    },
+    {
+      "code": "og_tag_missing",
+      "severity": "warn",
+      "category": "seo",
+      "route": "/fr/",
+      "ref": "og:image",
+      "fix": "Add the Open Graph tag to the served HTML so link previews in Slack, X, LinkedIn and Facebook show the page."
+    },
+    {
+      "code": "og_tag_missing",
+      "severity": "warn",
+      "category": "seo",
+      "route": "/fr/",
+      "ref": "og:title",
+      "fix": "Add the Open Graph tag to the served HTML so link previews in Slack, X, LinkedIn and Facebook show the page."
+    },
+    {
+      "code": "og_tag_missing",
+      "severity": "info",
+      "category": "seo",
+      "route": "/fr/",
+      "ref": "og:type",
+      "fix": "Add the Open Graph tag to the served HTML so link previews in Slack, X, LinkedIn and Facebook show the page."
+    },
+    {
+      "code": "og_tag_missing",
+      "severity": "info",
+      "category": "seo",
+      "route": "/fr/",
+      "ref": "og:url",
+      "fix": "Add the Open Graph tag to the served HTML so link previews in Slack, X, LinkedIn and Facebook show the page."
+    },
+    {
+      "code": "twitter_card_missing",
+      "severity": "info",
+      "category": "seo",
+      "route": "/fr/",
+      "ref": "twitter:card",
+      "fix": "Add \u003cmeta name=\"twitter:card\" content=\"summary_large_image\"\u003e for a large preview on X."
+    }
+  ]
+}

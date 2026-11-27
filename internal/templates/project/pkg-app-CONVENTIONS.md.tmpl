@@ -1,0 +1,111 @@
+# pkg/app conventions
+
+`pkg/app` holds no code any more: this file is all that is left in it. The
+LIVE composition root is **`internal/app`**, the composition graph, which every
+process command in `cmd/<bin>/cmd/` runs:
+
+```
+internal/app/providers.go   yours: provider funcs New<X>(<X>Deps) (T, error) — the DB pool, the ORM,
+                            clients, the auth chain, listeners
+internal/app/compose.go     yours, reconciled: one g.new<X>() constructor method per node, holding
+                            the value expression for every field of that node's Deps
+internal/app/roots.go       yours (optional): //forge:root structs — what each process builds
+internal/app/graph_gen.go   generated: memoized accessors g.<X>(), Build<Root>/Run<Root>,
+                            the default Server root
+internal/app/routes_gen.go  generated: <Audience>Routes route sets and per-service MountOptions
+cmd/<bin>/cmd/roots_gen.go  generated: one command per root, handed to runRoot in the owned serve.go
+```
+
+Every part of a process is a node built from its `Deps`: a handler, a
+package, a worker, an operator, and every provider. **Every `Deps` field
+resolves by type**, at generate time, never by name: give a provider's value
+its own type (`type DB struct{ *sql.DB }`) and any `Deps` field of that type is
+filled from it. Accessors are memoized, so `g.Users()` builds once, and a root
+builds only the nodes its fields reach. A value with `Run`, `Drain`, `Close` or
+`Ready` methods is supervised: started in construction order, stopped in
+reverse.
+
+`compose.go` is YOURS. Forge writes it once, then reconciles only the
+projection: a node with no `new<X>` method gets one, a `Deps` field a node
+gained gets its key, and a key naming a field its `Deps` struct no longer has
+is dropped. The EXPRESSION beside a key that still exists is never touched, so
+changing what fills a field is an edit there. A field two nodes could fill is
+a generate error until you write its key yourself. `forge project disown
+internal/app/compose.go` stops reconciliation altogether.
+
+To add a collaborator (a client, an adapter), add a provider in
+`providers.go`; generate wires it wherever a `Deps` field has its type. The
+architecture skill has the rest: roots and commands, per-root config reach,
+and `forge lint --graph` (`forge skill load architecture`).
+
+A project from before the graph (an owned `Infra` + `OpenInfra` +
+`NewComponents`) keeps that composition until `forge fix composition-graph`
+moves it. The migration support that used to live here is the generated
+`db/embed_gen.go` (`db.Source()`), applied by `migratekit.AutoMigrate` from the
+owned `cmd/<bin>/cmd/serve.go`.
+
+## Where do per-RPC nil checks belong? (Spoiler: nowhere.)
+
+Forge generates `New(Deps) (*Service, error)` and a `validateDeps()`
+helper. Add your required fields to that single method:
+
+```go
+func (d Deps) validateDeps() error {
+    if d.Logger == nil   { return fmt.Errorf("foo: Deps.Logger is required") }
+    if d.Config == nil   { return fmt.Errorf("foo: Deps.Config is required") }
+    if d.Repo == nil     { return fmt.Errorf("foo: Deps.Repo is required") }
+    return nil
+}
+```
+
+Once `Repo` is in `validateDeps`, individual RPC handlers can use
+`s.deps.Repo.Get(...)` directly — no `if s.deps.Repo == nil` preamble.
+The validation runs once at construction; if it passes, the field is
+non-nil for every RPC the service ever handles.
+
+If a Dep really is optional (e.g. an audit sink allowed to be nil in
+dev), keep it out of `validateDeps` and check at the one call site that
+needs it (mark it `// forge:optional-dep` on the Deps field).
+
+## Component config blocks (configuration ≠ collaborators)
+
+Scalar Deps fields (`MaxPerTick int`, `Interval time.Duration`, ...) are
+configuration, not collaborators. Declare a config block in
+`proto/<project>/config/v1/config.proto` and take it as one typed field
+(`Cfg *config.<Block>Config`, which the graph fills from the loaded config by
+type) instead of threading naked scalars through `Deps`. A config block also
+narrows what the root that reaches the component needs at startup.
+`forge lint --config-deps` flags naked-scalar Deps fields.
+
+## Test wiring
+
+Tests bypass the graph: each test constructs only what it needs. Each
+component gets its own generated `helpers_gen_test.go`, in that component's
+directory and package — e.g. `internal/handlers/order/helpers_gen_test.go`,
+`package order`. It emits `NewTest<Svc>(t, ...opts)` (and, for a handler,
+`NewTest<Svc>Server`, which serves it over a real Connect client). Defaults
+flow in for the bare-Deps trio, every interface-typed field gets its mock, and
+`With<Svc>Deps(deps)` overrides the rich deps.
+
+Two properties of that placement are load-bearing:
+
+- The `_test.go` **suffix** is what keeps package `testing` out of the
+  production binary. The toolchain compiles these files only into the
+  package's test binary, so `go list -deps ./cmd/<proj>` never contains
+  `testing`.
+- The **package clause** is the component's own (`package order`), not
+  `order_test`. Go compiles a package's in-package `_test.go` files INTO the
+  package under test, and an external `order_test` package then imports that
+  augmented package — so the helpers are usable from BOTH internal and
+  external test files in that directory, and from nowhere else.
+
+Typed entity factories (`New<Entity>(t, db, …)`, a minimal valid row) and
+create-request factories (`New<CreateRequest>(t, db, variant)`) land beside the
+handler whose CRUD RPCs own that entity, as
+`internal/handlers/<svc>/factories_gen_test.go` — regenerated from the applied
+schema every run, same package clause, same visibility rule as the harness
+above. Tests in that directory call `NewItem(t, db)` unqualified; a test
+elsewhere drives the entity through its RPCs rather than seeding rows behind
+them.
+
+See the `testing/patterns` skill for the canonical patterns.

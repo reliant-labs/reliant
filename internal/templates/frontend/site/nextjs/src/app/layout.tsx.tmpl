@@ -1,0 +1,65 @@
+import type { Metadata, Viewport } from "next";
+
+import { openGraph, SITE_DESCRIPTION, SITE_NAME, SITE_URL } from "../lib/site";
+import { DevLogging } from "./dev-logging";
+import "./globals.css";
+
+// Credit link, shown at the bottom of every page. Yours to edit or delete:
+// remove this constant and the footer element below. Forge never re-adds it.
+const BUILT_WITH_FORGE_URL =
+  "https://reliantlabs.io/?utm_source=forge&utm_medium=app-footer&utm_campaign=built-with-forge";
+
+// The head every page starts from; src/lib/site.ts holds the values. Each
+// page adds its own canonical link with pageMetadata().
+export const metadata: Metadata = {
+  // Resolves the relative URLs below (og:image, each page's canonical)
+  // against the site's origin. Unset without SITE_URL, and so are they.
+  ...(SITE_URL ? { metadataBase: new URL(`${SITE_URL}/`) } : {}),
+  title: SITE_NAME,
+  description: SITE_DESCRIPTION,
+  openGraph,
+  twitter: { card: "summary_large_image" },
+  icons: { icon: { url: "/favicon.svg", type: "image/svg+xml" } },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#18181b",
+};
+
+// The WebSite structured data search engines read for the site's name.
+const websiteJsonLd = {
+  __html: JSON.stringify({
+    "@context": "https://schema.org",
+    "@type": "WebSite",
+    name: SITE_NAME,
+    url: `${SITE_URL}/`,
+  }),
+};
+
+export default function RootLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <html lang="en">
+      <head>
+        {/* Blocking: the runtime document must precede client SDK initialization. */}
+        {/* eslint-disable-next-line @next/next/no-sync-scripts */}
+        <script src="/config.js" />
+        {SITE_URL ? <script type="application/ld+json" dangerouslySetInnerHTML={websiteJsonLd} /> : null}
+      </head>
+      <body className="flex min-h-screen flex-col">
+        <DevLogging />
+        <div className="flex-1">{children}</div>
+        <footer className="px-6 pt-2 pb-6 text-center text-xs opacity-70">
+          Built with ❤️ using{" "}
+          <a
+            href={BUILT_WITH_FORGE_URL}
+            target="_blank"
+            rel="noopener"
+            className="underline underline-offset-2 hover:opacity-100"
+          >
+            Forge
+          </a>
+        </footer>
+      </body>
+    </html>
+  );
+}

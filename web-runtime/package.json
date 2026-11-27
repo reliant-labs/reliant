@@ -1,0 +1,175 @@
+{
+  "name": "@reliantlabs/forge-web-runtime",
+  "version": "0.14.1",
+  "description": "The forge frontend runtime: Connect interceptor stack, session, error boundary, toast queue, <Resource> container, W3C trace propagation and the HyperDX browser SDK wiring (errors, console, network, traces) and a session-replay recorder that encodes off the main thread (replay off by default). The web twin of forge/pkg.",
+  "license": "Apache-2.0",
+  "//repository note": "REQUIRED for `npm publish --provenance`, not decoration. npm cross-checks this against the repository in the signed provenance statement and rejects the publish with a 422 if they disagree — an absent field reads as \"\" and fails that comparison. `directory` names the subdirectory this package lives in, so the provenance points at the real source. Omitting this is what made the first 0.3.1 publish fail AFTER the tarball had been signed and written to the sigstore transparency log.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/reliant-labs/forge.git",
+    "directory": "web-runtime"
+  },
+  "homepage": "https://github.com/reliant-labs/forge/tree/main/web-runtime#readme",
+  "bugs": {
+    "url": "https://github.com/reliant-labs/forge/issues"
+  },
+  "//publishConfig note": "A SCOPED package defaults to restricted. Restricted breaks `npm install` for anyone outside the org — including every machine that scaffolds a project with a released forge, which resolves this package from the registry by semver range. Declaring access here means a publish cannot accidentally ship private by omitting --access public.",
+  "publishConfig": {
+    "access": "public"
+  },
+  "type": "module",
+  "sideEffects": false,
+  "files": [
+    "dist",
+    "interceptors",
+    "README.md",
+    "NOTICE"
+  ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./auth/auth0": {
+      "types": "./dist/auth/auth0.d.ts",
+      "default": "./dist/auth/auth0.js"
+    },
+    "./auth/clerk": {
+      "types": "./dist/auth/clerk.d.ts",
+      "default": "./dist/auth/clerk.js"
+    },
+    "./auth/firebase": {
+      "types": "./dist/auth/firebase.d.ts",
+      "default": "./dist/auth/firebase.js"
+    },
+    "./auth/supabase": {
+      "types": "./dist/auth/supabase.d.ts",
+      "default": "./dist/auth/supabase.js"
+    },
+    "./changes-server": {
+      "types": "./dist/changes-server.d.ts",
+      "default": "./dist/changes-server.js"
+    },
+    "./devlog": {
+      "types": "./dist/devlog.d.ts",
+      "default": "./dist/devlog.js"
+    },
+    "./interceptors": {
+      "types": "./dist/interceptors.d.ts",
+      "default": "./dist/interceptors.js"
+    },
+    "./node": {
+      "types": "./dist/node.d.ts",
+      "default": "./dist/node.js"
+    },
+    "./otel-proxy": {
+      "types": "./dist/otel-proxy.d.ts",
+      "default": "./dist/otel-proxy.js"
+    },
+    "./fixture-transport": {
+      "types": "./dist/fixture-transport.d.ts",
+      "default": "./dist/fixture-transport.js"
+    },
+    "./mock-transport": {
+      "types": "./dist/mock-transport.d.ts",
+      "default": "./dist/mock-transport.js"
+    },
+    "./session": {
+      "types": "./dist/session.d.ts",
+      "default": "./dist/session.js"
+    },
+    "./service-hooks": {
+      "types": "./dist/service-hooks.d.ts",
+      "default": "./dist/service-hooks.js"
+    },
+    "./telemetry": {
+      "types": "./dist/telemetry.d.ts",
+      "default": "./dist/telemetry.js"
+    },
+    "./transport-scope": {
+      "types": "./dist/transport-scope.d.ts",
+      "default": "./dist/transport-scope.js"
+    },
+    "./vite": {
+      "types": "./dist/vite.d.ts",
+      "default": "./dist/vite.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "//imports note": "#hyperdx-otel-web is how sdk-client.ts loads @hyperdx/otel-web. Browser bundlers match `browser`, listed first so it wins even where a bundler also sets `node` (an SSR build, a misconfigured target), and get the SDK's own ESM build, still as a lazy chunk of its own. Node cannot load that build: its imports carry no file extensions ('./version', '@hyperdx/instrumentation-exception/build/src/browser'), and Node's ESM loader refuses them (ERR_UNSUPPORTED_DIR_IMPORT). The SDK's CommonJS build is no substitute either. Under Node it resolves every OpenTelemetry dependency to its Node build, so the OTLP exporter posts over node:http instead of fetch, and the console instrumentation throws on each console call (it calls `.default` on CommonJS modules). So under `node` without `browser`, the map resolves to dist/hyperdx-otel-web.node.js: the same SDK, built for the browser platform by scripts/build.mjs, with @opentelemetry/api left external and no Node builtin or require() in it. That is what @hyperdx/browser's pre-built bundle gave Node before. A test runner that runs this package natively (vitest externalizes a \"type\": \"module\" package) then starts the SDK a browser would. src/sdk-client-node.test.ts proves it records and exports a span.",
+  "imports": {
+    "#hyperdx-otel-web": {
+      "browser": "@hyperdx/otel-web",
+      "node": {
+        "types": "./dist/hyperdx-otel-web.node.d.ts",
+        "default": "./dist/hyperdx-otel-web.node.js"
+      },
+      "default": "@hyperdx/otel-web"
+    }
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.react18.json --noEmit",
+    "build": "node scripts/build.mjs",
+    "dev": "tsc -p tsconfig.build.json --watch --preserveWatchOutput",
+    "prepare": "node scripts/build.mjs",
+    "pretest": "node scripts/build.mjs",
+    "test": "vitest run",
+    "test:browser": "node --test scripts/browser-telemetry-smoke.mjs"
+  },
+  "// peerDependencies note": "@opentelemetry/api is the one REQUIRED peer: trace.ts propagates traceparent on every RPC from the barrel, and the './node' entry builds its spans on it. Every other peer is OPTIONAL because some entry point never imports it, and npm installs a non-optional peer (and every dependency) for every consumer whether or not it is reached: react, @connectrpc/connect and @bufbuild/protobuf are imported by the barrel and the browser subpaths, which every forge frontend scaffold (Next.js, Vite, Expo) declares as its own direct dependencies, while a './node'-only consumer (an Electron main process, a Node CLI) imports none of them. @tanstack/react-query is imported only by './service-hooks' and './transport-scope'. @hyperdx/otel-web (errors, traces, web vitals, the RUM session) and rrweb (session replay) are imported only by './telemetry', each through a lazy import() of its own chunk; they were DEPENDENCIES until 0.14.0, which put about 90 MB of browser packages into every './node' consumer's install (forge defect ae15c269). They are EXACT, because the runtime drives both below their public surface (tracer names, the replay wire shape HyperDX's player reads), and every forge web scaffold declares them at exactly these versions; `forge generate` adds them to any frontend whose sources import './telemetry'. 0.14.0 is a minor, not a patch, so a project on ^0.13 that never regenerates keeps the runtime that carries them. src/published-surface.test.ts holds the rule: a peer the './node' import closure does not reach must be optional.",
+  "peerDependencies": {
+    "@bufbuild/protobuf": "^2.5.0",
+    "@connectrpc/connect": "^2.0.0",
+    "@hyperdx/otel-web": "0.20.0",
+    "@opentelemetry/api": "^1.9.0",
+    "@tanstack/react-query": "^5.62.0",
+    "react": "^18.3.0 || ^19.0.0",
+    "rrweb": "2.1.7"
+  },
+  "peerDependenciesMeta": {
+    "@bufbuild/protobuf": {
+      "optional": true
+    },
+    "@connectrpc/connect": {
+      "optional": true
+    },
+    "@hyperdx/otel-web": {
+      "optional": true
+    },
+    "@tanstack/react-query": {
+      "optional": true
+    },
+    "react": {
+      "optional": true
+    },
+    "rrweb": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@bufbuild/protobuf": "^2.5.0",
+    "@connectrpc/connect": "^2.0.0",
+    "@connectrpc/connect-web": "^2.3.0",
+    "@hyperdx/otel-web": "0.20.0",
+    "@opentelemetry/api": "^1.9.0",
+    "@tanstack/react-query": "^5.62.0",
+    "@types/node": "^22.14.0",
+    "@types/react": "^19.1.0",
+    "@types/react-18": "npm:@types/react@~18.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitest/coverage-v8": "^4.1.11",
+    "esbuild": "0.28.2",
+    "jsdom": "^26.1.0",
+    "playwright": "1.58.0",
+    "react": "^19.1.0",
+    "react-dom": "^19.3.0",
+    "rrweb": "2.1.7",
+    "typescript": "^5.8.0",
+    "vitest": "^4.1.11"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

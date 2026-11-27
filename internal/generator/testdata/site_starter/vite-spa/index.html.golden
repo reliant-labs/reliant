@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!--
+      What search engines and link previews read: crawlers see this HTML as
+      served, before any JavaScript runs. Replace the description and
+      public/og.png (1200×630) with the site's own. The canonical link,
+      og:url, og:image and the WebSite JSON-LD need the site's absolute
+      origin, so vite.config.ts writes them at build time from SITE_URL
+      (deploy/kcl/<env>/main.k).
+    -->
+    <title>landing</title>
+    <meta name="description" content="landing — built with Forge. Replace this description." />
+    <meta name="theme-color" content="#18181b" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="landing" />
+    <meta property="og:title" content="landing" />
+    <meta property="og:description" content="landing — built with Forge. Replace this description." />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="icon" type="image/svg+xml" href="%BASE_URL%favicon.svg" />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script src="/config.js"></script>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

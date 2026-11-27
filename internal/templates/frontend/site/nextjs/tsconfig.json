@@ -1,0 +1,37 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["dom", "dom.iterable", "esnext"],
+    "allowJs": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "noEmit": true,
+    "esModuleInterop": true,
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noUncheckedSideEffectImports": false,
+    "types": ["node"],
+    "jsx": "react-jsx",
+    "incremental": true,
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ],
+    "paths": {
+      "@/*": ["./src/*"]
+    }
+  },
+  "// typescript 7 note": "types and noUncheckedSideEffectImports are spelled out at the values TypeScript 5 already uses here, because TypeScript 7 (the native compiler, tsgo) changed both defaults: it no longer adds every @types package (generated code reads process.env), and it checks side-effect imports, which nothing declares for import \"./globals.css\". So tsc behaves as before, and tsgo --noEmit checks the same rules.",
+  "include": [
+    "next-env.d.ts",
+    "**/*.ts",
+    "**/*.tsx",
+    ".next/types/**/*.ts",
+    ".next/dev/types/**/*.ts"
+  ],
+  "// exclude note": "The .next globs in include are there so `next dev`/`next build` have nothing to add (they rewrite this file when a value they want is missing); exclude then drops the whole build dir. Next writes per-route type stubs under .next/types that import each route by path, and a stub for a deleted route dangles. The same rule as forge's app frontends.",
+  "exclude": ["node_modules", ".next", "out"]
+}

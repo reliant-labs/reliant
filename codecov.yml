@@ -1,0 +1,37 @@
+# Codecov's view of forge's coverage. coverage.yml uploads main's full-mode
+# Go profile (scripts/ci-coverage-merge.sh) after each push to main.
+#
+# INFORMATIONAL. Neither status ever fails a commit: coverage is reported, not
+# gated, while the suite is raised toward its target. Merges are decided by
+# ci.yml's `CI gate` and the review check alone; nothing here can block one.
+codecov:
+  require_ci_to_pass: false
+
+coverage:
+  status:
+    project:
+      default:
+        informational: true
+    patch:
+      default:
+        informational: true
+
+comment: false
+
+# Profiles name files by import path; the repo names them from its root.
+fixes:
+  - "github.com/reliant-labs/forge/::"
+
+# Generated code, which no test of forge's is meant to exercise. Listed by
+# name, not as `**/*_gen.go`: most of forge's `*_gen.go` files are the
+# hand-written generators themselves (internal/codegen, internal/generator),
+# real code a coverage report must count. internal/ciguard's
+# TestCodecovIgnoresEveryGeneratedFile fails when a file carrying Go's
+# "Code generated ... DO NOT EDIT." header is not matched below.
+ignore:
+  - "**/*.pb.go"
+  - "**/mock_gen.go"
+  - "**/zz_generated.*.go"
+  - "pkg/fluxdelivery/template_gen.go"
+  - "**/gen/**"
+  - "**/testdata/**"

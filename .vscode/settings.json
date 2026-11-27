@@ -1,0 +1,49 @@
+{
+  "editor.formatOnSave": true,
+  "[go]": {
+    "editor.defaultFormatter": "golang.go",
+    "editor.codeActionsOnSave": {
+      "source.organizeImports": "explicit"
+    }
+  },
+  "go.useLanguageServer": true,
+  "gopls": {
+    "build.buildFlags": [],
+    "ui.diagnostic.analyses": {
+      "unusedparams": true,
+      "shadow": true,
+      "nilness": true,
+      "unusedwrite": true
+    },
+    "formatting.gofumpt": false
+  },
+  "[typescript]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[typescriptreact]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[javascript]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[json]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[yaml]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "tailwindCSS.experimental.classRegex": [
+    ["cva\\(([^)]*)\\)", "[\"'`]([^\"'`]*).*?[\"'`]"],
+    ["cn\\(([^)]*)\\)", "[\"'`]([^\"'`]*).*?[\"'`]"]
+  ],
+  "files.associations": {
+    "*.kcl": "kcl",
+    "*.k": "kcl",
+    "Taskfile.yml": "yaml",
+    "Taskfile.yaml": "yaml"
+  },
+  "buf.binaryPath": "buf",
+  "protoc": {
+    "path": "protoc"
+  }
+}

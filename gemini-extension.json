@@ -1,0 +1,11 @@
+{
+  "name": "forge",
+  "version": "1.12.0",
+  "description": "Deploy what your coding agent built, and let it prove the release works. Deploys need no account.",
+  "mcpServers": {
+    "forge": {
+      "command": "npx",
+      "args": ["-y", "@reliantlabs/forge", "mcp"]
+    }
+  }
+}

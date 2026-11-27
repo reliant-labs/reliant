@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Shop Example — anvils and more</title>
+    <meta name="description" content="Shop Example sells anvils, rockets and portable holes, shipped the same day." />
+    <link rel="canonical" href="https://shop.example/" />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {"@type": "WebSite", "name": "Shop Example", "url": "https://shop.example/"},
+          {"@type": "Organization", "name": "Shop Example Inc."}
+        ]
+      }
+    </script>
+    <script type="application/ld+json">
+      {"@type": "WebSite", "name": "No context", "url": "https://shop.example/"}
+    </script>
+    <script type="application/ld+json">
+      {"@context": "https://schema.org", "@type": "WebSite", "name": "Trailing comma",}
+    </script>
+  </head>
+  <body><main><h1>Shop</h1></main></body>
+</html>

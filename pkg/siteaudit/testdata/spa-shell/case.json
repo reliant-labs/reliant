@@ -1,0 +1,10 @@
+{
+  "site": "https://app.example",
+  "expect": {"indexing": "index"},
+  "pages": [
+    {"url": "https://app.example/", "status": 200, "raw": "index.html", "rendered": "rendered.html", "axe": "axe.json"},
+    {"url": "https://app.example/pricing", "status": 200, "raw": "index.html"}
+  ],
+  "robots": {"url": "https://app.example/robots.txt", "status": 404},
+  "not_found": {"url": "https://app.example/__forge_audit_404__", "status": 200, "raw": "index.html"}
+}

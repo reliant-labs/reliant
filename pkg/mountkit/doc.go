@@ -1,0 +1,82 @@
+// Package mountkit mounts a forge Connect service onto an http.ServeMux.
+//
+// # Why a library
+//
+// Earlier forge versions emitted a per-service Mount closure in the
+// generated inventory: each closure called svc.Register(mux, opts...),
+// then conditionally svc.RegisterHTTP(...) and svc.RegisterWebhookRoutes(...)
+// — the same handful of lines repeated once per service, gated by a
+// codegen flag (HasWebhooks). That body is uniform across every
+// service and every project, so it belongs in one tested library function
+// rather than in N generated closures.
+//
+// mountkit.RegisterService replaces that closure. It is interface-driven:
+// it asks the service value which capabilities it has (required Connect
+// registration, optional plain-HTTP routes, optional webhook routes) by
+// type-asserting small capability interfaces, and invokes whatever is
+// present. No per-service codegen, no hard dependency on any consumer's
+// concrete service type.
+//
+// # What it does NOT do
+//
+// mountkit adds no interceptors of its own: RegisterService threads the
+// caller's opts through to Register, followed by any options the caller
+// gave this one mount with WithHandlerOptions (a per-service interceptor on
+// top of the shared chain).
+//
+// What it does own is the protobuf JSON codec forge serves with
+// (JSONCodecOption, JSONCodecOptionV2; json_codec.go): connect-go's, whose
+// unmarshal errors also name the spelling to send when a Duration, Timestamp
+// or FieldMask arrives in Go or JavaScript syntax ("1h" → "3600s"). MountV2
+// installs it on every v2 mount, ahead of the caller's options;
+// serverkit.Chain puts it first in a v1 chain's handler options. A caller's
+// own codec still wins.
+//
+// mountkit does not build the HTTP middleware stack the optional
+// registrars consume — that stack (recovery / logging / audit, e.g.
+// forge/pkg/middleware.HTTPStack) is wired from the project's middleware
+// package, so the caller constructs it and passes it via WithHTTPStack.
+// When no stack is supplied, optional HTTP/webhook routes are mounted
+// with an identity (pass-through) stack.
+//
+// # The boundary with serverkit
+//
+// serverkit takes an already-composed http.Handler and owns the runtime
+// lifecycle; it knows nothing about service names or mounting. mountkit
+// sits one level ABOVE serverkit, in the mux-composition step the
+// generated cmd-server shim performs before handing the finished handler
+// to serverkit.Run. They are deliberately separate packages so neither
+// has to import the other's concerns.
+//
+// # Usage in generated code
+//
+// The generated cmd-server shim (or the data-only inventory's Mount
+// closure, during migration) calls RegisterService once per selected
+// service:
+//
+//	stack := fmw.HTTPStack(logger, middleware.ClaimsFromContext)
+//	for _, svc := range selectedServices {
+//	    mountkit.RegisterService(mux, svc, opts, mountkit.WithHTTPStack(stack))
+//	}
+//
+// opts is the shared []connect.HandlerOption (observe interceptors,
+// read/send limits) already composed once for the whole process.
+//
+// # connect-go v2
+//
+// A connect-go v2 service registers on a *connect.Server, and interceptors
+// belong to the server, not to a handler. So the v2 mount target is a MuxV2 —
+// the mux, the shared server interceptors and the shared connecthttp options —
+// and RegisterServiceV2 mounts a RegistrarV2 (RegisterV2(*connect.Server))
+// through it. Every mount that adds nothing of its own shares one server; a
+// mount given WithInterceptorsV2 or WithHTTPOptionsV2 gets a server of its own
+// with the shared chain followed by its own, which is what WithHandlerOptions
+// gives a v1 mount. All of them go on the same mux:
+//
+//	m := mountkit.NewMuxV2(mux, chain.ServerInterceptors(), chain.HTTPOptions()...)
+//	names := mountkit.RegisterServiceV2(m, svc, mountkit.WithHTTPStack(stack))
+//
+// A mount option of one major on a mount of the other panics at boot rather
+// than being dropped. v2 mounts read requests of any size unless a read limit
+// is passed, as v1 handlers do.
+package mountkit

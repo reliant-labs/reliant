@@ -1,0 +1,24 @@
+{
+  "numTotalTestSuites": 3,
+  "numTotalTests": 5,
+  "success": false,
+  "testResults": [
+    {
+      "name": "/work/repo/frontends/web/src/lib/money.test.ts",
+      "status": "failed",
+      "message": "",
+      "assertionResults": [
+        {"ancestorTitles": ["money", "formats"], "fullName": "money formats cents", "title": "cents", "status": "passed", "duration": 3.2, "failureMessages": []},
+        {"ancestorTitles": ["money"], "fullName": "money rounds", "title": "rounds", "status": "failed", "duration": 1, "failureMessages": ["AssertionError: expected 2 to be 3\n    at money.test.ts:14:20"]},
+        {"ancestorTitles": ["money"], "fullName": "money rounds", "title": "rounds", "status": "passed", "duration": 1, "failureMessages": []},
+        {"ancestorTitles": [], "fullName": "todo later", "title": "todo later", "status": "todo", "duration": null, "failureMessages": []}
+      ]
+    },
+    {
+      "name": "/work/repo/frontends/web/src/broken.test.ts",
+      "status": "failed",
+      "message": "Error: Cannot find module './missing'",
+      "assertionResults": []
+    }
+  ]
+}

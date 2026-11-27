@@ -1,0 +1,79 @@
+// yours: scaffolded once, never touched again — forge will not overwrite this file
+// Service implementation; canonical pattern in `forge skill load service-layer`.
+package {{.Name}}
+
+import (
+	"log/slog"
+{{- if .HasConfig}}
+
+	"{{.Module}}/pkg/config"
+{{- end}}
+)
+
+// Deps holds dependencies for the {{.Name}} package.
+//
+// Every field you add must be an INTERFACE, not a concrete type — a
+// dep interface declared in deps.go, or another internal package's
+// Service. `Store *db.PostgresRepository` compiles and then forces
+// every test of this package to open a real database;
+// `Store Store` takes the mock forge already generated. This is
+// lint-enforced (forgeconv-deps-are-interfaces). {{if .HasConfig}}Logger and Config are
+// the carve-outs: one shared singleton each{{else}}Logger is the
+// carve-out: one shared singleton{{end}}, supplied by the
+// composition, not worth an interface.
+type Deps struct {
+	Logger *slog.Logger
+{{- if .HasConfig}}
+	Config *config.Config
+{{- end}}
+	// Add your dependencies here.
+}
+
+// ─── The contract ───────────────────────────────────────────────────
+//
+// The forge:contract marker on `service` below makes its exported
+// methods the {{.Name}} package boundary. `forge generate` derives
+// `type Service interface` from them into contract_gen.go (forge-owned:
+// never edit it), and mock_gen.go and middleware_gen.go from that — so a
+// method is declared exactly once, here, on *service.
+//
+//   - Every exported method declared on service IS a Service method; keep
+//     helpers unexported. Exported types, functions (non-methods),
+//     constants, and variables are unrestricted.
+//   - Give each method a doc comment: it is copied onto the interface
+//     method in contract_gen.go, which is what callers read.
+//   - Re-run `forge generate` after adding, removing or re-signing a
+//     method. Until it runs, callers holding a Service cannot see a new
+//     method, and a removed one fails contract_gen.go's
+//     `var _ Service = (*service)(nil)` check.
+//
+// A method looks like this:
+//
+//	// Get returns the thing stored under id.
+//	func (s *service) Get(ctx context.Context, id string) (Thing, error) {
+//		return s.deps.Store.Get(ctx, id)
+//	}
+
+//forge:contract
+type service struct {
+	deps Deps
+}
+
+// New creates a new {{.Name}} service instance.
+// Returns the Service interface — callers interact only through the contract.
+//
+// The two-result `(Service, error)` shape lets New surface dep-validation
+// or one-time-init failures (missing required deps, bad config, etc.).
+// Scaffolds ship with a no-error path; polish the body when you grow
+// dep validation or eager initialization.
+//
+// forge:constructor
+//
+// The marker above opts this package into the generated observability
+// decorator (span / metrics / structured logging / panic-recovery on every
+// Service method, routed through the owned observe_chain.go seam). Replace it
+// with a forge:no-observe marker line to opt the package out; the same marker
+// in a single method's doc comment skips just that method.
+func New(deps Deps) (Service, error) {
+	return &service{deps: deps}, nil
+}

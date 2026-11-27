@@ -1,0 +1,10 @@
+{
+  "site": "https://prod.example",
+  "expect": {"indexing": "index", "canonical_host": "prod.example"},
+  "pages": [
+    {"url": "https://prod.example/", "status": 200, "header": {"X-Robots-Tag": ["googlebot: noindex, nofollow"]}, "raw": "page.html"},
+    {"url": "https://prod.example/down", "status": 503},
+    {"url": "https://prod.example/timeout", "status": 0, "err": "context deadline exceeded"}
+  ],
+  "robots": {"url": "https://prod.example/robots.txt", "status": 200, "file": "robots.txt"}
+}

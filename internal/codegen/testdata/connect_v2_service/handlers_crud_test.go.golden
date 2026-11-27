@@ -1,0 +1,159 @@
+// yours: scaffolded once, never touched again — forge will not overwrite this file
+//
+// Drives the real generated stack (handlers → pkg/crud → internal/db →
+// database) against the project's own migrations, asserting real CRUD
+// semantics. Extend it as your entities grow. See the forge `testing` skill.
+package items_test
+
+import (
+	"context"
+	"os"
+	"path/filepath"
+	"sort"
+	"strings"
+	"testing"
+
+	connect "connectrpc.com/connect/v2"
+	"github.com/reliant-labs/forge/pkg/orm"
+	"github.com/reliant-labs/forge/pkg/svcerr"
+	"github.com/reliant-labs/forge/pkg/testkit"
+
+	pb "example.com/v2app/gen/services/items/v1"
+	items "example.com/v2app/internal/handlers/items"
+	"example.com/v2app/pkg/middleware"
+)
+
+// findMigrationsDir walks up from the test's working directory (the package
+// dir, at internal/handlers/<svc>/) to the repo root — the nearest ancestor
+// containing db/migrations — and returns that db/migrations path. A hardcoded
+// relative depth is fragile: this file lives THREE levels under the repo root,
+// but a differently-nested package would need another count. Walking up finds
+// it regardless of depth.
+func findMigrationsDir(t *testing.T) string {
+	t.Helper()
+	dir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	for {
+		cand := filepath.Join(dir, "db", "migrations")
+		if info, statErr := os.Stat(cand); statErr == nil && info.IsDir() {
+			return cand
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			t.Fatalf("could not locate db/migrations walking up from %s", dir)
+		}
+		dir = parent
+	}
+}
+
+// crudTestDB builds a real-postgres database with the project's own
+// migrations applied (db/migrations/*.up.sql, in order) — the schema the
+// generated CRUD code runs against in production.
+func crudTestDB(t *testing.T) orm.Context {
+	t.Helper()
+	db := testkit.NewPostgresDB(t)
+	migDir := findMigrationsDir(t)
+	entries, err := os.ReadDir(migDir)
+	if err != nil {
+		t.Fatalf("read migrations dir: %v", err)
+	}
+	var ups []string
+	for _, e := range entries {
+		if strings.HasSuffix(e.Name(), ".up.sql") {
+			ups = append(ups, e.Name())
+		}
+	}
+	sort.Strings(ups)
+	for _, name := range ups {
+		sql, rerr := os.ReadFile(filepath.Join(migDir, name))
+		if rerr != nil {
+			t.Fatalf("read migration %s: %v", name, rerr)
+		}
+		if _, xerr := db.Exec(context.Background(), string(sql)); xerr != nil {
+			t.Fatalf("apply migration %s: %v", name, xerr)
+		}
+	}
+	return db
+}
+
+// crudTestCtx returns a context with authenticated test claims attached —
+// what the auth middleware would have produced for a real request.
+func crudTestCtx() context.Context {
+	return middleware.ContextWithClaims(context.Background(),
+		&middleware.Claims{UserID: "test-user", Email: "test@example.com"})
+}
+
+// assertCleanError asserts a client-facing error: the expected code, and
+// no leaked SQL/driver internals in the message.
+//
+// The code is svcerr.Code, the code the client is sent — not connect.CodeOf.
+// These tests call the handler directly, without the svcerr interceptor, so a
+// handler that returns a bare kind (`return nil, svcerr.PermissionDenied(…)`)
+// hands back no *connect.Error, and connect.CodeOf would read it as Unknown
+// while the generated CRUD paths' *connect.Error read correctly.
+func assertCleanError(t *testing.T, label string, err error, want connect.Code) {
+	t.Helper()
+	if err == nil {
+		t.Fatalf("%s: expected %v error, got nil", label, want)
+	}
+	if got := svcerr.CodeV2(err); got != want {
+		t.Errorf("%s: code = %v, want %v (err: %v)", label, got, want, err)
+	}
+	for _, leak := range []string{"sql:", "SELECT", "no rows in result set", "no such column"} {
+		if strings.Contains(err.Error(), leak) {
+			t.Errorf("%s: client-visible error leaks driver/SQL text (%q): %v", label, leak, err)
+		}
+	}
+}
+
+
+// TestCRUD_Item_Lifecycle exercises the full executed CRUD
+// path for Item end to end.
+func TestCRUD_Item_Lifecycle(t *testing.T) {
+	db := crudTestDB(t)
+	svc := items.NewTestItems(t, items.WithDB(db))
+	ctx := crudTestCtx()
+
+	// Two creates must produce two rows with distinct, non-empty IDs.
+	//
+	// The requests come from NewCreateItemRequest, which forge
+	// REGENERATES from the applied schema on every `forge generate`
+	// (factories_gen_test.go, beside this file): it seeds the foreign-key
+	// parents the request references and fills every field with a value the
+	// current constraints accept. A migration you edit later — a GENERATED
+	// column, a one-way status CHECK — flows into it instead of breaking this
+	// file. Variants 0 and 1 are distinct rows; override any field you assert
+	// on (`req.Name = "..."`) after the call.
+	first, err := svc.CreateItem(ctx, items.NewCreateItemRequest(t, db, 0))
+	if err != nil {
+		t.Fatalf("create #1: %v", err)
+	}
+	second, err := svc.CreateItem(ctx, items.NewCreateItemRequest(t, db, 1))
+	if err != nil {
+		t.Fatalf("create #2: %v", err)
+	}
+	id1 := first.GetItem().GetId()
+	id2 := second.GetItem().GetId()
+	if id1 == "" || id2 == "" {
+		t.Fatalf("create returned empty id(s): %q, %q", id1, id2)
+	}
+	if id1 == id2 {
+		t.Fatalf("two creates returned the same id %q — create must be an insert, never an upsert", id1)
+	}
+
+	// Get returns the created row.
+	got, err := svc.GetItem(ctx, &pb.GetItemRequest{ Id: id1})
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if got.GetItem().GetId() != id1 {
+		t.Errorf("get returned id %q, want %q", got.GetItem().GetId(), id1)
+	}
+
+	// A never-existed id maps to a clean NotFound too.
+	_, err = svc.GetItem(ctx, &pb.GetItemRequest{ Id: "never-existed"})
+	assertCleanError(t, "get missing", err, connect.CodeNotFound)
+}
+

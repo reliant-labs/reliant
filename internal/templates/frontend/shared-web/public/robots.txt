@@ -1,0 +1,5 @@
+# Every crawler may index every page. To keep a path out of search results:
+#   Disallow: /private/
+# A claimable preview deploy is already served with X-Robots-Tag: noindex.
+User-agent: *
+Allow: /

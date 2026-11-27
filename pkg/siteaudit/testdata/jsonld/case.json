@@ -1,0 +1,9 @@
+{
+  "site": "https://shop.example",
+  "expect": {"indexing": "index"},
+  "pages": [
+    {"url": "https://shop.example/", "status": 200, "raw": "home.html"},
+    {"url": "https://shop.example/products/anvil", "status": 200, "raw": "product.html"},
+    {"url": "https://shop.example/faq", "status": 200, "raw": "faq.html"}
+  ]
+}

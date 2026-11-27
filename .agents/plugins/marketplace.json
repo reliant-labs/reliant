@@ -1,0 +1,20 @@
+{
+  "name": "reliant-labs",
+  "interface": {
+    "displayName": "Reliant Labs"
+  },
+  "plugins": [
+    {
+      "name": "reliant-forge",
+      "source": {
+        "source": "local",
+        "path": "./plugins/reliant-forge"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_USE"
+      },
+      "category": "Developer Tools"
+    }
+  ]
+}

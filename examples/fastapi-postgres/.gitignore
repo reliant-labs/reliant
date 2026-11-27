@@ -1,0 +1,12 @@
+# forge: machine-local state (never committed)
+.forge-kcl/
+secrets/
+.forge/*
+!.forge/disowned.json
+!.forge/hashes/
+!.forge/scaffolded/
+!.forge/releases/
+!.forge/releases/*.json
+!.forge/promotions/
+!.forge/promotions/*.jsonl
+__pycache__/

@@ -1,0 +1,8 @@
+# robots.txt with mistakes
+Disallow: /tmp/
+User-agent: *
+Disallow: /private/
+Disalow: /typo/
+Crawl-delay: 2
+Allow private
+Sitemap: /sitemap_index.xml

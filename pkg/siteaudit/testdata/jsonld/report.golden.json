@@ -1,0 +1,356 @@
+{
+  "rules_version": "1",
+  "site": {
+    "url": "https://shop.example",
+    "host": "shop.example",
+    "score": {
+      "seo": 100,
+      "a11y": null
+    },
+    "indexing": {
+      "expected": "index",
+      "actual": "index"
+    },
+    "robots": {},
+    "sitemap": {
+      "files": 0,
+      "urls": 0
+    }
+  },
+  "routes": [
+    {
+      "route": "/",
+      "url": "https://shop.example/",
+      "status": 200,
+      "score": {
+        "seo": 100,
+        "a11y": null
+      },
+      "head": {
+        "title": "Shop Example — anvils and more",
+        "description": "Shop Example sells anvils, rockets and portable holes, shipped the same day.",
+        "canonical": "https://shop.example/",
+        "lang": "en",
+        "viewport": "width=device-width, initial-scale=1",
+        "jsonld_types": [
+          "Organization",
+          "WebSite"
+        ],
+        "indexable": true,
+        "og_complete": false
+      }
+    },
+    {
+      "route": "/faq",
+      "url": "https://shop.example/faq",
+      "status": 200,
+      "score": {
+        "seo": 100,
+        "a11y": null
+      },
+      "head": {
+        "title": "Questions about anvils — Shop Example",
+        "description": "Answers to what customers ask most about anvils: weight, shipping, and gravity.",
+        "canonical": "https://shop.example/faq",
+        "lang": "en",
+        "viewport": "width=device-width, initial-scale=1",
+        "jsonld_types": [
+          "FAQPage"
+        ],
+        "indexable": true,
+        "og_complete": false
+      }
+    },
+    {
+      "route": "/products/anvil",
+      "url": "https://shop.example/products/anvil",
+      "status": 200,
+      "score": {
+        "seo": 100,
+        "a11y": null
+      },
+      "head": {
+        "title": "Anvil, 50 kg — Shop Example",
+        "description": "A 50 kg forged steel anvil. Drops reliably from any height; ships the same day.",
+        "canonical": "https://shop.example/products/anvil",
+        "lang": "en",
+        "viewport": "width=device-width, initial-scale=1",
+        "jsonld_types": [
+          "Article",
+          "BreadcrumbList",
+          "NewsArticle",
+          "Product"
+        ],
+        "indexable": true,
+        "og_complete": false
+      }
+    }
+  ],
+  "findings": [
+    {
+      "code": "jsonld_invalid",
+      "severity": "warn",
+      "category": "seo",
+      "route": "/",
+      "ref": "jsonld[2]",
+      "evidence": {
+        "problem": "invalid character '}' looking for beginning of object key string"
+      },
+      "fix": "Fix the JSON-LD block: it is not valid JSON, so search engines ignore it."
+    },
+    {
+      "code": "jsonld_missing_property",
+      "severity": "warn",
+      "category": "seo",
+      "route": "/",
+      "ref": "jsonld[0] Organization.url",
+      "evidence": {
+        "problem": "Organization needs url"
+      },
+      "fix": "Add the property: without it the type is not eligible for rich results."
+    },
+    {
+      "code": "jsonld_no_context",
+      "severity": "warn",
+      "category": "seo",
+      "route": "/",
+      "ref": "jsonld[1]",
+      "evidence": {
+        "problem": "no @context"
+      },
+      "fix": "Add \"@context\": \"https://schema.org\" to the JSON-LD block."
+    },
+    {
+      "code": "og_tag_missing",
+      "severity": "warn",
+      "category": "seo",
+      "route": "/",
+      "ref": "og:description",
+      "fix": "Add the Open Graph tag to the served HTML so link previews in Slack, X, LinkedIn and Facebook show the page."
+    },
+    {
+      "code": "og_tag_missing",
+      "severity": "warn",
+      "category": "seo",
+      "route": "/",
+      "ref": "og:image",
+      "fix": "Add the Open Graph tag to the served HTML so link previews in Slack, X, LinkedIn and Facebook show the page."
+    },
+    {
+      "code": "og_tag_missing",
+      "severity": "warn",
+      "category": "seo",
+      "route": "/",
+      "ref": "og:title",
+      "fix": "Add the Open Graph tag to the served HTML so link previews in Slack, X, LinkedIn and Facebook show the page."
+    },
+    {
+      "code": "og_tag_missing",
+      "severity": "info",
+      "category": "seo",
+      "route": "/",
+      "ref": "og:type",
+      "fix": "Add the Open Graph tag to the served HTML so link previews in Slack, X, LinkedIn and Facebook show the page."
+    },
+    {
+      "code": "og_tag_missing",
+      "severity": "info",
+      "category": "seo",
+      "route": "/",
+      "ref": "og:url",
+      "fix": "Add the Open Graph tag to the served HTML so link previews in Slack, X, LinkedIn and Facebook show the page."
+    },
+    {
+      "code": "twitter_card_missing",
+      "severity": "info",
+      "category": "seo",
+      "route": "/",
+      "ref": "twitter:card",
+      "fix": "Add \u003cmeta name=\"twitter:card\" content=\"summary_large_image\"\u003e for a large preview on X."
+    },
+    {
+      "code": "jsonld_invalid",
+      "severity": "warn",
+      "category": "seo",
+      "route": "/faq",
+      "ref": "jsonld[1]",
+      "evidence": {
+        "problem": "the block is not a JSON object or array of objects"
+      },
+      "fix": "Fix the JSON-LD block: it is not valid JSON, so search engines ignore it."
+    },
+    {
+      "code": "jsonld_missing_property",
+      "severity": "warn",
+      "category": "seo",
+      "route": "/faq",
+      "ref": "jsonld[0] FAQPage.mainEntity[1].acceptedAnswer.text",
+      "evidence": {
+        "problem": "FAQPage needs mainEntity[1].acceptedAnswer.text"
+      },
+      "fix": "Add the property: without it the type is not eligible for rich results."
+    },
+    {
+      "code": "jsonld_missing_property",
+      "severity": "warn",
+      "category": "seo",
+      "route": "/faq",
+      "ref": "jsonld[0] FAQPage.mainEntity[2].name",
+      "evidence": {
+        "problem": "FAQPage needs mainEntity[2].name"
+      },
+      "fix": "Add the property: without it the type is not eligible for rich results."
+    },
+    {
+      "code": "og_tag_missing",
+      "severity": "warn",
+      "category": "seo",
+      "route": "/faq",
+      "ref": "og:description",
+      "fix": "Add the Open Graph tag to the served HTML so link previews in Slack, X, LinkedIn and Facebook show the page."
+    },
+    {
+      "code": "og_tag_missing",
+      "severity": "warn",
+      "category": "seo",
+      "route": "/faq",
+      "ref": "og:image",
+      "fix": "Add the Open Graph tag to the served HTML so link previews in Slack, X, LinkedIn and Facebook show the page."
+    },
+    {
+      "code": "og_tag_missing",
+      "severity": "warn",
+      "category": "seo",
+      "route": "/faq",
+      "ref": "og:title",
+      "fix": "Add the Open Graph tag to the served HTML so link previews in Slack, X, LinkedIn and Facebook show the page."
+    },
+    {
+      "code": "og_tag_missing",
+      "severity": "info",
+      "category": "seo",
+      "route": "/faq",
+      "ref": "og:type",
+      "fix": "Add the Open Graph tag to the served HTML so link previews in Slack, X, LinkedIn and Facebook show the page."
+    },
+    {
+      "code": "og_tag_missing",
+      "severity": "info",
+      "category": "seo",
+      "route": "/faq",
+      "ref": "og:url",
+      "fix": "Add the Open Graph tag to the served HTML so link previews in Slack, X, LinkedIn and Facebook show the page."
+    },
+    {
+      "code": "twitter_card_missing",
+      "severity": "info",
+      "category": "seo",
+      "route": "/faq",
+      "ref": "twitter:card",
+      "fix": "Add \u003cmeta name=\"twitter:card\" content=\"summary_large_image\"\u003e for a large preview on X."
+    },
+    {
+      "code": "jsonld_missing_property",
+      "severity": "warn",
+      "category": "seo",
+      "route": "/products/anvil",
+      "ref": "jsonld[0] Article.headline",
+      "evidence": {
+        "problem": "Article needs headline"
+      },
+      "fix": "Add the property: without it the type is not eligible for rich results."
+    },
+    {
+      "code": "jsonld_missing_property",
+      "severity": "warn",
+      "category": "seo",
+      "route": "/products/anvil",
+      "ref": "jsonld[0] BreadcrumbList.itemListElement[1].item",
+      "evidence": {
+        "problem": "BreadcrumbList needs itemListElement[1].item"
+      },
+      "fix": "Add the property: without it the type is not eligible for rich results."
+    },
+    {
+      "code": "jsonld_missing_property",
+      "severity": "warn",
+      "category": "seo",
+      "route": "/products/anvil",
+      "ref": "jsonld[0] BreadcrumbList.itemListElement[1].position",
+      "evidence": {
+        "problem": "BreadcrumbList needs itemListElement[1].position"
+      },
+      "fix": "Add the property: without it the type is not eligible for rich results."
+    },
+    {
+      "code": "jsonld_missing_property",
+      "severity": "warn",
+      "category": "seo",
+      "route": "/products/anvil",
+      "ref": "jsonld[0] NewsArticle.headline",
+      "evidence": {
+        "problem": "NewsArticle needs headline"
+      },
+      "fix": "Add the property: without it the type is not eligible for rich results."
+    },
+    {
+      "code": "jsonld_missing_property",
+      "severity": "warn",
+      "category": "seo",
+      "route": "/products/anvil",
+      "ref": "jsonld[0] Product.offers|review|aggregateRating",
+      "evidence": {
+        "problem": "Product needs offers|review|aggregateRating"
+      },
+      "fix": "Add the property: without it the type is not eligible for rich results."
+    },
+    {
+      "code": "og_tag_missing",
+      "severity": "warn",
+      "category": "seo",
+      "route": "/products/anvil",
+      "ref": "og:description",
+      "fix": "Add the Open Graph tag to the served HTML so link previews in Slack, X, LinkedIn and Facebook show the page."
+    },
+    {
+      "code": "og_tag_missing",
+      "severity": "warn",
+      "category": "seo",
+      "route": "/products/anvil",
+      "ref": "og:image",
+      "fix": "Add the Open Graph tag to the served HTML so link previews in Slack, X, LinkedIn and Facebook show the page."
+    },
+    {
+      "code": "og_tag_missing",
+      "severity": "warn",
+      "category": "seo",
+      "route": "/products/anvil",
+      "ref": "og:title",
+      "fix": "Add the Open Graph tag to the served HTML so link previews in Slack, X, LinkedIn and Facebook show the page."
+    },
+    {
+      "code": "og_tag_missing",
+      "severity": "info",
+      "category": "seo",
+      "route": "/products/anvil",
+      "ref": "og:type",
+      "fix": "Add the Open Graph tag to the served HTML so link previews in Slack, X, LinkedIn and Facebook show the page."
+    },
+    {
+      "code": "og_tag_missing",
+      "severity": "info",
+      "category": "seo",
+      "route": "/products/anvil",
+      "ref": "og:url",
+      "fix": "Add the Open Graph tag to the served HTML so link previews in Slack, X, LinkedIn and Facebook show the page."
+    },
+    {
+      "code": "twitter_card_missing",
+      "severity": "info",
+      "category": "seo",
+      "route": "/products/anvil",
+      "ref": "twitter:card",
+      "fix": "Add \u003cmeta name=\"twitter:card\" content=\"summary_large_image\"\u003e for a large preview on X."
+    }
+  ]
+}

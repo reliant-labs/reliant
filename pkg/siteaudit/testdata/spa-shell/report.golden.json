@@ -1,0 +1,321 @@
+{
+  "rules_version": "1",
+  "site": {
+    "url": "https://app.example",
+    "host": "app.example",
+    "score": {
+      "seo": 88,
+      "a11y": 72
+    },
+    "indexing": {
+      "expected": "index",
+      "actual": "index"
+    },
+    "robots": {
+      "status": "missing"
+    },
+    "sitemap": {
+      "files": 0,
+      "urls": 0
+    },
+    "not_found": "soft_404"
+  },
+  "routes": [
+    {
+      "route": "/",
+      "url": "https://app.example/",
+      "status": 200,
+      "rendered": true,
+      "score": {
+        "seo": 90,
+        "a11y": 72
+      },
+      "head": {
+        "title": "Dashboards for teams that ship",
+        "description": "App Example turns your team's metrics into dashboards everyone reads.",
+        "canonical": "https://app.example/",
+        "lang": "en",
+        "viewport": "width=device-width, initial-scale=1.0",
+        "indexable": true,
+        "og_complete": false,
+        "client_rendered": [
+          "description",
+          "canonical"
+        ]
+      }
+    },
+    {
+      "route": "/pricing",
+      "url": "https://app.example/pricing",
+      "status": 200,
+      "score": {
+        "seo": 86,
+        "a11y": null
+      },
+      "head": {
+        "title": "Vite + React + TS",
+        "lang": "en",
+        "viewport": "width=device-width, initial-scale=1.0",
+        "indexable": true,
+        "og_complete": false
+      }
+    }
+  ],
+  "findings": [
+    {
+      "code": "robots_missing",
+      "severity": "info",
+      "category": "seo",
+      "ref": "/robots.txt",
+      "evidence": {
+        "status": "404"
+      },
+      "fix": "Add a /robots.txt with \"User-agent: *\", \"Allow: /\" and a Sitemap: line."
+    },
+    {
+      "code": "sitemap_missing",
+      "severity": "info",
+      "category": "seo",
+      "ref": "/sitemap.xml",
+      "fix": "Publish /sitemap.xml listing the site's pages and name it in robots.txt."
+    },
+    {
+      "code": "soft_404",
+      "severity": "info",
+      "category": "seo",
+      "ref": "/__forge_audit_404__",
+      "evidence": {
+        "mode": "SPA fallback: unknown paths serve index.html with 200",
+        "status": "200"
+      },
+      "fix": "Answer unknown paths with a 404 (ship a 404.html) so search engines do not index error pages."
+    },
+    {
+      "code": "head_client_rendered",
+      "severity": "warn",
+      "category": "seo",
+      "route": "/",
+      "ref": "canonical",
+      "fix": "Put the tag in the served HTML: only Google runs JavaScript, other crawlers and link previews see the HTML as served."
+    },
+    {
+      "code": "head_client_rendered",
+      "severity": "warn",
+      "category": "seo",
+      "route": "/",
+      "ref": "description",
+      "fix": "Put the tag in the served HTML: only Google runs JavaScript, other crawlers and link previews see the HTML as served."
+    },
+    {
+      "code": "link_text_generic",
+      "severity": "warn",
+      "category": "seo",
+      "route": "/",
+      "ref": "https://app.example/docs",
+      "evidence": {
+        "text": "Read more"
+      },
+      "fix": "Describe the target in the link text instead of \"click here\" or \"read more\"."
+    },
+    {
+      "code": "og_tag_missing",
+      "severity": "warn",
+      "category": "seo",
+      "route": "/",
+      "ref": "og:description",
+      "fix": "Add the Open Graph tag to the served HTML so link previews in Slack, X, LinkedIn and Facebook show the page."
+    },
+    {
+      "code": "og_tag_missing",
+      "severity": "warn",
+      "category": "seo",
+      "route": "/",
+      "ref": "og:image",
+      "fix": "Add the Open Graph tag to the served HTML so link previews in Slack, X, LinkedIn and Facebook show the page."
+    },
+    {
+      "code": "og_tag_missing",
+      "severity": "warn",
+      "category": "seo",
+      "route": "/",
+      "ref": "og:title",
+      "fix": "Add the Open Graph tag to the served HTML so link previews in Slack, X, LinkedIn and Facebook show the page."
+    },
+    {
+      "code": "og_tag_missing",
+      "severity": "info",
+      "category": "seo",
+      "route": "/",
+      "ref": "og:type",
+      "fix": "Add the Open Graph tag to the served HTML so link previews in Slack, X, LinkedIn and Facebook show the page."
+    },
+    {
+      "code": "og_tag_missing",
+      "severity": "info",
+      "category": "seo",
+      "route": "/",
+      "ref": "og:url",
+      "fix": "Add the Open Graph tag to the served HTML so link previews in Slack, X, LinkedIn and Facebook show the page."
+    },
+    {
+      "code": "title_placeholder",
+      "severity": "info",
+      "category": "seo",
+      "route": "/",
+      "ref": "title",
+      "evidence": {
+        "source": "raw_html",
+        "title": "Vite + React + TS"
+      },
+      "fix": "Replace the starter title with the page's real title."
+    },
+    {
+      "code": "twitter_card_missing",
+      "severity": "info",
+      "category": "seo",
+      "route": "/",
+      "ref": "twitter:card",
+      "fix": "Add \u003cmeta name=\"twitter:card\" content=\"summary_large_image\"\u003e for a large preview on X."
+    },
+    {
+      "code": "a11y_violation",
+      "severity": "error",
+      "category": "accessibility",
+      "route": "/",
+      "ref": "button-name",
+      "evidence": {
+        "group": "a11y-names-labels",
+        "help": "Buttons must have discernible text",
+        "help_url": "https://dequeuniversity.com/rules/axe/4.10/button-name",
+        "impact": "critical",
+        "wcag": "wcag2a,wcag412"
+      },
+      "nodes": [
+        {
+          "target": "main \u003e button",
+          "html": "\u003cbutton\u003e\u003c/button\u003e",
+          "summary": "Fix any of the following:\n  Element does not have inner text that is visible to screen readers"
+        }
+      ],
+      "fix": "Buttons must have discernible text"
+    },
+    {
+      "code": "a11y_violation",
+      "severity": "warn",
+      "category": "accessibility",
+      "route": "/",
+      "ref": "color-contrast",
+      "evidence": {
+        "group": "a11y-color-contrast",
+        "help": "Elements must meet minimum color contrast ratio thresholds",
+        "help_url": "https://dequeuniversity.com/rules/axe/4.10/color-contrast",
+        "impact": "serious",
+        "wcag": "wcag2aa,wcag143"
+      },
+      "nodes": [
+        {
+          "target": "my-header \u003e\u003e\u003e a.pricing",
+          "html": "\u003ca href=\"/pricing\" class=\"pricing text-gray-400 hover:text-gray-500 focus:text-gray-500 transition-colors duration-150 ease-in-out px-3 py-2 rounded-md text-sm font-medium leading-5 tracking-tight underline-offset-4 decoration-2 decoration-gray-300 data-[state=open]:bg-gray-100 aria-[current=page]:…",
+          "summary": "Fix any of the following:\n  Element has insufficient color contrast of 2.5 (foreground color: #9ca3af, background color: #ffffff, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1"
+        }
+      ],
+      "fix": "Elements must meet minimum color contrast ratio thresholds"
+    },
+    {
+      "code": "a11y_violation",
+      "severity": "info",
+      "category": "accessibility",
+      "route": "/",
+      "ref": "region",
+      "evidence": {
+        "help": "All page content should be contained by landmarks",
+        "help_url": "https://dequeuniversity.com/rules/axe/4.10/region",
+        "impact": "moderate",
+        "wcag": "best-practice"
+      },
+      "nodes": [
+        {
+          "target": "header",
+          "html": "\u003cheader\u003e",
+          "summary": "Fix any of the following:\n  Some page content is not contained by landmarks"
+        }
+      ],
+      "fix": "All page content should be contained by landmarks"
+    },
+    {
+      "code": "canonical_missing",
+      "severity": "warn",
+      "category": "seo",
+      "route": "/pricing",
+      "ref": "canonical",
+      "fix": "Add \u003clink rel=\"canonical\" href=\"https://\u003cprod host\u003e/\u003cpath\u003e\"\u003e naming the page's preferred URL."
+    },
+    {
+      "code": "description_missing",
+      "severity": "warn",
+      "category": "seo",
+      "route": "/pricing",
+      "ref": "description",
+      "fix": "Add \u003cmeta name=\"description\" content=\"…\"\u003e summarising the page in one or two sentences."
+    },
+    {
+      "code": "og_tag_missing",
+      "severity": "warn",
+      "category": "seo",
+      "route": "/pricing",
+      "ref": "og:description",
+      "fix": "Add the Open Graph tag to the served HTML so link previews in Slack, X, LinkedIn and Facebook show the page."
+    },
+    {
+      "code": "og_tag_missing",
+      "severity": "warn",
+      "category": "seo",
+      "route": "/pricing",
+      "ref": "og:image",
+      "fix": "Add the Open Graph tag to the served HTML so link previews in Slack, X, LinkedIn and Facebook show the page."
+    },
+    {
+      "code": "og_tag_missing",
+      "severity": "warn",
+      "category": "seo",
+      "route": "/pricing",
+      "ref": "og:title",
+      "fix": "Add the Open Graph tag to the served HTML so link previews in Slack, X, LinkedIn and Facebook show the page."
+    },
+    {
+      "code": "og_tag_missing",
+      "severity": "info",
+      "category": "seo",
+      "route": "/pricing",
+      "ref": "og:type",
+      "fix": "Add the Open Graph tag to the served HTML so link previews in Slack, X, LinkedIn and Facebook show the page."
+    },
+    {
+      "code": "og_tag_missing",
+      "severity": "info",
+      "category": "seo",
+      "route": "/pricing",
+      "ref": "og:url",
+      "fix": "Add the Open Graph tag to the served HTML so link previews in Slack, X, LinkedIn and Facebook show the page."
+    },
+    {
+      "code": "title_placeholder",
+      "severity": "info",
+      "category": "seo",
+      "route": "/pricing",
+      "ref": "title",
+      "evidence": {
+        "title": "Vite + React + TS"
+      },
+      "fix": "Replace the starter title with the page's real title."
+    },
+    {
+      "code": "twitter_card_missing",
+      "severity": "info",
+      "category": "seo",
+      "route": "/pricing",
+      "ref": "twitter:card",
+      "fix": "Add \u003cmeta name=\"twitter:card\" content=\"summary_large_image\"\u003e for a large preview on X."
+    }
+  ]
+}

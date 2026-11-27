@@ -1,0 +1,20 @@
+{
+  "site": "https://acme.example",
+  "expect": {"indexing": "index", "canonical_host": "acme.example"},
+  "pages": [
+    {"url": "https://acme.example/", "status": 200, "raw": "index.html"},
+    {"url": "https://acme.example/about/", "status": 200, "raw": "about.html"},
+    {"url": "https://acme.example/blog/hello/", "status": 200, "raw": "blog-hello.html"},
+    {"url": "https://acme.example/old/", "status": 404, "raw": "404.html"}
+  ],
+  "robots": {"url": "https://acme.example/robots.txt", "status": 200, "file": "robots.txt"},
+  "sitemaps": [{"url": "https://acme.example/sitemap.xml", "status": 200, "file": "sitemap.xml"}],
+  "link_results": [
+    {"url": "https://acme.example/og.png", "status": 200, "placeholder": true},
+    {"url": "https://acme.example/og-about.png", "status": 200},
+    {"url": "https://acme.example/og-hello.png", "status": 200},
+    {"url": "https://github.com/acme", "status": 200},
+    {"url": "https://gone.example/page", "status": 0, "err": "dial tcp: no such host"}
+  ],
+  "not_found": {"url": "https://acme.example/__forge_audit_404__", "status": 404, "raw": "404.html"}
+}

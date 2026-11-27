@@ -1,0 +1,43 @@
+{
+  "schema": "forge.status/v1",
+  "generated_at": "2026-11-25T14:00:00Z",
+  "page": {
+    "title": "Status"
+  },
+  "components": [
+    {
+      "name": "Website",
+      "state": "operational",
+      "days": [
+        {
+          "date": "2026-11-19",
+          "availability": 1
+        },
+        {
+          "date": "2026-11-20",
+          "availability": 1
+        },
+        {
+          "date": "2026-11-21",
+          "availability": 1
+        },
+        {
+          "date": "2026-11-22",
+          "availability": 1
+        },
+        {
+          "date": "2026-11-23",
+          "availability": 1
+        },
+        {
+          "date": "2026-11-24",
+          "availability": 1
+        },
+        {
+          "date": "2026-11-25",
+          "availability": 1
+        }
+      ]
+    }
+  ]
+}

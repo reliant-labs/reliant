@@ -1,0 +1,8 @@
+// yours: scaffolded once, never touched again — forge will not overwrite this file
+
+// Source: widget {{.Name}}.
+package widgets
+
+func New{{.FieldName}}Cmd() *Cmd {
+	return newCmd(func(c *app.Components) []Widget { return []Widget{c.Widget{{.FieldName}}()} })
+}

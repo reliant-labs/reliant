@@ -1,0 +1,41 @@
+{
+  "violations": [
+    {
+      "id": "button-name",
+      "impact": "critical",
+      "tags": ["cat.name-role-value", "wcag2a", "wcag412", "section508"],
+      "description": "Ensure buttons have discernible text",
+      "help": "Buttons must have discernible text",
+      "helpUrl": "https://dequeuniversity.com/rules/axe/4.10/button-name",
+      "nodes": [
+        {"target": ["main > button"], "html": "<button></button>", "impact": "critical", "failureSummary": "Fix any of the following:\n  Element does not have inner text that is visible to screen readers"}
+      ]
+    },
+    {
+      "id": "color-contrast",
+      "impact": "serious",
+      "tags": ["cat.color", "wcag2aa", "wcag143"],
+      "description": "Ensure the contrast between foreground and background colors meets WCAG 2 AA minimum contrast ratio thresholds",
+      "help": "Elements must meet minimum color contrast ratio thresholds",
+      "helpUrl": "https://dequeuniversity.com/rules/axe/4.10/color-contrast",
+      "nodes": [
+        {"target": [["my-header", "a.pricing"]], "html": "<a href=\"/pricing\" class=\"pricing text-gray-400 hover:text-gray-500 focus:text-gray-500 transition-colors duration-150 ease-in-out px-3 py-2 rounded-md text-sm font-medium leading-5 tracking-tight underline-offset-4 decoration-2 decoration-gray-300 data-[state=open]:bg-gray-100 aria-[current=page]:text-gray-900 this-class-list-goes-on-long-enough-to-be-truncated-by-the-audit-because-it-is-over-three-hundred-characters\">Pricing</a>", "impact": "serious", "failureSummary": "Fix any of the following:\n  Element has insufficient color contrast of 2.5 (foreground color: #9ca3af, background color: #ffffff, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1"}
+      ]
+    },
+    {
+      "id": "region",
+      "impact": "moderate",
+      "tags": ["cat.keyboard", "best-practice"],
+      "description": "Ensure all page content is contained by landmarks",
+      "help": "All page content should be contained by landmarks",
+      "helpUrl": "https://dequeuniversity.com/rules/axe/4.10/region",
+      "nodes": [{"target": ["header"], "html": "<header>", "impact": "moderate", "failureSummary": "Fix any of the following:\n  Some page content is not contained by landmarks"}]
+    }
+  ],
+  "passes": [
+    {"id": "html-has-lang"}, {"id": "html-lang-valid"}, {"id": "document-title"},
+    {"id": "meta-viewport"}, {"id": "link-name"}, {"id": "landmark-one-main"}, {"id": "heading-order"}
+  ],
+  "incomplete": [{"id": "aria-valid-attr-value"}],
+  "inapplicable": [{"id": "video-caption"}, {"id": "image-alt"}]
+}

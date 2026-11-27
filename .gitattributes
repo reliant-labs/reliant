@@ -1,0 +1,16 @@
+# Templates are embedded with go:embed and goldens are compared byte-for-byte,
+# so a CRLF checkout on Windows would break the template/golden tests.
+* text=auto eol=lf
+
+# Rendered from internal/benefits/benefits.yaml by `task docs:benefits`
+# (go test ./internal/benefits -run TestRenderedFilesAreCurrent -update).
+# Regenerate them on a merge; never resolve a conflict in them by hand.
+# internal/benefits' TestGitattributesMarksBenefitRenders pins these lines.
+docs/benefits.md linguist-generated=true
+docs/why-forge.md linguist-generated=true
+
+# internal/benefits/benefits.yaml is deliberately NOT merge=union. Union is
+# unsafe for it: two edits to one folded-prose field (claim, why, use,
+# thesis) keep both versions of the line, which parses and validates; and two
+# entries added at the same spot interleave on their shared lines
+# (availability:, evidence:, blank lines), moving fields between entries.

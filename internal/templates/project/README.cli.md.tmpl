@@ -1,0 +1,115 @@
+# {{.Name}}
+
+A Cobra-based CLI built with [Forge](https://github.com/reliant-labs/forge).
+
+## Quick start
+
+```bash
+# Install dependencies
+task deps
+
+# Build the binary into ./bin/{{.Name}}
+task build
+
+# Run from source
+go run ./cmd/{{.Name}} version
+
+# Or install onto $PATH
+task install
+{{.Name}} version
+```
+
+## Adding a subcommand
+
+Each subcommand lives in its own file under `cmd/{{.Name}}/`. The pattern
+mirrors `version.go`:
+
+```go
+// cmd/{{.Name}}/hello.go
+package main
+
+import (
+	"fmt"
+
+	"github.com/spf13/cobra"
+)
+
+var helloCmd = &cobra.Command{
+	Use:   "hello [name]",
+	Short: "Print a greeting",
+	Args:  cobra.MaximumNArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		name := "world"
+		if len(args) > 0 {
+			name = args[0]
+		}
+		fmt.Printf("hello, %s\n", name)
+	},
+}
+
+func init() {
+	rootCmd.AddCommand(helloCmd)
+}
+```
+
+For larger commands, factor logic into `internal/<package>/` and call it
+from the cobra `Run` function. `forge scaffold package <name>` scaffolds an
+internal package with a contract interface and tests.
+
+## Task commands
+
+| Command | Description |
+|---|---|
+| `task build` | Build the CLI binary into `./bin/{{.Name}}` |
+| `task install` | Install the CLI into `$GOBIN` |
+| `task test` | Run `go test ./...`, recording the lane and its coverage under `.forge/tests/runs/` |
+| `task test:report` | Summarise the last run |
+| `task lint` | Run `golangci-lint` |
+| `task fmt` | Run `goimports -w` and `go mod tidy` |
+| `task vet` | Run `go vet ./...` |
+| `task clean` | Remove `./bin` and coverage outputs |
+
+Run `task --list` (or just `task`) for the full set.
+
+## Test results and coverage
+
+`task test` records every lane it runs, with its coverage, under
+`.forge/tests/runs/` (gitignored); `task test:report` summarises the last
+run. `FORGE_TESTS=off` records nothing for one run.
+
+CI's "Report test results" step uploads the run to your project's control
+plane with no secret: its job has `id-token: write`, and forge exchanges the
+job's GitHub OIDC token for a short-lived `tests:write` token. That works once
+the Reliant GitHub App is installed on this repository and an org admin has
+linked the installation to the org in the web app's organization settings
+(Reliant cloud: https://forge.reliantlabs.io). Until then, and on a fork's pull
+request, which gets no OIDC token, the step prints one line and stays green; it
+never decides the job's result. To upload with a token instead, store one with
+`tests:write` (or `deploy:write`) as the secret `FORGE_CONTROL_PLANE_TOKEN` and
+pass it in the step's `env:`: the secret, if set, overrides OIDC.
+`tests.upload: never` in `forge.yaml` turns upload off.
+
+## Project structure
+
+```
+{{.Name}}/
+├── cmd/{{.Name}}/    # Cobra root + subcommands (each in its own file)
+├── internal/         # Application packages (forge scaffold package <name>)
+├── pkg/config/       # Configuration types (extend as needed)
+├── .reliant/         # Forge conventions, skills, project metadata
+├── forge.yaml        # Forge project manifest (kind: cli)
+├── go.mod
+├── README.md
+└── Taskfile.yml
+```
+
+## Build flags
+
+Stamp the binary's version, commit, and date at build time so
+`{{.Name}} version` reports a real release rather than `dev`:
+
+```bash
+go build -trimpath -buildvcs=true \
+  -ldflags="-X main.version=v1.0.0 -X main.commit=$(git rev-parse HEAD) -X main.date=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+  -o bin/{{.Name}} ./cmd/{{.Name}}
+```

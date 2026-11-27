@@ -1,0 +1,141 @@
+{
+  "rules_version": "1",
+  "site": {
+    "url": "https://lint.example",
+    "host": "lint.example",
+    "score": {
+      "seo": 60,
+      "a11y": null
+    },
+    "indexing": {
+      "expected": "index",
+      "actual": "index"
+    },
+    "robots": {},
+    "sitemap": {
+      "files": 0,
+      "urls": 0
+    }
+  },
+  "routes": [
+    {
+      "route": "/",
+      "url": "https://lint.example/",
+      "status": 200,
+      "score": {
+        "seo": 60,
+        "a11y": null
+      },
+      "head": {
+        "social": {
+          "og:image": "/og.png",
+          "og:title": "Lint me"
+        },
+        "indexable": true,
+        "og_complete": false
+      }
+    }
+  ],
+  "findings": [
+    {
+      "code": "canonical_missing",
+      "severity": "warn",
+      "category": "seo",
+      "route": "/",
+      "ref": "canonical",
+      "fix": "Add \u003clink rel=\"canonical\" href=\"https://\u003cprod host\u003e/\u003cpath\u003e\"\u003e naming the page's preferred URL."
+    },
+    {
+      "code": "description_missing",
+      "severity": "warn",
+      "category": "seo",
+      "route": "/",
+      "ref": "description",
+      "fix": "Add \u003cmeta name=\"description\" content=\"…\"\u003e summarising the page in one or two sentences."
+    },
+    {
+      "code": "image_alt_missing",
+      "severity": "warn",
+      "category": "seo",
+      "route": "/",
+      "ref": "/x.png",
+      "fix": "Add alt text describing the image, or alt=\"\" when it is decorative."
+    },
+    {
+      "code": "lang_missing",
+      "severity": "warn",
+      "category": "seo",
+      "route": "/",
+      "fix": "Add a lang attribute to \u003chtml\u003e (\u003chtml lang=\"en\"\u003e)."
+    },
+    {
+      "code": "link_text_generic",
+      "severity": "warn",
+      "category": "seo",
+      "route": "/",
+      "ref": "https://lint.example/missing",
+      "evidence": {
+        "text": "here"
+      },
+      "fix": "Describe the target in the link text instead of \"click here\" or \"read more\"."
+    },
+    {
+      "code": "og_image_relative",
+      "severity": "warn",
+      "category": "seo",
+      "route": "/",
+      "ref": "og:image",
+      "evidence": {
+        "og:image": "/og.png"
+      },
+      "fix": "Make og:image an absolute https URL: scrapers do not resolve relative ones."
+    },
+    {
+      "code": "og_tag_missing",
+      "severity": "warn",
+      "category": "seo",
+      "route": "/",
+      "ref": "og:description",
+      "fix": "Add the Open Graph tag to the served HTML so link previews in Slack, X, LinkedIn and Facebook show the page."
+    },
+    {
+      "code": "og_tag_missing",
+      "severity": "info",
+      "category": "seo",
+      "route": "/",
+      "ref": "og:type",
+      "fix": "Add the Open Graph tag to the served HTML so link previews in Slack, X, LinkedIn and Facebook show the page."
+    },
+    {
+      "code": "og_tag_missing",
+      "severity": "info",
+      "category": "seo",
+      "route": "/",
+      "ref": "og:url",
+      "fix": "Add the Open Graph tag to the served HTML so link previews in Slack, X, LinkedIn and Facebook show the page."
+    },
+    {
+      "code": "title_missing",
+      "severity": "error",
+      "category": "seo",
+      "route": "/",
+      "ref": "title",
+      "fix": "Give the page a \u003ctitle\u003e that names it."
+    },
+    {
+      "code": "twitter_card_missing",
+      "severity": "info",
+      "category": "seo",
+      "route": "/",
+      "ref": "twitter:card",
+      "fix": "Add \u003cmeta name=\"twitter:card\" content=\"summary_large_image\"\u003e for a large preview on X."
+    },
+    {
+      "code": "viewport_missing",
+      "severity": "warn",
+      "category": "seo",
+      "route": "/",
+      "fix": "Add \u003cmeta name=\"viewport\" content=\"width=device-width, initial-scale=1\"\u003e."
+    }
+  ]
+}
