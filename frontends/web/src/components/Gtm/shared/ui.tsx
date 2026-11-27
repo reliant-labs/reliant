@@ -14,12 +14,18 @@ import Badge from "@/components/forge-ui/badge";
 import Tag from "@/components/forge-ui/tag";
 import {
   GtmCampaignStatus,
+  GtmChannelMode,
+  GtmChannelSource,
   GtmClaimStatus,
+  GtmConnectionState,
   GtmIdeaKind,
   GtmIdeaSource,
   GtmIdeaStatus,
-  GtmItemKind,
+  GtmItemFormat,
   GtmItemStatus,
+  GtmStrategyCategory,
+  GtmStrategyStatus,
+  type GtmChannel,
 } from "@/gen/reliant/v1/gtm_pb";
 
 // No "info": the forge-ui info variant is accent-on-accent-surface, and
@@ -56,12 +62,64 @@ export const ITEM_STATUS: Partial<Record<GtmItemStatus, Label>> = {
   [GtmItemStatus.PAUSED]: { label: "Paused", variant: "neutral" },
 };
 
-export const ITEM_KIND: Partial<Record<GtmItemKind, string>> = {
-  [GtmItemKind.BLOG_POST]: "Blog post",
-  [GtmItemKind.SOCIAL_POST]: "Social post",
-  [GtmItemKind.EMAIL]: "Email",
-  [GtmItemKind.LAUNCH]: "Launch",
-  [GtmItemKind.OTHER]: "Other",
+export const ITEM_FORMAT: Partial<Record<GtmItemFormat, string>> = {
+  [GtmItemFormat.SHORT_POST]: "Short post",
+  [GtmItemFormat.LONG_POST]: "Long post",
+  [GtmItemFormat.EMAIL]: "Email",
+  [GtmItemFormat.COLD_OUTREACH]: "Cold outreach",
+  [GtmItemFormat.VIDEO]: "Video",
+  [GtmItemFormat.MEDIA_PITCH]: "Media pitch",
+  [GtmItemFormat.AD]: "Ad",
+  [GtmItemFormat.OTHER]: "Other",
+};
+
+/** Every format, in the order a picker lists them. */
+export const ITEM_FORMATS: GtmItemFormat[] = [
+  GtmItemFormat.SHORT_POST,
+  GtmItemFormat.LONG_POST,
+  GtmItemFormat.EMAIL,
+  GtmItemFormat.COLD_OUTREACH,
+  GtmItemFormat.VIDEO,
+  GtmItemFormat.MEDIA_PITCH,
+  GtmItemFormat.AD,
+  GtmItemFormat.OTHER,
+];
+
+export const formatLabel = (format: GtmItemFormat) => ITEM_FORMAT[format] ?? "Any format";
+
+/** Email-type formats (EMAIL, COLD_OUTREACH): sent only through the agent's approved send, never scheduled or published. */
+export const isEmailFormat = (format: GtmItemFormat) => format === GtmItemFormat.EMAIL || format === GtmItemFormat.COLD_OUTREACH;
+
+export const STRATEGY_STATUS: Partial<Record<GtmStrategyStatus, Label>> = {
+  [GtmStrategyStatus.DRAFT]: { label: "Draft", variant: "neutral" },
+  [GtmStrategyStatus.ACTIVE]: { label: "Active", variant: "success" },
+  [GtmStrategyStatus.DONE]: { label: "Done", variant: "neutral" },
+  [GtmStrategyStatus.ARCHIVED]: { label: "Archived", variant: "neutral" },
+};
+
+/** The 13 strategy categories, in the catalog's order, with their display labels (GtmStrategyCategory). */
+export const STRATEGY_CATEGORIES: { id: GtmStrategyCategory; label: string }[] = [
+  { id: GtmStrategyCategory.PRICING_OFFERS_INCENTIVES, label: "Pricing, offers & incentives" },
+  { id: GtmStrategyCategory.REFERRAL_VIRAL_GROWTH, label: "Referral & viral growth" },
+  { id: GtmStrategyCategory.PAID_ACQUISITION, label: "Paid acquisition" },
+  { id: GtmStrategyCategory.ORGANIC_CONTENT_SEO, label: "Organic content & SEO" },
+  { id: GtmStrategyCategory.OUTBOUND_SALES_PROSPECTING, label: "Outbound sales & prospecting" },
+  { id: GtmStrategyCategory.PARTNERSHIPS_DISTRIBUTION, label: "Partnerships & distribution" },
+  { id: GtmStrategyCategory.LAUNCHES_PR, label: "Launches & PR" },
+  { id: GtmStrategyCategory.COMMUNITY_EVENTS, label: "Community & events" },
+  { id: GtmStrategyCategory.PRODUCT_LED_GROWTH, label: "Product-led growth" },
+  { id: GtmStrategyCategory.CONVERSION_OPTIMIZATION, label: "Conversion optimization" },
+  { id: GtmStrategyCategory.RETENTION_EXPANSION, label: "Retention & expansion" },
+  { id: GtmStrategyCategory.TRUST_REPUTATION, label: "Trust & reputation" },
+  { id: GtmStrategyCategory.MARKET_RESEARCH_POSITIONING, label: "Market research & positioning" },
+];
+
+export const categoryLabel = (id: GtmStrategyCategory) => STRATEGY_CATEGORIES.find((c) => c.id === id)?.label ?? "No category";
+
+export const CONNECTION_STATE: Partial<Record<GtmConnectionState, Label>> = {
+  [GtmConnectionState.CONNECTED]: { label: "Connected", variant: "success" },
+  [GtmConnectionState.NOT_CONNECTED]: { label: "Not connected", variant: "warning" },
+  [GtmConnectionState.UNKNOWN]: { label: "Status unknown", variant: "neutral" },
 };
 
 export const CAMPAIGN_STATUS: Partial<Record<GtmCampaignStatus, Label>> = {
@@ -82,22 +140,26 @@ export function isItemOut(status: GtmItemStatus): boolean {
   return status === GtmItemStatus.SENT || status === GtmItemStatus.PUBLISHED;
 }
 
-/** The calendar's channels; the colours are the calendar's categorical palette. A channel is free-form, so others fall back. */
-export const CHANNELS: { id: string; label: string; color: string }[] = [
-  { id: "blog", label: "Blog", color: "#6366f1" },
-  { id: "email", label: "Email", color: "#0ea5e9" },
-  { id: "newsletter", label: "Newsletter", color: "#0ea5e9" },
-  { id: "x", label: "X", color: "#64748b" },
-  { id: "linkedin", label: "LinkedIn", color: "#10b981" },
-  { id: "hn", label: "Hacker News", color: "#f59e0b" },
-  { id: "changelog", label: "Changelog", color: "#8b5cf6" },
-];
+/** Each default channel's colour, by key (the calendar's categorical palette); any other channel a neutral violet. */
+const CHANNEL_COLORS: Record<string, string> = {
+  blog: "#6366f1",
+  email: "#0ea5e9",
+  x: "#64748b",
+  linkedin: "#10b981",
+  "hacker-news": "#f59e0b",
+  reddit: "#f97316",
+  youtube: "#ef4444",
+};
 
-export const channelLabel = (id: string) => CHANNELS.find((c) => c.id === id)?.label ?? (id || "No channel");
+export const channelColor = (channel: Pick<GtmChannel, "key">) => CHANNEL_COLORS[channel.key] ?? "#8b5cf6";
 
-/** "Email", or "Blog post · Blog": the kind, and the channel when it says more. */
-export const kindAndChannel = (kind: GtmItemKind, channel: string) =>
-  kind === GtmItemKind.EMAIL ? ITEM_KIND[kind]! : `${ITEM_KIND[kind] ?? "Item"} · ${channelLabel(channel)}`;
+export const isManualChannel = (channel: GtmChannel | undefined) => channel?.mode === GtmChannelMode.MANUAL;
+
+/** "Email", or "Long post · Blog": the format, and its channel when that says more. */
+export function formatAndChannel(format: GtmItemFormat, channel: GtmChannel | undefined): string {
+  if (!channel) return `${formatLabel(format)} · No channel`;
+  return format === GtmItemFormat.EMAIL && channel.key === "email" ? formatLabel(format) : `${formatLabel(format)} · ${channel.name}`;
+}
 
 export function IdeaStatusBadge({ status }: { status: GtmIdeaStatus }) {
   const s = IDEA_STATUS[status] ?? UNKNOWN;
@@ -117,6 +179,24 @@ export function CampaignStatusBadge({ status }: { status: GtmCampaignStatus }) {
 export function ClaimStatusBadge({ status }: { status: GtmClaimStatus }) {
   const s = CLAIM_STATUS[status] ?? UNKNOWN;
   return <Badge label={s.label} variant={s.variant} size="sm" dot />;
+}
+
+export function StrategyStatusBadge({ status }: { status: GtmStrategyStatus }) {
+  const s = STRATEGY_STATUS[status] ?? UNKNOWN;
+  return <Badge label={s.label} variant={s.variant} size="sm" />;
+}
+
+export function ConnectionBadge({ state }: { state: GtmConnectionState }) {
+  const s = CONNECTION_STATE[state];
+  return s ? <Badge label={s.label} variant={s.variant} size="sm" dot /> : null;
+}
+
+/** Who added a channel: the default set, an agent (badged), or a person. */
+export function ChannelSourceTag({ source }: { source: GtmChannelSource }) {
+  if (source === GtmChannelSource.AGENT) return <Tag icon={<Bot className="size-3" aria-hidden="true" />}>Added by agent</Tag>;
+  if (source === GtmChannelSource.PERSON) return <Tag icon={<UserRound className="size-3" aria-hidden="true" />}>Added by a person</Tag>;
+  if (source === GtmChannelSource.SEED) return <Tag>Default</Tag>;
+  return null;
 }
 
 /** Agent or Human, with the icon carrying the difference as well as the word. */
