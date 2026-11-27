@@ -170,6 +170,19 @@ func (c *client) Query(ctx context.Context, orgID string, q gtm.AnalyticsQuery) 
 		mapped := mapCPError(err)
 		c.log.WarnContext(ctx, "gtm analytics: QueryPanel failed",
 			"template", string(q.Template), "code", connect.CodeOf(err).String(), "error", err)
+		if q.Environment != "" {
+			switch connect.CodeOf(err) {
+			case connect.CodePermissionDenied, connect.CodeInvalidArgument:
+				// The ids may be stale: an environment deleted and recreated
+				// has a new id, and the control plane refuses an id that is
+				// no longer live. Forget the resolution so a retry looks the
+				// name up again, and say so rather than blame the credential.
+				if inv, ok := c.envs.(EnvInvalidator); ok {
+					inv.Invalidate(orgID, q.Environment, q.ProjectID)
+				}
+				return gtm.AnalyticsResult{}, envNotQueryable(q.Environment)
+			}
+		}
 		return gtm.AnalyticsResult{}, mapped
 	}
 	res, err := decode(q, resp.Msg)

@@ -9,6 +9,7 @@ import (
 	"io"
 	"log/slog"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -381,5 +382,122 @@ func TestEnvErrorsSurviveTheService(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// TestStaleEnvIDIsEvicted: an environment deleted and recreated has a new id;
+// the control plane refuses the cached one, the read names the environment,
+// the cache entry goes, and the retry resolves the new id.
+func TestStaleEnvIDIsEvicted(t *testing.T) {
+	for _, code := range []connect.Code{connect.CodePermissionDenied, connect.CodeInvalidArgument} {
+		t.Run(code.String(), func(t *testing.T) {
+			deploy := &fakeDeploy{envs: []*cpv1.DeployEnvironment{env("env-old", "prod", "web")}}
+			envs := newTestResolver(deploy, &clock{to})
+			cp := &fakeCP{resp: kRows(0, 0)}
+			c := newClient(Deps{CP: cp, Token: token(testToken), Envs: envs, Log: discard()})
+			q := sqlQueries["event_counts"]
+			q.Environment, q.ProjectID = "prod", "web"
+			ctx := context.Background()
+
+			if _, err := c.Query(ctx, tenantZero, q); err != nil {
+				t.Fatal(err)
+			}
+			// Recreated: the control plane lists a new id and refuses the old.
+			deploy.envs = []*cpv1.DeployEnvironment{env("env-new", "prod", "web")}
+			cp.err = connect.NewError(code, errors.New("env-old is not a live environment of the org"))
+			_, err := c.Query(ctx, tenantZero, q)
+			if !IsEnvNotQueryable(err) || !errors.Is(err, gtm.ErrAnalyticsFailed) {
+				t.Fatalf("err = %v", err)
+			}
+			if want := "the product analytics query failed: environment prod could not be queried; it may have been recreated, retry"; err.Error() != want {
+				t.Errorf("err = %q, want %q", err.Error(), want)
+			}
+			if strings.Contains(err.Error(), "credential") || strings.Contains(err.Error(), "env-old") {
+				t.Errorf("err = %q", err)
+			}
+			// Passes through the Service with its text.
+			if _, serr := service(c).ReadProductAnalytics(ctx, agent, q); serr == nil || serr.Error() != err.Error() {
+				t.Errorf("through the Service: %v", serr)
+			}
+
+			cp.err = nil
+			if _, err := c.Query(ctx, tenantZero, q); err != nil {
+				t.Fatal(err)
+			}
+			last := cp.reqs[len(cp.reqs)-1].Msg.GetScope().GetEnvIds()
+			if !slices.Equal(last, []string{"env-new"}) {
+				t.Fatalf("retry read env ids %v, want the new one", last)
+			}
+		})
+	}
+	t.Run("no Environment keeps the credential error", func(t *testing.T) {
+		cp := &fakeCP{err: connect.NewError(connect.CodePermissionDenied, errors.New("no"))}
+		c := newClient(Deps{CP: cp, Token: token(testToken), Envs: &stubEnvs{}, Log: discard()})
+		if _, err := c.Query(context.Background(), tenantZero, sqlQueries["event_counts"]); err != errCredentialRefused {
+			t.Fatalf("err = %v", err)
+		}
+	})
+	t.Run("a resolver without Invalidate", func(t *testing.T) {
+		cp := &fakeCP{err: connect.NewError(connect.CodeInvalidArgument, errors.New("no"))}
+		c := newClient(Deps{CP: cp, Token: token(testToken), Envs: &stubEnvs{ids: []string{"e1"}}, Log: discard()})
+		q := sqlQueries["event_counts"]
+		q.Environment = "prod"
+		if _, err := c.Query(context.Background(), tenantZero, q); !IsEnvNotQueryable(err) {
+			t.Fatalf("err = %v", err)
+		}
+	})
+}
+
+// TestResolverCacheIsBounded: the cache never holds more than
+// maxEnvCacheEntries; when full it drops expired entries first, and empties
+// itself only when none has expired.
+func TestResolverCacheIsBounded(t *testing.T) {
+	var envs []*cpv1.DeployEnvironment
+	for i := range maxEnvCacheEntries + 10 {
+		envs = append(envs, env("id-"+strconv.Itoa(i), "n"+strconv.Itoa(i), ""))
+	}
+	c := &clock{to}
+	r := newTestResolver(&fakeDeploy{envs: envs}, c).(*envResolver)
+	ctx := context.Background()
+	resolve := func(i int) {
+		t.Helper()
+		if _, err := r.Resolve(ctx, tenantZero, "n"+strconv.Itoa(i), ""); err != nil {
+			t.Fatal(err)
+		}
+	}
+	size := func() int { r.mu.Lock(); defer r.mu.Unlock(); return len(r.cache) }
+
+	// Half the entries, then let them expire, then the other half.
+	for i := range maxEnvCacheEntries / 2 {
+		resolve(i)
+	}
+	c.t = to.Add(DefaultEnvCacheTTL)
+	for i := maxEnvCacheEntries / 2; i < maxEnvCacheEntries; i++ {
+		resolve(i)
+	}
+	if got := size(); got != maxEnvCacheEntries {
+		t.Fatalf("size = %d, want %d", got, maxEnvCacheEntries)
+	}
+	// Full: the next store drops the expired half and keeps the live one.
+	resolve(maxEnvCacheEntries)
+	if got := size(); got != maxEnvCacheEntries/2+1 {
+		t.Fatalf("after dropping expired: size = %d, want %d", got, maxEnvCacheEntries/2+1)
+	}
+	if _, ok := r.cached(envKey{tenantZero, "n" + strconv.Itoa(maxEnvCacheEntries-1), ""}); !ok {
+		t.Error("a live entry was dropped")
+	}
+	// Fill with live entries only: the store past the bound empties the cache.
+	for i := 0; size() < maxEnvCacheEntries; i++ {
+		resolve(i)
+	}
+	resolve(maxEnvCacheEntries + 5)
+	if got := size(); got != 1 {
+		t.Fatalf("after a full live cache: size = %d, want 1", got)
+	}
+	for i := range maxEnvCacheEntries + 10 {
+		resolve(i)
+		if got := size(); got > maxEnvCacheEntries {
+			t.Fatalf("size %d over the bound", got)
+		}
 	}
 }

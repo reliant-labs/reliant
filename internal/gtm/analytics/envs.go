@@ -111,6 +111,16 @@ type envEntry struct {
 	expires time.Time
 }
 
+// EnvInvalidator is an EnvResolver that can forget a cached resolution.
+// The reader calls it when the control plane refuses a query over the ids a
+// resolution gave (an environment deleted and recreated has a new id), so
+// the next read resolves the name afresh.
+type EnvInvalidator interface {
+	Invalidate(orgID, name, projectID string)
+}
+
+var _ EnvInvalidator = (*envResolver)(nil)
+
 type envResolver struct {
 	cp    DeployClient
 	token func() string
@@ -150,6 +160,13 @@ func (r *envResolver) Resolve(ctx context.Context, orgID, name, projectID string
 		r.log.WarnContext(ctx, "gtm analytics: ListEnvironments failed", "code", connect.CodeOf(err).String(), "error", err)
 		switch connect.CodeOf(err) {
 		case connect.CodePermissionDenied:
+			// Every PermissionDenied here is the token's scope. The request
+			// names only the token's own org (a machine credential may name
+			// no other, and orgID is the run's org the token was minted
+			// for) and no environment, so the one check ListEnvironments
+			// can fail is the scope it requires: deploy:read (control-plane
+			// handlers/deploy requiredScope(OrgRoleMember)), which obs:read
+			// does not imply.
 			return nil, errTokenNeedsDeployRead
 		case connect.CodeUnauthenticated:
 			return nil, errCredentialRefused
@@ -182,6 +199,13 @@ func (r *envResolver) Resolve(ctx context.Context, orgID, name, projectID string
 	sort.Strings(ids)
 	r.store(key, ids)
 	return append([]string(nil), ids...), nil
+}
+
+// Invalidate implements EnvInvalidator.
+func (r *envResolver) Invalidate(orgID, name, projectID string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	delete(r.cache, envKey{orgID, name, projectID})
 }
 
 func (r *envResolver) cached(key envKey) ([]string, bool) {

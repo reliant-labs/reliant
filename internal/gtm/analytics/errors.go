@@ -3,6 +3,9 @@
 package analytics
 
 import (
+	"errors"
+	"strings"
+
 	"github.com/reliant-labs/reliant/internal/gtm"
 )
 
@@ -84,6 +87,21 @@ func ErrBadResponse() error { return errBadResponse }
 // ErrTokenNeedsDeployRead is DeployService.ListEnvironments refusing the
 // analytics token (PermissionDenied): it lacks deploy:read.
 func ErrTokenNeedsDeployRead() error { return errTokenNeedsDeployRead }
+
+// envNotQueryable is QueryPanel refusing a read over the ids an
+// Environment resolved to (PermissionDenied or InvalidArgument), whose
+// cached resolution was dropped. name is a validated environment name, so
+// the text stays fixed but for it.
+func envNotQueryable(name string) error {
+	return failedError{detail: "environment " + name + " could not be queried; it may have been recreated, retry"}
+}
+
+// IsEnvNotQueryable reports whether err is the error a read returns when the
+// control plane refused the environment it named.
+func IsEnvNotQueryable(err error) bool {
+	var f failedError
+	return errors.As(err, &f) && strings.HasPrefix(f.detail, "environment ") && strings.HasSuffix(f.detail, "; it may have been recreated, retry")
+}
 
 // ErrEnvLookupFailed is any other ListEnvironments failure.
 func ErrEnvLookupFailed() error { return errEnvLookupFailed }
