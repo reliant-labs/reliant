@@ -135,6 +135,7 @@ type TokenServiceClient interface {
 	//
 	// auth_required: false for the same reason as ExchangeToken: the handler,
 	// not the interceptor, authenticates the caller.
+	// forge:mutation: mints a new short-lived git credential for the provider connection on every call
 	GetGitToken(context.Context, *connect.Request[v1.GetGitTokenRequest]) (*connect.Response[v1.GetGitTokenResponse], error)
 	// GetGitHubBotToken returns a short-lived GitHub App INSTALLATION token for
 	// ONE repository, so an agent on a daemon can review, label and merge as
@@ -163,6 +164,7 @@ type TokenServiceClient interface {
 	//     `git_credential_not_connected`, `git_credential_needs_reconnect`.
 	//   - PERMISSION_DENIED, reason `github_owner_cannot_push`.
 	//   - UNAVAILABLE: the control plane or GitHub could not be reached; retry.
+	// forge:mutation: mints a new GitHub App installation token on every call
 	GetGitHubBotToken(context.Context, *connect.Request[v1.GetGitHubBotTokenRequest]) (*connect.Response[v1.GetGitHubBotTokenResponse], error)
 }
 
@@ -347,6 +349,7 @@ type TokenServiceHandler interface {
 	//
 	// auth_required: false for the same reason as ExchangeToken: the handler,
 	// not the interceptor, authenticates the caller.
+	// forge:mutation: mints a new short-lived git credential for the provider connection on every call
 	GetGitToken(context.Context, *connect.Request[v1.GetGitTokenRequest]) (*connect.Response[v1.GetGitTokenResponse], error)
 	// GetGitHubBotToken returns a short-lived GitHub App INSTALLATION token for
 	// ONE repository, so an agent on a daemon can review, label and merge as
@@ -375,6 +378,7 @@ type TokenServiceHandler interface {
 	//     `git_credential_not_connected`, `git_credential_needs_reconnect`.
 	//   - PERMISSION_DENIED, reason `github_owner_cannot_push`.
 	//   - UNAVAILABLE: the control plane or GitHub could not be reached; retry.
+	// forge:mutation: mints a new GitHub App installation token on every call
 	GetGitHubBotToken(context.Context, *connect.Request[v1.GetGitHubBotTokenRequest]) (*connect.Response[v1.GetGitHubBotTokenResponse], error)
 }
 

@@ -27,7 +27,9 @@ option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
 service ForgeService {
   // GetTopology returns the whole release/environment topology. Set verify to
   // reconcile each environment against its live cluster.
-  rpc GetTopology(GetForgeTopologyRequest) returns (GetForgeTopologyResponse) {}
+  rpc GetTopology(GetForgeTopologyRequest) returns (GetForgeTopologyResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // VerifyEnv reconciles one environment against its live cluster.
   rpc VerifyEnv(VerifyForgeEnvRequest) returns (VerifyForgeEnvResponse) {
@@ -38,10 +40,14 @@ service ForgeService {
 
   // ListSecrets returns declared/present/inert secrets for an environment.
   // The report carries NAMES and BOOLEANS only, never a secret value.
-  rpc ListSecrets(ListForgeSecretsRequest) returns (ListForgeSecretsResponse) {}
+  rpc ListSecrets(ListForgeSecretsRequest) returns (ListForgeSecretsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // GetEnvStatus returns runtime checks for an environment.
-  rpc GetEnvStatus(GetForgeEnvStatusRequest) returns (GetForgeEnvStatusResponse) {}
+  rpc GetEnvStatus(GetForgeEnvStatusRequest) returns (GetForgeEnvStatusResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // GetEnvShape projects ONE environment's render into the declaration the
   // control plane records for it — `forge env shape <env> --json`.
@@ -58,7 +64,9 @@ service ForgeService {
   // records. That identity is what stops a Register from writing a
   // declaration that disagrees with the next build's, on an env whose kind is
   // immutable.
-  rpc GetEnvShape(GetForgeEnvShapeRequest) returns (GetForgeEnvShapeResponse) {}
+  rpc GetEnvShape(GetForgeEnvShapeRequest) returns (GetForgeEnvShapeResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // PlanPromote previews binding an environment to a release. READ-ONLY: it
   // runs `forge env promote <release> --to <env> --plan`, which computes the

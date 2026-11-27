@@ -27,7 +27,6 @@
 
 import { defaultParseSearch, defaultStringifySearch } from "@tanstack/react-router";
 
-/** Below this width the desktop shell's sidebars and panels stop fitting. */
 import {
   encodedSegment,
   mobileAutomationPath,
@@ -44,12 +43,14 @@ import {
 import { orgFreePath, orgOfPath } from "./paths/org";
 import { orgSegment, type RouteOrgScope } from "./routeOrg";
 import { isSafeReturnTo } from "./returnTo";
+import { DESKTOP_OPT_OUT_KEY, hasCoarsePointer, PHONE_MAX_WIDTH, readDesktopOptOut } from "./phoneShape";
 
-export const MOBILE_MAX_WIDTH = 768;
+// What a phone is, and the desktop opt-out, live in lib/phoneShape (the root
+// font size reads them too); re-exported here for the redirect's callers.
+export { DESKTOP_OPT_OUT_PARAM, isPhoneViewport, readDesktopOptOut } from "./phoneShape";
 
-/** Query param and storage key for the "give me the desktop app" opt-out. */
-export const DESKTOP_OPT_OUT_PARAM = "desktop";
-const DESKTOP_OPT_OUT_KEY = "reliant-force-desktop";
+/** Below this width the desktop shell's sidebars and panels stop fitting. */
+export const MOBILE_MAX_WIDTH = PHONE_MAX_WIDTH;
 
 export interface MobileRedirectEnv {
   pathname: string;
@@ -237,12 +238,22 @@ function mobileTwinOf(path: string, query: URLSearchParams): string {
   if (path.startsWith("/settings/machines") || path.startsWith("/settings/environments")) return mobileMachinesPath();
   // Billing on a phone is a screen inside /m/settings. A visit that has a way
   // back (the claim page sends people here to subscribe) keeps it: the mobile
-  // twin opens on billing and offers the same return.
+  // twin opens on billing and offers the same return. The App hosting tab
+  // (`?tab=hosting`: "Set up hosting billing", a deploy queued on billing, a
+  // hosting checkout's return) keeps its tab, so the screen opens on the
+  // hosting card, and its `org`, which that card asks about before acting in
+  // another organization. A checkout's `checkout=` marker is not carried: it
+  // is for the desktop app's checkout window, and the card reads the server.
   if (path === "/settings/billing") {
+    const params = new URLSearchParams({ section: "billing" });
     const returnTo = query.get("returnTo");
-    if (isSafeReturnTo(returnTo)) {
-      return `${mobileSettingsPath()}?${new URLSearchParams({ section: "billing", returnTo })}`;
+    if (isSafeReturnTo(returnTo)) params.set("returnTo", returnTo);
+    if (query.get("tab") === "hosting") {
+      params.set("tab", "hosting");
+      const org = query.get("org");
+      if (org) params.set("org", org);
     }
+    return `${mobileSettingsPath()}?${params}`;
   }
   const section = /^\/settings\/([^/]+)$/.exec(path)?.[1];
   const mobileSection = section ? MOBILE_SETTINGS_SECTION_FOR[section] : undefined;
@@ -279,21 +290,6 @@ export function mobileHandoffAllowed({
   );
 }
 
-/** Reads the opt-out from the URL, persisting it so it survives navigation. */
-export function readDesktopOptOut(search: string): boolean {
-  try {
-    if (new URLSearchParams(search).has(DESKTOP_OPT_OUT_PARAM)) {
-      localStorage.setItem(DESKTOP_OPT_OUT_KEY, "1");
-      return true;
-    }
-    return localStorage.getItem(DESKTOP_OPT_OUT_KEY) === "1";
-  } catch {
-    // Safari private browsing throws on localStorage. Honour the URL for this
-    // navigation and accept that it won't persist.
-    return new URLSearchParams(search).has(DESKTOP_OPT_OUT_PARAM);
-  }
-}
-
 /** Clears the opt-out so the browser returns to the mobile surface. */
 export function clearDesktopOptOut(): void {
   try {
@@ -301,18 +297,6 @@ export function clearDesktopOptOut(): void {
   } catch {
     // Nothing to clear if storage is unavailable.
   }
-}
-
-/**
- * Whether this device is phone-shaped — narrow AND touch, the same two
- * signals the redirect uses. For desktop-surface routes a phone can still be
- * on (the Apps console), to keep desktop-only overlays off them.
- */
-export function isPhoneViewport(): boolean {
-  if (typeof window === "undefined") return false;
-  const coarsePointer =
-    window.matchMedia?.("(pointer: coarse), (hover: none)").matches ?? false;
-  return window.innerWidth <= MOBILE_MAX_WIDTH && coarsePointer;
 }
 
 /**
@@ -333,16 +317,11 @@ export function shouldRedirectToMobileNow(location: {
 }): boolean {
   if (typeof window === "undefined") return false;
 
-  // `pointer: coarse` is the touch signal; `hover: none` catches devices that
-  // report a fine pointer (some styluses) but have no hover.
-  const coarsePointer =
-    window.matchMedia?.("(pointer: coarse), (hover: none)").matches ?? false;
-
   return shouldRedirectToMobile({
     pathname: location.pathname,
     search: location.search,
     width: window.innerWidth,
-    coarsePointer,
+    coarsePointer: hasCoarsePointer(),
     // Falls back to the live URL for the opt-out only: a `?desktop=1` arriving
     // via a full page load is present in both, and the persisted flag is the
     // authority on subsequent navigations.

@@ -94,7 +94,7 @@ func (e *adoptEnv) made(t *testing.T, def *reliantv1.TriggerDefinition) (*core.T
 
 func (e *adoptEnv) row(t *testing.T, id string) *core.Trigger {
 	t.Helper()
-	row, err := e.repo.GetTrigger(context.Background(), id)
+	row, err := store.GetTrigger(context.Background(), e.repo.ORM(), id)
 	require.NoError(t, err)
 	return row
 }

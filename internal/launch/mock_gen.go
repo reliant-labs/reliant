@@ -22,14 +22,15 @@ import (
 )
 
 // forge:section MockWorkflowLoader
-// forge:hash=27de9052bc714bd51848a573063fd6021638e3ab686dcdb35a3c160c957c4b7a
+// forge:hash=a86c9107027d56d5efbb02dc83903037069a908ff9bf0298624f4ee96b610731
 
 // MockWorkflowLoader is a test mock for the WorkflowLoader interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockWorkflowLoader.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockWorkflowLoader.<Method>Func not set" error.
 type MockWorkflowLoader struct {
 	contractkit.Recorder
 	LoadWorkflowFunc func(context.Context, string) (*db.Workflow, error)
@@ -44,18 +45,39 @@ func (m *MockWorkflowLoader) LoadWorkflow(ctx context.Context, id string) (*db.W
 	return nil, contractkit.MockNotSet("MockWorkflowLoader", "LoadWorkflow")
 }
 
+// MockWorkflowLoaderLoadWorkflowCall is one recorded call of MockWorkflowLoader.LoadWorkflow, one
+// field per parameter.
+type MockWorkflowLoaderLoadWorkflowCall struct {
+	Ctx context.Context
+	ID  string
+}
+
+// LoadWorkflowCalls returns every recorded LoadWorkflow call, oldest first, with
+// its arguments typed. It reads the same log as Calls("LoadWorkflow").
+func (m *MockWorkflowLoader) LoadWorkflowCalls() []MockWorkflowLoaderLoadWorkflowCall {
+	var out []MockWorkflowLoaderLoadWorkflowCall
+	for _, c := range m.Recorder.Calls("LoadWorkflow") {
+		var r MockWorkflowLoaderLoadWorkflowCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ WorkflowLoader = (*MockWorkflowLoader)(nil)
 
 // forge:section MockWorktreeReader
-// forge:hash=b7bed189e49274f0d88a6eed88c0dc640b39aa192717224022677e156fe6c6b6
+// forge:hash=96b16901154a24122872b2e0f3f29003c32d5a3219d029295fd1820e37421f2f
 
 // MockWorktreeReader is a test mock for the WorktreeReader interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockWorktreeReader.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockWorktreeReader.<Method>Func not set" error.
 type MockWorktreeReader struct {
 	contractkit.Recorder
 	GetWorktreeFunc func(context.Context, string) (*db.Worktree, error)
@@ -70,18 +92,39 @@ func (m *MockWorktreeReader) GetWorktree(ctx context.Context, id string) (*db.Wo
 	return nil, contractkit.MockNotSet("MockWorktreeReader", "GetWorktree")
 }
 
+// MockWorktreeReaderGetWorktreeCall is one recorded call of MockWorktreeReader.GetWorktree, one
+// field per parameter.
+type MockWorktreeReaderGetWorktreeCall struct {
+	Ctx context.Context
+	ID  string
+}
+
+// GetWorktreeCalls returns every recorded GetWorktree call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetWorktree").
+func (m *MockWorktreeReader) GetWorktreeCalls() []MockWorktreeReaderGetWorktreeCall {
+	var out []MockWorktreeReaderGetWorktreeCall
+	for _, c := range m.Recorder.Calls("GetWorktree") {
+		var r MockWorktreeReaderGetWorktreeCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ WorktreeReader = (*MockWorktreeReader)(nil)
 
 // forge:section MockProjectReader
-// forge:hash=f9b4085c70c8d6169fcb271bef837b5099665899a29a3c69622f2265067c12e6
+// forge:hash=9f035e49c31ebe445ac2b3fdf22f439c2852d11bb82476d69b21734d7e6b1592
 
 // MockProjectReader is a test mock for the ProjectReader interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockProjectReader.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockProjectReader.<Method>Func not set" error.
 type MockProjectReader struct {
 	contractkit.Recorder
 	GetProjectFunc func(context.Context, string) (*db.Project, error)
@@ -96,18 +139,39 @@ func (m *MockProjectReader) GetProject(ctx context.Context, id string) (*db.Proj
 	return nil, contractkit.MockNotSet("MockProjectReader", "GetProject")
 }
 
+// MockProjectReaderGetProjectCall is one recorded call of MockProjectReader.GetProject, one
+// field per parameter.
+type MockProjectReaderGetProjectCall struct {
+	Ctx context.Context
+	ID  string
+}
+
+// GetProjectCalls returns every recorded GetProject call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetProject").
+func (m *MockProjectReader) GetProjectCalls() []MockProjectReaderGetProjectCall {
+	var out []MockProjectReaderGetProjectCall
+	for _, c := range m.Recorder.Calls("GetProject") {
+		var r MockProjectReaderGetProjectCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ ProjectReader = (*MockProjectReader)(nil)
 
 // forge:section MockChatReader
-// forge:hash=210130601684bfdb66362ca1ac208e8d50eb0a2ea91e01e2c58b875a799f519e
+// forge:hash=06f64e5f4cd7ba8e17b94e0fa54c699da792a788f7604230dc8e17970aabf4d1
 
 // MockChatReader is a test mock for the ChatReader interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockChatReader.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockChatReader.<Method>Func not set" error.
 type MockChatReader struct {
 	contractkit.Recorder
 	GetChatFunc func(context.Context, string) (*db.Chat, error)
@@ -122,18 +186,39 @@ func (m *MockChatReader) GetChat(ctx context.Context, id string) (*db.Chat, erro
 	return nil, contractkit.MockNotSet("MockChatReader", "GetChat")
 }
 
+// MockChatReaderGetChatCall is one recorded call of MockChatReader.GetChat, one
+// field per parameter.
+type MockChatReaderGetChatCall struct {
+	Ctx context.Context
+	ID  string
+}
+
+// GetChatCalls returns every recorded GetChat call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetChat").
+func (m *MockChatReader) GetChatCalls() []MockChatReaderGetChatCall {
+	var out []MockChatReaderGetChatCall
+	for _, c := range m.Recorder.Calls("GetChat") {
+		var r MockChatReaderGetChatCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ ChatReader = (*MockChatReader)(nil)
 
 // forge:section MockChatWriter
-// forge:hash=9a07deb2b182753e4ee444fecf5136cfe74b7c8c786290fa1d67d0d378a2f204
+// forge:hash=c69f565f8df9be5c23fab92e132df2b1f70202fd8c7341a769a1efc3fb02766c
 
 // MockChatWriter is a test mock for the ChatWriter interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockChatWriter.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockChatWriter.<Method>Func not set" error.
 type MockChatWriter struct {
 	contractkit.Recorder
 	LockUserOrgsFunc            func(context.Context, string, ...db.OrgRead) error
@@ -218,18 +303,209 @@ func (m *MockChatWriter) CreateUserUpdate(ctx context.Context, update *db.UserUp
 	return contractkit.MockNotSet("MockChatWriter", "CreateUserUpdate")
 }
 
+// MockChatWriterLockUserOrgsCall is one recorded call of MockChatWriter.LockUserOrgs, one
+// field per parameter.
+type MockChatWriterLockUserOrgsCall struct {
+	Ctx    context.Context
+	UserID string
+	Reads  []db.OrgRead
+}
+
+// LockUserOrgsCalls returns every recorded LockUserOrgs call, oldest first, with
+// its arguments typed. It reads the same log as Calls("LockUserOrgs").
+func (m *MockChatWriter) LockUserOrgsCalls() []MockChatWriterLockUserOrgsCall {
+	var out []MockChatWriterLockUserOrgsCall
+	for _, c := range m.Recorder.Calls("LockUserOrgs") {
+		var r MockChatWriterLockUserOrgsCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.Reads, _ = c.Args[2].([]db.OrgRead)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockChatWriterCreateChatCall is one recorded call of MockChatWriter.CreateChat, one
+// field per parameter.
+type MockChatWriterCreateChatCall struct {
+	Ctx  context.Context
+	Chat *db.Chat
+}
+
+// CreateChatCalls returns every recorded CreateChat call, oldest first, with
+// its arguments typed. It reads the same log as Calls("CreateChat").
+func (m *MockChatWriter) CreateChatCalls() []MockChatWriterCreateChatCall {
+	var out []MockChatWriterCreateChatCall
+	for _, c := range m.Recorder.Calls("CreateChat") {
+		var r MockChatWriterCreateChatCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Chat, _ = c.Args[1].(*db.Chat)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockChatWriterUpdateChatCall is one recorded call of MockChatWriter.UpdateChat, one
+// field per parameter.
+type MockChatWriterUpdateChatCall struct {
+	Ctx  context.Context
+	Chat *db.Chat
+}
+
+// UpdateChatCalls returns every recorded UpdateChat call, oldest first, with
+// its arguments typed. It reads the same log as Calls("UpdateChat").
+func (m *MockChatWriter) UpdateChatCalls() []MockChatWriterUpdateChatCall {
+	var out []MockChatWriterUpdateChatCall
+	for _, c := range m.Recorder.Calls("UpdateChat") {
+		var r MockChatWriterUpdateChatCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Chat, _ = c.Args[1].(*db.Chat)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockChatWriterUpdateChatActiveDaemonCall is one recorded call of MockChatWriter.UpdateChatActiveDaemon, one
+// field per parameter.
+type MockChatWriterUpdateChatActiveDaemonCall struct {
+	Ctx      context.Context
+	ChatID   string
+	DaemonID *string
+}
+
+// UpdateChatActiveDaemonCalls returns every recorded UpdateChatActiveDaemon call, oldest first, with
+// its arguments typed. It reads the same log as Calls("UpdateChatActiveDaemon").
+func (m *MockChatWriter) UpdateChatActiveDaemonCalls() []MockChatWriterUpdateChatActiveDaemonCall {
+	var out []MockChatWriterUpdateChatActiveDaemonCall
+	for _, c := range m.Recorder.Calls("UpdateChatActiveDaemon") {
+		var r MockChatWriterUpdateChatActiveDaemonCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ChatID, _ = c.Args[1].(string)
+		r.DaemonID, _ = c.Args[2].(*string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockChatWriterCountMessagesInChatCall is one recorded call of MockChatWriter.CountMessagesInChat, one
+// field per parameter.
+type MockChatWriterCountMessagesInChatCall struct {
+	Ctx    context.Context
+	ChatID string
+}
+
+// CountMessagesInChatCalls returns every recorded CountMessagesInChat call, oldest first, with
+// its arguments typed. It reads the same log as Calls("CountMessagesInChat").
+func (m *MockChatWriter) CountMessagesInChatCalls() []MockChatWriterCountMessagesInChatCall {
+	var out []MockChatWriterCountMessagesInChatCall
+	for _, c := range m.Recorder.Calls("CountMessagesInChat") {
+		var r MockChatWriterCountMessagesInChatCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ChatID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockChatWriterSaveMessageToThreadCall is one recorded call of MockChatWriter.SaveMessageToThread, one
+// field per parameter.
+type MockChatWriterSaveMessageToThreadCall struct {
+	Ctx           context.Context
+	ChatID        string
+	Thread        string
+	Role          int32
+	Content       string
+	WorkflowID    *string
+	AttachmentIDs []string
+	DisplayStyle  *int32
+}
+
+// SaveMessageToThreadCalls returns every recorded SaveMessageToThread call, oldest first, with
+// its arguments typed. It reads the same log as Calls("SaveMessageToThread").
+func (m *MockChatWriter) SaveMessageToThreadCalls() []MockChatWriterSaveMessageToThreadCall {
+	var out []MockChatWriterSaveMessageToThreadCall
+	for _, c := range m.Recorder.Calls("SaveMessageToThread") {
+		var r MockChatWriterSaveMessageToThreadCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ChatID, _ = c.Args[1].(string)
+		r.Thread, _ = c.Args[2].(string)
+		r.Role, _ = c.Args[3].(int32)
+		r.Content, _ = c.Args[4].(string)
+		r.WorkflowID, _ = c.Args[5].(*string)
+		r.AttachmentIDs, _ = c.Args[6].([]string)
+		r.DisplayStyle, _ = c.Args[7].(*int32)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockChatWriterSaveMessageToThreadOnceCall is one recorded call of MockChatWriter.SaveMessageToThreadOnce, one
+// field per parameter.
+type MockChatWriterSaveMessageToThreadOnceCall struct {
+	Ctx           context.Context
+	ChatID        string
+	Thread        string
+	Role          int32
+	Content       string
+	WorkflowID    *string
+	AttachmentIDs []string
+	DisplayStyle  *int32
+	MessageID     string
+}
+
+// SaveMessageToThreadOnceCalls returns every recorded SaveMessageToThreadOnce call, oldest first, with
+// its arguments typed. It reads the same log as Calls("SaveMessageToThreadOnce").
+func (m *MockChatWriter) SaveMessageToThreadOnceCalls() []MockChatWriterSaveMessageToThreadOnceCall {
+	var out []MockChatWriterSaveMessageToThreadOnceCall
+	for _, c := range m.Recorder.Calls("SaveMessageToThreadOnce") {
+		var r MockChatWriterSaveMessageToThreadOnceCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ChatID, _ = c.Args[1].(string)
+		r.Thread, _ = c.Args[2].(string)
+		r.Role, _ = c.Args[3].(int32)
+		r.Content, _ = c.Args[4].(string)
+		r.WorkflowID, _ = c.Args[5].(*string)
+		r.AttachmentIDs, _ = c.Args[6].([]string)
+		r.DisplayStyle, _ = c.Args[7].(*int32)
+		r.MessageID, _ = c.Args[8].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockChatWriterCreateUserUpdateCall is one recorded call of MockChatWriter.CreateUserUpdate, one
+// field per parameter.
+type MockChatWriterCreateUserUpdateCall struct {
+	Ctx    context.Context
+	Update *db.UserUpdate
+}
+
+// CreateUserUpdateCalls returns every recorded CreateUserUpdate call, oldest first, with
+// its arguments typed. It reads the same log as Calls("CreateUserUpdate").
+func (m *MockChatWriter) CreateUserUpdateCalls() []MockChatWriterCreateUserUpdateCall {
+	var out []MockChatWriterCreateUserUpdateCall
+	for _, c := range m.Recorder.Calls("CreateUserUpdate") {
+		var r MockChatWriterCreateUserUpdateCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Update, _ = c.Args[1].(*db.UserUpdate)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ ChatWriter = (*MockChatWriter)(nil)
 
 // forge:section MockTriggerEventStore
-// forge:hash=908bf2b2637053fd916dbc85f4452b235ae98e5d8dc7657aa0b288e3e5188932
+// forge:hash=73d99ab920e8b9b2bf29e0971daee99c8ceae0b593c2ed2976e183b0a7e61dfb
 
 // MockTriggerEventStore is a test mock for the TriggerEventStore interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockTriggerEventStore.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockTriggerEventStore.<Method>Func not set" error.
 type MockTriggerEventStore struct {
 	contractkit.Recorder
 	InsertTriggerEventIfAbsentFunc func(context.Context, *core.TriggerEvent) (bool, error)
@@ -284,18 +560,133 @@ func (m *MockTriggerEventStore) ClaimPendingTriggerEvent(ctx context.Context, id
 	return false, contractkit.MockNotSet("MockTriggerEventStore", "ClaimPendingTriggerEvent")
 }
 
+// MockTriggerEventStoreInsertTriggerEventIfAbsentCall is one recorded call of MockTriggerEventStore.InsertTriggerEventIfAbsent, one
+// field per parameter.
+type MockTriggerEventStoreInsertTriggerEventIfAbsentCall struct {
+	Ctx context.Context
+	Ev  *core.TriggerEvent
+}
+
+// InsertTriggerEventIfAbsentCalls returns every recorded InsertTriggerEventIfAbsent call, oldest first, with
+// its arguments typed. It reads the same log as Calls("InsertTriggerEventIfAbsent").
+func (m *MockTriggerEventStore) InsertTriggerEventIfAbsentCalls() []MockTriggerEventStoreInsertTriggerEventIfAbsentCall {
+	var out []MockTriggerEventStoreInsertTriggerEventIfAbsentCall
+	for _, c := range m.Recorder.Calls("InsertTriggerEventIfAbsent") {
+		var r MockTriggerEventStoreInsertTriggerEventIfAbsentCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Ev, _ = c.Args[1].(*core.TriggerEvent)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockTriggerEventStoreGetTriggerEventByDedupeCall is one recorded call of MockTriggerEventStore.GetTriggerEventByDedupe, one
+// field per parameter.
+type MockTriggerEventStoreGetTriggerEventByDedupeCall struct {
+	Ctx       context.Context
+	Kind      core.TriggerEventKind
+	DedupeKey string
+}
+
+// GetTriggerEventByDedupeCalls returns every recorded GetTriggerEventByDedupe call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetTriggerEventByDedupe").
+func (m *MockTriggerEventStore) GetTriggerEventByDedupeCalls() []MockTriggerEventStoreGetTriggerEventByDedupeCall {
+	var out []MockTriggerEventStoreGetTriggerEventByDedupeCall
+	for _, c := range m.Recorder.Calls("GetTriggerEventByDedupe") {
+		var r MockTriggerEventStoreGetTriggerEventByDedupeCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Kind, _ = c.Args[1].(core.TriggerEventKind)
+		r.DedupeKey, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockTriggerEventStoreUpdateTriggerEventOutcomeCall is one recorded call of MockTriggerEventStore.UpdateTriggerEventOutcome, one
+// field per parameter.
+type MockTriggerEventStoreUpdateTriggerEventOutcomeCall struct {
+	Ctx     context.Context
+	ID      string
+	Outcome core.TriggerEventOutcome
+	Detail  string
+	ChatID  *string
+}
+
+// UpdateTriggerEventOutcomeCalls returns every recorded UpdateTriggerEventOutcome call, oldest first, with
+// its arguments typed. It reads the same log as Calls("UpdateTriggerEventOutcome").
+func (m *MockTriggerEventStore) UpdateTriggerEventOutcomeCalls() []MockTriggerEventStoreUpdateTriggerEventOutcomeCall {
+	var out []MockTriggerEventStoreUpdateTriggerEventOutcomeCall
+	for _, c := range m.Recorder.Calls("UpdateTriggerEventOutcome") {
+		var r MockTriggerEventStoreUpdateTriggerEventOutcomeCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ID, _ = c.Args[1].(string)
+		r.Outcome, _ = c.Args[2].(core.TriggerEventOutcome)
+		r.Detail, _ = c.Args[3].(string)
+		r.ChatID, _ = c.Args[4].(*string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockTriggerEventStoreUpdateTriggerEventPayloadCall is one recorded call of MockTriggerEventStore.UpdateTriggerEventPayload, one
+// field per parameter.
+type MockTriggerEventStoreUpdateTriggerEventPayloadCall struct {
+	Ctx     context.Context
+	ID      string
+	Payload map[string]any
+}
+
+// UpdateTriggerEventPayloadCalls returns every recorded UpdateTriggerEventPayload call, oldest first, with
+// its arguments typed. It reads the same log as Calls("UpdateTriggerEventPayload").
+func (m *MockTriggerEventStore) UpdateTriggerEventPayloadCalls() []MockTriggerEventStoreUpdateTriggerEventPayloadCall {
+	var out []MockTriggerEventStoreUpdateTriggerEventPayloadCall
+	for _, c := range m.Recorder.Calls("UpdateTriggerEventPayload") {
+		var r MockTriggerEventStoreUpdateTriggerEventPayloadCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ID, _ = c.Args[1].(string)
+		r.Payload, _ = c.Args[2].(map[string]any)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockTriggerEventStoreClaimPendingTriggerEventCall is one recorded call of MockTriggerEventStore.ClaimPendingTriggerEvent, one
+// field per parameter.
+type MockTriggerEventStoreClaimPendingTriggerEventCall struct {
+	Ctx     context.Context
+	ID      string
+	Payload map[string]any
+	Def     *core.TriggerEventDefinition
+}
+
+// ClaimPendingTriggerEventCalls returns every recorded ClaimPendingTriggerEvent call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ClaimPendingTriggerEvent").
+func (m *MockTriggerEventStore) ClaimPendingTriggerEventCalls() []MockTriggerEventStoreClaimPendingTriggerEventCall {
+	var out []MockTriggerEventStoreClaimPendingTriggerEventCall
+	for _, c := range m.Recorder.Calls("ClaimPendingTriggerEvent") {
+		var r MockTriggerEventStoreClaimPendingTriggerEventCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ID, _ = c.Args[1].(string)
+		r.Payload, _ = c.Args[2].(map[string]any)
+		r.Def, _ = c.Args[3].(*core.TriggerEventDefinition)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ TriggerEventStore = (*MockTriggerEventStore)(nil)
 
 // forge:section MockWorkflowStore
-// forge:hash=676e51b77470f2938aa0cb5b23b601b6a1d680569e37e2124e7413ee2db7909b
+// forge:hash=6713db1d1e84f2504c10ab286b80883d368f6c05df591b25815d496dac2b6403
 
 // MockWorkflowStore is a test mock for the WorkflowStore interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockWorkflowStore.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockWorkflowStore.<Method>Func not set" error.
 type MockWorkflowStore struct {
 	contractkit.Recorder
 	CompareAndSwapWorkflowStatusFunc func(context.Context, string, db.WorkflowStatus, db.WorkflowStatus) (bool, error)
@@ -340,18 +731,105 @@ func (m *MockWorkflowStore) ClaimWorkflowStart(ctx context.Context, id string) (
 	return false, contractkit.MockNotSet("MockWorkflowStore", "ClaimWorkflowStart")
 }
 
+// MockWorkflowStoreCompareAndSwapWorkflowStatusCall is one recorded call of MockWorkflowStore.CompareAndSwapWorkflowStatus, one
+// field per parameter.
+type MockWorkflowStoreCompareAndSwapWorkflowStatusCall struct {
+	Ctx            context.Context
+	ID             string
+	NewStatus      db.WorkflowStatus
+	ExpectedStatus db.WorkflowStatus
+}
+
+// CompareAndSwapWorkflowStatusCalls returns every recorded CompareAndSwapWorkflowStatus call, oldest first, with
+// its arguments typed. It reads the same log as Calls("CompareAndSwapWorkflowStatus").
+func (m *MockWorkflowStore) CompareAndSwapWorkflowStatusCalls() []MockWorkflowStoreCompareAndSwapWorkflowStatusCall {
+	var out []MockWorkflowStoreCompareAndSwapWorkflowStatusCall
+	for _, c := range m.Recorder.Calls("CompareAndSwapWorkflowStatus") {
+		var r MockWorkflowStoreCompareAndSwapWorkflowStatusCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ID, _ = c.Args[1].(string)
+		r.NewStatus, _ = c.Args[2].(db.WorkflowStatus)
+		r.ExpectedStatus, _ = c.Args[3].(db.WorkflowStatus)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockWorkflowStoreUpdateWorkflowNameCall is one recorded call of MockWorkflowStore.UpdateWorkflowName, one
+// field per parameter.
+type MockWorkflowStoreUpdateWorkflowNameCall struct {
+	Ctx          context.Context
+	ID           string
+	WorkflowName string
+}
+
+// UpdateWorkflowNameCalls returns every recorded UpdateWorkflowName call, oldest first, with
+// its arguments typed. It reads the same log as Calls("UpdateWorkflowName").
+func (m *MockWorkflowStore) UpdateWorkflowNameCalls() []MockWorkflowStoreUpdateWorkflowNameCall {
+	var out []MockWorkflowStoreUpdateWorkflowNameCall
+	for _, c := range m.Recorder.Calls("UpdateWorkflowName") {
+		var r MockWorkflowStoreUpdateWorkflowNameCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ID, _ = c.Args[1].(string)
+		r.WorkflowName, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockWorkflowStoreMarkWorkflowStartFailedCall is one recorded call of MockWorkflowStore.MarkWorkflowStartFailed, one
+// field per parameter.
+type MockWorkflowStoreMarkWorkflowStartFailedCall struct {
+	Ctx context.Context
+	ID  string
+}
+
+// MarkWorkflowStartFailedCalls returns every recorded MarkWorkflowStartFailed call, oldest first, with
+// its arguments typed. It reads the same log as Calls("MarkWorkflowStartFailed").
+func (m *MockWorkflowStore) MarkWorkflowStartFailedCalls() []MockWorkflowStoreMarkWorkflowStartFailedCall {
+	var out []MockWorkflowStoreMarkWorkflowStartFailedCall
+	for _, c := range m.Recorder.Calls("MarkWorkflowStartFailed") {
+		var r MockWorkflowStoreMarkWorkflowStartFailedCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockWorkflowStoreClaimWorkflowStartCall is one recorded call of MockWorkflowStore.ClaimWorkflowStart, one
+// field per parameter.
+type MockWorkflowStoreClaimWorkflowStartCall struct {
+	Ctx context.Context
+	ID  string
+}
+
+// ClaimWorkflowStartCalls returns every recorded ClaimWorkflowStart call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ClaimWorkflowStart").
+func (m *MockWorkflowStore) ClaimWorkflowStartCalls() []MockWorkflowStoreClaimWorkflowStartCall {
+	var out []MockWorkflowStoreClaimWorkflowStartCall
+	for _, c := range m.Recorder.Calls("ClaimWorkflowStart") {
+		var r MockWorkflowStoreClaimWorkflowStartCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ WorkflowStore = (*MockWorkflowStore)(nil)
 
 // forge:section MockPinnedWorkflowResolver
-// forge:hash=d849a16a520e89b1aea15528b927ca5d395fe808d946d652bce5a865df4724cd
+// forge:hash=db890d3042c5dc12b4445df1a963a0693b55b3cfdc79a12836c5bf9e0e272fb3
 
 // MockPinnedWorkflowResolver is a test mock for the PinnedWorkflowResolver interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockPinnedWorkflowResolver.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockPinnedWorkflowResolver.<Method>Func not set" error.
 type MockPinnedWorkflowResolver struct {
 	contractkit.Recorder
 	GetPinnedProjectCatalogFunc        func(context.Context, string) (*db.PinnedCatalog, bool, error)
@@ -456,18 +934,237 @@ func (m *MockPinnedWorkflowResolver) WorkflowSourceDiagnostic(ctx context.Contex
 	return "", contractkit.MockNotSet("MockPinnedWorkflowResolver", "WorkflowSourceDiagnostic")
 }
 
+// MockPinnedWorkflowResolverGetPinnedProjectCatalogCall is one recorded call of MockPinnedWorkflowResolver.GetPinnedProjectCatalog, one
+// field per parameter.
+type MockPinnedWorkflowResolverGetPinnedProjectCatalogCall struct {
+	Ctx context.Context
+	Pin string
+}
+
+// GetPinnedProjectCatalogCalls returns every recorded GetPinnedProjectCatalog call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetPinnedProjectCatalog").
+func (m *MockPinnedWorkflowResolver) GetPinnedProjectCatalogCalls() []MockPinnedWorkflowResolverGetPinnedProjectCatalogCall {
+	var out []MockPinnedWorkflowResolverGetPinnedProjectCatalogCall
+	for _, c := range m.Recorder.Calls("GetPinnedProjectCatalog") {
+		var r MockPinnedWorkflowResolverGetPinnedProjectCatalogCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Pin, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockPinnedWorkflowResolverGetWorkflowDraftBySlugCall is one recorded call of MockPinnedWorkflowResolver.GetWorkflowDraftBySlug, one
+// field per parameter.
+type MockPinnedWorkflowResolverGetWorkflowDraftBySlugCall struct {
+	Ctx    context.Context
+	UserID string
+	Slug   string
+}
+
+// GetWorkflowDraftBySlugCalls returns every recorded GetWorkflowDraftBySlug call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetWorkflowDraftBySlug").
+func (m *MockPinnedWorkflowResolver) GetWorkflowDraftBySlugCalls() []MockPinnedWorkflowResolverGetWorkflowDraftBySlugCall {
+	var out []MockPinnedWorkflowResolverGetWorkflowDraftBySlugCall
+	for _, c := range m.Recorder.Calls("GetWorkflowDraftBySlug") {
+		var r MockPinnedWorkflowResolverGetWorkflowDraftBySlugCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.Slug, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockPinnedWorkflowResolverGetUsableWorkflowBySlugCall is one recorded call of MockPinnedWorkflowResolver.GetUsableWorkflowBySlug, one
+// field per parameter.
+type MockPinnedWorkflowResolverGetUsableWorkflowBySlugCall struct {
+	Ctx    context.Context
+	UserID string
+	Slug   string
+}
+
+// GetUsableWorkflowBySlugCalls returns every recorded GetUsableWorkflowBySlug call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetUsableWorkflowBySlug").
+func (m *MockPinnedWorkflowResolver) GetUsableWorkflowBySlugCalls() []MockPinnedWorkflowResolverGetUsableWorkflowBySlugCall {
+	var out []MockPinnedWorkflowResolverGetUsableWorkflowBySlugCall
+	for _, c := range m.Recorder.Calls("GetUsableWorkflowBySlug") {
+		var r MockPinnedWorkflowResolverGetUsableWorkflowBySlugCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.Slug, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockPinnedWorkflowResolverGetPresetBySlugCall is one recorded call of MockPinnedWorkflowResolver.GetPresetBySlug, one
+// field per parameter.
+type MockPinnedWorkflowResolverGetPresetBySlugCall struct {
+	Ctx    context.Context
+	UserID string
+	Slug   string
+}
+
+// GetPresetBySlugCalls returns every recorded GetPresetBySlug call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetPresetBySlug").
+func (m *MockPinnedWorkflowResolver) GetPresetBySlugCalls() []MockPinnedWorkflowResolverGetPresetBySlugCall {
+	var out []MockPinnedWorkflowResolverGetPresetBySlugCall
+	for _, c := range m.Recorder.Calls("GetPresetBySlug") {
+		var r MockPinnedWorkflowResolverGetPresetBySlugCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.Slug, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockPinnedWorkflowResolverGetPresetBySlugAndProjectCall is one recorded call of MockPinnedWorkflowResolver.GetPresetBySlugAndProject, one
+// field per parameter.
+type MockPinnedWorkflowResolverGetPresetBySlugAndProjectCall struct {
+	Ctx       context.Context
+	UserID    string
+	Slug      string
+	ProjectID string
+}
+
+// GetPresetBySlugAndProjectCalls returns every recorded GetPresetBySlugAndProject call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetPresetBySlugAndProject").
+func (m *MockPinnedWorkflowResolver) GetPresetBySlugAndProjectCalls() []MockPinnedWorkflowResolverGetPresetBySlugAndProjectCall {
+	var out []MockPinnedWorkflowResolverGetPresetBySlugAndProjectCall
+	for _, c := range m.Recorder.Calls("GetPresetBySlugAndProject") {
+		var r MockPinnedWorkflowResolverGetPresetBySlugAndProjectCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.Slug, _ = c.Args[2].(string)
+		r.ProjectID, _ = c.Args[3].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockPinnedWorkflowResolverGetProjectWorkflowsJSONCall is one recorded call of MockPinnedWorkflowResolver.GetProjectWorkflowsJSON, one
+// field per parameter.
+type MockPinnedWorkflowResolverGetProjectWorkflowsJSONCall struct {
+	Ctx       context.Context
+	ProjectID string
+}
+
+// GetProjectWorkflowsJSONCalls returns every recorded GetProjectWorkflowsJSON call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetProjectWorkflowsJSON").
+func (m *MockPinnedWorkflowResolver) GetProjectWorkflowsJSONCalls() []MockPinnedWorkflowResolverGetProjectWorkflowsJSONCall {
+	var out []MockPinnedWorkflowResolverGetProjectWorkflowsJSONCall
+	for _, c := range m.Recorder.Calls("GetProjectWorkflowsJSON") {
+		var r MockPinnedWorkflowResolverGetProjectWorkflowsJSONCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ProjectID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockPinnedWorkflowResolverGetProjectPresetsJSONCall is one recorded call of MockPinnedWorkflowResolver.GetProjectPresetsJSON, one
+// field per parameter.
+type MockPinnedWorkflowResolverGetProjectPresetsJSONCall struct {
+	Ctx       context.Context
+	ProjectID string
+}
+
+// GetProjectPresetsJSONCalls returns every recorded GetProjectPresetsJSON call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetProjectPresetsJSON").
+func (m *MockPinnedWorkflowResolver) GetProjectPresetsJSONCalls() []MockPinnedWorkflowResolverGetProjectPresetsJSONCall {
+	var out []MockPinnedWorkflowResolverGetProjectPresetsJSONCall
+	for _, c := range m.Recorder.Calls("GetProjectPresetsJSON") {
+		var r MockPinnedWorkflowResolverGetProjectPresetsJSONCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ProjectID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockPinnedWorkflowResolverGetProjectMachineWorkflowsJSONCall is one recorded call of MockPinnedWorkflowResolver.GetProjectMachineWorkflowsJSON, one
+// field per parameter.
+type MockPinnedWorkflowResolverGetProjectMachineWorkflowsJSONCall struct {
+	Ctx       context.Context
+	ProjectID string
+	DaemonID  string
+}
+
+// GetProjectMachineWorkflowsJSONCalls returns every recorded GetProjectMachineWorkflowsJSON call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetProjectMachineWorkflowsJSON").
+func (m *MockPinnedWorkflowResolver) GetProjectMachineWorkflowsJSONCalls() []MockPinnedWorkflowResolverGetProjectMachineWorkflowsJSONCall {
+	var out []MockPinnedWorkflowResolverGetProjectMachineWorkflowsJSONCall
+	for _, c := range m.Recorder.Calls("GetProjectMachineWorkflowsJSON") {
+		var r MockPinnedWorkflowResolverGetProjectMachineWorkflowsJSONCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ProjectID, _ = c.Args[1].(string)
+		r.DaemonID, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockPinnedWorkflowResolverGetProjectMachinePresetsJSONCall is one recorded call of MockPinnedWorkflowResolver.GetProjectMachinePresetsJSON, one
+// field per parameter.
+type MockPinnedWorkflowResolverGetProjectMachinePresetsJSONCall struct {
+	Ctx       context.Context
+	ProjectID string
+	DaemonID  string
+}
+
+// GetProjectMachinePresetsJSONCalls returns every recorded GetProjectMachinePresetsJSON call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetProjectMachinePresetsJSON").
+func (m *MockPinnedWorkflowResolver) GetProjectMachinePresetsJSONCalls() []MockPinnedWorkflowResolverGetProjectMachinePresetsJSONCall {
+	var out []MockPinnedWorkflowResolverGetProjectMachinePresetsJSONCall
+	for _, c := range m.Recorder.Calls("GetProjectMachinePresetsJSON") {
+		var r MockPinnedWorkflowResolverGetProjectMachinePresetsJSONCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ProjectID, _ = c.Args[1].(string)
+		r.DaemonID, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockPinnedWorkflowResolverWorkflowSourceDiagnosticCall is one recorded call of MockPinnedWorkflowResolver.WorkflowSourceDiagnostic, one
+// field per parameter.
+type MockPinnedWorkflowResolverWorkflowSourceDiagnosticCall struct {
+	Ctx       context.Context
+	ProjectID string
+	DaemonID  string
+	Ref       string
+}
+
+// WorkflowSourceDiagnosticCalls returns every recorded WorkflowSourceDiagnostic call, oldest first, with
+// its arguments typed. It reads the same log as Calls("WorkflowSourceDiagnostic").
+func (m *MockPinnedWorkflowResolver) WorkflowSourceDiagnosticCalls() []MockPinnedWorkflowResolverWorkflowSourceDiagnosticCall {
+	var out []MockPinnedWorkflowResolverWorkflowSourceDiagnosticCall
+	for _, c := range m.Recorder.Calls("WorkflowSourceDiagnostic") {
+		var r MockPinnedWorkflowResolverWorkflowSourceDiagnosticCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ProjectID, _ = c.Args[1].(string)
+		r.DaemonID, _ = c.Args[2].(string)
+		r.Ref, _ = c.Args[3].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ PinnedWorkflowResolver = (*MockPinnedWorkflowResolver)(nil)
 
 // forge:section MockWorkflowProvenanceReader
-// forge:hash=3db0e11cf6fb193af13cd27898d88b7d97b507c5fd391467d22218d35d940064
+// forge:hash=11604e499c167e1a1c999e9b707a26debc43a24bca4c4d50146148af14b038cf
 
 // MockWorkflowProvenanceReader is a test mock for the WorkflowProvenanceReader interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockWorkflowProvenanceReader.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockWorkflowProvenanceReader.<Method>Func not set" error.
 type MockWorkflowProvenanceReader struct {
 	contractkit.Recorder
 	ProjectWorkflowProvenanceFunc func(context.Context, string) ([]config.WorkflowProvenance, error)
@@ -482,18 +1179,39 @@ func (m *MockWorkflowProvenanceReader) ProjectWorkflowProvenance(ctx context.Con
 	return nil, contractkit.MockNotSet("MockWorkflowProvenanceReader", "ProjectWorkflowProvenance")
 }
 
+// MockWorkflowProvenanceReaderProjectWorkflowProvenanceCall is one recorded call of MockWorkflowProvenanceReader.ProjectWorkflowProvenance, one
+// field per parameter.
+type MockWorkflowProvenanceReaderProjectWorkflowProvenanceCall struct {
+	Ctx       context.Context
+	ProjectID string
+}
+
+// ProjectWorkflowProvenanceCalls returns every recorded ProjectWorkflowProvenance call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ProjectWorkflowProvenance").
+func (m *MockWorkflowProvenanceReader) ProjectWorkflowProvenanceCalls() []MockWorkflowProvenanceReaderProjectWorkflowProvenanceCall {
+	var out []MockWorkflowProvenanceReaderProjectWorkflowProvenanceCall
+	for _, c := range m.Recorder.Calls("ProjectWorkflowProvenance") {
+		var r MockWorkflowProvenanceReaderProjectWorkflowProvenanceCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ProjectID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ WorkflowProvenanceReader = (*MockWorkflowProvenanceReader)(nil)
 
 // forge:section MockMachineNamer
-// forge:hash=097fdc3a721fc41a7c75f13f6b423df2e7db4d2a28dd5b82c7edbcc922da351a
+// forge:hash=eab103bcbcd891d70c171a5f7ec6974914ad2994425056314bdff0c58fe2ec69
 
 // MockMachineNamer is a test mock for the MachineNamer interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockMachineNamer.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockMachineNamer.<Method>Func not set" error.
 type MockMachineNamer struct {
 	contractkit.Recorder
 	MachineDisplayNameFunc func(context.Context, string) string
@@ -508,18 +1226,39 @@ func (m *MockMachineNamer) MachineDisplayName(ctx context.Context, daemonID stri
 	return ""
 }
 
+// MockMachineNamerMachineDisplayNameCall is one recorded call of MockMachineNamer.MachineDisplayName, one
+// field per parameter.
+type MockMachineNamerMachineDisplayNameCall struct {
+	Ctx      context.Context
+	DaemonID string
+}
+
+// MachineDisplayNameCalls returns every recorded MachineDisplayName call, oldest first, with
+// its arguments typed. It reads the same log as Calls("MachineDisplayName").
+func (m *MockMachineNamer) MachineDisplayNameCalls() []MockMachineNamerMachineDisplayNameCall {
+	var out []MockMachineNamerMachineDisplayNameCall
+	for _, c := range m.Recorder.Calls("MachineDisplayName") {
+		var r MockMachineNamerMachineDisplayNameCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.DaemonID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ MachineNamer = (*MockMachineNamer)(nil)
 
 // forge:section MockWorkflowResolver
-// forge:hash=4b0bced73328cdd32f0d7bb327fb4d4664c7ed0e7509053c438a341498597e26
+// forge:hash=249527ef855cfc897edebd3fcddec03b9db8e31a24bd22077f40245aba1a5010
 
 // MockWorkflowResolver is a test mock for the WorkflowResolver interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockWorkflowResolver.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockWorkflowResolver.<Method>Func not set" error.
 type MockWorkflowResolver struct {
 	contractkit.Recorder
 	GetWorkflowDraftBySlugFunc         func(context.Context, string, string) (*db.WorkflowDraft, error)
@@ -614,18 +1353,217 @@ func (m *MockWorkflowResolver) WorkflowSourceDiagnostic(ctx context.Context, pro
 	return "", contractkit.MockNotSet("MockWorkflowResolver", "WorkflowSourceDiagnostic")
 }
 
+// MockWorkflowResolverGetWorkflowDraftBySlugCall is one recorded call of MockWorkflowResolver.GetWorkflowDraftBySlug, one
+// field per parameter.
+type MockWorkflowResolverGetWorkflowDraftBySlugCall struct {
+	Ctx    context.Context
+	UserID string
+	Slug   string
+}
+
+// GetWorkflowDraftBySlugCalls returns every recorded GetWorkflowDraftBySlug call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetWorkflowDraftBySlug").
+func (m *MockWorkflowResolver) GetWorkflowDraftBySlugCalls() []MockWorkflowResolverGetWorkflowDraftBySlugCall {
+	var out []MockWorkflowResolverGetWorkflowDraftBySlugCall
+	for _, c := range m.Recorder.Calls("GetWorkflowDraftBySlug") {
+		var r MockWorkflowResolverGetWorkflowDraftBySlugCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.Slug, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockWorkflowResolverGetUsableWorkflowBySlugCall is one recorded call of MockWorkflowResolver.GetUsableWorkflowBySlug, one
+// field per parameter.
+type MockWorkflowResolverGetUsableWorkflowBySlugCall struct {
+	Ctx    context.Context
+	UserID string
+	Slug   string
+}
+
+// GetUsableWorkflowBySlugCalls returns every recorded GetUsableWorkflowBySlug call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetUsableWorkflowBySlug").
+func (m *MockWorkflowResolver) GetUsableWorkflowBySlugCalls() []MockWorkflowResolverGetUsableWorkflowBySlugCall {
+	var out []MockWorkflowResolverGetUsableWorkflowBySlugCall
+	for _, c := range m.Recorder.Calls("GetUsableWorkflowBySlug") {
+		var r MockWorkflowResolverGetUsableWorkflowBySlugCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.Slug, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockWorkflowResolverGetPresetBySlugCall is one recorded call of MockWorkflowResolver.GetPresetBySlug, one
+// field per parameter.
+type MockWorkflowResolverGetPresetBySlugCall struct {
+	Ctx    context.Context
+	UserID string
+	Slug   string
+}
+
+// GetPresetBySlugCalls returns every recorded GetPresetBySlug call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetPresetBySlug").
+func (m *MockWorkflowResolver) GetPresetBySlugCalls() []MockWorkflowResolverGetPresetBySlugCall {
+	var out []MockWorkflowResolverGetPresetBySlugCall
+	for _, c := range m.Recorder.Calls("GetPresetBySlug") {
+		var r MockWorkflowResolverGetPresetBySlugCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.Slug, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockWorkflowResolverGetPresetBySlugAndProjectCall is one recorded call of MockWorkflowResolver.GetPresetBySlugAndProject, one
+// field per parameter.
+type MockWorkflowResolverGetPresetBySlugAndProjectCall struct {
+	Ctx       context.Context
+	UserID    string
+	Slug      string
+	ProjectID string
+}
+
+// GetPresetBySlugAndProjectCalls returns every recorded GetPresetBySlugAndProject call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetPresetBySlugAndProject").
+func (m *MockWorkflowResolver) GetPresetBySlugAndProjectCalls() []MockWorkflowResolverGetPresetBySlugAndProjectCall {
+	var out []MockWorkflowResolverGetPresetBySlugAndProjectCall
+	for _, c := range m.Recorder.Calls("GetPresetBySlugAndProject") {
+		var r MockWorkflowResolverGetPresetBySlugAndProjectCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.Slug, _ = c.Args[2].(string)
+		r.ProjectID, _ = c.Args[3].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockWorkflowResolverGetProjectWorkflowsJSONCall is one recorded call of MockWorkflowResolver.GetProjectWorkflowsJSON, one
+// field per parameter.
+type MockWorkflowResolverGetProjectWorkflowsJSONCall struct {
+	Ctx       context.Context
+	ProjectID string
+}
+
+// GetProjectWorkflowsJSONCalls returns every recorded GetProjectWorkflowsJSON call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetProjectWorkflowsJSON").
+func (m *MockWorkflowResolver) GetProjectWorkflowsJSONCalls() []MockWorkflowResolverGetProjectWorkflowsJSONCall {
+	var out []MockWorkflowResolverGetProjectWorkflowsJSONCall
+	for _, c := range m.Recorder.Calls("GetProjectWorkflowsJSON") {
+		var r MockWorkflowResolverGetProjectWorkflowsJSONCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ProjectID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockWorkflowResolverGetProjectPresetsJSONCall is one recorded call of MockWorkflowResolver.GetProjectPresetsJSON, one
+// field per parameter.
+type MockWorkflowResolverGetProjectPresetsJSONCall struct {
+	Ctx       context.Context
+	ProjectID string
+}
+
+// GetProjectPresetsJSONCalls returns every recorded GetProjectPresetsJSON call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetProjectPresetsJSON").
+func (m *MockWorkflowResolver) GetProjectPresetsJSONCalls() []MockWorkflowResolverGetProjectPresetsJSONCall {
+	var out []MockWorkflowResolverGetProjectPresetsJSONCall
+	for _, c := range m.Recorder.Calls("GetProjectPresetsJSON") {
+		var r MockWorkflowResolverGetProjectPresetsJSONCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ProjectID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockWorkflowResolverGetProjectMachineWorkflowsJSONCall is one recorded call of MockWorkflowResolver.GetProjectMachineWorkflowsJSON, one
+// field per parameter.
+type MockWorkflowResolverGetProjectMachineWorkflowsJSONCall struct {
+	Ctx       context.Context
+	ProjectID string
+	DaemonID  string
+}
+
+// GetProjectMachineWorkflowsJSONCalls returns every recorded GetProjectMachineWorkflowsJSON call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetProjectMachineWorkflowsJSON").
+func (m *MockWorkflowResolver) GetProjectMachineWorkflowsJSONCalls() []MockWorkflowResolverGetProjectMachineWorkflowsJSONCall {
+	var out []MockWorkflowResolverGetProjectMachineWorkflowsJSONCall
+	for _, c := range m.Recorder.Calls("GetProjectMachineWorkflowsJSON") {
+		var r MockWorkflowResolverGetProjectMachineWorkflowsJSONCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ProjectID, _ = c.Args[1].(string)
+		r.DaemonID, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockWorkflowResolverGetProjectMachinePresetsJSONCall is one recorded call of MockWorkflowResolver.GetProjectMachinePresetsJSON, one
+// field per parameter.
+type MockWorkflowResolverGetProjectMachinePresetsJSONCall struct {
+	Ctx       context.Context
+	ProjectID string
+	DaemonID  string
+}
+
+// GetProjectMachinePresetsJSONCalls returns every recorded GetProjectMachinePresetsJSON call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetProjectMachinePresetsJSON").
+func (m *MockWorkflowResolver) GetProjectMachinePresetsJSONCalls() []MockWorkflowResolverGetProjectMachinePresetsJSONCall {
+	var out []MockWorkflowResolverGetProjectMachinePresetsJSONCall
+	for _, c := range m.Recorder.Calls("GetProjectMachinePresetsJSON") {
+		var r MockWorkflowResolverGetProjectMachinePresetsJSONCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ProjectID, _ = c.Args[1].(string)
+		r.DaemonID, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockWorkflowResolverWorkflowSourceDiagnosticCall is one recorded call of MockWorkflowResolver.WorkflowSourceDiagnostic, one
+// field per parameter.
+type MockWorkflowResolverWorkflowSourceDiagnosticCall struct {
+	Ctx       context.Context
+	ProjectID string
+	DaemonID  string
+	Ref       string
+}
+
+// WorkflowSourceDiagnosticCalls returns every recorded WorkflowSourceDiagnostic call, oldest first, with
+// its arguments typed. It reads the same log as Calls("WorkflowSourceDiagnostic").
+func (m *MockWorkflowResolver) WorkflowSourceDiagnosticCalls() []MockWorkflowResolverWorkflowSourceDiagnosticCall {
+	var out []MockWorkflowResolverWorkflowSourceDiagnosticCall
+	for _, c := range m.Recorder.Calls("WorkflowSourceDiagnostic") {
+		var r MockWorkflowResolverWorkflowSourceDiagnosticCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ProjectID, _ = c.Args[1].(string)
+		r.DaemonID, _ = c.Args[2].(string)
+		r.Ref, _ = c.Args[3].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ WorkflowResolver = (*MockWorkflowResolver)(nil)
 
 // forge:section MockProjectLookup
-// forge:hash=2f5a7281642d4f707a706280342bfbae167c6465b0edda5ca8cf69efa0f0df7d
+// forge:hash=ba7e0c44d04ddeb96d3ef63cf93ec15d798252031c4b98f86377515883f7c49a
 
 // MockProjectLookup is a test mock for the ProjectLookup interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockProjectLookup.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockProjectLookup.<Method>Func not set" error.
 type MockProjectLookup struct {
 	contractkit.Recorder
 	GetDaemonFunc                    func(context.Context, string) (*db.Daemon, error)
@@ -670,18 +1608,103 @@ func (m *MockProjectLookup) GetSetting(ctx context.Context, userID string, proje
 	return nil, contractkit.MockNotSet("MockProjectLookup", "GetSetting")
 }
 
+// MockProjectLookupGetDaemonCall is one recorded call of MockProjectLookup.GetDaemon, one
+// field per parameter.
+type MockProjectLookupGetDaemonCall struct {
+	Ctx context.Context
+	ID  string
+}
+
+// GetDaemonCalls returns every recorded GetDaemon call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetDaemon").
+func (m *MockProjectLookup) GetDaemonCalls() []MockProjectLookupGetDaemonCall {
+	var out []MockProjectLookupGetDaemonCall
+	for _, c := range m.Recorder.Calls("GetDaemon") {
+		var r MockProjectLookupGetDaemonCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockProjectLookupListProjectDaemonsForProjectCall is one recorded call of MockProjectLookup.ListProjectDaemonsForProject, one
+// field per parameter.
+type MockProjectLookupListProjectDaemonsForProjectCall struct {
+	Ctx       context.Context
+	ProjectID string
+}
+
+// ListProjectDaemonsForProjectCalls returns every recorded ListProjectDaemonsForProject call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListProjectDaemonsForProject").
+func (m *MockProjectLookup) ListProjectDaemonsForProjectCalls() []MockProjectLookupListProjectDaemonsForProjectCall {
+	var out []MockProjectLookupListProjectDaemonsForProjectCall
+	for _, c := range m.Recorder.Calls("ListProjectDaemonsForProject") {
+		var r MockProjectLookupListProjectDaemonsForProjectCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ProjectID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockProjectLookupListWorktreesCall is one recorded call of MockProjectLookup.ListWorktrees, one
+// field per parameter.
+type MockProjectLookupListWorktreesCall struct {
+	Ctx     context.Context
+	Filters db.WorktreeFilters
+}
+
+// ListWorktreesCalls returns every recorded ListWorktrees call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListWorktrees").
+func (m *MockProjectLookup) ListWorktreesCalls() []MockProjectLookupListWorktreesCall {
+	var out []MockProjectLookupListWorktreesCall
+	for _, c := range m.Recorder.Calls("ListWorktrees") {
+		var r MockProjectLookupListWorktreesCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Filters, _ = c.Args[1].(db.WorktreeFilters)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockProjectLookupGetSettingCall is one recorded call of MockProjectLookup.GetSetting, one
+// field per parameter.
+type MockProjectLookupGetSettingCall struct {
+	Ctx       context.Context
+	UserID    string
+	ProjectID *string
+	Key       string
+}
+
+// GetSettingCalls returns every recorded GetSetting call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetSetting").
+func (m *MockProjectLookup) GetSettingCalls() []MockProjectLookupGetSettingCall {
+	var out []MockProjectLookupGetSettingCall
+	for _, c := range m.Recorder.Calls("GetSetting") {
+		var r MockProjectLookupGetSettingCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.ProjectID, _ = c.Args[2].(*string)
+		r.Key, _ = c.Args[3].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ ProjectLookup = (*MockProjectLookup)(nil)
 
 // forge:section MockTransactor
-// forge:hash=b376f661922dfb9ed0d185559ec31c0300735b9e13c55a5ab6fa9f3d6f67d2c8
+// forge:hash=71c87eae4885f2acfe0392dfd10d0b820e72ae486ff49ec8738c240a011d8a55
 
 // MockTransactor is a test mock for the Transactor interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockTransactor.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockTransactor.<Method>Func not set" error.
 type MockTransactor struct {
 	contractkit.Recorder
 	RunTxFunc func(context.Context, orm.TxPolicy, func(ctx context.Context) error) error
@@ -696,18 +1719,41 @@ func (m *MockTransactor) RunTx(p0 context.Context, policy orm.TxPolicy, f func(c
 	return contractkit.MockNotSet("MockTransactor", "RunTx")
 }
 
+// MockTransactorRunTxCall is one recorded call of MockTransactor.RunTx, one
+// field per parameter.
+type MockTransactorRunTxCall struct {
+	Ctx    context.Context
+	Policy orm.TxPolicy
+	F      func(ctx context.Context) error
+}
+
+// RunTxCalls returns every recorded RunTx call, oldest first, with
+// its arguments typed. It reads the same log as Calls("RunTx").
+func (m *MockTransactor) RunTxCalls() []MockTransactorRunTxCall {
+	var out []MockTransactorRunTxCall
+	for _, c := range m.Recorder.Calls("RunTx") {
+		var r MockTransactorRunTxCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Policy, _ = c.Args[1].(orm.TxPolicy)
+		r.F, _ = c.Args[2].(func(ctx context.Context) error)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ Transactor = (*MockTransactor)(nil)
 
 // forge:section MockStore
-// forge:hash=383f404c5fccb2cca9ed5f13b8ec329660bc5aa7a809ee33d77759f21c9586ba
+// forge:hash=d4eea8db9eb4537f43ea25985e40baba93a7febf414b95741322fdea1b904ba5
 
 // MockStore is a test mock for the Store interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockStore.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockStore.<Method>Func not set" error.
 type MockStore struct {
 	contractkit.Recorder
 	LockUserOrgsFunc                   func(context.Context, string, ...db.OrgRead) error
@@ -972,18 +2018,599 @@ func (m *MockStore) RunTx(p0 context.Context, policy orm.TxPolicy, f func(ctx co
 	return contractkit.MockNotSet("MockStore", "RunTx")
 }
 
+// MockStoreLockUserOrgsCall is one recorded call of MockStore.LockUserOrgs, one
+// field per parameter.
+type MockStoreLockUserOrgsCall struct {
+	Ctx    context.Context
+	UserID string
+	Reads  []db.OrgRead
+}
+
+// LockUserOrgsCalls returns every recorded LockUserOrgs call, oldest first, with
+// its arguments typed. It reads the same log as Calls("LockUserOrgs").
+func (m *MockStore) LockUserOrgsCalls() []MockStoreLockUserOrgsCall {
+	var out []MockStoreLockUserOrgsCall
+	for _, c := range m.Recorder.Calls("LockUserOrgs") {
+		var r MockStoreLockUserOrgsCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.Reads, _ = c.Args[2].([]db.OrgRead)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockStoreCreateChatCall is one recorded call of MockStore.CreateChat, one
+// field per parameter.
+type MockStoreCreateChatCall struct {
+	Ctx  context.Context
+	Chat *db.Chat
+}
+
+// CreateChatCalls returns every recorded CreateChat call, oldest first, with
+// its arguments typed. It reads the same log as Calls("CreateChat").
+func (m *MockStore) CreateChatCalls() []MockStoreCreateChatCall {
+	var out []MockStoreCreateChatCall
+	for _, c := range m.Recorder.Calls("CreateChat") {
+		var r MockStoreCreateChatCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Chat, _ = c.Args[1].(*db.Chat)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockStoreUpdateChatCall is one recorded call of MockStore.UpdateChat, one
+// field per parameter.
+type MockStoreUpdateChatCall struct {
+	Ctx  context.Context
+	Chat *db.Chat
+}
+
+// UpdateChatCalls returns every recorded UpdateChat call, oldest first, with
+// its arguments typed. It reads the same log as Calls("UpdateChat").
+func (m *MockStore) UpdateChatCalls() []MockStoreUpdateChatCall {
+	var out []MockStoreUpdateChatCall
+	for _, c := range m.Recorder.Calls("UpdateChat") {
+		var r MockStoreUpdateChatCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Chat, _ = c.Args[1].(*db.Chat)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockStoreUpdateChatActiveDaemonCall is one recorded call of MockStore.UpdateChatActiveDaemon, one
+// field per parameter.
+type MockStoreUpdateChatActiveDaemonCall struct {
+	Ctx      context.Context
+	ChatID   string
+	DaemonID *string
+}
+
+// UpdateChatActiveDaemonCalls returns every recorded UpdateChatActiveDaemon call, oldest first, with
+// its arguments typed. It reads the same log as Calls("UpdateChatActiveDaemon").
+func (m *MockStore) UpdateChatActiveDaemonCalls() []MockStoreUpdateChatActiveDaemonCall {
+	var out []MockStoreUpdateChatActiveDaemonCall
+	for _, c := range m.Recorder.Calls("UpdateChatActiveDaemon") {
+		var r MockStoreUpdateChatActiveDaemonCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ChatID, _ = c.Args[1].(string)
+		r.DaemonID, _ = c.Args[2].(*string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockStoreCountMessagesInChatCall is one recorded call of MockStore.CountMessagesInChat, one
+// field per parameter.
+type MockStoreCountMessagesInChatCall struct {
+	Ctx    context.Context
+	ChatID string
+}
+
+// CountMessagesInChatCalls returns every recorded CountMessagesInChat call, oldest first, with
+// its arguments typed. It reads the same log as Calls("CountMessagesInChat").
+func (m *MockStore) CountMessagesInChatCalls() []MockStoreCountMessagesInChatCall {
+	var out []MockStoreCountMessagesInChatCall
+	for _, c := range m.Recorder.Calls("CountMessagesInChat") {
+		var r MockStoreCountMessagesInChatCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ChatID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockStoreSaveMessageToThreadCall is one recorded call of MockStore.SaveMessageToThread, one
+// field per parameter.
+type MockStoreSaveMessageToThreadCall struct {
+	Ctx           context.Context
+	ChatID        string
+	Thread        string
+	Role          int32
+	Content       string
+	WorkflowID    *string
+	AttachmentIDs []string
+	DisplayStyle  *int32
+}
+
+// SaveMessageToThreadCalls returns every recorded SaveMessageToThread call, oldest first, with
+// its arguments typed. It reads the same log as Calls("SaveMessageToThread").
+func (m *MockStore) SaveMessageToThreadCalls() []MockStoreSaveMessageToThreadCall {
+	var out []MockStoreSaveMessageToThreadCall
+	for _, c := range m.Recorder.Calls("SaveMessageToThread") {
+		var r MockStoreSaveMessageToThreadCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ChatID, _ = c.Args[1].(string)
+		r.Thread, _ = c.Args[2].(string)
+		r.Role, _ = c.Args[3].(int32)
+		r.Content, _ = c.Args[4].(string)
+		r.WorkflowID, _ = c.Args[5].(*string)
+		r.AttachmentIDs, _ = c.Args[6].([]string)
+		r.DisplayStyle, _ = c.Args[7].(*int32)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockStoreSaveMessageToThreadOnceCall is one recorded call of MockStore.SaveMessageToThreadOnce, one
+// field per parameter.
+type MockStoreSaveMessageToThreadOnceCall struct {
+	Ctx           context.Context
+	ChatID        string
+	Thread        string
+	Role          int32
+	Content       string
+	WorkflowID    *string
+	AttachmentIDs []string
+	DisplayStyle  *int32
+	MessageID     string
+}
+
+// SaveMessageToThreadOnceCalls returns every recorded SaveMessageToThreadOnce call, oldest first, with
+// its arguments typed. It reads the same log as Calls("SaveMessageToThreadOnce").
+func (m *MockStore) SaveMessageToThreadOnceCalls() []MockStoreSaveMessageToThreadOnceCall {
+	var out []MockStoreSaveMessageToThreadOnceCall
+	for _, c := range m.Recorder.Calls("SaveMessageToThreadOnce") {
+		var r MockStoreSaveMessageToThreadOnceCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ChatID, _ = c.Args[1].(string)
+		r.Thread, _ = c.Args[2].(string)
+		r.Role, _ = c.Args[3].(int32)
+		r.Content, _ = c.Args[4].(string)
+		r.WorkflowID, _ = c.Args[5].(*string)
+		r.AttachmentIDs, _ = c.Args[6].([]string)
+		r.DisplayStyle, _ = c.Args[7].(*int32)
+		r.MessageID, _ = c.Args[8].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockStoreCreateUserUpdateCall is one recorded call of MockStore.CreateUserUpdate, one
+// field per parameter.
+type MockStoreCreateUserUpdateCall struct {
+	Ctx    context.Context
+	Update *db.UserUpdate
+}
+
+// CreateUserUpdateCalls returns every recorded CreateUserUpdate call, oldest first, with
+// its arguments typed. It reads the same log as Calls("CreateUserUpdate").
+func (m *MockStore) CreateUserUpdateCalls() []MockStoreCreateUserUpdateCall {
+	var out []MockStoreCreateUserUpdateCall
+	for _, c := range m.Recorder.Calls("CreateUserUpdate") {
+		var r MockStoreCreateUserUpdateCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Update, _ = c.Args[1].(*db.UserUpdate)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockStoreCompareAndSwapWorkflowStatusCall is one recorded call of MockStore.CompareAndSwapWorkflowStatus, one
+// field per parameter.
+type MockStoreCompareAndSwapWorkflowStatusCall struct {
+	Ctx            context.Context
+	ID             string
+	NewStatus      db.WorkflowStatus
+	ExpectedStatus db.WorkflowStatus
+}
+
+// CompareAndSwapWorkflowStatusCalls returns every recorded CompareAndSwapWorkflowStatus call, oldest first, with
+// its arguments typed. It reads the same log as Calls("CompareAndSwapWorkflowStatus").
+func (m *MockStore) CompareAndSwapWorkflowStatusCalls() []MockStoreCompareAndSwapWorkflowStatusCall {
+	var out []MockStoreCompareAndSwapWorkflowStatusCall
+	for _, c := range m.Recorder.Calls("CompareAndSwapWorkflowStatus") {
+		var r MockStoreCompareAndSwapWorkflowStatusCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ID, _ = c.Args[1].(string)
+		r.NewStatus, _ = c.Args[2].(db.WorkflowStatus)
+		r.ExpectedStatus, _ = c.Args[3].(db.WorkflowStatus)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockStoreUpdateWorkflowNameCall is one recorded call of MockStore.UpdateWorkflowName, one
+// field per parameter.
+type MockStoreUpdateWorkflowNameCall struct {
+	Ctx          context.Context
+	ID           string
+	WorkflowName string
+}
+
+// UpdateWorkflowNameCalls returns every recorded UpdateWorkflowName call, oldest first, with
+// its arguments typed. It reads the same log as Calls("UpdateWorkflowName").
+func (m *MockStore) UpdateWorkflowNameCalls() []MockStoreUpdateWorkflowNameCall {
+	var out []MockStoreUpdateWorkflowNameCall
+	for _, c := range m.Recorder.Calls("UpdateWorkflowName") {
+		var r MockStoreUpdateWorkflowNameCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ID, _ = c.Args[1].(string)
+		r.WorkflowName, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockStoreMarkWorkflowStartFailedCall is one recorded call of MockStore.MarkWorkflowStartFailed, one
+// field per parameter.
+type MockStoreMarkWorkflowStartFailedCall struct {
+	Ctx context.Context
+	ID  string
+}
+
+// MarkWorkflowStartFailedCalls returns every recorded MarkWorkflowStartFailed call, oldest first, with
+// its arguments typed. It reads the same log as Calls("MarkWorkflowStartFailed").
+func (m *MockStore) MarkWorkflowStartFailedCalls() []MockStoreMarkWorkflowStartFailedCall {
+	var out []MockStoreMarkWorkflowStartFailedCall
+	for _, c := range m.Recorder.Calls("MarkWorkflowStartFailed") {
+		var r MockStoreMarkWorkflowStartFailedCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockStoreClaimWorkflowStartCall is one recorded call of MockStore.ClaimWorkflowStart, one
+// field per parameter.
+type MockStoreClaimWorkflowStartCall struct {
+	Ctx context.Context
+	ID  string
+}
+
+// ClaimWorkflowStartCalls returns every recorded ClaimWorkflowStart call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ClaimWorkflowStart").
+func (m *MockStore) ClaimWorkflowStartCalls() []MockStoreClaimWorkflowStartCall {
+	var out []MockStoreClaimWorkflowStartCall
+	for _, c := range m.Recorder.Calls("ClaimWorkflowStart") {
+		var r MockStoreClaimWorkflowStartCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockStoreGetWorkflowDraftBySlugCall is one recorded call of MockStore.GetWorkflowDraftBySlug, one
+// field per parameter.
+type MockStoreGetWorkflowDraftBySlugCall struct {
+	Ctx    context.Context
+	UserID string
+	Slug   string
+}
+
+// GetWorkflowDraftBySlugCalls returns every recorded GetWorkflowDraftBySlug call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetWorkflowDraftBySlug").
+func (m *MockStore) GetWorkflowDraftBySlugCalls() []MockStoreGetWorkflowDraftBySlugCall {
+	var out []MockStoreGetWorkflowDraftBySlugCall
+	for _, c := range m.Recorder.Calls("GetWorkflowDraftBySlug") {
+		var r MockStoreGetWorkflowDraftBySlugCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.Slug, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockStoreGetUsableWorkflowBySlugCall is one recorded call of MockStore.GetUsableWorkflowBySlug, one
+// field per parameter.
+type MockStoreGetUsableWorkflowBySlugCall struct {
+	Ctx    context.Context
+	UserID string
+	Slug   string
+}
+
+// GetUsableWorkflowBySlugCalls returns every recorded GetUsableWorkflowBySlug call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetUsableWorkflowBySlug").
+func (m *MockStore) GetUsableWorkflowBySlugCalls() []MockStoreGetUsableWorkflowBySlugCall {
+	var out []MockStoreGetUsableWorkflowBySlugCall
+	for _, c := range m.Recorder.Calls("GetUsableWorkflowBySlug") {
+		var r MockStoreGetUsableWorkflowBySlugCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.Slug, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockStoreGetPresetBySlugCall is one recorded call of MockStore.GetPresetBySlug, one
+// field per parameter.
+type MockStoreGetPresetBySlugCall struct {
+	Ctx    context.Context
+	UserID string
+	Slug   string
+}
+
+// GetPresetBySlugCalls returns every recorded GetPresetBySlug call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetPresetBySlug").
+func (m *MockStore) GetPresetBySlugCalls() []MockStoreGetPresetBySlugCall {
+	var out []MockStoreGetPresetBySlugCall
+	for _, c := range m.Recorder.Calls("GetPresetBySlug") {
+		var r MockStoreGetPresetBySlugCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.Slug, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockStoreGetPresetBySlugAndProjectCall is one recorded call of MockStore.GetPresetBySlugAndProject, one
+// field per parameter.
+type MockStoreGetPresetBySlugAndProjectCall struct {
+	Ctx       context.Context
+	UserID    string
+	Slug      string
+	ProjectID string
+}
+
+// GetPresetBySlugAndProjectCalls returns every recorded GetPresetBySlugAndProject call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetPresetBySlugAndProject").
+func (m *MockStore) GetPresetBySlugAndProjectCalls() []MockStoreGetPresetBySlugAndProjectCall {
+	var out []MockStoreGetPresetBySlugAndProjectCall
+	for _, c := range m.Recorder.Calls("GetPresetBySlugAndProject") {
+		var r MockStoreGetPresetBySlugAndProjectCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.Slug, _ = c.Args[2].(string)
+		r.ProjectID, _ = c.Args[3].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockStoreGetProjectWorkflowsJSONCall is one recorded call of MockStore.GetProjectWorkflowsJSON, one
+// field per parameter.
+type MockStoreGetProjectWorkflowsJSONCall struct {
+	Ctx       context.Context
+	ProjectID string
+}
+
+// GetProjectWorkflowsJSONCalls returns every recorded GetProjectWorkflowsJSON call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetProjectWorkflowsJSON").
+func (m *MockStore) GetProjectWorkflowsJSONCalls() []MockStoreGetProjectWorkflowsJSONCall {
+	var out []MockStoreGetProjectWorkflowsJSONCall
+	for _, c := range m.Recorder.Calls("GetProjectWorkflowsJSON") {
+		var r MockStoreGetProjectWorkflowsJSONCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ProjectID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockStoreGetProjectPresetsJSONCall is one recorded call of MockStore.GetProjectPresetsJSON, one
+// field per parameter.
+type MockStoreGetProjectPresetsJSONCall struct {
+	Ctx       context.Context
+	ProjectID string
+}
+
+// GetProjectPresetsJSONCalls returns every recorded GetProjectPresetsJSON call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetProjectPresetsJSON").
+func (m *MockStore) GetProjectPresetsJSONCalls() []MockStoreGetProjectPresetsJSONCall {
+	var out []MockStoreGetProjectPresetsJSONCall
+	for _, c := range m.Recorder.Calls("GetProjectPresetsJSON") {
+		var r MockStoreGetProjectPresetsJSONCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ProjectID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockStoreGetProjectMachineWorkflowsJSONCall is one recorded call of MockStore.GetProjectMachineWorkflowsJSON, one
+// field per parameter.
+type MockStoreGetProjectMachineWorkflowsJSONCall struct {
+	Ctx       context.Context
+	ProjectID string
+	DaemonID  string
+}
+
+// GetProjectMachineWorkflowsJSONCalls returns every recorded GetProjectMachineWorkflowsJSON call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetProjectMachineWorkflowsJSON").
+func (m *MockStore) GetProjectMachineWorkflowsJSONCalls() []MockStoreGetProjectMachineWorkflowsJSONCall {
+	var out []MockStoreGetProjectMachineWorkflowsJSONCall
+	for _, c := range m.Recorder.Calls("GetProjectMachineWorkflowsJSON") {
+		var r MockStoreGetProjectMachineWorkflowsJSONCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ProjectID, _ = c.Args[1].(string)
+		r.DaemonID, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockStoreGetProjectMachinePresetsJSONCall is one recorded call of MockStore.GetProjectMachinePresetsJSON, one
+// field per parameter.
+type MockStoreGetProjectMachinePresetsJSONCall struct {
+	Ctx       context.Context
+	ProjectID string
+	DaemonID  string
+}
+
+// GetProjectMachinePresetsJSONCalls returns every recorded GetProjectMachinePresetsJSON call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetProjectMachinePresetsJSON").
+func (m *MockStore) GetProjectMachinePresetsJSONCalls() []MockStoreGetProjectMachinePresetsJSONCall {
+	var out []MockStoreGetProjectMachinePresetsJSONCall
+	for _, c := range m.Recorder.Calls("GetProjectMachinePresetsJSON") {
+		var r MockStoreGetProjectMachinePresetsJSONCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ProjectID, _ = c.Args[1].(string)
+		r.DaemonID, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockStoreWorkflowSourceDiagnosticCall is one recorded call of MockStore.WorkflowSourceDiagnostic, one
+// field per parameter.
+type MockStoreWorkflowSourceDiagnosticCall struct {
+	Ctx       context.Context
+	ProjectID string
+	DaemonID  string
+	Ref       string
+}
+
+// WorkflowSourceDiagnosticCalls returns every recorded WorkflowSourceDiagnostic call, oldest first, with
+// its arguments typed. It reads the same log as Calls("WorkflowSourceDiagnostic").
+func (m *MockStore) WorkflowSourceDiagnosticCalls() []MockStoreWorkflowSourceDiagnosticCall {
+	var out []MockStoreWorkflowSourceDiagnosticCall
+	for _, c := range m.Recorder.Calls("WorkflowSourceDiagnostic") {
+		var r MockStoreWorkflowSourceDiagnosticCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ProjectID, _ = c.Args[1].(string)
+		r.DaemonID, _ = c.Args[2].(string)
+		r.Ref, _ = c.Args[3].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockStoreGetDaemonCall is one recorded call of MockStore.GetDaemon, one
+// field per parameter.
+type MockStoreGetDaemonCall struct {
+	Ctx context.Context
+	ID  string
+}
+
+// GetDaemonCalls returns every recorded GetDaemon call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetDaemon").
+func (m *MockStore) GetDaemonCalls() []MockStoreGetDaemonCall {
+	var out []MockStoreGetDaemonCall
+	for _, c := range m.Recorder.Calls("GetDaemon") {
+		var r MockStoreGetDaemonCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockStoreListProjectDaemonsForProjectCall is one recorded call of MockStore.ListProjectDaemonsForProject, one
+// field per parameter.
+type MockStoreListProjectDaemonsForProjectCall struct {
+	Ctx       context.Context
+	ProjectID string
+}
+
+// ListProjectDaemonsForProjectCalls returns every recorded ListProjectDaemonsForProject call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListProjectDaemonsForProject").
+func (m *MockStore) ListProjectDaemonsForProjectCalls() []MockStoreListProjectDaemonsForProjectCall {
+	var out []MockStoreListProjectDaemonsForProjectCall
+	for _, c := range m.Recorder.Calls("ListProjectDaemonsForProject") {
+		var r MockStoreListProjectDaemonsForProjectCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ProjectID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockStoreListWorktreesCall is one recorded call of MockStore.ListWorktrees, one
+// field per parameter.
+type MockStoreListWorktreesCall struct {
+	Ctx     context.Context
+	Filters db.WorktreeFilters
+}
+
+// ListWorktreesCalls returns every recorded ListWorktrees call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListWorktrees").
+func (m *MockStore) ListWorktreesCalls() []MockStoreListWorktreesCall {
+	var out []MockStoreListWorktreesCall
+	for _, c := range m.Recorder.Calls("ListWorktrees") {
+		var r MockStoreListWorktreesCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Filters, _ = c.Args[1].(db.WorktreeFilters)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockStoreGetSettingCall is one recorded call of MockStore.GetSetting, one
+// field per parameter.
+type MockStoreGetSettingCall struct {
+	Ctx       context.Context
+	UserID    string
+	ProjectID *string
+	Key       string
+}
+
+// GetSettingCalls returns every recorded GetSetting call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetSetting").
+func (m *MockStore) GetSettingCalls() []MockStoreGetSettingCall {
+	var out []MockStoreGetSettingCall
+	for _, c := range m.Recorder.Calls("GetSetting") {
+		var r MockStoreGetSettingCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.ProjectID, _ = c.Args[2].(*string)
+		r.Key, _ = c.Args[3].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockStoreRunTxCall is one recorded call of MockStore.RunTx, one
+// field per parameter.
+type MockStoreRunTxCall struct {
+	Ctx    context.Context
+	Policy orm.TxPolicy
+	F      func(ctx context.Context) error
+}
+
+// RunTxCalls returns every recorded RunTx call, oldest first, with
+// its arguments typed. It reads the same log as Calls("RunTx").
+func (m *MockStore) RunTxCalls() []MockStoreRunTxCall {
+	var out []MockStoreRunTxCall
+	for _, c := range m.Recorder.Calls("RunTx") {
+		var r MockStoreRunTxCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Policy, _ = c.Args[1].(orm.TxPolicy)
+		r.F, _ = c.Args[2].(func(ctx context.Context) error)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ Store = (*MockStore)(nil)
 
 // forge:section MockThreadCreator
-// forge:hash=0c7a8678fa1876a5992f30143c440d234b57c9eaacb5e3ec640c2e24632a2417
+// forge:hash=ed193ba0c563fc6770d04f5d622c240f7acf1fdd99a44c037cdba2b229182575
 
 // MockThreadCreator is a test mock for the ThreadCreator interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockThreadCreator.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockThreadCreator.<Method>Func not set" error.
 type MockThreadCreator struct {
 	contractkit.Recorder
 	CreateWorkflowWithThreadFunc func(context.Context, threads.CreateWorkflowWithThreadOpts) (*db.Workflow, *db.Thread, *db.ContextWindow, error)
@@ -998,18 +2625,39 @@ func (m *MockThreadCreator) CreateWorkflowWithThread(ctx context.Context, opts t
 	return nil, nil, nil, contractkit.MockNotSet("MockThreadCreator", "CreateWorkflowWithThread")
 }
 
+// MockThreadCreatorCreateWorkflowWithThreadCall is one recorded call of MockThreadCreator.CreateWorkflowWithThread, one
+// field per parameter.
+type MockThreadCreatorCreateWorkflowWithThreadCall struct {
+	Ctx  context.Context
+	Opts threads.CreateWorkflowWithThreadOpts
+}
+
+// CreateWorkflowWithThreadCalls returns every recorded CreateWorkflowWithThread call, oldest first, with
+// its arguments typed. It reads the same log as Calls("CreateWorkflowWithThread").
+func (m *MockThreadCreator) CreateWorkflowWithThreadCalls() []MockThreadCreatorCreateWorkflowWithThreadCall {
+	var out []MockThreadCreatorCreateWorkflowWithThreadCall
+	for _, c := range m.Recorder.Calls("CreateWorkflowWithThread") {
+		var r MockThreadCreatorCreateWorkflowWithThreadCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Opts, _ = c.Args[1].(threads.CreateWorkflowWithThreadOpts)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ ThreadCreator = (*MockThreadCreator)(nil)
 
 // forge:section MockService
-// forge:hash=2374469de5f793f66d4bf359b78581ee4ebb9e3f4fc263a78cdbdf42ff933a3c
+// forge:hash=b40e4dd959c404dbb65944b171b5d12d2ab2d693708e288c32c1568b8f0d86ec
 
 // MockService is a test mock for the projectaccess.Service interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockService.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockService.<Method>Func not set" error.
 type MockService struct {
 	contractkit.Recorder
 	GetProjectWithUserCheckFunc func(context.Context, string, string) (*core.Project, error)
@@ -1024,18 +2672,41 @@ func (m *MockService) GetProjectWithUserCheck(ctx context.Context, id string, us
 	return nil, contractkit.MockNotSet("MockService", "GetProjectWithUserCheck")
 }
 
+// MockServiceGetProjectWithUserCheckCall is one recorded call of MockService.GetProjectWithUserCheck, one
+// field per parameter.
+type MockServiceGetProjectWithUserCheckCall struct {
+	Ctx    context.Context
+	ID     string
+	UserID string
+}
+
+// GetProjectWithUserCheckCalls returns every recorded GetProjectWithUserCheck call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetProjectWithUserCheck").
+func (m *MockService) GetProjectWithUserCheckCalls() []MockServiceGetProjectWithUserCheckCall {
+	var out []MockServiceGetProjectWithUserCheckCall
+	for _, c := range m.Recorder.Calls("GetProjectWithUserCheck") {
+		var r MockServiceGetProjectWithUserCheckCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ID, _ = c.Args[1].(string)
+		r.UserID, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ projectaccess.Service = (*MockService)(nil)
 
 // forge:section MockChatselectionStore
-// forge:hash=a5df481b2f01a167c00a87a3e4d01146d378c55555de5346bae33850e087806d
+// forge:hash=11274984c7d70912295504ada7faace9a2158f11cc8386e806b77236589b633b
 
 // MockChatselectionStore is a test mock for the chatselection.Store interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockChatselectionStore.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockChatselectionStore.<Method>Func not set" error.
 type MockChatselectionStore struct {
 	contractkit.Recorder
 	GetChatSelectionFunc    func(context.Context, string) (*chatselection.Selection, error)
@@ -1068,6 +2739,72 @@ func (m *MockChatselectionStore) CopyChatSelection(ctx context.Context, fromChat
 		return m.CopyChatSelectionFunc(ctx, fromChatID, toChatID, userID)
 	}
 	return contractkit.MockNotSet("MockChatselectionStore", "CopyChatSelection")
+}
+
+// MockChatselectionStoreGetChatSelectionCall is one recorded call of MockChatselectionStore.GetChatSelection, one
+// field per parameter.
+type MockChatselectionStoreGetChatSelectionCall struct {
+	Ctx    context.Context
+	ChatID string
+}
+
+// GetChatSelectionCalls returns every recorded GetChatSelection call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetChatSelection").
+func (m *MockChatselectionStore) GetChatSelectionCalls() []MockChatselectionStoreGetChatSelectionCall {
+	var out []MockChatselectionStoreGetChatSelectionCall
+	for _, c := range m.Recorder.Calls("GetChatSelection") {
+		var r MockChatselectionStoreGetChatSelectionCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ChatID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockChatselectionStoreMutateChatSelectionCall is one recorded call of MockChatselectionStore.MutateChatSelection, one
+// field per parameter.
+type MockChatselectionStoreMutateChatSelectionCall struct {
+	Ctx    context.Context
+	ChatID string
+	Mutate func(current *chatselection.Selection) (*chatselection.Selection, error)
+}
+
+// MutateChatSelectionCalls returns every recorded MutateChatSelection call, oldest first, with
+// its arguments typed. It reads the same log as Calls("MutateChatSelection").
+func (m *MockChatselectionStore) MutateChatSelectionCalls() []MockChatselectionStoreMutateChatSelectionCall {
+	var out []MockChatselectionStoreMutateChatSelectionCall
+	for _, c := range m.Recorder.Calls("MutateChatSelection") {
+		var r MockChatselectionStoreMutateChatSelectionCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ChatID, _ = c.Args[1].(string)
+		r.Mutate, _ = c.Args[2].(func(current *chatselection.Selection) (*chatselection.Selection, error))
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockChatselectionStoreCopyChatSelectionCall is one recorded call of MockChatselectionStore.CopyChatSelection, one
+// field per parameter.
+type MockChatselectionStoreCopyChatSelectionCall struct {
+	Ctx        context.Context
+	FromChatID string
+	ToChatID   string
+	UserID     string
+}
+
+// CopyChatSelectionCalls returns every recorded CopyChatSelection call, oldest first, with
+// its arguments typed. It reads the same log as Calls("CopyChatSelection").
+func (m *MockChatselectionStore) CopyChatSelectionCalls() []MockChatselectionStoreCopyChatSelectionCall {
+	var out []MockChatselectionStoreCopyChatSelectionCall
+	for _, c := range m.Recorder.Calls("CopyChatSelection") {
+		var r MockChatselectionStoreCopyChatSelectionCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.FromChatID, _ = c.Args[1].(string)
+		r.ToChatID, _ = c.Args[2].(string)
+		r.UserID, _ = c.Args[3].(string)
+		out = append(out, r)
+	}
+	return out
 }
 
 // Compile-time check.

@@ -16,14 +16,15 @@ import (
 )
 
 // forge:section MockService
-// forge:hash=97caa280fdcb2a727161df61e65254f1db206c62d4ee01caea82071f6b1dbbea
+// forge:hash=14805bc1278ad081614f45ab0dbc0e2011aeb911d55071e3fdcc24b2d3c9c045
 
 // MockService is a test mock for the Service interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockService.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockService.<Method>Func not set" error.
 type MockService struct {
 	contractkit.Recorder
 	ListChangesFunc           func(context.Context, string, string, tools.ChangeFilter) ([]tools.ChangeSummary, error)
@@ -86,6 +87,146 @@ func (m *MockService) GetChangeReadout(ctx context.Context, userID string, chang
 		return m.GetChangeReadoutFunc(ctx, userID, changeID, runID)
 	}
 	return *new(tools.ChangeReadout), contractkit.MockNotSet("MockService", "GetChangeReadout")
+}
+
+// MockServiceListChangesCall is one recorded call of MockService.ListChanges, one
+// field per parameter.
+type MockServiceListChangesCall struct {
+	Ctx       context.Context
+	UserID    string
+	ProjectID string
+	F         tools.ChangeFilter
+}
+
+// ListChangesCalls returns every recorded ListChanges call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListChanges").
+func (m *MockService) ListChangesCalls() []MockServiceListChangesCall {
+	var out []MockServiceListChangesCall
+	for _, c := range m.Recorder.Calls("ListChanges") {
+		var r MockServiceListChangesCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.ProjectID, _ = c.Args[2].(string)
+		r.F, _ = c.Args[3].(tools.ChangeFilter)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceGetChangeCall is one recorded call of MockService.GetChange, one
+// field per parameter.
+type MockServiceGetChangeCall struct {
+	Ctx      context.Context
+	UserID   string
+	ChangeID string
+	Events   int
+}
+
+// GetChangeCalls returns every recorded GetChange call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetChange").
+func (m *MockService) GetChangeCalls() []MockServiceGetChangeCall {
+	var out []MockServiceGetChangeCall
+	for _, c := range m.Recorder.Calls("GetChange") {
+		var r MockServiceGetChangeCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.ChangeID, _ = c.Args[2].(string)
+		r.Events, _ = c.Args[3].(int)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceCreateChangeCall is one recorded call of MockService.CreateChange, one
+// field per parameter.
+type MockServiceCreateChangeCall struct {
+	Ctx       context.Context
+	UserID    string
+	ProjectID string
+	In        tools.ChangeCreate
+}
+
+// CreateChangeCalls returns every recorded CreateChange call, oldest first, with
+// its arguments typed. It reads the same log as Calls("CreateChange").
+func (m *MockService) CreateChangeCalls() []MockServiceCreateChangeCall {
+	var out []MockServiceCreateChangeCall
+	for _, c := range m.Recorder.Calls("CreateChange") {
+		var r MockServiceCreateChangeCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.ProjectID, _ = c.Args[2].(string)
+		r.In, _ = c.Args[3].(tools.ChangeCreate)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceApplyChangeCall is one recorded call of MockService.ApplyChange, one
+// field per parameter.
+type MockServiceApplyChangeCall struct {
+	Ctx    context.Context
+	UserID string
+	Op     tools.ChangeOp
+}
+
+// ApplyChangeCalls returns every recorded ApplyChange call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ApplyChange").
+func (m *MockService) ApplyChangeCalls() []MockServiceApplyChangeCall {
+	var out []MockServiceApplyChangeCall
+	for _, c := range m.Recorder.Calls("ApplyChange") {
+		var r MockServiceApplyChangeCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.Op, _ = c.Args[2].(tools.ChangeOp)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceRequestChangeApprovalCall is one recorded call of MockService.RequestChangeApproval, one
+// field per parameter.
+type MockServiceRequestChangeApprovalCall struct {
+	Ctx      context.Context
+	UserID   string
+	ChangeID string
+}
+
+// RequestChangeApprovalCalls returns every recorded RequestChangeApproval call, oldest first, with
+// its arguments typed. It reads the same log as Calls("RequestChangeApproval").
+func (m *MockService) RequestChangeApprovalCalls() []MockServiceRequestChangeApprovalCall {
+	var out []MockServiceRequestChangeApprovalCall
+	for _, c := range m.Recorder.Calls("RequestChangeApproval") {
+		var r MockServiceRequestChangeApprovalCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.ChangeID, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceGetChangeReadoutCall is one recorded call of MockService.GetChangeReadout, one
+// field per parameter.
+type MockServiceGetChangeReadoutCall struct {
+	Ctx      context.Context
+	UserID   string
+	ChangeID string
+	RunID    string
+}
+
+// GetChangeReadoutCalls returns every recorded GetChangeReadout call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetChangeReadout").
+func (m *MockService) GetChangeReadoutCalls() []MockServiceGetChangeReadoutCall {
+	var out []MockServiceGetChangeReadoutCall
+	for _, c := range m.Recorder.Calls("GetChangeReadout") {
+		var r MockServiceGetChangeReadoutCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.ChangeID, _ = c.Args[2].(string)
+		r.RunID, _ = c.Args[3].(string)
+		out = append(out, r)
+	}
+	return out
 }
 
 // Compile-time check.
