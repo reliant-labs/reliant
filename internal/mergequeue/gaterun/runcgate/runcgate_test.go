@@ -13,14 +13,15 @@ import (
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/mergequeue/gaterun"
+	"github.com/reliant-labs/reliant/internal/mergequeue/gaterun/gatehost"
 )
 
-func spec() gaterun.Spec {
+func spec() gatehost.Spec {
 	env, _ := gaterun.GateEnv("gate-b1-1", map[string]string{"GOFLAGS": "-mod=mod"})
-	return gaterun.Spec{
+	return gatehost.Spec{
 		RunID: "gate-b1-1", Image: "gate:test", Command: []string{"/bin/sh", "-c", "exit 0"},
 		SourceDir: "/tmp/src", Env: env, VulnDBDir: "/var/lib/forge/vulndb",
-		Limits: gaterun.Limits{CPUs: 4, MemoryBytes: 8 << 30, Pids: 4096, DiskBytes: 1 << 30, Wall: time.Minute},
+		Limits: gatehost.Limits{CPUs: 4, MemoryBytes: 8 << 30, Pids: 4096, DiskBytes: 1 << 30, Wall: time.Minute},
 	}
 }
 
@@ -137,13 +138,13 @@ func TestRunClassifiesTheEnd(t *testing.T) {
 		name   string
 		docker *fakeDocker
 		class  gaterun.Class
-		check  func(gaterun.Result) bool
+		check  func(gatehost.Result) bool
 	}{
 		{"pass", &fakeDocker{state: containerState{Status: "exited"}}, gaterun.ClassPass, nil},
 		{"fail", &fakeDocker{startExit: 1, state: containerState{Status: "exited", ExitCode: 1}}, gaterun.ClassFail, nil},
 		{"unproven exit", &fakeDocker{startExit: 2, state: containerState{Status: "exited", ExitCode: 2}}, gaterun.ClassUnproven, nil},
 		{"oom", &fakeDocker{startExit: 137, state: containerState{Status: "exited", ExitCode: 137, OOMKilled: true}}, gaterun.ClassUnproven,
-			func(r gaterun.Result) bool { return r.OOMKilled }},
+			func(r gatehost.Result) bool { return r.OOMKilled }},
 		{"still running after the attach", &fakeDocker{state: containerState{Status: "running"}}, gaterun.ClassUnproven, nil},
 		{"lost attach", &fakeDocker{startErr: errors.New("connection reset"), state: containerState{Status: "exited"}}, gaterun.ClassUnproven, nil},
 		{"attach and engine disagree", &fakeDocker{startExit: 0, state: containerState{Status: "exited", ExitCode: 1}}, gaterun.ClassUnproven, nil},

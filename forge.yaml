@@ -31,7 +31,7 @@
 
 name: reliant
 module_path: github.com/reliant-labs/reliant
-forge_version: v1.11.1-0.20261126012849-a60339115d75
+forge_version: v1.13.1-0.20261127143700-eaf3a164d017
 harness: reliant
 config:
     # Every process setting is typed config (proto/reliant/config/v1, read through
@@ -87,6 +87,15 @@ lint:
         # blocks (`forge test flakes gate`, which scripts/test-flake.sh runs;
         # forge ci gate's flake-check step). For customers the step warns.
         flake-check: error
+        # forge v1.12.0 ends these rules' v1.11.0 warn-first grace. At that
+        # pin they report 35 findings (3 tables whose handlers scope rows by
+        # hand, 24 reads with no idempotency_level, 8 reads returning a
+        # credential). Changing an rpc's idempotency level is a buf-breaking
+        # change to a public proto, so it is not part of a pin bump. Warn
+        # until #3865 fixes them; then delete each entry so it gates.
+        crud-table-unowned: warn
+        forge-idempotency-read-undeclared: warn
+        forge-idempotency-secret-response-marked-read: warn
     tracing:
         # internal/logging's ctx-less helpers write through slog without the
         # request's context, so their lines carry no trace_id. Listing them

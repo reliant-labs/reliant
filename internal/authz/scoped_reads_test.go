@@ -56,7 +56,6 @@ var userScopedReads = map[string]string{
 	"ListMainWorktreesForUser": readCallersFilter,
 	"ListProjects":             readCallersFilter,
 	"ListRuns":                 readCallersFilter,
-	"ListTriggers":             readCallersFilter,
 	// The takeover decides each offer: its offeree and offerer must be live
 	// members of its org, or an admin of it asked (internal/orgtakeover).
 	// The inbox's P11 notices (inbox_automation_notices.go): each row is the
@@ -80,7 +79,6 @@ var userScopedReads = map[string]string{
 	"GetProjectByPathAndUser":      readCallersFilter,
 	"GetProjectByRemoteURLAndUser": readCallersFilter,
 
-	"FiringsSinceLastSuccess":   readParentAuthorized,
 	"GetPresetBySlugAndProject": readParentAuthorized,
 	"ListPresetsByTag":          readParentAuthorized,
 	"ListUserPresetsByProject":  readParentAuthorized,

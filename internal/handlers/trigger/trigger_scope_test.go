@@ -15,6 +15,7 @@ import (
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/triggers"
 )
 
@@ -40,7 +41,7 @@ nodes:
 
 func (e *triggerTestEnv) storedScope(t *testing.T, id string) core.IntegrationConfig {
 	t.Helper()
-	stored, err := e.repo.GetTrigger(context.Background(), id)
+	stored, err := store.GetTrigger(context.Background(), e.repo.ORM(), id)
 	require.NoError(t, err)
 	var cfg core.IntegrationConfig
 	require.NoError(t, json.Unmarshal(stored.Config, &cfg))

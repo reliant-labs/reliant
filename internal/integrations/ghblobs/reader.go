@@ -39,6 +39,8 @@ type Reader struct {
 	base     string
 	client   *http.Client
 	maxBytes int64
+	// slots holds one token per read in flight (MaxInFlight).
+	slots chan struct{}
 }
 
 // New builds a Reader over deps.Tokens.
@@ -57,7 +59,7 @@ func New(deps Deps) Service {
 	if maxBytes <= 0 {
 		maxBytes = MaxBytes
 	}
-	return &Reader{tokens: deps.Tokens, base: base, client: client, maxBytes: maxBytes}
+	return &Reader{tokens: deps.Tokens, base: base, client: client, maxBytes: maxBytes, slots: make(chan struct{}, MaxInFlight)}
 }
 
 // Read returns the bytes of blob blobID in owner/repo, read as userID.
@@ -66,6 +68,12 @@ func (r *Reader) Read(ctx context.Context, userID, owner, repo, blobID string) (
 	if !namePattern.MatchString(owner) || !namePattern.MatchString(repo) || strings.Trim(owner, ".") == "" || strings.Trim(repo, ".") == "" ||
 		!blobPattern.MatchString(blobID) {
 		return nil, ErrInvalid
+	}
+	select {
+	case r.slots <- struct{}{}:
+		defer func() { <-r.slots }()
+	case <-ctx.Done():
+		return nil, ctx.Err()
 	}
 	token, err := r.tokens.Token(ctx, userID)
 	if err != nil {

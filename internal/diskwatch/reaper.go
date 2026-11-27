@@ -194,6 +194,9 @@ type reaperState struct {
 	run reaperRunner
 	// goCache runs the Go-cache pass (`forge machine storage gocache --apply`).
 	goCache reaperRunner
+	// scanGoCaches lists the Go build caches running builds use
+	// (gocaches.go); nil sees none (tests, a watcher not on the system env).
+	scanGoCaches func() []string
 	// budget overrides reaperPassBudget (tests).
 	budget time.Duration
 
@@ -271,6 +274,9 @@ func (w *Watcher) reaperTick(ctx context.Context) (ran bool) {
 		trigger, interval = "pressure", cfg.PressureInterval
 	}
 	policy := w.reaperPolicyPath(cfg)
+	// Every poll, so a build's own GOCACHE is seen while it runs and is
+	// trimmed from then on (gocaches.go).
+	w.observeGoCaches(ctx, policy)
 	last := w.lastReaperRun(policy)
 	fullDue := last.IsZero() || now.Sub(last) >= interval
 	// Between full passes, the Go-cache pass on its own, shorter cadence: the

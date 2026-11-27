@@ -49,7 +49,7 @@ func (s *temporalSchedules) Sync(ctx context.Context, id string) error {
 	if fail != nil && fail(call) {
 		return errTemporalUnavailable
 	}
-	tr, err := s.repo.GetTrigger(ctx, id)
+	tr, err := store.GetTrigger(ctx, s.repo.ORM(), id)
 	if err != nil {
 		return err
 	}

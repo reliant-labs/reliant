@@ -16,17 +16,20 @@
 # and flaky tests (Tests D3b).
 #
 # THE CREDENTIAL IS FORGE'S TO FIND. It always asks for the upload and lets
-# forge pick the credential: FORGE_CONTROL_PLANE_TOKEN when set (a `tests:write`
-# token kept as a secret of the `tests-upload` environment), else the job's
-# GitHub Actions OIDC identity (the job needs `permissions: id-token: write`),
-# which the control plane exchanges for a short-lived `tests:write` token.
+# forge pick the credential: FORGE_CONTROL_PLANE_TOKEN when set, else the job's
+# GitHub Actions OIDC identity (the job needs `permissions: id-token: write`,
+# which sets ACTIONS_ID_TOKEN_REQUEST_URL), which the control plane exchanges
+# for a short-lived `tests:write` token. Both callers pass no token: they
+# upload with OIDC alone. (The `tests-upload` environment still holds a
+# `tests:write` token; passing it to the upload step again is the rollback.)
 # When neither works, forge says why in one line on stderr.
 #
 # IT NEVER CHANGES A VERDICT, and it always exits 0: the gates already judged
 # the lanes, and the upload is a copy of what they recorded.
 #   - No recorded run: a warning, nothing sent.
-#   - No credential, a failed upload, or a control plane that does not record
-#     test runs yet: forge's own warning.
+#   - No credential, a failed upload, a control plane that refuses or does not
+#     yet offer the OIDC exchange, or one that does not record test runs yet:
+#     forge's own warning.
 # The report itself (text: results, merged coverage, diff coverage) is printed
 # either way, so the job's log shows what the lanes measured.
 set -uo pipefail
@@ -44,6 +47,17 @@ warn() {
 if ! ls .forge/tests/runs/*/run.json >/dev/null 2>&1; then
   warn "no recorded test run under .forge/tests/runs/ for ${sha:0:12}; nothing to report"
   exit 0
+fi
+
+# Which credential forge will find first (cloud.ResolveCredentialFor), named
+# so the job's log says which path an upload took. Never the value, and never
+# a reason to skip: forge is asked either way, and says why when it has none.
+if [ -n "${FORGE_CONTROL_PLANE_TOKEN:-}" ]; then
+  echo "test-upload: credential: FORGE_CONTROL_PLANE_TOKEN"
+elif [ -n "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" ]; then
+  echo "test-upload: credential: this job's GitHub Actions OIDC identity, exchanged for tests:write"
+else
+  echo "test-upload: credential: no FORGE_CONTROL_PLANE_TOKEN and no GitHub Actions OIDC identity (id-token: write); forge looks for a stored login"
 fi
 
 scripts/forge.sh test report --commit "$sha" --upload || echo "test-upload: forge test report exited $? (no verdict changes)"

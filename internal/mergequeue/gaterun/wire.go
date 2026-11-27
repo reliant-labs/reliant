@@ -182,14 +182,14 @@ func (r StartRequest) Validate() error {
 	if err := validatePlan(r.Stages); err != nil {
 		return err
 	}
-	_, err := GateEnv(r.GateID, r.gateEnv())
+	_, err := GateEnv(r.GateID, r.EffectiveEnv())
 	return err
 }
 
-// gateEnv is the request's gate.env with the base commit's variables over
+// EffectiveEnv is the request's gate.env with the base commit's variables over
 // it: when the request names a base, the batch's real base wins over any
 // value pipeline.yaml's gate.env sets for them.
-func (r StartRequest) gateEnv() map[string]string {
+func (r StartRequest) EffectiveEnv() map[string]string {
 	if r.BaseSHA == "" {
 		return r.Env
 	}

@@ -130,27 +130,26 @@ func (s *Service) ListInbox(
 // from any one caller's cancellation.
 const inboxReadTimeout = 15 * time.Second
 
-// sharedRead is readInbox, shared by every ListInbox of the same user that
-// arrives while one is in flight: the reads are the same whatever the scope
+// sharedRead is readInbox, shared by the ListInbox calls of the same user that
+// arrive while one is in flight: the reads are the same whatever the scope
 // or limit (those are applied after), so N concurrent calls — a list and its
-// badge, several tabs, a reconnect replay — cost one set of queries and one
-// slice of the pool, not N. The read runs on a context detached from the
-// first caller's cancellation (so one caller giving up does not fail the
-// others) with its own deadline. Callers only read the result.
+// badge, several tabs, a reconnect replay — cost at most two sets of queries
+// and slices of the pool, not N. A call joins only a read that starts after
+// it arrived (freshFlight), never one already in flight: the refetch after
+// answering a question must not get the list from before the answer. The
+// read runs on a context detached from any caller's cancellation (so one
+// caller giving up does not fail the others) with its own deadline. Callers
+// only read the result.
 //
 // The read is shared only within one authorization class (sharedReadKey): what
 // it returns depends on the credential as well as the user, so a session's
 // read is never handed to an access token's call, nor the reverse.
 func (s *Service) sharedRead(ctx context.Context, userID string) (*inboxReads, error) {
-	v, err, _ := s.inboxReads.Do(sharedReadKey(ctx, userID), func() (any, error) {
+	return s.inboxReads.Do(ctx, sharedReadKey(ctx, userID), func() (*inboxReads, error) {
 		rctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), inboxReadTimeout)
 		defer cancel()
 		return s.readInbox(rctx, userID)
 	})
-	if err != nil {
-		return nil, err
-	}
-	return v.(*inboxReads), nil
 }
 
 // readInbox runs ListInbox's reads concurrently, at most inboxReadConcurrency
@@ -186,7 +185,7 @@ func (s *Service) readInbox(ctx context.Context, userID string) (*inboxReads, er
 		// them once.
 		var stored []*core.Trigger
 		if err := lim.do(gctx, func() (err error) {
-			stored, err = s.deps.Repo.ListTriggers(gctx, core.TriggerFilters{UserID: userID})
+			stored, err = s.deps.Notices.ListTriggersForUser(gctx, core.TriggerFilters{UserID: userID})
 			// Automation health is the triggers the caller may read: none of
 			// an org they have left.
 			stored = authz.Visible(gctx, userID, stored, authz.CanReadTrigger)

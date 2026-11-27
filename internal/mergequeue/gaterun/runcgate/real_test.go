@@ -16,12 +16,13 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/gatetest"
 	"github.com/reliant-labs/reliant/internal/mergequeue/gaterun"
+	"github.com/reliant-labs/reliant/internal/mergequeue/gaterun/gatehost"
 	"github.com/reliant-labs/reliant/internal/pipeline/config"
 )
 
 type copyFetcher struct{ src string }
 
-func (c copyFetcher) Fetch(_ context.Context, spec gaterun.FetchSpec) error {
+func (c copyFetcher) Fetch(_ context.Context, spec gatehost.FetchSpec) error {
 	return os.CopyFS(spec.Dir, os.DirFS(c.src))
 }
 
@@ -58,12 +59,12 @@ func TestRealRuncGate(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(src, "README"), []byte("candidate\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	r := &gaterun.Runner{
+	r := &gatehost.Runner{
 		NotIsolated: b, Fetcher: copyFetcher{src: src}, WorkRoot: t.TempDir(), Image: image,
-		Limits: gaterun.Limits{CPUs: 1, MemoryBytes: 512 << 20, Pids: 256, DiskBytes: 1 << 30},
+		Limits: gatehost.Limits{CPUs: 1, MemoryBytes: 512 << 20, Pids: 256, DiskBytes: 1 << 30},
 	}
 	sel, err := r.Select(ctx, true)
-	if err != nil || sel != gaterun.Backend(b) {
+	if err != nil || sel != gatehost.Backend(b) {
 		t.Fatalf("select: %v %v", sel, err)
 	}
 

@@ -12,19 +12,17 @@
 //     polls it (CommandStatus) until the gate reports a [GateResult]. Start
 //     and status are idempotent by gate id, so a dropped connection mid-gate
 //     costs a poll, not the gate.
-//   - The daemon half, [Jobs] over a [Runner], runs the gate's three steps
-//     (pipeline redesign §3.3, "Gate isolation"). Only the middle one runs
-//     pull-request code:
-//     1. fetch, outside the boundary and credentialed: `reliant-queue/<batch>`
-//     at the exact candidate sha into a fresh per-gate directory. The
-//     credential is per invocation; none is written into the directory.
-//     2. gate, inside a [Backend]: the stage script (script.go) runs lint →
-//     test → build → sbom_scan from the repository's resolved stages,
-//     stopping at the first stage that does not pass, and writes
-//     gate-result.json.
-//     3. report, outside: the output directory is read back through
-//     Backend.CopyOut as a tar stream, as data only (report.go): size-capped,
-//     never extracted, links refused, nothing executed. Then Teardown.
+//   - The daemon half, package gatehost, runs the gate's three steps
+//     (pipeline redesign §3.3, "Gate isolation"): a credentialed fetch
+//     outside the boundary, the stage script inside a backend, and a report
+//     read back as data. Only the middle one runs pull-request code.
+//
+// This package is the server half and the wire both halves share: the
+// commands, the request and result types, the verdict rules and the gate's
+// environment. It is server-safe: it runs no git and holds no repository
+// bytes, so a server role may import it (internal/architecture's
+// TestServerRolesRunNoCode). Everything that touches a checkout is in
+// gatehost, which only the daemon imports.
 //
 // Isolation fails closed. A machine whose isolated backend (sysbox, later vm)
 // does not pass Detect and Preflight refuses the gate with
@@ -33,8 +31,9 @@
 // gate of a repository whose mode is shadow, and a result it produced is
 // never [GateResult.Landable].
 //
-// Nothing sends a gate command yet; the queue's scheduler (M7) will, through
-// the Dispatcher.
+// [PoolMembers] is the pool member choice the Dispatcher makes, exported for
+// the merge queue's other daemon jobs (internal/mergequeue/jobrun), which run
+// on the same pool.
 //
-//forge:not-a-component: the merge queue's scheduler (M7) builds the Dispatcher over the worker's daemon router, the machine-pool store and pipeline_repos; the daemon builds Jobs in its gate command handler. Neither is wired by the composition root yet
+//forge:not-a-component: the merge queue's scheduler builds the Dispatcher over the worker's daemon router, the machine-pool store and pipeline_repos; the daemon builds gatehost.Jobs in its gate command handler. Neither is wired by the composition root yet
 package gaterun

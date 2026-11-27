@@ -19,14 +19,15 @@ import (
 )
 
 // forge:section MockService
-// forge:hash=ead3910e4f9b9a0d9fde1702632c581ce65d6e1d7b4d89d49de9ec53d940e166
+// forge:hash=b0c8fc42bc44c30d89bd7e4feef17e2e7a4465becba62565255dcb039a836ebc
 
 // MockService is a test mock for the Service interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockService.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockService.<Method>Func not set" error.
 type MockService struct {
 	contractkit.Recorder
 	UpsertDaemonIdentityFunc        func(context.Context, core.DaemonIdentity) (bool, error)
@@ -61,18 +62,79 @@ func (m *MockService) ApplyDaemonRegistrySnapshot(ctx context.Context, snap Regi
 	return RegistrySnapshotResult{}, contractkit.MockNotSet("MockService", "ApplyDaemonRegistrySnapshot")
 }
 
+// MockServiceUpsertDaemonIdentityCall is one recorded call of MockService.UpsertDaemonIdentity, one
+// field per parameter.
+type MockServiceUpsertDaemonIdentityCall struct {
+	Ctx context.Context
+	ID  core.DaemonIdentity
+}
+
+// UpsertDaemonIdentityCalls returns every recorded UpsertDaemonIdentity call, oldest first, with
+// its arguments typed. It reads the same log as Calls("UpsertDaemonIdentity").
+func (m *MockService) UpsertDaemonIdentityCalls() []MockServiceUpsertDaemonIdentityCall {
+	var out []MockServiceUpsertDaemonIdentityCall
+	for _, c := range m.Recorder.Calls("UpsertDaemonIdentity") {
+		var r MockServiceUpsertDaemonIdentityCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ID, _ = c.Args[1].(core.DaemonIdentity)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceRemoveDaemonCall is one recorded call of MockService.RemoveDaemon, one
+// field per parameter.
+type MockServiceRemoveDaemonCall struct {
+	Ctx      context.Context
+	DaemonID string
+}
+
+// RemoveDaemonCalls returns every recorded RemoveDaemon call, oldest first, with
+// its arguments typed. It reads the same log as Calls("RemoveDaemon").
+func (m *MockService) RemoveDaemonCalls() []MockServiceRemoveDaemonCall {
+	var out []MockServiceRemoveDaemonCall
+	for _, c := range m.Recorder.Calls("RemoveDaemon") {
+		var r MockServiceRemoveDaemonCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.DaemonID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceApplyDaemonRegistrySnapshotCall is one recorded call of MockService.ApplyDaemonRegistrySnapshot, one
+// field per parameter.
+type MockServiceApplyDaemonRegistrySnapshotCall struct {
+	Ctx  context.Context
+	Snap RegistrySnapshotApply
+}
+
+// ApplyDaemonRegistrySnapshotCalls returns every recorded ApplyDaemonRegistrySnapshot call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ApplyDaemonRegistrySnapshot").
+func (m *MockService) ApplyDaemonRegistrySnapshotCalls() []MockServiceApplyDaemonRegistrySnapshotCall {
+	var out []MockServiceApplyDaemonRegistrySnapshotCall
+	for _, c := range m.Recorder.Calls("ApplyDaemonRegistrySnapshot") {
+		var r MockServiceApplyDaemonRegistrySnapshotCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Snap, _ = c.Args[1].(RegistrySnapshotApply)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ Service = (*MockService)(nil)
 
 // forge:section MockDaemons
-// forge:hash=96d90e0e1af0ad58c4a25ecbc20c08b37163bce116416f3cf73ad12e93e91940
+// forge:hash=2a99d9e8137ae550234dfdab1a000471495bfda07d6153113dc11c9dc515c48c
 
 // MockDaemons is a test mock for the Daemons interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockDaemons.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockDaemons.<Method>Func not set" error.
 type MockDaemons struct {
 	contractkit.Recorder
 	UpsertDaemonIdentityFunc          func(context.Context, core.DaemonIdentity, time.Time, time.Time) (bool, error)
@@ -127,18 +189,129 @@ func (m *MockDaemons) UnpinChatsFromDaemon(ctx context.Context, daemonID string)
 	return nil, contractkit.MockNotSet("MockDaemons", "UnpinChatsFromDaemon")
 }
 
+// MockDaemonsUpsertDaemonIdentityCall is one recorded call of MockDaemons.UpsertDaemonIdentity, one
+// field per parameter.
+type MockDaemonsUpsertDaemonIdentityCall struct {
+	Ctx       context.Context
+	ID        core.DaemonIdentity
+	CreatedAt time.Time
+	Now       time.Time
+}
+
+// UpsertDaemonIdentityCalls returns every recorded UpsertDaemonIdentity call, oldest first, with
+// its arguments typed. It reads the same log as Calls("UpsertDaemonIdentity").
+func (m *MockDaemons) UpsertDaemonIdentityCalls() []MockDaemonsUpsertDaemonIdentityCall {
+	var out []MockDaemonsUpsertDaemonIdentityCall
+	for _, c := range m.Recorder.Calls("UpsertDaemonIdentity") {
+		var r MockDaemonsUpsertDaemonIdentityCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ID, _ = c.Args[1].(core.DaemonIdentity)
+		r.CreatedAt, _ = c.Args[2].(time.Time)
+		r.Now, _ = c.Args[3].(time.Time)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockDaemonsDeleteDaemonRowCall is one recorded call of MockDaemons.DeleteDaemonRow, one
+// field per parameter.
+type MockDaemonsDeleteDaemonRowCall struct {
+	Ctx      context.Context
+	DaemonID string
+}
+
+// DeleteDaemonRowCalls returns every recorded DeleteDaemonRow call, oldest first, with
+// its arguments typed. It reads the same log as Calls("DeleteDaemonRow").
+func (m *MockDaemons) DeleteDaemonRowCalls() []MockDaemonsDeleteDaemonRowCall {
+	var out []MockDaemonsDeleteDaemonRowCall
+	for _, c := range m.Recorder.Calls("DeleteDaemonRow") {
+		var r MockDaemonsDeleteDaemonRowCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.DaemonID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockDaemonsLockDaemonsAbsentFromSnapshotCall is one recorded call of MockDaemons.LockDaemonsAbsentFromSnapshot, one
+// field per parameter.
+type MockDaemonsLockDaemonsAbsentFromSnapshotCall struct {
+	Ctx               context.Context
+	UserID            string
+	Keep              []string
+	KeepCreatedAfter  time.Time
+	KeepAttachedSince time.Time
+}
+
+// LockDaemonsAbsentFromSnapshotCalls returns every recorded LockDaemonsAbsentFromSnapshot call, oldest first, with
+// its arguments typed. It reads the same log as Calls("LockDaemonsAbsentFromSnapshot").
+func (m *MockDaemons) LockDaemonsAbsentFromSnapshotCalls() []MockDaemonsLockDaemonsAbsentFromSnapshotCall {
+	var out []MockDaemonsLockDaemonsAbsentFromSnapshotCall
+	for _, c := range m.Recorder.Calls("LockDaemonsAbsentFromSnapshot") {
+		var r MockDaemonsLockDaemonsAbsentFromSnapshotCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.Keep, _ = c.Args[2].([]string)
+		r.KeepCreatedAfter, _ = c.Args[3].(time.Time)
+		r.KeepAttachedSince, _ = c.Args[4].(time.Time)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockDaemonsReleaseDaemonFromWorkspacesCall is one recorded call of MockDaemons.ReleaseDaemonFromWorkspaces, one
+// field per parameter.
+type MockDaemonsReleaseDaemonFromWorkspacesCall struct {
+	Ctx      context.Context
+	DaemonID string
+}
+
+// ReleaseDaemonFromWorkspacesCalls returns every recorded ReleaseDaemonFromWorkspaces call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ReleaseDaemonFromWorkspaces").
+func (m *MockDaemons) ReleaseDaemonFromWorkspacesCalls() []MockDaemonsReleaseDaemonFromWorkspacesCall {
+	var out []MockDaemonsReleaseDaemonFromWorkspacesCall
+	for _, c := range m.Recorder.Calls("ReleaseDaemonFromWorkspaces") {
+		var r MockDaemonsReleaseDaemonFromWorkspacesCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.DaemonID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockDaemonsUnpinChatsFromDaemonCall is one recorded call of MockDaemons.UnpinChatsFromDaemon, one
+// field per parameter.
+type MockDaemonsUnpinChatsFromDaemonCall struct {
+	Ctx      context.Context
+	DaemonID string
+}
+
+// UnpinChatsFromDaemonCalls returns every recorded UnpinChatsFromDaemon call, oldest first, with
+// its arguments typed. It reads the same log as Calls("UnpinChatsFromDaemon").
+func (m *MockDaemons) UnpinChatsFromDaemonCalls() []MockDaemonsUnpinChatsFromDaemonCall {
+	var out []MockDaemonsUnpinChatsFromDaemonCall
+	for _, c := range m.Recorder.Calls("UnpinChatsFromDaemon") {
+		var r MockDaemonsUnpinChatsFromDaemonCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.DaemonID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ Daemons = (*MockDaemons)(nil)
 
 // forge:section MockLifecycle
-// forge:hash=e3b91ae69f13d91a522890caea13e1fde3686b932a6a83f49774519fead089d0
+// forge:hash=0985407a9beda5526469b6ddb8d4950f1a09efabe6afbfa89d4119e4c432add4
 
 // MockLifecycle is a test mock for the Lifecycle interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockLifecycle.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockLifecycle.<Method>Func not set" error.
 type MockLifecycle struct {
 	contractkit.Recorder
 	ApplyDaemonLifecycleFunc func(context.Context, core.DaemonLifecycleUpdate) (bool, error)
@@ -153,18 +326,39 @@ func (m *MockLifecycle) ApplyDaemonLifecycle(ctx context.Context, lc core.Daemon
 	return false, contractkit.MockNotSet("MockLifecycle", "ApplyDaemonLifecycle")
 }
 
+// MockLifecycleApplyDaemonLifecycleCall is one recorded call of MockLifecycle.ApplyDaemonLifecycle, one
+// field per parameter.
+type MockLifecycleApplyDaemonLifecycleCall struct {
+	Ctx context.Context
+	Lc  core.DaemonLifecycleUpdate
+}
+
+// ApplyDaemonLifecycleCalls returns every recorded ApplyDaemonLifecycle call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ApplyDaemonLifecycle").
+func (m *MockLifecycle) ApplyDaemonLifecycleCalls() []MockLifecycleApplyDaemonLifecycleCall {
+	var out []MockLifecycleApplyDaemonLifecycleCall
+	for _, c := range m.Recorder.Calls("ApplyDaemonLifecycle") {
+		var r MockLifecycleApplyDaemonLifecycleCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Lc, _ = c.Args[1].(core.DaemonLifecycleUpdate)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ Lifecycle = (*MockLifecycle)(nil)
 
 // forge:section MockUserUpdates
-// forge:hash=88d1f5b127e499234fc8de92ca631b8e88506f8fe3798add3765c857ae4ccc02
+// forge:hash=772f992d0b6d256c7fdb1af5e0755f53cef80528459dbbabb45fa9297ee5f1ff
 
 // MockUserUpdates is a test mock for the UserUpdates interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockUserUpdates.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockUserUpdates.<Method>Func not set" error.
 type MockUserUpdates struct {
 	contractkit.Recorder
 	CreateUserUpdateFunc func(context.Context, *core.UserUpdate) error
@@ -179,18 +373,39 @@ func (m *MockUserUpdates) CreateUserUpdate(ctx context.Context, update *core.Use
 	return contractkit.MockNotSet("MockUserUpdates", "CreateUserUpdate")
 }
 
+// MockUserUpdatesCreateUserUpdateCall is one recorded call of MockUserUpdates.CreateUserUpdate, one
+// field per parameter.
+type MockUserUpdatesCreateUserUpdateCall struct {
+	Ctx    context.Context
+	Update *core.UserUpdate
+}
+
+// CreateUserUpdateCalls returns every recorded CreateUserUpdate call, oldest first, with
+// its arguments typed. It reads the same log as Calls("CreateUserUpdate").
+func (m *MockUserUpdates) CreateUserUpdateCalls() []MockUserUpdatesCreateUserUpdateCall {
+	var out []MockUserUpdatesCreateUserUpdateCall
+	for _, c := range m.Recorder.Calls("CreateUserUpdate") {
+		var r MockUserUpdatesCreateUserUpdateCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Update, _ = c.Args[1].(*core.UserUpdate)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ UserUpdates = (*MockUserUpdates)(nil)
 
 // forge:section MockTxRunner
-// forge:hash=1a0ee09450a8c0c0c820b797730ecbfabb88f624601078e98bcecc809d6c34d9
+// forge:hash=1a9a9ed41b954ef2ab28e8326f76baa309a556ade16a586f99462bed4c992c21
 
 // MockTxRunner is a test mock for the TxRunner interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockTxRunner.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockTxRunner.<Method>Func not set" error.
 type MockTxRunner struct {
 	contractkit.Recorder
 	RunTxFunc func(context.Context, orm.TxPolicy, func(ctx context.Context) error) error
@@ -203,6 +418,28 @@ func (m *MockTxRunner) RunTx(p0 context.Context, policy orm.TxPolicy, fn func(ct
 		return m.RunTxFunc(p0, policy, fn)
 	}
 	return contractkit.MockNotSet("MockTxRunner", "RunTx")
+}
+
+// MockTxRunnerRunTxCall is one recorded call of MockTxRunner.RunTx, one
+// field per parameter.
+type MockTxRunnerRunTxCall struct {
+	Ctx    context.Context
+	Policy orm.TxPolicy
+	Fn     func(ctx context.Context) error
+}
+
+// RunTxCalls returns every recorded RunTx call, oldest first, with
+// its arguments typed. It reads the same log as Calls("RunTx").
+func (m *MockTxRunner) RunTxCalls() []MockTxRunnerRunTxCall {
+	var out []MockTxRunnerRunTxCall
+	for _, c := range m.Recorder.Calls("RunTx") {
+		var r MockTxRunnerRunTxCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Policy, _ = c.Args[1].(orm.TxPolicy)
+		r.Fn, _ = c.Args[2].(func(ctx context.Context) error)
+		out = append(out, r)
+	}
+	return out
 }
 
 // Compile-time check.

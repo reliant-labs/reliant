@@ -14,14 +14,15 @@ import (
 )
 
 // forge:section MockDialGuard
-// forge:hash=e9273f7db0dbf0307dfdf023b4ee379e2f87f2d98721e1b9339ded7166b3e8a4
+// forge:hash=b29b2ebcc835efce8d4164846035c43c7d3e8b05412a3fe28567d1a7bb673c35
 
 // MockDialGuard is a test mock for the DialGuard interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockDialGuard.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockDialGuard.<Method>Func not set" error.
 type MockDialGuard struct {
 	contractkit.Recorder
 	TransportFunc func() *http.Transport
@@ -34,6 +35,22 @@ func (m *MockDialGuard) Transport() *http.Transport {
 		return m.TransportFunc()
 	}
 	return nil
+}
+
+// MockDialGuardTransportCall is one recorded call of MockDialGuard.Transport, one
+// field per parameter.
+type MockDialGuardTransportCall struct {
+}
+
+// TransportCalls returns every recorded Transport call, oldest first, with
+// its arguments typed. It reads the same log as Calls("Transport").
+func (m *MockDialGuard) TransportCalls() []MockDialGuardTransportCall {
+	var out []MockDialGuardTransportCall
+	for range m.Recorder.Calls("Transport") {
+		var r MockDialGuardTransportCall
+		out = append(out, r)
+	}
+	return out
 }
 
 // Compile-time check.
