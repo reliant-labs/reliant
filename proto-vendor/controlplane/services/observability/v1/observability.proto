@@ -408,6 +408,11 @@ message TimeRange {
 // attribute can never spoof identity); the rest read the signal's own
 // attributes first, then the resource's.
 message QueryScope {
+  option (buf.validate.message).cel = {
+    id: "query_scope.project_exclusive"
+    message: "set project_id or project_ids, not both"
+    expression: "!has(this.project_id) || size(this.project_ids) == 0"
+  };
   reserved 2;
   reserved "env_id";
   // The org whose data is read. The caller MUST be a member; this is verified
@@ -433,7 +438,7 @@ message QueryScope {
   // Only the platform organization (tenant zero) has such telemetry, so any
   // other org is refused PermissionDenied, as is a credential bound to one
   // environment. It takes no env_ids and no project_id (both narrow by
-  // environment): sending either is InvalidArgument.
+  // environment): sending either is InvalidArgument (project_ids too).
   bool platform_scope = 8;
   // Narrow to these dev instances: reliant.instance.id, which the OTLP gateway
   // stamps from a dev token's `sid` (dropping any a client sent). ANDed with
@@ -454,6 +459,29 @@ message QueryScope {
     (buf.validate.field).repeated.max_items = 50,
     (buf.validate.field).repeated.items.string.min_len = 1,
     (buf.validate.field).repeated.items.string.max_len = 320
+  ];
+  // Several forge projects at once: the union of their environments is in
+  // scope, as project_id's one project's would be. It is project_id's plural,
+  // so a scope names one or the other (InvalidArgument for both); empty =
+  // not narrowed by it, which is today's behaviour. Entries are non-empty: the
+  // project-less environments are named by project_id = "" alone. env_ids
+  // ANDs with it as with project_id: each must be a live environment of one
+  // of these projects. A project the org does not have adds no environment,
+  // and a set of only such projects reads nothing, never everything, so the
+  // answer does not say which projects exist. Projects authorize nothing:
+  // the caller is admitted to org_id, and a credential bound to one
+  // environment is still held to it.
+  //
+  // Like project_id, the set expands to every live environment of its
+  // projects, and a telemetry read compiles at most 500 environments: a set
+  // with more is InvalidArgument, as one project with more is. Name env_ids
+  // to read a subset.
+  //
+  // platform_scope takes no project_ids either.
+  repeated string project_ids = 11 [
+    (buf.validate.field).repeated.max_items = 50,
+    (buf.validate.field).repeated.items.string.min_len = 1,
+    (buf.validate.field).repeated.items.string.max_len = 128
   ];
 }
 

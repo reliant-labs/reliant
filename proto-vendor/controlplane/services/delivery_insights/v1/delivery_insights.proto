@@ -19,7 +19,8 @@ option go_package = "github.com/reliant-labs/control-plane/gen/services/delivery
 // SCOPE IS K1's, VERBATIM IN MEANING. Every RPC carries scope.org_id; the handler
 // verifies the caller is a member of that org (PermissionDenied otherwise) and
 // that every scope.env_ids entry is a live environment of THAT org (and of
-// scope.project_id when set), before any ledger row is read. Empty env_ids = every
+// scope.project_id, or one of scope.project_ids, when set), before any ledger
+// row is read. Empty env_ids = every
 // environment of the org (of the project, when project_id is set).
 //
 // DeliveryScope deliberately mirrors ObservabilityService's QueryScope field for
@@ -83,6 +84,11 @@ message DeliveryTimeRange {
 // match ObservabilityService's QueryScope; the fields that only make sense for
 // telemetry (services, filters) are reserved, not repeated.
 message DeliveryScope {
+  option (buf.validate.message).cel = {
+    id: "delivery_scope.project_exclusive"
+    message: "set project_id or project_ids, not both"
+    expression: "!has(this.project_id) || size(this.project_ids) == 0"
+  };
   reserved 2, 3, 7;
   reserved "env_id", "services", "filters";
   // The org whose ledger is read. The caller MUST be a member; verified
@@ -97,6 +103,15 @@ message DeliveryScope {
   // Control-plane environment ids (deploy_environments.id). Empty = every
   // environment of the org (of the project, when project_id is set).
   repeated string env_ids = 6 [(buf.validate.field).repeated.max_items = 50];
+  // QueryScope.project_ids: the union of these projects' environments (same
+  // field number). Not with project_id; empty = not narrowed by it. A
+  // project the org does not have adds no environment, and a set of only
+  // such projects reads nothing, never everything. env_ids ANDs with it.
+  repeated string project_ids = 11 [
+    (buf.validate.field).repeated.max_items = 50,
+    (buf.validate.field).repeated.items.string.min_len = 1,
+    (buf.validate.field).repeated.items.string.max_len = 128
+  ];
 }
 
 message ListReleasesRequest {

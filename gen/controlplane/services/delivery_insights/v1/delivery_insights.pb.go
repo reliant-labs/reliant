@@ -104,7 +104,12 @@ type DeliveryScope struct {
 	ProjectId *string `protobuf:"bytes,5,opt,name=project_id,json=projectId,proto3,oneof" json:"project_id,omitempty"`
 	// Control-plane environment ids (deploy_environments.id). Empty = every
 	// environment of the org (of the project, when project_id is set).
-	EnvIds        []string `protobuf:"bytes,6,rep,name=env_ids,json=envIds,proto3" json:"env_ids,omitempty"`
+	EnvIds []string `protobuf:"bytes,6,rep,name=env_ids,json=envIds,proto3" json:"env_ids,omitempty"`
+	// QueryScope.project_ids: the union of these projects' environments (same
+	// field number). Not with project_id; empty = not narrowed by it. A
+	// project the org does not have adds no environment, and a set of only
+	// such projects reads nothing, never everything. env_ids ANDs with it.
+	ProjectIds    []string `protobuf:"bytes,11,rep,name=project_ids,json=projectIds,proto3" json:"project_ids,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -163,6 +168,13 @@ func (x *DeliveryScope) GetProjectId() string {
 func (x *DeliveryScope) GetEnvIds() []string {
 	if x != nil {
 		return x.EnvIds
+	}
+	return nil
+}
+
+func (x *DeliveryScope) GetProjectIds() []string {
+	if x != nil {
+		return x.ProjectIds
 	}
 	return nil
 }
@@ -947,14 +959,16 @@ const file_services_delivery_insights_v1_delivery_insights_proto_rawDesc = "" +
 	"\x11DeliveryTimeRange\x120\n" +
 	"\x05start\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\x05start\x12,\n" +
 	"\x03end\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x03end\x12;\n" +
-	"\brelative\x18\x03 \x01(\v2\x1f.controlplane.v1.RelativeWindowR\brelative\"\xe2\x01\n" +
+	"\brelative\x18\x03 \x01(\v2\x1f.controlplane.v1.RelativeWindowR\brelative\"\x83\x02\n" +
 	"\rDeliveryScope\x12\x15\n" +
 	"\x06org_id\x18\x01 \x01(\tR\x05orgId\x12A\n" +
 	"\n" +
 	"time_range\x18\x04 \x01(\v2\".controlplane.v1.DeliveryTimeRangeR\ttimeRange\x12\"\n" +
 	"\n" +
 	"project_id\x18\x05 \x01(\tH\x00R\tprojectId\x88\x01\x01\x12\x17\n" +
-	"\aenv_ids\x18\x06 \x03(\tR\x06envIdsB\r\n" +
+	"\aenv_ids\x18\x06 \x03(\tR\x06envIds\x12\x1f\n" +
+	"\vproject_ids\x18\v \x03(\tR\n" +
+	"projectIdsB\r\n" +
 	"\v_project_idJ\x04\b\x02\x10\x03J\x04\b\x03\x10\x04J\x04\b\a\x10\bR\x06env_idR\bservicesR\afilters\"a\n" +
 	"\x13ListReleasesRequest\x124\n" +
 	"\x05scope\x18\x01 \x01(\v2\x1e.controlplane.v1.DeliveryScopeR\x05scope\x12\x14\n" +

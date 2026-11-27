@@ -201,6 +201,32 @@ service TestsService {
       activity: {none: "reads only: answers whether a retained report names a blob, changes nothing"}
     };
   }
+
+  // GetTestPortfolio returns the test health of several projects at once:
+  // one row per project, each the figures GetTestSummary answers for that
+  // project on its own default branch (with the default trend_points and
+  // pass_rate_runs), and totals across them. The console's multi-project
+  // Tests and Coverage pages read it.
+  //
+  // TOTALS NEVER AVERAGE PERCENTAGES. The pass rate is weighted by each
+  // project's pass_rate_runs (passed runs over judged runs, summed); coverage
+  // is summed per (language, granularity) and weighted by statements
+  // (Σcovered / Σstatements), never mixed into one figure across languages
+  // or granularities; counts are summed.
+  //
+  // Authorized like GetTestSummary (tests:read for a machine credential,
+  // deploy:read for a person), across the whole org: a caller bound to some
+  // environments is refused, because every figure merges runs across
+  // environments. A named project with no runs is a row with has_runs false,
+  // never NotFound, so a project of another org reads the same as an empty
+  // one.
+  rpc GetTestPortfolio(GetTestPortfolioRequest) returns (GetTestPortfolioResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+    };
+  }
 }
 
 // === Enums ===
@@ -229,6 +255,20 @@ enum TestRunSource {
   // A rerun of a red run's failed tests, to classify them (`forge test
   // flakes confirm`, lane "confirm").
   TEST_RUN_SOURCE_CONFIRM = 4;
+}
+
+// TestRunCIProvenance says who vouches for a run's CI fields (TestRunCI, and
+// TestRunSummary's ci_repository, ci_ref, ci_sha and ci_event).
+enum TestRunCIProvenance {
+  TEST_RUN_CI_PROVENANCE_UNSPECIFIED = 0;
+  // The uploader said so, and nothing checked it: every run a hand-minted
+  // token or a person records.
+  TEST_RUN_CI_PROVENANCE_ASSERTED = 1;
+  // The claims of a verified GitHub Actions ID token, which the uploading
+  // credential was exchanged for (AccessTokenService.ExchangeFederatedToken).
+  // The run's ci (provider "github", run_id, run_url, attempt) is derived from
+  // the claims too, whatever the upload said.
+  TEST_RUN_CI_PROVENANCE_GITHUB_OIDC = 2;
 }
 
 // TestRunOutcome is a run's verdict, as forge's `test report` exit codes
@@ -509,6 +549,23 @@ message TestRunSummary {
   // Who recorded it: the token's name, or the person.
   string uploaded_by = 21;
   google.protobuf.Timestamp created_at = 22;
+  // Who vouches for the run's CI fields. Output only: the server sets it
+  // from the uploading credential, never from the request.
+  // forge:read-only
+  TestRunCIProvenance ci_provenance = 23;
+  // The verified repository (owner/name), ref ("refs/heads/main"), commit
+  // and triggering event ("push", "pull_request", ...): set only when
+  // ci_provenance is GITHUB_OIDC, empty otherwise. Output only. ci_sha is
+  // the commit the workflow ran on, which for a pull_request event is
+  // GitHub's merge commit, not necessarily git_commit.
+  // forge:read-only
+  string ci_repository = 24;
+  // forge:read-only
+  string ci_ref = 25;
+  // forge:read-only
+  string ci_sha = 26;
+  // forge:read-only
+  string ci_event = 27;
 }
 
 // TestReleaseMarker places a release on a coverage trend.
@@ -1137,4 +1194,103 @@ message HasCoverageBlobResponse {
   // uncommitted working tree), so the blob is in no commit. False when
   // present is false.
   bool uncommitted = 2;
+}
+
+message GetTestPortfolioRequest {
+  // The forge projects, each at most once. Empty: every project of the org
+  // that has a recorded run, the 50 with the most recent run first, and
+  // truncated in the response says whether there were more.
+  repeated string projects = 1 [(buf.validate.field).repeated = {
+    max_items: 50
+    unique: true
+    items: {
+      string: {
+        min_len: 1
+        max_len: 256
+      }
+    }
+  }];
+  // The org this request acts in (docs/orgs.md). Unset: the caller's default
+  // org. A person must be a member of it; a machine credential may name only
+  // its own org.
+  optional string org_id = 2;
+}
+
+message GetTestPortfolioResponse {
+  // One row per project: in the request's order when projects were named,
+  // else most recent run first.
+  repeated TestPortfolioProject projects = 1;
+  // Across every row.
+  TestPortfolioTotals totals = 2;
+  // The request named no project and the org has more than 50 with runs:
+  // only the 50 with the most recent run are listed and totalled.
+  bool truncated = 3;
+}
+
+// TestPortfolioProject is one project's test health on its default branch:
+// the figures GetTestSummary answers for it with no branch named and the
+// default trend_points and pass_rate_runs.
+message TestPortfolioProject {
+  string project = 1;
+  // The project has a recorded run on the branch summarised. False for a
+  // named project with no runs, or one this org does not have (which reads
+  // the same): every figure below is then empty.
+  bool has_runs = 2;
+  // The default branch summarised (GetTestSummaryResponse.branch). Empty
+  // when no recent run names a branch: every run of the project is then
+  // summarised.
+  string branch = 3;
+  // The newest commit report on the branch (GetTestSummaryResponse.latest).
+  // Unset when none exists.
+  TestCommitReport latest = 4;
+  // latest's coverage per language, generated code left out, as
+  // GetCoverage's root node splits it. Empty when latest is unset or
+  // carried no coverage.
+  repeated TestPortfolioCoverage coverage = 5;
+  // Runs passed over runs judged among the branch's newest runs
+  // (GetTestSummaryResponse.pass_rate), and the n.
+  double pass_rate = 6;
+  int32 pass_rate_runs = 7;
+  // The project's flake states (GetTestSummaryResponse's counts).
+  int32 suspected_count = 8;
+  int32 flaky_count = 9;
+  int32 quarantined_count = 10;
+  // The branch's newest run. Unset when has_runs is false.
+  TestRunSummary last_run = 11;
+}
+
+// TestPortfolioCoverage is coverage of one language at one granularity,
+// summed over statements: percent is Σcovered / Σstatements, never an average
+// of percentages.
+message TestPortfolioCoverage {
+  // "go" | "ts" | another runner's language.
+  string lang = 1;
+  // The report's granularity (TestCoverage.granularity): "statement", or
+  // "line" when any of the report's files was counted by line. A figure of
+  // one granularity is never summed with one of the other.
+  string granularity = 2;
+  TestStatementCoverage combined = 3;
+  // The projects summed into this figure: 1 on a project's row.
+  int32 projects = 4;
+}
+
+// TestPortfolioTotals is the response's rows summed.
+message TestPortfolioTotals {
+  // Rows; rows with has_runs; rows with a latest report.
+  int32 projects = 1;
+  int32 projects_with_runs = 2;
+  int32 projects_with_report = 3;
+  // Every row's passed runs over every row's judged runs: each row's
+  // pass_rate weighted by its pass_rate_runs. 0 when no run was judged.
+  double pass_rate = 4;
+  // The sum of the rows' pass_rate_runs.
+  int32 pass_rate_runs = 5;
+  int32 suspected_count = 6;
+  int32 flaky_count = 7;
+  int32 quarantined_count = 8;
+  // The rows' latest reports' totals, summed.
+  TestTotals latest_totals = 9;
+  // The rows' coverage summed per (lang, granularity), by lang then
+  // granularity.
+  repeated TestPortfolioCoverage coverage = 10;
 }

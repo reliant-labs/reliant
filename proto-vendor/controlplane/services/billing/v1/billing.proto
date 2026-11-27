@@ -1220,6 +1220,8 @@ message GetFreeHostingStatusResponse {
   // The org's live static sites counted against the allowance (only when
   // is_designated).
   repeated FreeHostingSite sites = 4;
+  // Site-count limit of the allowance. 0 means no limit (signed-in free
+  // hosting has none); a positive value is a cap.
   int32 sites_limit = 5;
   // Aggregate static storage of those sites, and its limit.
   int64 storage_bytes = 6;
@@ -1266,6 +1268,50 @@ message GetCurrentUserUsageBillingResponse {
   // The monthly hosting minimum: a period whose hosting charges total more
   // than zero and less than this is billed this. 0 when there is none.
   int64 minimum_monthly_cents = 5;
+  // The name independent pay-as-you-go hosting is presented under: "Hobby".
+  // A display name only: it bills exactly as this response's rates, minimum
+  // and policy_version say, and is not a machine plan.
+  string plan_display_name = 6;
+  // Hosting usage the monthly minimum includes at list rates: the minimum
+  // pays for the first included_usage_cents of a month's usage, and usage
+  // above it is billed at the rates. Equal to minimum_monthly_cents; a month
+  // with no hosting usage is still billed $0.
+  int64 included_usage_cents = 7;
+  // The one-time hosting launch credit of the organization's founder, as it
+  // stands for THIS organization. Unset when there is no organization.
+  HostingLaunchCredit launch_credit = 8;
+}
+
+// HostingLaunchCredit is a founder's one-time hosting launch credit: granted
+// once per person and once per card when an organization's hosting billing is
+// first funded, it pays down the hosting invoice whose billing period starts
+// before expires_at (usage and the monthly minimum alike); the rest expires.
+// Not part of the consented hosting usage policy: a credit never raises a
+// charge.
+message HostingLaunchCredit {
+  // What a founder with no credit decision yet is granted when they first
+  // add a card through the hosting checkout. 0 when credits are not being
+  // granted, or when this founder already had theirs decided (here or in
+  // another organization).
+  int64 offer_cents = 1;
+  // The founder holds a credit for this organization.
+  bool granted = 2;
+  int64 granted_cents = 3;
+  // What is left to apply; it stops applying once expired is true.
+  int64 remaining_cents = 4;
+  google.protobuf.Timestamp granted_at = 5;
+  // A hosting invoice whose billing period starts at or after this gets no
+  // credit.
+  google.protobuf.Timestamp expires_at = 6;
+  // Some of the credit has been applied to a hosting invoice, and how much.
+  bool applied = 7;
+  int64 applied_cents = 8;
+  // expires_at has passed.
+  bool expired = 9;
+  // Why this founder was granted no credit for this organization, when a
+  // grant was refused: "card_already_credited" (the card already earned
+  // another founder's credit). Empty otherwise.
+  string refused_reason = 10;
 }
 
 message CreateCurrentUserUsageBillingCheckoutRequest {

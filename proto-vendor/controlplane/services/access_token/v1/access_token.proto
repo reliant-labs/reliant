@@ -179,6 +179,29 @@ service AccessTokenService {
     };
   }
 
+  // ExchangeFederatedToken trades a CI provider's ID token for a short-lived
+  // ORG automation token, so an upload from CI needs no stored secret.
+  //
+  // UNAUTHENTICATED: the ID token in the request is the credential. For
+  // GitHub Actions it must be signed by GitHub, carry this control plane's
+  // URL as its audience, come from an allowed event, and name a repository
+  // whose owner has the Reliant GitHub App installed AND linked to an
+  // organization (Organization settings → GitHub). That link names the org
+  // the token is minted into; nothing in the request does.
+  //
+  // The token carries only federatable scopes (today tests:write), acts as
+  // no one, lives at most the configured TTL (15 minutes), and each ID token
+  // is exchanged at most once (oidc_token_replayed). Unlinking the
+  // installation revokes the live tokens it authorized.
+  //
+  // forge:custom
+  rpc ExchangeFederatedToken(ExchangeFederatedTokenRequest) returns (ExchangeFederatedTokenResponse) {
+    option (forge.v1.method) = {
+      auth_required: false
+      activity: {none: "mints a short-lived CI token; audit_log records it"}
+    };
+  }
+
   // ── MEMBER PERMISSIONS ──────────────────────────────────────────────
   //
   // What a PERSON may do in the org, and therefore the most a token acting
@@ -312,7 +335,8 @@ message UpdateOrgMemberGrantsResponse {
 }
 
 // ResourceBinding confines a token to one resource. kind is one of
-// "daemon" | "port" | "connector" (forge/pkg/accesstoken.AllResourceKinds).
+// "daemon" | "port" | "connector" | "environment"
+// (forge/pkg/accesstoken.AllResourceKinds).
 message ResourceBinding {
   string kind = 1;
   string id = 2;
@@ -355,6 +379,15 @@ message CreateTokenRequest {
   // org. A person must be a member of it; a machine credential may name only
   // its own org.
   optional string org_id = 4;
+  // resource, when set, confines the token to one resource. An org token
+  // may be bound only to an ENVIRONMENT of the org (kind "environment", id a
+  // live deploy environment of the org; any other is NotFound, so the mint is
+  // no existence oracle), and then every scope it carries must be one that
+  // binds to an environment (forge/pkg/accesstoken: obs:read, db:query,
+  // changes:read, ...). The app credential of a deploy not on Reliant
+  // hosting is the case: changes:read bound to the one environment whose
+  // Changes snapshot it fetches. Unset: an org-wide token, as before.
+  ResourceBinding resource = 5;
 }
 
 message CreateTokenResponse {
@@ -520,4 +553,36 @@ message ExchangeTokenResponse {
   AccessToken token = 1;
   // secret is the plaintext, returned exactly once.
   string secret = 2;
+}
+
+// FederationProvider names the CI system whose ID token is exchanged. An enum,
+// so another provider (GitLab CI's id_tokens) is a new value, not a new rpc.
+enum FederationProvider {
+  FEDERATION_PROVIDER_UNSPECIFIED = 0;
+  // GitHub Actions: an OIDC ID token from token.actions.githubusercontent.com.
+  FEDERATION_PROVIDER_GITHUB_ACTIONS = 1;
+}
+
+message ExchangeFederatedTokenRequest {
+  FederationProvider provider = 1;
+  // id_token is the provider's raw ID token (a JWT, under 8 KiB). It is a
+  // credential: never logged or recorded.
+  string id_token = 2 [debug_redact = true];
+  // scopes requested. Empty asks for every scope federatable in this context;
+  // anything not federatable is dropped, and the response says what was
+  // granted.
+  repeated string scopes = 3;
+}
+
+message ExchangeFederatedTokenResponse {
+  // token is the rlat_ plaintext, returned exactly once.
+  string token = 1 [debug_redact = true];
+  google.protobuf.Timestamp expires_at = 2;
+  // scopes granted: requested ∩ federatable.
+  repeated string scopes = 3;
+  // org_id is the organization the installation link named.
+  string org_id = 4;
+  // subject names the run the token was minted for, for display:
+  // "github:owner/repo@refs/heads/main run 123/1".
+  string subject = 5;
 }

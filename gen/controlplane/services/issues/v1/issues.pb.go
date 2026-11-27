@@ -651,6 +651,10 @@ type IssueScope struct {
 	// QueryScope.instance_users: the instances of these people, by email; an
 	// email that names no member matches nothing.
 	InstanceUsers []string `protobuf:"bytes,10,rep,name=instance_users,json=instanceUsers,proto3" json:"instance_users,omitempty"`
+	// QueryScope.project_ids: the union of these projects' environments. Not
+	// with project_id; empty = not narrowed by it. A project the org does not
+	// have adds no environment, and a set of only such projects reads nothing.
+	ProjectIds    []string `protobuf:"bytes,11,rep,name=project_ids,json=projectIds,proto3" json:"project_ids,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -730,6 +734,13 @@ func (x *IssueScope) GetInstanceIds() []string {
 func (x *IssueScope) GetInstanceUsers() []string {
 	if x != nil {
 		return x.InstanceUsers
+	}
+	return nil
+}
+
+func (x *IssueScope) GetProjectIds() []string {
+	if x != nil {
+		return x.ProjectIds
 	}
 	return nil
 }
@@ -3414,7 +3425,7 @@ const file_services_issues_v1_issues_proto_rawDesc = "" +
 	"\x0eIssueTimeRange\x120\n" +
 	"\x05start\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\x05start\x12,\n" +
 	"\x03end\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x03end\x12;\n" +
-	"\brelative\x18\x03 \x01(\v2\x1f.controlplane.v1.RelativeWindowR\brelative\"\xb2\x02\n" +
+	"\brelative\x18\x03 \x01(\v2\x1f.controlplane.v1.RelativeWindowR\brelative\"\xd3\x02\n" +
 	"\n" +
 	"IssueScope\x12\x15\n" +
 	"\x06org_id\x18\x01 \x01(\tR\x05orgId\x12\x1a\n" +
@@ -3426,7 +3437,9 @@ const file_services_issues_v1_issues_proto_rawDesc = "" +
 	"\aenv_ids\x18\x06 \x03(\tR\x06envIds\x12!\n" +
 	"\finstance_ids\x18\t \x03(\tR\vinstanceIds\x12%\n" +
 	"\x0einstance_users\x18\n" +
-	" \x03(\tR\rinstanceUsersB\r\n" +
+	" \x03(\tR\rinstanceUsers\x12\x1f\n" +
+	"\vproject_ids\x18\v \x03(\tR\n" +
+	"projectIdsB\r\n" +
 	"\v_project_idJ\x04\b\x02\x10\x03J\x04\b\a\x10\bR\x06env_idR\afilters\"\x9e\a\n" +
 	"\x11ListIssuesRequest\x121\n" +
 	"\x05scope\x18\x01 \x01(\v2\x1b.controlplane.v1.IssueScopeR\x05scope\x128\n" +

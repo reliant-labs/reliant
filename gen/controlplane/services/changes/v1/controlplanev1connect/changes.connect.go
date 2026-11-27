@@ -20,8 +20,14 @@
 // WHO MAY DO WHAT. Every rpc names its environment or change; a caller who is
 // not a member of the environment's org, or a credential of another org,
 // gets NotFound, so ids are no existence oracle.
-//   - reads (List/Get/ListChangeEvents/GetChangesSnapshot): any org member;
-//     a token carrying changes:write, changes:launch or obs:read.
+//   - reads (List/Get/ListChangeEvents/GetChangesDeliveryStatus): any org
+//     member; a token carrying changes:write, changes:launch or obs:read.
+//   - GetChangesSnapshot: a read, and also a token carrying changes:read
+//     (org-wide, or bound to that environment): the credential of an app
+//     not on Reliant hosting, which fetches the snapshot it evaluates. That
+//     scope reads the snapshot and NOTHING ELSE: every other rpc, the reads
+//     included, refuses a token whose only Changes authority is changes:read
+//     (PermissionDenied, reason "scope_missing").
 //   - GetChangeReadout: a read, and obs:read (every member holds it; a token
 //     must carry it).
 //   - CreateChange, UpdateChangeDraft, SetChangePreview, StopChange,
@@ -198,7 +204,7 @@ type ChangesServiceClient interface {
 	// A change its current release does not declare is left out (its key
 	// evaluates "unknown", the code's default); a change whose delivery names a
 	// variant the release no longer declares is delivered off and listed in
-	// problems.
+	// problems. The one rpc a changes:read token may call (WHO MAY DO WHAT).
 	GetChangesSnapshot(context.Context, *connect.Request[v1.GetChangesSnapshotRequest]) (*connect.Response[v1.GetChangesSnapshotResponse], error)
 	// GetChangeReadout reads one experiment run's results: per-arm conversion
 	// of the run's frozen success metric, each treatment against the control,
@@ -239,7 +245,8 @@ type ChangesServiceClient interface {
 	// the ConfigMap, not seen by every page or pod: a page applies it on its
 	// next load; a pod after the kubelet's ConfigMap sync (about a minute) plus
 	// the SDK's 10s re-read. An environment with no hosted apps lists no
-	// targets. Same access as GetChangesSnapshot.
+	// targets. Same access as the other reads (List/Get): a changes:read
+	// token, which reads the snapshot alone, is refused.
 	GetChangesDeliveryStatus(context.Context, *connect.Request[v1.GetChangesDeliveryStatusRequest]) (*connect.Response[v1.GetChangesDeliveryStatusResponse], error)
 }
 
@@ -521,7 +528,7 @@ type ChangesServiceHandler interface {
 	// A change its current release does not declare is left out (its key
 	// evaluates "unknown", the code's default); a change whose delivery names a
 	// variant the release no longer declares is delivered off and listed in
-	// problems.
+	// problems. The one rpc a changes:read token may call (WHO MAY DO WHAT).
 	GetChangesSnapshot(context.Context, *connect.Request[v1.GetChangesSnapshotRequest]) (*connect.Response[v1.GetChangesSnapshotResponse], error)
 	// GetChangeReadout reads one experiment run's results: per-arm conversion
 	// of the run's frozen success metric, each treatment against the control,
@@ -562,7 +569,8 @@ type ChangesServiceHandler interface {
 	// the ConfigMap, not seen by every page or pod: a page applies it on its
 	// next load; a pod after the kubelet's ConfigMap sync (about a minute) plus
 	// the SDK's 10s re-read. An environment with no hosted apps lists no
-	// targets. Same access as GetChangesSnapshot.
+	// targets. Same access as the other reads (List/Get): a changes:read
+	// token, which reads the snapshot alone, is refused.
 	GetChangesDeliveryStatus(context.Context, *connect.Request[v1.GetChangesDeliveryStatusRequest]) (*connect.Response[v1.GetChangesDeliveryStatusResponse], error)
 }
 

@@ -138,6 +138,63 @@ func (TestRunSource) EnumDescriptor() ([]byte, []int) {
 	return file_services_tests_v1_tests_proto_rawDescGZIP(), []int{1}
 }
 
+// TestRunCIProvenance says who vouches for a run's CI fields (TestRunCI, and
+// TestRunSummary's ci_repository, ci_ref, ci_sha and ci_event).
+type TestRunCIProvenance int32
+
+const (
+	TestRunCIProvenance_TEST_RUN_CI_PROVENANCE_UNSPECIFIED TestRunCIProvenance = 0
+	// The uploader said so, and nothing checked it: every run a hand-minted
+	// token or a person records.
+	TestRunCIProvenance_TEST_RUN_CI_PROVENANCE_ASSERTED TestRunCIProvenance = 1
+	// The claims of a verified GitHub Actions ID token, which the uploading
+	// credential was exchanged for (AccessTokenService.ExchangeFederatedToken).
+	// The run's ci (provider "github", run_id, run_url, attempt) is derived from
+	// the claims too, whatever the upload said.
+	TestRunCIProvenance_TEST_RUN_CI_PROVENANCE_GITHUB_OIDC TestRunCIProvenance = 2
+)
+
+// Enum value maps for TestRunCIProvenance.
+var (
+	TestRunCIProvenance_name = map[int32]string{
+		0: "TEST_RUN_CI_PROVENANCE_UNSPECIFIED",
+		1: "TEST_RUN_CI_PROVENANCE_ASSERTED",
+		2: "TEST_RUN_CI_PROVENANCE_GITHUB_OIDC",
+	}
+	TestRunCIProvenance_value = map[string]int32{
+		"TEST_RUN_CI_PROVENANCE_UNSPECIFIED": 0,
+		"TEST_RUN_CI_PROVENANCE_ASSERTED":    1,
+		"TEST_RUN_CI_PROVENANCE_GITHUB_OIDC": 2,
+	}
+)
+
+func (x TestRunCIProvenance) Enum() *TestRunCIProvenance {
+	p := new(TestRunCIProvenance)
+	*p = x
+	return p
+}
+
+func (x TestRunCIProvenance) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (TestRunCIProvenance) Descriptor() protoreflect.EnumDescriptor {
+	return file_services_tests_v1_tests_proto_enumTypes[2].Descriptor()
+}
+
+func (TestRunCIProvenance) Type() protoreflect.EnumType {
+	return &file_services_tests_v1_tests_proto_enumTypes[2]
+}
+
+func (x TestRunCIProvenance) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use TestRunCIProvenance.Descriptor instead.
+func (TestRunCIProvenance) EnumDescriptor() ([]byte, []int) {
+	return file_services_tests_v1_tests_proto_rawDescGZIP(), []int{2}
+}
+
 // TestRunOutcome is a run's verdict, as forge's `test report` exit codes
 // define it. Coverage never decides it.
 type TestRunOutcome int32
@@ -180,11 +237,11 @@ func (x TestRunOutcome) String() string {
 }
 
 func (TestRunOutcome) Descriptor() protoreflect.EnumDescriptor {
-	return file_services_tests_v1_tests_proto_enumTypes[2].Descriptor()
+	return file_services_tests_v1_tests_proto_enumTypes[3].Descriptor()
 }
 
 func (TestRunOutcome) Type() protoreflect.EnumType {
-	return &file_services_tests_v1_tests_proto_enumTypes[2]
+	return &file_services_tests_v1_tests_proto_enumTypes[3]
 }
 
 func (x TestRunOutcome) Number() protoreflect.EnumNumber {
@@ -193,7 +250,7 @@ func (x TestRunOutcome) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use TestRunOutcome.Descriptor instead.
 func (TestRunOutcome) EnumDescriptor() ([]byte, []int) {
-	return file_services_tests_v1_tests_proto_rawDescGZIP(), []int{2}
+	return file_services_tests_v1_tests_proto_rawDescGZIP(), []int{3}
 }
 
 // TestRunIngestState is how far the ingest worker has processed a run.
@@ -238,11 +295,11 @@ func (x TestRunIngestState) String() string {
 }
 
 func (TestRunIngestState) Descriptor() protoreflect.EnumDescriptor {
-	return file_services_tests_v1_tests_proto_enumTypes[3].Descriptor()
+	return file_services_tests_v1_tests_proto_enumTypes[4].Descriptor()
 }
 
 func (TestRunIngestState) Type() protoreflect.EnumType {
-	return &file_services_tests_v1_tests_proto_enumTypes[3]
+	return &file_services_tests_v1_tests_proto_enumTypes[4]
 }
 
 func (x TestRunIngestState) Number() protoreflect.EnumNumber {
@@ -251,7 +308,7 @@ func (x TestRunIngestState) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use TestRunIngestState.Descriptor instead.
 func (TestRunIngestState) EnumDescriptor() ([]byte, []int) {
-	return file_services_tests_v1_tests_proto_rawDescGZIP(), []int{3}
+	return file_services_tests_v1_tests_proto_rawDescGZIP(), []int{4}
 }
 
 // TestCaseStatus is one test case's result in one run.
@@ -291,11 +348,11 @@ func (x TestCaseStatus) String() string {
 }
 
 func (TestCaseStatus) Descriptor() protoreflect.EnumDescriptor {
-	return file_services_tests_v1_tests_proto_enumTypes[4].Descriptor()
+	return file_services_tests_v1_tests_proto_enumTypes[5].Descriptor()
 }
 
 func (TestCaseStatus) Type() protoreflect.EnumType {
-	return &file_services_tests_v1_tests_proto_enumTypes[4]
+	return &file_services_tests_v1_tests_proto_enumTypes[5]
 }
 
 func (x TestCaseStatus) Number() protoreflect.EnumNumber {
@@ -304,7 +361,7 @@ func (x TestCaseStatus) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use TestCaseStatus.Descriptor instead.
 func (TestCaseStatus) EnumDescriptor() ([]byte, []int) {
-	return file_services_tests_v1_tests_proto_rawDescGZIP(), []int{4}
+	return file_services_tests_v1_tests_proto_rawDescGZIP(), []int{5}
 }
 
 // TestQuarantineMode is forge.yaml `tests.flakes.quarantine`.
@@ -345,11 +402,11 @@ func (x TestQuarantineMode) String() string {
 }
 
 func (TestQuarantineMode) Descriptor() protoreflect.EnumDescriptor {
-	return file_services_tests_v1_tests_proto_enumTypes[5].Descriptor()
+	return file_services_tests_v1_tests_proto_enumTypes[6].Descriptor()
 }
 
 func (TestQuarantineMode) Type() protoreflect.EnumType {
-	return &file_services_tests_v1_tests_proto_enumTypes[5]
+	return &file_services_tests_v1_tests_proto_enumTypes[6]
 }
 
 func (x TestQuarantineMode) Number() protoreflect.EnumNumber {
@@ -358,7 +415,7 @@ func (x TestQuarantineMode) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use TestQuarantineMode.Descriptor instead.
 func (TestQuarantineMode) EnumDescriptor() ([]byte, []int) {
-	return file_services_tests_v1_tests_proto_rawDescGZIP(), []int{5}
+	return file_services_tests_v1_tests_proto_rawDescGZIP(), []int{6}
 }
 
 // TestFlakeState is a test's flake state (forge pkg/testreport).
@@ -415,11 +472,11 @@ func (x TestFlakeState) String() string {
 }
 
 func (TestFlakeState) Descriptor() protoreflect.EnumDescriptor {
-	return file_services_tests_v1_tests_proto_enumTypes[6].Descriptor()
+	return file_services_tests_v1_tests_proto_enumTypes[7].Descriptor()
 }
 
 func (TestFlakeState) Type() protoreflect.EnumType {
-	return &file_services_tests_v1_tests_proto_enumTypes[6]
+	return &file_services_tests_v1_tests_proto_enumTypes[7]
 }
 
 func (x TestFlakeState) Number() protoreflect.EnumNumber {
@@ -428,7 +485,7 @@ func (x TestFlakeState) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use TestFlakeState.Descriptor instead.
 func (TestFlakeState) EnumDescriptor() ([]byte, []int) {
-	return file_services_tests_v1_tests_proto_rawDescGZIP(), []int{6}
+	return file_services_tests_v1_tests_proto_rawDescGZIP(), []int{7}
 }
 
 // TestFlakeSignal is what detected a flake event.
@@ -475,11 +532,11 @@ func (x TestFlakeSignal) String() string {
 }
 
 func (TestFlakeSignal) Descriptor() protoreflect.EnumDescriptor {
-	return file_services_tests_v1_tests_proto_enumTypes[7].Descriptor()
+	return file_services_tests_v1_tests_proto_enumTypes[8].Descriptor()
 }
 
 func (TestFlakeSignal) Type() protoreflect.EnumType {
-	return &file_services_tests_v1_tests_proto_enumTypes[7]
+	return &file_services_tests_v1_tests_proto_enumTypes[8]
 }
 
 func (x TestFlakeSignal) Number() protoreflect.EnumNumber {
@@ -488,7 +545,7 @@ func (x TestFlakeSignal) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use TestFlakeSignal.Descriptor instead.
 func (TestFlakeSignal) EnumDescriptor() ([]byte, []int) {
-	return file_services_tests_v1_tests_proto_rawDescGZIP(), []int{7}
+	return file_services_tests_v1_tests_proto_rawDescGZIP(), []int{8}
 }
 
 // TestFlakeVerdict classifies one failure (forge pkg/testreport.Verdict).
@@ -554,11 +611,11 @@ func (x TestFlakeVerdict) String() string {
 }
 
 func (TestFlakeVerdict) Descriptor() protoreflect.EnumDescriptor {
-	return file_services_tests_v1_tests_proto_enumTypes[8].Descriptor()
+	return file_services_tests_v1_tests_proto_enumTypes[9].Descriptor()
 }
 
 func (TestFlakeVerdict) Type() protoreflect.EnumType {
-	return &file_services_tests_v1_tests_proto_enumTypes[8]
+	return &file_services_tests_v1_tests_proto_enumTypes[9]
 }
 
 func (x TestFlakeVerdict) Number() protoreflect.EnumNumber {
@@ -567,7 +624,7 @@ func (x TestFlakeVerdict) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use TestFlakeVerdict.Descriptor instead.
 func (TestFlakeVerdict) EnumDescriptor() ([]byte, []int) {
-	return file_services_tests_v1_tests_proto_rawDescGZIP(), []int{8}
+	return file_services_tests_v1_tests_proto_rawDescGZIP(), []int{9}
 }
 
 // TestEvidenceStatus is how complete a release's test evidence is.
@@ -611,11 +668,11 @@ func (x TestEvidenceStatus) String() string {
 }
 
 func (TestEvidenceStatus) Descriptor() protoreflect.EnumDescriptor {
-	return file_services_tests_v1_tests_proto_enumTypes[9].Descriptor()
+	return file_services_tests_v1_tests_proto_enumTypes[10].Descriptor()
 }
 
 func (TestEvidenceStatus) Type() protoreflect.EnumType {
-	return &file_services_tests_v1_tests_proto_enumTypes[9]
+	return &file_services_tests_v1_tests_proto_enumTypes[10]
 }
 
 func (x TestEvidenceStatus) Number() protoreflect.EnumNumber {
@@ -624,7 +681,7 @@ func (x TestEvidenceStatus) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use TestEvidenceStatus.Descriptor instead.
 func (TestEvidenceStatus) EnumDescriptor() ([]byte, []int) {
-	return file_services_tests_v1_tests_proto_rawDescGZIP(), []int{9}
+	return file_services_tests_v1_tests_proto_rawDescGZIP(), []int{10}
 }
 
 // TestCoverageNodeKind is what a GetCoverage child is.
@@ -667,11 +724,11 @@ func (x TestCoverageNodeKind) String() string {
 }
 
 func (TestCoverageNodeKind) Descriptor() protoreflect.EnumDescriptor {
-	return file_services_tests_v1_tests_proto_enumTypes[10].Descriptor()
+	return file_services_tests_v1_tests_proto_enumTypes[11].Descriptor()
 }
 
 func (TestCoverageNodeKind) Type() protoreflect.EnumType {
-	return &file_services_tests_v1_tests_proto_enumTypes[10]
+	return &file_services_tests_v1_tests_proto_enumTypes[11]
 }
 
 func (x TestCoverageNodeKind) Number() protoreflect.EnumNumber {
@@ -680,7 +737,7 @@ func (x TestCoverageNodeKind) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use TestCoverageNodeKind.Descriptor instead.
 func (TestCoverageNodeKind) EnumDescriptor() ([]byte, []int) {
-	return file_services_tests_v1_tests_proto_rawDescGZIP(), []int{10}
+	return file_services_tests_v1_tests_proto_rawDescGZIP(), []int{11}
 }
 
 // TestKey identifies one test: (language, package, name). Subtests are
@@ -1430,8 +1487,25 @@ type TestRunSummary struct {
 	CoveragePercent *float64 `protobuf:"fixed64,19,opt,name=coverage_percent,json=coveragePercent,proto3,oneof" json:"coverage_percent,omitempty"`
 	ForgeVersion    string   `protobuf:"bytes,20,opt,name=forge_version,json=forgeVersion,proto3" json:"forge_version,omitempty"`
 	// Who recorded it: the token's name, or the person.
-	UploadedBy    string                 `protobuf:"bytes,21,opt,name=uploaded_by,json=uploadedBy,proto3" json:"uploaded_by,omitempty"`
-	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,22,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	UploadedBy string                 `protobuf:"bytes,21,opt,name=uploaded_by,json=uploadedBy,proto3" json:"uploaded_by,omitempty"`
+	CreatedAt  *timestamppb.Timestamp `protobuf:"bytes,22,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	// Who vouches for the run's CI fields. Output only: the server sets it
+	// from the uploading credential, never from the request.
+	// forge:read-only
+	CiProvenance TestRunCIProvenance `protobuf:"varint,23,opt,name=ci_provenance,json=ciProvenance,proto3,enum=controlplane.v1.TestRunCIProvenance" json:"ci_provenance,omitempty"`
+	// The verified repository (owner/name), ref ("refs/heads/main"), commit
+	// and triggering event ("push", "pull_request", ...): set only when
+	// ci_provenance is GITHUB_OIDC, empty otherwise. Output only. ci_sha is
+	// the commit the workflow ran on, which for a pull_request event is
+	// GitHub's merge commit, not necessarily git_commit.
+	// forge:read-only
+	CiRepository string `protobuf:"bytes,24,opt,name=ci_repository,json=ciRepository,proto3" json:"ci_repository,omitempty"`
+	// forge:read-only
+	CiRef string `protobuf:"bytes,25,opt,name=ci_ref,json=ciRef,proto3" json:"ci_ref,omitempty"`
+	// forge:read-only
+	CiSha string `protobuf:"bytes,26,opt,name=ci_sha,json=ciSha,proto3" json:"ci_sha,omitempty"`
+	// forge:read-only
+	CiEvent       string `protobuf:"bytes,27,opt,name=ci_event,json=ciEvent,proto3" json:"ci_event,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1618,6 +1692,41 @@ func (x *TestRunSummary) GetCreatedAt() *timestamppb.Timestamp {
 		return x.CreatedAt
 	}
 	return nil
+}
+
+func (x *TestRunSummary) GetCiProvenance() TestRunCIProvenance {
+	if x != nil {
+		return x.CiProvenance
+	}
+	return TestRunCIProvenance_TEST_RUN_CI_PROVENANCE_UNSPECIFIED
+}
+
+func (x *TestRunSummary) GetCiRepository() string {
+	if x != nil {
+		return x.CiRepository
+	}
+	return ""
+}
+
+func (x *TestRunSummary) GetCiRef() string {
+	if x != nil {
+		return x.CiRef
+	}
+	return ""
+}
+
+func (x *TestRunSummary) GetCiSha() string {
+	if x != nil {
+		return x.CiSha
+	}
+	return ""
+}
+
+func (x *TestRunSummary) GetCiEvent() string {
+	if x != nil {
+		return x.CiEvent
+	}
+	return ""
 }
 
 // TestReleaseMarker places a release on a coverage trend.
@@ -4882,6 +4991,471 @@ func (x *HasCoverageBlobResponse) GetUncommitted() bool {
 	return false
 }
 
+type GetTestPortfolioRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The forge projects, each at most once. Empty: every project of the org
+	// that has a recorded run, the 50 with the most recent run first, and
+	// truncated in the response says whether there were more.
+	Projects []string `protobuf:"bytes,1,rep,name=projects,proto3" json:"projects,omitempty"`
+	// The org this request acts in (docs/orgs.md). Unset: the caller's default
+	// org. A person must be a member of it; a machine credential may name only
+	// its own org.
+	OrgId         *string `protobuf:"bytes,2,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetTestPortfolioRequest) Reset() {
+	*x = GetTestPortfolioRequest{}
+	mi := &file_services_tests_v1_tests_proto_msgTypes[44]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetTestPortfolioRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetTestPortfolioRequest) ProtoMessage() {}
+
+func (x *GetTestPortfolioRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_services_tests_v1_tests_proto_msgTypes[44]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetTestPortfolioRequest.ProtoReflect.Descriptor instead.
+func (*GetTestPortfolioRequest) Descriptor() ([]byte, []int) {
+	return file_services_tests_v1_tests_proto_rawDescGZIP(), []int{44}
+}
+
+func (x *GetTestPortfolioRequest) GetProjects() []string {
+	if x != nil {
+		return x.Projects
+	}
+	return nil
+}
+
+func (x *GetTestPortfolioRequest) GetOrgId() string {
+	if x != nil && x.OrgId != nil {
+		return *x.OrgId
+	}
+	return ""
+}
+
+type GetTestPortfolioResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// One row per project: in the request's order when projects were named,
+	// else most recent run first.
+	Projects []*TestPortfolioProject `protobuf:"bytes,1,rep,name=projects,proto3" json:"projects,omitempty"`
+	// Across every row.
+	Totals *TestPortfolioTotals `protobuf:"bytes,2,opt,name=totals,proto3" json:"totals,omitempty"`
+	// The request named no project and the org has more than 50 with runs:
+	// only the 50 with the most recent run are listed and totalled.
+	Truncated     bool `protobuf:"varint,3,opt,name=truncated,proto3" json:"truncated,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetTestPortfolioResponse) Reset() {
+	*x = GetTestPortfolioResponse{}
+	mi := &file_services_tests_v1_tests_proto_msgTypes[45]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetTestPortfolioResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetTestPortfolioResponse) ProtoMessage() {}
+
+func (x *GetTestPortfolioResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_services_tests_v1_tests_proto_msgTypes[45]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetTestPortfolioResponse.ProtoReflect.Descriptor instead.
+func (*GetTestPortfolioResponse) Descriptor() ([]byte, []int) {
+	return file_services_tests_v1_tests_proto_rawDescGZIP(), []int{45}
+}
+
+func (x *GetTestPortfolioResponse) GetProjects() []*TestPortfolioProject {
+	if x != nil {
+		return x.Projects
+	}
+	return nil
+}
+
+func (x *GetTestPortfolioResponse) GetTotals() *TestPortfolioTotals {
+	if x != nil {
+		return x.Totals
+	}
+	return nil
+}
+
+func (x *GetTestPortfolioResponse) GetTruncated() bool {
+	if x != nil {
+		return x.Truncated
+	}
+	return false
+}
+
+// TestPortfolioProject is one project's test health on its default branch:
+// the figures GetTestSummary answers for it with no branch named and the
+// default trend_points and pass_rate_runs.
+type TestPortfolioProject struct {
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Project string                 `protobuf:"bytes,1,opt,name=project,proto3" json:"project,omitempty"`
+	// The project has a recorded run on the branch summarised. False for a
+	// named project with no runs, or one this org does not have (which reads
+	// the same): every figure below is then empty.
+	HasRuns bool `protobuf:"varint,2,opt,name=has_runs,json=hasRuns,proto3" json:"has_runs,omitempty"`
+	// The default branch summarised (GetTestSummaryResponse.branch). Empty
+	// when no recent run names a branch: every run of the project is then
+	// summarised.
+	Branch string `protobuf:"bytes,3,opt,name=branch,proto3" json:"branch,omitempty"`
+	// The newest commit report on the branch (GetTestSummaryResponse.latest).
+	// Unset when none exists.
+	Latest *TestCommitReport `protobuf:"bytes,4,opt,name=latest,proto3" json:"latest,omitempty"`
+	// latest's coverage per language, generated code left out, as
+	// GetCoverage's root node splits it. Empty when latest is unset or
+	// carried no coverage.
+	Coverage []*TestPortfolioCoverage `protobuf:"bytes,5,rep,name=coverage,proto3" json:"coverage,omitempty"`
+	// Runs passed over runs judged among the branch's newest runs
+	// (GetTestSummaryResponse.pass_rate), and the n.
+	PassRate     float64 `protobuf:"fixed64,6,opt,name=pass_rate,json=passRate,proto3" json:"pass_rate,omitempty"`
+	PassRateRuns int32   `protobuf:"varint,7,opt,name=pass_rate_runs,json=passRateRuns,proto3" json:"pass_rate_runs,omitempty"`
+	// The project's flake states (GetTestSummaryResponse's counts).
+	SuspectedCount   int32 `protobuf:"varint,8,opt,name=suspected_count,json=suspectedCount,proto3" json:"suspected_count,omitempty"`
+	FlakyCount       int32 `protobuf:"varint,9,opt,name=flaky_count,json=flakyCount,proto3" json:"flaky_count,omitempty"`
+	QuarantinedCount int32 `protobuf:"varint,10,opt,name=quarantined_count,json=quarantinedCount,proto3" json:"quarantined_count,omitempty"`
+	// The branch's newest run. Unset when has_runs is false.
+	LastRun       *TestRunSummary `protobuf:"bytes,11,opt,name=last_run,json=lastRun,proto3" json:"last_run,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *TestPortfolioProject) Reset() {
+	*x = TestPortfolioProject{}
+	mi := &file_services_tests_v1_tests_proto_msgTypes[46]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TestPortfolioProject) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TestPortfolioProject) ProtoMessage() {}
+
+func (x *TestPortfolioProject) ProtoReflect() protoreflect.Message {
+	mi := &file_services_tests_v1_tests_proto_msgTypes[46]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TestPortfolioProject.ProtoReflect.Descriptor instead.
+func (*TestPortfolioProject) Descriptor() ([]byte, []int) {
+	return file_services_tests_v1_tests_proto_rawDescGZIP(), []int{46}
+}
+
+func (x *TestPortfolioProject) GetProject() string {
+	if x != nil {
+		return x.Project
+	}
+	return ""
+}
+
+func (x *TestPortfolioProject) GetHasRuns() bool {
+	if x != nil {
+		return x.HasRuns
+	}
+	return false
+}
+
+func (x *TestPortfolioProject) GetBranch() string {
+	if x != nil {
+		return x.Branch
+	}
+	return ""
+}
+
+func (x *TestPortfolioProject) GetLatest() *TestCommitReport {
+	if x != nil {
+		return x.Latest
+	}
+	return nil
+}
+
+func (x *TestPortfolioProject) GetCoverage() []*TestPortfolioCoverage {
+	if x != nil {
+		return x.Coverage
+	}
+	return nil
+}
+
+func (x *TestPortfolioProject) GetPassRate() float64 {
+	if x != nil {
+		return x.PassRate
+	}
+	return 0
+}
+
+func (x *TestPortfolioProject) GetPassRateRuns() int32 {
+	if x != nil {
+		return x.PassRateRuns
+	}
+	return 0
+}
+
+func (x *TestPortfolioProject) GetSuspectedCount() int32 {
+	if x != nil {
+		return x.SuspectedCount
+	}
+	return 0
+}
+
+func (x *TestPortfolioProject) GetFlakyCount() int32 {
+	if x != nil {
+		return x.FlakyCount
+	}
+	return 0
+}
+
+func (x *TestPortfolioProject) GetQuarantinedCount() int32 {
+	if x != nil {
+		return x.QuarantinedCount
+	}
+	return 0
+}
+
+func (x *TestPortfolioProject) GetLastRun() *TestRunSummary {
+	if x != nil {
+		return x.LastRun
+	}
+	return nil
+}
+
+// TestPortfolioCoverage is coverage of one language at one granularity,
+// summed over statements: percent is Σcovered / Σstatements, never an average
+// of percentages.
+type TestPortfolioCoverage struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// "go" | "ts" | another runner's language.
+	Lang string `protobuf:"bytes,1,opt,name=lang,proto3" json:"lang,omitempty"`
+	// The report's granularity (TestCoverage.granularity): "statement", or
+	// "line" when any of the report's files was counted by line. A figure of
+	// one granularity is never summed with one of the other.
+	Granularity string                 `protobuf:"bytes,2,opt,name=granularity,proto3" json:"granularity,omitempty"`
+	Combined    *TestStatementCoverage `protobuf:"bytes,3,opt,name=combined,proto3" json:"combined,omitempty"`
+	// The projects summed into this figure: 1 on a project's row.
+	Projects      int32 `protobuf:"varint,4,opt,name=projects,proto3" json:"projects,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *TestPortfolioCoverage) Reset() {
+	*x = TestPortfolioCoverage{}
+	mi := &file_services_tests_v1_tests_proto_msgTypes[47]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TestPortfolioCoverage) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TestPortfolioCoverage) ProtoMessage() {}
+
+func (x *TestPortfolioCoverage) ProtoReflect() protoreflect.Message {
+	mi := &file_services_tests_v1_tests_proto_msgTypes[47]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TestPortfolioCoverage.ProtoReflect.Descriptor instead.
+func (*TestPortfolioCoverage) Descriptor() ([]byte, []int) {
+	return file_services_tests_v1_tests_proto_rawDescGZIP(), []int{47}
+}
+
+func (x *TestPortfolioCoverage) GetLang() string {
+	if x != nil {
+		return x.Lang
+	}
+	return ""
+}
+
+func (x *TestPortfolioCoverage) GetGranularity() string {
+	if x != nil {
+		return x.Granularity
+	}
+	return ""
+}
+
+func (x *TestPortfolioCoverage) GetCombined() *TestStatementCoverage {
+	if x != nil {
+		return x.Combined
+	}
+	return nil
+}
+
+func (x *TestPortfolioCoverage) GetProjects() int32 {
+	if x != nil {
+		return x.Projects
+	}
+	return 0
+}
+
+// TestPortfolioTotals is the response's rows summed.
+type TestPortfolioTotals struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Rows; rows with has_runs; rows with a latest report.
+	Projects           int32 `protobuf:"varint,1,opt,name=projects,proto3" json:"projects,omitempty"`
+	ProjectsWithRuns   int32 `protobuf:"varint,2,opt,name=projects_with_runs,json=projectsWithRuns,proto3" json:"projects_with_runs,omitempty"`
+	ProjectsWithReport int32 `protobuf:"varint,3,opt,name=projects_with_report,json=projectsWithReport,proto3" json:"projects_with_report,omitempty"`
+	// Every row's passed runs over every row's judged runs: each row's
+	// pass_rate weighted by its pass_rate_runs. 0 when no run was judged.
+	PassRate float64 `protobuf:"fixed64,4,opt,name=pass_rate,json=passRate,proto3" json:"pass_rate,omitempty"`
+	// The sum of the rows' pass_rate_runs.
+	PassRateRuns     int32 `protobuf:"varint,5,opt,name=pass_rate_runs,json=passRateRuns,proto3" json:"pass_rate_runs,omitempty"`
+	SuspectedCount   int32 `protobuf:"varint,6,opt,name=suspected_count,json=suspectedCount,proto3" json:"suspected_count,omitempty"`
+	FlakyCount       int32 `protobuf:"varint,7,opt,name=flaky_count,json=flakyCount,proto3" json:"flaky_count,omitempty"`
+	QuarantinedCount int32 `protobuf:"varint,8,opt,name=quarantined_count,json=quarantinedCount,proto3" json:"quarantined_count,omitempty"`
+	// The rows' latest reports' totals, summed.
+	LatestTotals *TestTotals `protobuf:"bytes,9,opt,name=latest_totals,json=latestTotals,proto3" json:"latest_totals,omitempty"`
+	// The rows' coverage summed per (lang, granularity), by lang then
+	// granularity.
+	Coverage      []*TestPortfolioCoverage `protobuf:"bytes,10,rep,name=coverage,proto3" json:"coverage,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *TestPortfolioTotals) Reset() {
+	*x = TestPortfolioTotals{}
+	mi := &file_services_tests_v1_tests_proto_msgTypes[48]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TestPortfolioTotals) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TestPortfolioTotals) ProtoMessage() {}
+
+func (x *TestPortfolioTotals) ProtoReflect() protoreflect.Message {
+	mi := &file_services_tests_v1_tests_proto_msgTypes[48]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TestPortfolioTotals.ProtoReflect.Descriptor instead.
+func (*TestPortfolioTotals) Descriptor() ([]byte, []int) {
+	return file_services_tests_v1_tests_proto_rawDescGZIP(), []int{48}
+}
+
+func (x *TestPortfolioTotals) GetProjects() int32 {
+	if x != nil {
+		return x.Projects
+	}
+	return 0
+}
+
+func (x *TestPortfolioTotals) GetProjectsWithRuns() int32 {
+	if x != nil {
+		return x.ProjectsWithRuns
+	}
+	return 0
+}
+
+func (x *TestPortfolioTotals) GetProjectsWithReport() int32 {
+	if x != nil {
+		return x.ProjectsWithReport
+	}
+	return 0
+}
+
+func (x *TestPortfolioTotals) GetPassRate() float64 {
+	if x != nil {
+		return x.PassRate
+	}
+	return 0
+}
+
+func (x *TestPortfolioTotals) GetPassRateRuns() int32 {
+	if x != nil {
+		return x.PassRateRuns
+	}
+	return 0
+}
+
+func (x *TestPortfolioTotals) GetSuspectedCount() int32 {
+	if x != nil {
+		return x.SuspectedCount
+	}
+	return 0
+}
+
+func (x *TestPortfolioTotals) GetFlakyCount() int32 {
+	if x != nil {
+		return x.FlakyCount
+	}
+	return 0
+}
+
+func (x *TestPortfolioTotals) GetQuarantinedCount() int32 {
+	if x != nil {
+		return x.QuarantinedCount
+	}
+	return 0
+}
+
+func (x *TestPortfolioTotals) GetLatestTotals() *TestTotals {
+	if x != nil {
+		return x.LatestTotals
+	}
+	return nil
+}
+
+func (x *TestPortfolioTotals) GetCoverage() []*TestPortfolioCoverage {
+	if x != nil {
+		return x.Coverage
+	}
+	return nil
+}
+
 var File_services_tests_v1_tests_proto protoreflect.FileDescriptor
 
 const file_services_tests_v1_tests_proto_rawDesc = "" +
@@ -4954,7 +5528,7 @@ const file_services_tests_v1_tests_proto_rawDesc = "" +
 	"\bcoverage\x18\x06 \x01(\v2\x1d.controlplane.v1.TestCoverageR\bcoverage\x12#\n" +
 	"\rreport_digest\x18\a \x01(\tR\freportDigest\x129\n" +
 	"\n" +
-	"updated_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\"\x9b\a\n" +
+	"updated_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\"\xd4\b\n" +
 	"\x0eTestRunSummary\x12\x15\n" +
 	"\x06run_id\x18\x01 \x01(\tR\x05runId\x12\x18\n" +
 	"\aproject\x18\x02 \x01(\tR\aproject\x12\x1d\n" +
@@ -4983,7 +5557,12 @@ const file_services_tests_v1_tests_proto_rawDesc = "" +
 	"\vuploaded_by\x18\x15 \x01(\tR\n" +
 	"uploadedBy\x129\n" +
 	"\n" +
-	"created_at\x18\x16 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAtB\x13\n" +
+	"created_at\x18\x16 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x12I\n" +
+	"\rci_provenance\x18\x17 \x01(\x0e2$.controlplane.v1.TestRunCIProvenanceR\fciProvenance\x12#\n" +
+	"\rci_repository\x18\x18 \x01(\tR\fciRepository\x12\x15\n" +
+	"\x06ci_ref\x18\x19 \x01(\tR\x05ciRef\x12\x15\n" +
+	"\x06ci_sha\x18\x1a \x01(\tR\x05ciSha\x12\x19\n" +
+	"\bci_event\x18\x1b \x01(\tR\aciEventB\x13\n" +
 	"\x11_coverage_percent\"\x8e\x01\n" +
 	"\x11TestReleaseMarker\x12'\n" +
 	"\x0frelease_version\x18\x01 \x01(\tR\x0ereleaseVersion\x12\x1d\n" +
@@ -5326,7 +5905,47 @@ const file_services_tests_v1_tests_proto_rawDesc = "" +
 	"\a_org_id\"U\n" +
 	"\x17HasCoverageBlobResponse\x12\x18\n" +
 	"\apresent\x18\x01 \x01(\bR\apresent\x12 \n" +
-	"\vuncommitted\x18\x02 \x01(\bR\vuncommitted*\x80\x01\n" +
+	"\vuncommitted\x18\x02 \x01(\bR\vuncommitted\"\\\n" +
+	"\x17GetTestPortfolioRequest\x12\x1a\n" +
+	"\bprojects\x18\x01 \x03(\tR\bprojects\x12\x1a\n" +
+	"\x06org_id\x18\x02 \x01(\tH\x00R\x05orgId\x88\x01\x01B\t\n" +
+	"\a_org_id\"\xb9\x01\n" +
+	"\x18GetTestPortfolioResponse\x12A\n" +
+	"\bprojects\x18\x01 \x03(\v2%.controlplane.v1.TestPortfolioProjectR\bprojects\x12<\n" +
+	"\x06totals\x18\x02 \x01(\v2$.controlplane.v1.TestPortfolioTotalsR\x06totals\x12\x1c\n" +
+	"\ttruncated\x18\x03 \x01(\bR\ttruncated\"\xd8\x03\n" +
+	"\x14TestPortfolioProject\x12\x18\n" +
+	"\aproject\x18\x01 \x01(\tR\aproject\x12\x19\n" +
+	"\bhas_runs\x18\x02 \x01(\bR\ahasRuns\x12\x16\n" +
+	"\x06branch\x18\x03 \x01(\tR\x06branch\x129\n" +
+	"\x06latest\x18\x04 \x01(\v2!.controlplane.v1.TestCommitReportR\x06latest\x12B\n" +
+	"\bcoverage\x18\x05 \x03(\v2&.controlplane.v1.TestPortfolioCoverageR\bcoverage\x12\x1b\n" +
+	"\tpass_rate\x18\x06 \x01(\x01R\bpassRate\x12$\n" +
+	"\x0epass_rate_runs\x18\a \x01(\x05R\fpassRateRuns\x12'\n" +
+	"\x0fsuspected_count\x18\b \x01(\x05R\x0esuspectedCount\x12\x1f\n" +
+	"\vflaky_count\x18\t \x01(\x05R\n" +
+	"flakyCount\x12+\n" +
+	"\x11quarantined_count\x18\n" +
+	" \x01(\x05R\x10quarantinedCount\x12:\n" +
+	"\blast_run\x18\v \x01(\v2\x1f.controlplane.v1.TestRunSummaryR\alastRun\"\xad\x01\n" +
+	"\x15TestPortfolioCoverage\x12\x12\n" +
+	"\x04lang\x18\x01 \x01(\tR\x04lang\x12 \n" +
+	"\vgranularity\x18\x02 \x01(\tR\vgranularity\x12B\n" +
+	"\bcombined\x18\x03 \x01(\v2&.controlplane.v1.TestStatementCoverageR\bcombined\x12\x1a\n" +
+	"\bprojects\x18\x04 \x01(\x05R\bprojects\"\xd1\x03\n" +
+	"\x13TestPortfolioTotals\x12\x1a\n" +
+	"\bprojects\x18\x01 \x01(\x05R\bprojects\x12,\n" +
+	"\x12projects_with_runs\x18\x02 \x01(\x05R\x10projectsWithRuns\x120\n" +
+	"\x14projects_with_report\x18\x03 \x01(\x05R\x12projectsWithReport\x12\x1b\n" +
+	"\tpass_rate\x18\x04 \x01(\x01R\bpassRate\x12$\n" +
+	"\x0epass_rate_runs\x18\x05 \x01(\x05R\fpassRateRuns\x12'\n" +
+	"\x0fsuspected_count\x18\x06 \x01(\x05R\x0esuspectedCount\x12\x1f\n" +
+	"\vflaky_count\x18\a \x01(\x05R\n" +
+	"flakyCount\x12+\n" +
+	"\x11quarantined_count\x18\b \x01(\x05R\x10quarantinedCount\x12@\n" +
+	"\rlatest_totals\x18\t \x01(\v2\x1b.controlplane.v1.TestTotalsR\flatestTotals\x12B\n" +
+	"\bcoverage\x18\n" +
+	" \x03(\v2&.controlplane.v1.TestPortfolioCoverageR\bcoverage*\x80\x01\n" +
 	"\x13TestPayloadEncoding\x12%\n" +
 	"!TEST_PAYLOAD_ENCODING_UNSPECIFIED\x10\x00\x12\"\n" +
 	"\x1eTEST_PAYLOAD_ENCODING_IDENTITY\x10\x01\x12\x1e\n" +
@@ -5336,7 +5955,11 @@ const file_services_tests_v1_tests_proto_rawDesc = "" +
 	"\x12TEST_RUN_SOURCE_CI\x10\x01\x12\x19\n" +
 	"\x15TEST_RUN_SOURCE_LOCAL\x10\x02\x12\x17\n" +
 	"\x13TEST_RUN_SOURCE_ENV\x10\x03\x12\x1b\n" +
-	"\x17TEST_RUN_SOURCE_CONFIRM\x10\x04*\x8f\x01\n" +
+	"\x17TEST_RUN_SOURCE_CONFIRM\x10\x04*\x8a\x01\n" +
+	"\x13TestRunCIProvenance\x12&\n" +
+	"\"TEST_RUN_CI_PROVENANCE_UNSPECIFIED\x10\x00\x12#\n" +
+	"\x1fTEST_RUN_CI_PROVENANCE_ASSERTED\x10\x01\x12&\n" +
+	"\"TEST_RUN_CI_PROVENANCE_GITHUB_OIDC\x10\x02*\x8f\x01\n" +
 	"\x0eTestRunOutcome\x12 \n" +
 	"\x1cTEST_RUN_OUTCOME_UNSPECIFIED\x10\x00\x12\x1b\n" +
 	"\x17TEST_RUN_OUTCOME_PASSED\x10\x01\x12\x1b\n" +
@@ -5388,7 +6011,7 @@ const file_services_tests_v1_tests_proto_rawDesc = "" +
 	"#TEST_COVERAGE_NODE_KIND_UNSPECIFIED\x10\x00\x12#\n" +
 	"\x1fTEST_COVERAGE_NODE_KIND_PACKAGE\x10\x01\x12%\n" +
 	"!TEST_COVERAGE_NODE_KIND_DIRECTORY\x10\x02\x12 \n" +
-	"\x1cTEST_COVERAGE_NODE_KIND_FILE\x10\x032\xef\a\n" +
+	"\x1cTEST_COVERAGE_NODE_KIND_FILE\x10\x032\xdd\b\n" +
 	"\fTestsService\x12^\n" +
 	"\rRecordTestRun\x12%.controlplane.v1.RecordTestRunRequest\x1a&.controlplane.v1.RecordTestRunResponse\x12f\n" +
 	"\x0eGetTestSummary\x12&.controlplane.v1.GetTestSummaryRequest\x1a'.controlplane.v1.GetTestSummaryResponse\"\x03\x90\x02\x01\x12`\n" +
@@ -5400,7 +6023,8 @@ const file_services_tests_v1_tests_proto_rawDesc = "" +
 	"\x0fGetReleaseTests\x12'.controlplane.v1.GetReleaseTestsRequest\x1a(.controlplane.v1.GetReleaseTestsResponse\"\x03\x90\x02\x01\x12f\n" +
 	"\x0eListFlakyTests\x12&.controlplane.v1.ListFlakyTestsRequest\x1a'.controlplane.v1.ListFlakyTestsResponse\"\x03\x90\x02\x01\x12Q\n" +
 	"\aGetTest\x12\x1f.controlplane.v1.GetTestRequest\x1a .controlplane.v1.GetTestResponse\"\x03\x90\x02\x01\x12i\n" +
-	"\x0fHasCoverageBlob\x12'.controlplane.v1.HasCoverageBlobRequest\x1a(.controlplane.v1.HasCoverageBlobResponse\"\x03\x90\x02\x01B\xd1\x01\n" +
+	"\x0fHasCoverageBlob\x12'.controlplane.v1.HasCoverageBlobRequest\x1a(.controlplane.v1.HasCoverageBlobResponse\"\x03\x90\x02\x01\x12l\n" +
+	"\x10GetTestPortfolio\x12(.controlplane.v1.GetTestPortfolioRequest\x1a).controlplane.v1.GetTestPortfolioResponse\"\x03\x90\x02\x01B\xd1\x01\n" +
 	"\x13com.controlplane.v1B\n" +
 	"TestsProtoP\x01ZQgithub.com/reliant-labs/reliant/gen/controlplane/services/tests/v1;controlplanev1\xa2\x02\x03CXX\xaa\x02\x0fControlplane.V1\xca\x02\x0fControlplane\\V1\xe2\x02\x1bControlplane\\V1\\GPBMetadata\xea\x02\x10Controlplane::V1b\x06proto3"
 
@@ -5416,187 +6040,204 @@ func file_services_tests_v1_tests_proto_rawDescGZIP() []byte {
 	return file_services_tests_v1_tests_proto_rawDescData
 }
 
-var file_services_tests_v1_tests_proto_enumTypes = make([]protoimpl.EnumInfo, 11)
-var file_services_tests_v1_tests_proto_msgTypes = make([]protoimpl.MessageInfo, 50)
+var file_services_tests_v1_tests_proto_enumTypes = make([]protoimpl.EnumInfo, 12)
+var file_services_tests_v1_tests_proto_msgTypes = make([]protoimpl.MessageInfo, 55)
 var file_services_tests_v1_tests_proto_goTypes = []any{
-	(TestPayloadEncoding)(0),        // 0: controlplane.v1.TestPayloadEncoding
-	(TestRunSource)(0),              // 1: controlplane.v1.TestRunSource
-	(TestRunOutcome)(0),             // 2: controlplane.v1.TestRunOutcome
-	(TestRunIngestState)(0),         // 3: controlplane.v1.TestRunIngestState
-	(TestCaseStatus)(0),             // 4: controlplane.v1.TestCaseStatus
-	(TestQuarantineMode)(0),         // 5: controlplane.v1.TestQuarantineMode
-	(TestFlakeState)(0),             // 6: controlplane.v1.TestFlakeState
-	(TestFlakeSignal)(0),            // 7: controlplane.v1.TestFlakeSignal
-	(TestFlakeVerdict)(0),           // 8: controlplane.v1.TestFlakeVerdict
-	(TestEvidenceStatus)(0),         // 9: controlplane.v1.TestEvidenceStatus
-	(TestCoverageNodeKind)(0),       // 10: controlplane.v1.TestCoverageNodeKind
-	(*TestKey)(nil),                 // 11: controlplane.v1.TestKey
-	(*TestTotals)(nil),              // 12: controlplane.v1.TestTotals
-	(*TestRunCI)(nil),               // 13: controlplane.v1.TestRunCI
-	(*TestFlakePolicy)(nil),         // 14: controlplane.v1.TestFlakePolicy
-	(*TestStatementCoverage)(nil),   // 15: controlplane.v1.TestStatementCoverage
-	(*TestDiffCoverage)(nil),        // 16: controlplane.v1.TestDiffCoverage
-	(*TestLanguageCoverage)(nil),    // 17: controlplane.v1.TestLanguageCoverage
-	(*TestCoverage)(nil),            // 18: controlplane.v1.TestCoverage
-	(*TestCommitReport)(nil),        // 19: controlplane.v1.TestCommitReport
-	(*TestRunSummary)(nil),          // 20: controlplane.v1.TestRunSummary
-	(*TestReleaseMarker)(nil),       // 21: controlplane.v1.TestReleaseMarker
-	(*TestCoveragePoint)(nil),       // 22: controlplane.v1.TestCoveragePoint
-	(*TestPackageCoverage)(nil),     // 23: controlplane.v1.TestPackageCoverage
-	(*TestQuarantine)(nil),          // 24: controlplane.v1.TestQuarantine
-	(*TestFlake)(nil),               // 25: controlplane.v1.TestFlake
-	(*TestFlakeEvent)(nil),          // 26: controlplane.v1.TestFlakeEvent
-	(*TestUploadPart)(nil),          // 27: controlplane.v1.TestUploadPart
-	(*RecordTestRunRequest)(nil),    // 28: controlplane.v1.RecordTestRunRequest
-	(*RecordTestRunResponse)(nil),   // 29: controlplane.v1.RecordTestRunResponse
-	(*GetTestSummaryRequest)(nil),   // 30: controlplane.v1.GetTestSummaryRequest
-	(*GetTestSummaryResponse)(nil),  // 31: controlplane.v1.GetTestSummaryResponse
-	(*TestHostHealth)(nil),          // 32: controlplane.v1.TestHostHealth
-	(*ListTestRunsRequest)(nil),     // 33: controlplane.v1.ListTestRunsRequest
-	(*ListTestRunsResponse)(nil),    // 34: controlplane.v1.ListTestRunsResponse
-	(*GetTestRunRequest)(nil),       // 35: controlplane.v1.GetTestRunRequest
-	(*TestFailure)(nil),             // 36: controlplane.v1.TestFailure
-	(*TestTiming)(nil),              // 37: controlplane.v1.TestTiming
-	(*GetTestRunResponse)(nil),      // 38: controlplane.v1.GetTestRunResponse
-	(*GetCoverageRequest)(nil),      // 39: controlplane.v1.GetCoverageRequest
-	(*TestCoverageNode)(nil),        // 40: controlplane.v1.TestCoverageNode
-	(*GetCoverageResponse)(nil),     // 41: controlplane.v1.GetCoverageResponse
-	(*GetFileCoverageRequest)(nil),  // 42: controlplane.v1.GetFileCoverageRequest
-	(*TestLineCoverage)(nil),        // 43: controlplane.v1.TestLineCoverage
-	(*GetFileCoverageResponse)(nil), // 44: controlplane.v1.GetFileCoverageResponse
-	(*GetReleaseTestsRequest)(nil),  // 45: controlplane.v1.GetReleaseTestsRequest
-	(*GetReleaseTestsResponse)(nil), // 46: controlplane.v1.GetReleaseTestsResponse
-	(*ListFlakyTestsRequest)(nil),   // 47: controlplane.v1.ListFlakyTestsRequest
-	(*ListFlakyTestsResponse)(nil),  // 48: controlplane.v1.ListFlakyTestsResponse
-	(*GetTestRequest)(nil),          // 49: controlplane.v1.GetTestRequest
-	(*TestOutcome)(nil),             // 50: controlplane.v1.TestOutcome
-	(*TestFailureSignature)(nil),    // 51: controlplane.v1.TestFailureSignature
-	(*GetTestResponse)(nil),         // 52: controlplane.v1.GetTestResponse
-	(*HasCoverageBlobRequest)(nil),  // 53: controlplane.v1.HasCoverageBlobRequest
-	(*HasCoverageBlobResponse)(nil), // 54: controlplane.v1.HasCoverageBlobResponse
-	nil,                             // 55: controlplane.v1.TestLanguageCoverage.LanesEntry
-	nil,                             // 56: controlplane.v1.TestCoverage.LanesEntry
-	nil,                             // 57: controlplane.v1.TestCoveragePoint.LanesPercentEntry
-	nil,                             // 58: controlplane.v1.TestPackageCoverage.LanesEntry
-	nil,                             // 59: controlplane.v1.TestCoverageNode.LanesEntry
-	nil,                             // 60: controlplane.v1.TestLineCoverage.HitsEntry
-	(*timestamppb.Timestamp)(nil),   // 61: google.protobuf.Timestamp
+	(TestPayloadEncoding)(0),         // 0: controlplane.v1.TestPayloadEncoding
+	(TestRunSource)(0),               // 1: controlplane.v1.TestRunSource
+	(TestRunCIProvenance)(0),         // 2: controlplane.v1.TestRunCIProvenance
+	(TestRunOutcome)(0),              // 3: controlplane.v1.TestRunOutcome
+	(TestRunIngestState)(0),          // 4: controlplane.v1.TestRunIngestState
+	(TestCaseStatus)(0),              // 5: controlplane.v1.TestCaseStatus
+	(TestQuarantineMode)(0),          // 6: controlplane.v1.TestQuarantineMode
+	(TestFlakeState)(0),              // 7: controlplane.v1.TestFlakeState
+	(TestFlakeSignal)(0),             // 8: controlplane.v1.TestFlakeSignal
+	(TestFlakeVerdict)(0),            // 9: controlplane.v1.TestFlakeVerdict
+	(TestEvidenceStatus)(0),          // 10: controlplane.v1.TestEvidenceStatus
+	(TestCoverageNodeKind)(0),        // 11: controlplane.v1.TestCoverageNodeKind
+	(*TestKey)(nil),                  // 12: controlplane.v1.TestKey
+	(*TestTotals)(nil),               // 13: controlplane.v1.TestTotals
+	(*TestRunCI)(nil),                // 14: controlplane.v1.TestRunCI
+	(*TestFlakePolicy)(nil),          // 15: controlplane.v1.TestFlakePolicy
+	(*TestStatementCoverage)(nil),    // 16: controlplane.v1.TestStatementCoverage
+	(*TestDiffCoverage)(nil),         // 17: controlplane.v1.TestDiffCoverage
+	(*TestLanguageCoverage)(nil),     // 18: controlplane.v1.TestLanguageCoverage
+	(*TestCoverage)(nil),             // 19: controlplane.v1.TestCoverage
+	(*TestCommitReport)(nil),         // 20: controlplane.v1.TestCommitReport
+	(*TestRunSummary)(nil),           // 21: controlplane.v1.TestRunSummary
+	(*TestReleaseMarker)(nil),        // 22: controlplane.v1.TestReleaseMarker
+	(*TestCoveragePoint)(nil),        // 23: controlplane.v1.TestCoveragePoint
+	(*TestPackageCoverage)(nil),      // 24: controlplane.v1.TestPackageCoverage
+	(*TestQuarantine)(nil),           // 25: controlplane.v1.TestQuarantine
+	(*TestFlake)(nil),                // 26: controlplane.v1.TestFlake
+	(*TestFlakeEvent)(nil),           // 27: controlplane.v1.TestFlakeEvent
+	(*TestUploadPart)(nil),           // 28: controlplane.v1.TestUploadPart
+	(*RecordTestRunRequest)(nil),     // 29: controlplane.v1.RecordTestRunRequest
+	(*RecordTestRunResponse)(nil),    // 30: controlplane.v1.RecordTestRunResponse
+	(*GetTestSummaryRequest)(nil),    // 31: controlplane.v1.GetTestSummaryRequest
+	(*GetTestSummaryResponse)(nil),   // 32: controlplane.v1.GetTestSummaryResponse
+	(*TestHostHealth)(nil),           // 33: controlplane.v1.TestHostHealth
+	(*ListTestRunsRequest)(nil),      // 34: controlplane.v1.ListTestRunsRequest
+	(*ListTestRunsResponse)(nil),     // 35: controlplane.v1.ListTestRunsResponse
+	(*GetTestRunRequest)(nil),        // 36: controlplane.v1.GetTestRunRequest
+	(*TestFailure)(nil),              // 37: controlplane.v1.TestFailure
+	(*TestTiming)(nil),               // 38: controlplane.v1.TestTiming
+	(*GetTestRunResponse)(nil),       // 39: controlplane.v1.GetTestRunResponse
+	(*GetCoverageRequest)(nil),       // 40: controlplane.v1.GetCoverageRequest
+	(*TestCoverageNode)(nil),         // 41: controlplane.v1.TestCoverageNode
+	(*GetCoverageResponse)(nil),      // 42: controlplane.v1.GetCoverageResponse
+	(*GetFileCoverageRequest)(nil),   // 43: controlplane.v1.GetFileCoverageRequest
+	(*TestLineCoverage)(nil),         // 44: controlplane.v1.TestLineCoverage
+	(*GetFileCoverageResponse)(nil),  // 45: controlplane.v1.GetFileCoverageResponse
+	(*GetReleaseTestsRequest)(nil),   // 46: controlplane.v1.GetReleaseTestsRequest
+	(*GetReleaseTestsResponse)(nil),  // 47: controlplane.v1.GetReleaseTestsResponse
+	(*ListFlakyTestsRequest)(nil),    // 48: controlplane.v1.ListFlakyTestsRequest
+	(*ListFlakyTestsResponse)(nil),   // 49: controlplane.v1.ListFlakyTestsResponse
+	(*GetTestRequest)(nil),           // 50: controlplane.v1.GetTestRequest
+	(*TestOutcome)(nil),              // 51: controlplane.v1.TestOutcome
+	(*TestFailureSignature)(nil),     // 52: controlplane.v1.TestFailureSignature
+	(*GetTestResponse)(nil),          // 53: controlplane.v1.GetTestResponse
+	(*HasCoverageBlobRequest)(nil),   // 54: controlplane.v1.HasCoverageBlobRequest
+	(*HasCoverageBlobResponse)(nil),  // 55: controlplane.v1.HasCoverageBlobResponse
+	(*GetTestPortfolioRequest)(nil),  // 56: controlplane.v1.GetTestPortfolioRequest
+	(*GetTestPortfolioResponse)(nil), // 57: controlplane.v1.GetTestPortfolioResponse
+	(*TestPortfolioProject)(nil),     // 58: controlplane.v1.TestPortfolioProject
+	(*TestPortfolioCoverage)(nil),    // 59: controlplane.v1.TestPortfolioCoverage
+	(*TestPortfolioTotals)(nil),      // 60: controlplane.v1.TestPortfolioTotals
+	nil,                              // 61: controlplane.v1.TestLanguageCoverage.LanesEntry
+	nil,                              // 62: controlplane.v1.TestCoverage.LanesEntry
+	nil,                              // 63: controlplane.v1.TestCoveragePoint.LanesPercentEntry
+	nil,                              // 64: controlplane.v1.TestPackageCoverage.LanesEntry
+	nil,                              // 65: controlplane.v1.TestCoverageNode.LanesEntry
+	nil,                              // 66: controlplane.v1.TestLineCoverage.HitsEntry
+	(*timestamppb.Timestamp)(nil),    // 67: google.protobuf.Timestamp
 }
 var file_services_tests_v1_tests_proto_depIdxs = []int32{
-	5,  // 0: controlplane.v1.TestFlakePolicy.quarantine:type_name -> controlplane.v1.TestQuarantineMode
-	15, // 1: controlplane.v1.TestLanguageCoverage.combined:type_name -> controlplane.v1.TestStatementCoverage
-	55, // 2: controlplane.v1.TestLanguageCoverage.lanes:type_name -> controlplane.v1.TestLanguageCoverage.LanesEntry
-	15, // 3: controlplane.v1.TestCoverage.combined:type_name -> controlplane.v1.TestStatementCoverage
-	56, // 4: controlplane.v1.TestCoverage.lanes:type_name -> controlplane.v1.TestCoverage.LanesEntry
-	15, // 5: controlplane.v1.TestCoverage.only_e2e:type_name -> controlplane.v1.TestStatementCoverage
-	17, // 6: controlplane.v1.TestCoverage.languages:type_name -> controlplane.v1.TestLanguageCoverage
-	16, // 7: controlplane.v1.TestCoverage.diff:type_name -> controlplane.v1.TestDiffCoverage
-	12, // 8: controlplane.v1.TestCommitReport.totals:type_name -> controlplane.v1.TestTotals
-	18, // 9: controlplane.v1.TestCommitReport.coverage:type_name -> controlplane.v1.TestCoverage
-	61, // 10: controlplane.v1.TestCommitReport.updated_at:type_name -> google.protobuf.Timestamp
-	1,  // 11: controlplane.v1.TestRunSummary.source:type_name -> controlplane.v1.TestRunSource
-	13, // 12: controlplane.v1.TestRunSummary.ci:type_name -> controlplane.v1.TestRunCI
-	61, // 13: controlplane.v1.TestRunSummary.started_at:type_name -> google.protobuf.Timestamp
-	61, // 14: controlplane.v1.TestRunSummary.finished_at:type_name -> google.protobuf.Timestamp
-	2,  // 15: controlplane.v1.TestRunSummary.outcome:type_name -> controlplane.v1.TestRunOutcome
-	3,  // 16: controlplane.v1.TestRunSummary.ingest_state:type_name -> controlplane.v1.TestRunIngestState
-	12, // 17: controlplane.v1.TestRunSummary.totals:type_name -> controlplane.v1.TestTotals
-	61, // 18: controlplane.v1.TestRunSummary.created_at:type_name -> google.protobuf.Timestamp
-	61, // 19: controlplane.v1.TestReleaseMarker.cut_at:type_name -> google.protobuf.Timestamp
-	61, // 20: controlplane.v1.TestCoveragePoint.at:type_name -> google.protobuf.Timestamp
-	57, // 21: controlplane.v1.TestCoveragePoint.lanes_percent:type_name -> controlplane.v1.TestCoveragePoint.LanesPercentEntry
-	15, // 22: controlplane.v1.TestPackageCoverage.combined:type_name -> controlplane.v1.TestStatementCoverage
-	58, // 23: controlplane.v1.TestPackageCoverage.lanes:type_name -> controlplane.v1.TestPackageCoverage.LanesEntry
-	61, // 24: controlplane.v1.TestQuarantine.expires_at:type_name -> google.protobuf.Timestamp
-	11, // 25: controlplane.v1.TestFlake.test:type_name -> controlplane.v1.TestKey
-	6,  // 26: controlplane.v1.TestFlake.state:type_name -> controlplane.v1.TestFlakeState
-	7,  // 27: controlplane.v1.TestFlake.signals:type_name -> controlplane.v1.TestFlakeSignal
-	61, // 28: controlplane.v1.TestFlake.first_seen_at:type_name -> google.protobuf.Timestamp
-	61, // 29: controlplane.v1.TestFlake.last_event_at:type_name -> google.protobuf.Timestamp
-	61, // 30: controlplane.v1.TestFlake.quarantined_at:type_name -> google.protobuf.Timestamp
-	24, // 31: controlplane.v1.TestFlake.quarantine:type_name -> controlplane.v1.TestQuarantine
-	7,  // 32: controlplane.v1.TestFlakeEvent.signal:type_name -> controlplane.v1.TestFlakeSignal
-	8,  // 33: controlplane.v1.TestFlakeEvent.verdict:type_name -> controlplane.v1.TestFlakeVerdict
-	61, // 34: controlplane.v1.TestFlakeEvent.at:type_name -> google.protobuf.Timestamp
-	0,  // 35: controlplane.v1.TestUploadPart.encoding:type_name -> controlplane.v1.TestPayloadEncoding
-	1,  // 36: controlplane.v1.RecordTestRunRequest.source:type_name -> controlplane.v1.TestRunSource
-	13, // 37: controlplane.v1.RecordTestRunRequest.ci:type_name -> controlplane.v1.TestRunCI
-	61, // 38: controlplane.v1.RecordTestRunRequest.started_at:type_name -> google.protobuf.Timestamp
-	61, // 39: controlplane.v1.RecordTestRunRequest.finished_at:type_name -> google.protobuf.Timestamp
-	27, // 40: controlplane.v1.RecordTestRunRequest.results:type_name -> controlplane.v1.TestUploadPart
-	27, // 41: controlplane.v1.RecordTestRunRequest.coverage:type_name -> controlplane.v1.TestUploadPart
-	27, // 42: controlplane.v1.RecordTestRunRequest.diff:type_name -> controlplane.v1.TestUploadPart
-	14, // 43: controlplane.v1.RecordTestRunRequest.flake_policy:type_name -> controlplane.v1.TestFlakePolicy
-	3,  // 44: controlplane.v1.RecordTestRunResponse.ingest_state:type_name -> controlplane.v1.TestRunIngestState
-	19, // 45: controlplane.v1.GetTestSummaryResponse.latest:type_name -> controlplane.v1.TestCommitReport
-	22, // 46: controlplane.v1.GetTestSummaryResponse.coverage_trend:type_name -> controlplane.v1.TestCoveragePoint
-	21, // 47: controlplane.v1.GetTestSummaryResponse.release_markers:type_name -> controlplane.v1.TestReleaseMarker
-	20, // 48: controlplane.v1.GetTestSummaryResponse.last_run:type_name -> controlplane.v1.TestRunSummary
-	23, // 49: controlplane.v1.GetTestSummaryResponse.low_coverage_packages:type_name -> controlplane.v1.TestPackageCoverage
-	32, // 50: controlplane.v1.GetTestSummaryResponse.host_health:type_name -> controlplane.v1.TestHostHealth
-	1,  // 51: controlplane.v1.ListTestRunsRequest.source:type_name -> controlplane.v1.TestRunSource
-	2,  // 52: controlplane.v1.ListTestRunsRequest.outcome:type_name -> controlplane.v1.TestRunOutcome
-	20, // 53: controlplane.v1.ListTestRunsResponse.runs:type_name -> controlplane.v1.TestRunSummary
-	11, // 54: controlplane.v1.TestFailure.test:type_name -> controlplane.v1.TestKey
-	8,  // 55: controlplane.v1.TestFailure.verdict:type_name -> controlplane.v1.TestFlakeVerdict
-	11, // 56: controlplane.v1.TestTiming.test:type_name -> controlplane.v1.TestKey
-	20, // 57: controlplane.v1.GetTestRunResponse.run:type_name -> controlplane.v1.TestRunSummary
-	36, // 58: controlplane.v1.GetTestRunResponse.failures:type_name -> controlplane.v1.TestFailure
-	11, // 59: controlplane.v1.GetTestRunResponse.retry_passes:type_name -> controlplane.v1.TestKey
-	37, // 60: controlplane.v1.GetTestRunResponse.slowest:type_name -> controlplane.v1.TestTiming
-	10, // 61: controlplane.v1.TestCoverageNode.kind:type_name -> controlplane.v1.TestCoverageNodeKind
-	15, // 62: controlplane.v1.TestCoverageNode.combined:type_name -> controlplane.v1.TestStatementCoverage
-	59, // 63: controlplane.v1.TestCoverageNode.lanes:type_name -> controlplane.v1.TestCoverageNode.LanesEntry
-	16, // 64: controlplane.v1.TestCoverageNode.diff:type_name -> controlplane.v1.TestDiffCoverage
-	18, // 65: controlplane.v1.GetCoverageResponse.coverage:type_name -> controlplane.v1.TestCoverage
-	40, // 66: controlplane.v1.GetCoverageResponse.children:type_name -> controlplane.v1.TestCoverageNode
-	60, // 67: controlplane.v1.TestLineCoverage.hits:type_name -> controlplane.v1.TestLineCoverage.HitsEntry
-	18, // 68: controlplane.v1.GetFileCoverageResponse.coverage:type_name -> controlplane.v1.TestCoverage
-	43, // 69: controlplane.v1.GetFileCoverageResponse.lines:type_name -> controlplane.v1.TestLineCoverage
-	9,  // 70: controlplane.v1.GetReleaseTestsResponse.status:type_name -> controlplane.v1.TestEvidenceStatus
-	19, // 71: controlplane.v1.GetReleaseTestsResponse.report:type_name -> controlplane.v1.TestCommitReport
-	11, // 72: controlplane.v1.GetReleaseTestsResponse.new_failures:type_name -> controlplane.v1.TestKey
-	25, // 73: controlplane.v1.GetReleaseTestsResponse.new_flakes:type_name -> controlplane.v1.TestFlake
-	6,  // 74: controlplane.v1.ListFlakyTestsRequest.state:type_name -> controlplane.v1.TestFlakeState
-	25, // 75: controlplane.v1.ListFlakyTestsResponse.tests:type_name -> controlplane.v1.TestFlake
-	4,  // 76: controlplane.v1.TestOutcome.status:type_name -> controlplane.v1.TestCaseStatus
-	61, // 77: controlplane.v1.TestOutcome.at:type_name -> google.protobuf.Timestamp
-	8,  // 78: controlplane.v1.TestFailureSignature.verdict:type_name -> controlplane.v1.TestFlakeVerdict
-	61, // 79: controlplane.v1.TestFailureSignature.first_seen_at:type_name -> google.protobuf.Timestamp
-	61, // 80: controlplane.v1.TestFailureSignature.last_seen_at:type_name -> google.protobuf.Timestamp
-	25, // 81: controlplane.v1.GetTestResponse.flake:type_name -> controlplane.v1.TestFlake
-	50, // 82: controlplane.v1.GetTestResponse.outcomes:type_name -> controlplane.v1.TestOutcome
-	26, // 83: controlplane.v1.GetTestResponse.events:type_name -> controlplane.v1.TestFlakeEvent
-	51, // 84: controlplane.v1.GetTestResponse.signatures:type_name -> controlplane.v1.TestFailureSignature
-	15, // 85: controlplane.v1.TestLanguageCoverage.LanesEntry.value:type_name -> controlplane.v1.TestStatementCoverage
-	15, // 86: controlplane.v1.TestCoverage.LanesEntry.value:type_name -> controlplane.v1.TestStatementCoverage
-	15, // 87: controlplane.v1.TestPackageCoverage.LanesEntry.value:type_name -> controlplane.v1.TestStatementCoverage
-	15, // 88: controlplane.v1.TestCoverageNode.LanesEntry.value:type_name -> controlplane.v1.TestStatementCoverage
-	28, // 89: controlplane.v1.TestsService.RecordTestRun:input_type -> controlplane.v1.RecordTestRunRequest
-	30, // 90: controlplane.v1.TestsService.GetTestSummary:input_type -> controlplane.v1.GetTestSummaryRequest
-	33, // 91: controlplane.v1.TestsService.ListTestRuns:input_type -> controlplane.v1.ListTestRunsRequest
-	35, // 92: controlplane.v1.TestsService.GetTestRun:input_type -> controlplane.v1.GetTestRunRequest
-	39, // 93: controlplane.v1.TestsService.GetCoverage:input_type -> controlplane.v1.GetCoverageRequest
-	42, // 94: controlplane.v1.TestsService.GetFileCoverage:input_type -> controlplane.v1.GetFileCoverageRequest
-	45, // 95: controlplane.v1.TestsService.GetReleaseTests:input_type -> controlplane.v1.GetReleaseTestsRequest
-	47, // 96: controlplane.v1.TestsService.ListFlakyTests:input_type -> controlplane.v1.ListFlakyTestsRequest
-	49, // 97: controlplane.v1.TestsService.GetTest:input_type -> controlplane.v1.GetTestRequest
-	53, // 98: controlplane.v1.TestsService.HasCoverageBlob:input_type -> controlplane.v1.HasCoverageBlobRequest
-	29, // 99: controlplane.v1.TestsService.RecordTestRun:output_type -> controlplane.v1.RecordTestRunResponse
-	31, // 100: controlplane.v1.TestsService.GetTestSummary:output_type -> controlplane.v1.GetTestSummaryResponse
-	34, // 101: controlplane.v1.TestsService.ListTestRuns:output_type -> controlplane.v1.ListTestRunsResponse
-	38, // 102: controlplane.v1.TestsService.GetTestRun:output_type -> controlplane.v1.GetTestRunResponse
-	41, // 103: controlplane.v1.TestsService.GetCoverage:output_type -> controlplane.v1.GetCoverageResponse
-	44, // 104: controlplane.v1.TestsService.GetFileCoverage:output_type -> controlplane.v1.GetFileCoverageResponse
-	46, // 105: controlplane.v1.TestsService.GetReleaseTests:output_type -> controlplane.v1.GetReleaseTestsResponse
-	48, // 106: controlplane.v1.TestsService.ListFlakyTests:output_type -> controlplane.v1.ListFlakyTestsResponse
-	52, // 107: controlplane.v1.TestsService.GetTest:output_type -> controlplane.v1.GetTestResponse
-	54, // 108: controlplane.v1.TestsService.HasCoverageBlob:output_type -> controlplane.v1.HasCoverageBlobResponse
-	99, // [99:109] is the sub-list for method output_type
-	89, // [89:99] is the sub-list for method input_type
-	89, // [89:89] is the sub-list for extension type_name
-	89, // [89:89] is the sub-list for extension extendee
-	0,  // [0:89] is the sub-list for field type_name
+	6,   // 0: controlplane.v1.TestFlakePolicy.quarantine:type_name -> controlplane.v1.TestQuarantineMode
+	16,  // 1: controlplane.v1.TestLanguageCoverage.combined:type_name -> controlplane.v1.TestStatementCoverage
+	61,  // 2: controlplane.v1.TestLanguageCoverage.lanes:type_name -> controlplane.v1.TestLanguageCoverage.LanesEntry
+	16,  // 3: controlplane.v1.TestCoverage.combined:type_name -> controlplane.v1.TestStatementCoverage
+	62,  // 4: controlplane.v1.TestCoverage.lanes:type_name -> controlplane.v1.TestCoverage.LanesEntry
+	16,  // 5: controlplane.v1.TestCoverage.only_e2e:type_name -> controlplane.v1.TestStatementCoverage
+	18,  // 6: controlplane.v1.TestCoverage.languages:type_name -> controlplane.v1.TestLanguageCoverage
+	17,  // 7: controlplane.v1.TestCoverage.diff:type_name -> controlplane.v1.TestDiffCoverage
+	13,  // 8: controlplane.v1.TestCommitReport.totals:type_name -> controlplane.v1.TestTotals
+	19,  // 9: controlplane.v1.TestCommitReport.coverage:type_name -> controlplane.v1.TestCoverage
+	67,  // 10: controlplane.v1.TestCommitReport.updated_at:type_name -> google.protobuf.Timestamp
+	1,   // 11: controlplane.v1.TestRunSummary.source:type_name -> controlplane.v1.TestRunSource
+	14,  // 12: controlplane.v1.TestRunSummary.ci:type_name -> controlplane.v1.TestRunCI
+	67,  // 13: controlplane.v1.TestRunSummary.started_at:type_name -> google.protobuf.Timestamp
+	67,  // 14: controlplane.v1.TestRunSummary.finished_at:type_name -> google.protobuf.Timestamp
+	3,   // 15: controlplane.v1.TestRunSummary.outcome:type_name -> controlplane.v1.TestRunOutcome
+	4,   // 16: controlplane.v1.TestRunSummary.ingest_state:type_name -> controlplane.v1.TestRunIngestState
+	13,  // 17: controlplane.v1.TestRunSummary.totals:type_name -> controlplane.v1.TestTotals
+	67,  // 18: controlplane.v1.TestRunSummary.created_at:type_name -> google.protobuf.Timestamp
+	2,   // 19: controlplane.v1.TestRunSummary.ci_provenance:type_name -> controlplane.v1.TestRunCIProvenance
+	67,  // 20: controlplane.v1.TestReleaseMarker.cut_at:type_name -> google.protobuf.Timestamp
+	67,  // 21: controlplane.v1.TestCoveragePoint.at:type_name -> google.protobuf.Timestamp
+	63,  // 22: controlplane.v1.TestCoveragePoint.lanes_percent:type_name -> controlplane.v1.TestCoveragePoint.LanesPercentEntry
+	16,  // 23: controlplane.v1.TestPackageCoverage.combined:type_name -> controlplane.v1.TestStatementCoverage
+	64,  // 24: controlplane.v1.TestPackageCoverage.lanes:type_name -> controlplane.v1.TestPackageCoverage.LanesEntry
+	67,  // 25: controlplane.v1.TestQuarantine.expires_at:type_name -> google.protobuf.Timestamp
+	12,  // 26: controlplane.v1.TestFlake.test:type_name -> controlplane.v1.TestKey
+	7,   // 27: controlplane.v1.TestFlake.state:type_name -> controlplane.v1.TestFlakeState
+	8,   // 28: controlplane.v1.TestFlake.signals:type_name -> controlplane.v1.TestFlakeSignal
+	67,  // 29: controlplane.v1.TestFlake.first_seen_at:type_name -> google.protobuf.Timestamp
+	67,  // 30: controlplane.v1.TestFlake.last_event_at:type_name -> google.protobuf.Timestamp
+	67,  // 31: controlplane.v1.TestFlake.quarantined_at:type_name -> google.protobuf.Timestamp
+	25,  // 32: controlplane.v1.TestFlake.quarantine:type_name -> controlplane.v1.TestQuarantine
+	8,   // 33: controlplane.v1.TestFlakeEvent.signal:type_name -> controlplane.v1.TestFlakeSignal
+	9,   // 34: controlplane.v1.TestFlakeEvent.verdict:type_name -> controlplane.v1.TestFlakeVerdict
+	67,  // 35: controlplane.v1.TestFlakeEvent.at:type_name -> google.protobuf.Timestamp
+	0,   // 36: controlplane.v1.TestUploadPart.encoding:type_name -> controlplane.v1.TestPayloadEncoding
+	1,   // 37: controlplane.v1.RecordTestRunRequest.source:type_name -> controlplane.v1.TestRunSource
+	14,  // 38: controlplane.v1.RecordTestRunRequest.ci:type_name -> controlplane.v1.TestRunCI
+	67,  // 39: controlplane.v1.RecordTestRunRequest.started_at:type_name -> google.protobuf.Timestamp
+	67,  // 40: controlplane.v1.RecordTestRunRequest.finished_at:type_name -> google.protobuf.Timestamp
+	28,  // 41: controlplane.v1.RecordTestRunRequest.results:type_name -> controlplane.v1.TestUploadPart
+	28,  // 42: controlplane.v1.RecordTestRunRequest.coverage:type_name -> controlplane.v1.TestUploadPart
+	28,  // 43: controlplane.v1.RecordTestRunRequest.diff:type_name -> controlplane.v1.TestUploadPart
+	15,  // 44: controlplane.v1.RecordTestRunRequest.flake_policy:type_name -> controlplane.v1.TestFlakePolicy
+	4,   // 45: controlplane.v1.RecordTestRunResponse.ingest_state:type_name -> controlplane.v1.TestRunIngestState
+	20,  // 46: controlplane.v1.GetTestSummaryResponse.latest:type_name -> controlplane.v1.TestCommitReport
+	23,  // 47: controlplane.v1.GetTestSummaryResponse.coverage_trend:type_name -> controlplane.v1.TestCoveragePoint
+	22,  // 48: controlplane.v1.GetTestSummaryResponse.release_markers:type_name -> controlplane.v1.TestReleaseMarker
+	21,  // 49: controlplane.v1.GetTestSummaryResponse.last_run:type_name -> controlplane.v1.TestRunSummary
+	24,  // 50: controlplane.v1.GetTestSummaryResponse.low_coverage_packages:type_name -> controlplane.v1.TestPackageCoverage
+	33,  // 51: controlplane.v1.GetTestSummaryResponse.host_health:type_name -> controlplane.v1.TestHostHealth
+	1,   // 52: controlplane.v1.ListTestRunsRequest.source:type_name -> controlplane.v1.TestRunSource
+	3,   // 53: controlplane.v1.ListTestRunsRequest.outcome:type_name -> controlplane.v1.TestRunOutcome
+	21,  // 54: controlplane.v1.ListTestRunsResponse.runs:type_name -> controlplane.v1.TestRunSummary
+	12,  // 55: controlplane.v1.TestFailure.test:type_name -> controlplane.v1.TestKey
+	9,   // 56: controlplane.v1.TestFailure.verdict:type_name -> controlplane.v1.TestFlakeVerdict
+	12,  // 57: controlplane.v1.TestTiming.test:type_name -> controlplane.v1.TestKey
+	21,  // 58: controlplane.v1.GetTestRunResponse.run:type_name -> controlplane.v1.TestRunSummary
+	37,  // 59: controlplane.v1.GetTestRunResponse.failures:type_name -> controlplane.v1.TestFailure
+	12,  // 60: controlplane.v1.GetTestRunResponse.retry_passes:type_name -> controlplane.v1.TestKey
+	38,  // 61: controlplane.v1.GetTestRunResponse.slowest:type_name -> controlplane.v1.TestTiming
+	11,  // 62: controlplane.v1.TestCoverageNode.kind:type_name -> controlplane.v1.TestCoverageNodeKind
+	16,  // 63: controlplane.v1.TestCoverageNode.combined:type_name -> controlplane.v1.TestStatementCoverage
+	65,  // 64: controlplane.v1.TestCoverageNode.lanes:type_name -> controlplane.v1.TestCoverageNode.LanesEntry
+	17,  // 65: controlplane.v1.TestCoverageNode.diff:type_name -> controlplane.v1.TestDiffCoverage
+	19,  // 66: controlplane.v1.GetCoverageResponse.coverage:type_name -> controlplane.v1.TestCoverage
+	41,  // 67: controlplane.v1.GetCoverageResponse.children:type_name -> controlplane.v1.TestCoverageNode
+	66,  // 68: controlplane.v1.TestLineCoverage.hits:type_name -> controlplane.v1.TestLineCoverage.HitsEntry
+	19,  // 69: controlplane.v1.GetFileCoverageResponse.coverage:type_name -> controlplane.v1.TestCoverage
+	44,  // 70: controlplane.v1.GetFileCoverageResponse.lines:type_name -> controlplane.v1.TestLineCoverage
+	10,  // 71: controlplane.v1.GetReleaseTestsResponse.status:type_name -> controlplane.v1.TestEvidenceStatus
+	20,  // 72: controlplane.v1.GetReleaseTestsResponse.report:type_name -> controlplane.v1.TestCommitReport
+	12,  // 73: controlplane.v1.GetReleaseTestsResponse.new_failures:type_name -> controlplane.v1.TestKey
+	26,  // 74: controlplane.v1.GetReleaseTestsResponse.new_flakes:type_name -> controlplane.v1.TestFlake
+	7,   // 75: controlplane.v1.ListFlakyTestsRequest.state:type_name -> controlplane.v1.TestFlakeState
+	26,  // 76: controlplane.v1.ListFlakyTestsResponse.tests:type_name -> controlplane.v1.TestFlake
+	5,   // 77: controlplane.v1.TestOutcome.status:type_name -> controlplane.v1.TestCaseStatus
+	67,  // 78: controlplane.v1.TestOutcome.at:type_name -> google.protobuf.Timestamp
+	9,   // 79: controlplane.v1.TestFailureSignature.verdict:type_name -> controlplane.v1.TestFlakeVerdict
+	67,  // 80: controlplane.v1.TestFailureSignature.first_seen_at:type_name -> google.protobuf.Timestamp
+	67,  // 81: controlplane.v1.TestFailureSignature.last_seen_at:type_name -> google.protobuf.Timestamp
+	26,  // 82: controlplane.v1.GetTestResponse.flake:type_name -> controlplane.v1.TestFlake
+	51,  // 83: controlplane.v1.GetTestResponse.outcomes:type_name -> controlplane.v1.TestOutcome
+	27,  // 84: controlplane.v1.GetTestResponse.events:type_name -> controlplane.v1.TestFlakeEvent
+	52,  // 85: controlplane.v1.GetTestResponse.signatures:type_name -> controlplane.v1.TestFailureSignature
+	58,  // 86: controlplane.v1.GetTestPortfolioResponse.projects:type_name -> controlplane.v1.TestPortfolioProject
+	60,  // 87: controlplane.v1.GetTestPortfolioResponse.totals:type_name -> controlplane.v1.TestPortfolioTotals
+	20,  // 88: controlplane.v1.TestPortfolioProject.latest:type_name -> controlplane.v1.TestCommitReport
+	59,  // 89: controlplane.v1.TestPortfolioProject.coverage:type_name -> controlplane.v1.TestPortfolioCoverage
+	21,  // 90: controlplane.v1.TestPortfolioProject.last_run:type_name -> controlplane.v1.TestRunSummary
+	16,  // 91: controlplane.v1.TestPortfolioCoverage.combined:type_name -> controlplane.v1.TestStatementCoverage
+	13,  // 92: controlplane.v1.TestPortfolioTotals.latest_totals:type_name -> controlplane.v1.TestTotals
+	59,  // 93: controlplane.v1.TestPortfolioTotals.coverage:type_name -> controlplane.v1.TestPortfolioCoverage
+	16,  // 94: controlplane.v1.TestLanguageCoverage.LanesEntry.value:type_name -> controlplane.v1.TestStatementCoverage
+	16,  // 95: controlplane.v1.TestCoverage.LanesEntry.value:type_name -> controlplane.v1.TestStatementCoverage
+	16,  // 96: controlplane.v1.TestPackageCoverage.LanesEntry.value:type_name -> controlplane.v1.TestStatementCoverage
+	16,  // 97: controlplane.v1.TestCoverageNode.LanesEntry.value:type_name -> controlplane.v1.TestStatementCoverage
+	29,  // 98: controlplane.v1.TestsService.RecordTestRun:input_type -> controlplane.v1.RecordTestRunRequest
+	31,  // 99: controlplane.v1.TestsService.GetTestSummary:input_type -> controlplane.v1.GetTestSummaryRequest
+	34,  // 100: controlplane.v1.TestsService.ListTestRuns:input_type -> controlplane.v1.ListTestRunsRequest
+	36,  // 101: controlplane.v1.TestsService.GetTestRun:input_type -> controlplane.v1.GetTestRunRequest
+	40,  // 102: controlplane.v1.TestsService.GetCoverage:input_type -> controlplane.v1.GetCoverageRequest
+	43,  // 103: controlplane.v1.TestsService.GetFileCoverage:input_type -> controlplane.v1.GetFileCoverageRequest
+	46,  // 104: controlplane.v1.TestsService.GetReleaseTests:input_type -> controlplane.v1.GetReleaseTestsRequest
+	48,  // 105: controlplane.v1.TestsService.ListFlakyTests:input_type -> controlplane.v1.ListFlakyTestsRequest
+	50,  // 106: controlplane.v1.TestsService.GetTest:input_type -> controlplane.v1.GetTestRequest
+	54,  // 107: controlplane.v1.TestsService.HasCoverageBlob:input_type -> controlplane.v1.HasCoverageBlobRequest
+	56,  // 108: controlplane.v1.TestsService.GetTestPortfolio:input_type -> controlplane.v1.GetTestPortfolioRequest
+	30,  // 109: controlplane.v1.TestsService.RecordTestRun:output_type -> controlplane.v1.RecordTestRunResponse
+	32,  // 110: controlplane.v1.TestsService.GetTestSummary:output_type -> controlplane.v1.GetTestSummaryResponse
+	35,  // 111: controlplane.v1.TestsService.ListTestRuns:output_type -> controlplane.v1.ListTestRunsResponse
+	39,  // 112: controlplane.v1.TestsService.GetTestRun:output_type -> controlplane.v1.GetTestRunResponse
+	42,  // 113: controlplane.v1.TestsService.GetCoverage:output_type -> controlplane.v1.GetCoverageResponse
+	45,  // 114: controlplane.v1.TestsService.GetFileCoverage:output_type -> controlplane.v1.GetFileCoverageResponse
+	47,  // 115: controlplane.v1.TestsService.GetReleaseTests:output_type -> controlplane.v1.GetReleaseTestsResponse
+	49,  // 116: controlplane.v1.TestsService.ListFlakyTests:output_type -> controlplane.v1.ListFlakyTestsResponse
+	53,  // 117: controlplane.v1.TestsService.GetTest:output_type -> controlplane.v1.GetTestResponse
+	55,  // 118: controlplane.v1.TestsService.HasCoverageBlob:output_type -> controlplane.v1.HasCoverageBlobResponse
+	57,  // 119: controlplane.v1.TestsService.GetTestPortfolio:output_type -> controlplane.v1.GetTestPortfolioResponse
+	109, // [109:120] is the sub-list for method output_type
+	98,  // [98:109] is the sub-list for method input_type
+	98,  // [98:98] is the sub-list for extension type_name
+	98,  // [98:98] is the sub-list for extension extendee
+	0,   // [0:98] is the sub-list for field type_name
 }
 
 func init() { file_services_tests_v1_tests_proto_init() }
@@ -5627,13 +6268,14 @@ func file_services_tests_v1_tests_proto_init() {
 	file_services_tests_v1_tests_proto_msgTypes[36].OneofWrappers = []any{}
 	file_services_tests_v1_tests_proto_msgTypes[38].OneofWrappers = []any{}
 	file_services_tests_v1_tests_proto_msgTypes[42].OneofWrappers = []any{}
+	file_services_tests_v1_tests_proto_msgTypes[44].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_services_tests_v1_tests_proto_rawDesc), len(file_services_tests_v1_tests_proto_rawDesc)),
-			NumEnums:      11,
-			NumMessages:   50,
+			NumEnums:      12,
+			NumMessages:   55,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

@@ -1419,7 +1419,7 @@ type QueryScope struct {
 	// Only the platform organization (tenant zero) has such telemetry, so any
 	// other org is refused PermissionDenied, as is a credential bound to one
 	// environment. It takes no env_ids and no project_id (both narrow by
-	// environment): sending either is InvalidArgument.
+	// environment): sending either is InvalidArgument (project_ids too).
 	PlatformScope bool `protobuf:"varint,8,opt,name=platform_scope,json=platformScope,proto3" json:"platform_scope,omitempty"`
 	// Narrow to these dev instances: reliant.instance.id, which the OTLP gateway
 	// stamps from a dev token's `sid` (dropping any a client sent). ANDed with
@@ -1433,6 +1433,25 @@ type QueryScope struct {
 	// nothing, never the whole scope. ANDed with instance_ids. Empty = not
 	// narrowed.
 	InstanceUsers []string `protobuf:"bytes,10,rep,name=instance_users,json=instanceUsers,proto3" json:"instance_users,omitempty"`
+	// Several forge projects at once: the union of their environments is in
+	// scope, as project_id's one project's would be. It is project_id's plural,
+	// so a scope names one or the other (InvalidArgument for both); empty =
+	// not narrowed by it, which is today's behaviour. Entries are non-empty: the
+	// project-less environments are named by project_id = "" alone. env_ids
+	// ANDs with it as with project_id: each must be a live environment of one
+	// of these projects. A project the org does not have adds no environment,
+	// and a set of only such projects reads nothing, never everything, so the
+	// answer does not say which projects exist. Projects authorize nothing:
+	// the caller is admitted to org_id, and a credential bound to one
+	// environment is still held to it.
+	//
+	// Like project_id, the set expands to every live environment of its
+	// projects, and a telemetry read compiles at most 500 environments: a set
+	// with more is InvalidArgument, as one project with more is. Name env_ids
+	// to read a subset.
+	//
+	// platform_scope takes no project_ids either.
+	ProjectIds    []string `protobuf:"bytes,11,rep,name=project_ids,json=projectIds,proto3" json:"project_ids,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1526,6 +1545,13 @@ func (x *QueryScope) GetInstanceIds() []string {
 func (x *QueryScope) GetInstanceUsers() []string {
 	if x != nil {
 		return x.InstanceUsers
+	}
+	return nil
+}
+
+func (x *QueryScope) GetProjectIds() []string {
+	if x != nil {
+		return x.ProjectIds
 	}
 	return nil
 }
@@ -12044,7 +12070,7 @@ const file_services_observability_v1_observability_proto_rawDesc = "" +
 	"\tTimeRange\x120\n" +
 	"\x05start\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\x05start\x12,\n" +
 	"\x03end\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x03end\x12;\n" +
-	"\brelative\x18\x03 \x01(\v2\x1f.controlplane.v1.RelativeWindowR\brelative\"\x81\x03\n" +
+	"\brelative\x18\x03 \x01(\v2\x1f.controlplane.v1.RelativeWindowR\brelative\"\xa2\x03\n" +
 	"\n" +
 	"QueryScope\x12\x15\n" +
 	"\x06org_id\x18\x01 \x01(\tR\x05orgId\x12\x1a\n" +
@@ -12058,7 +12084,9 @@ const file_services_observability_v1_observability_proto_rawDesc = "" +
 	"\x0eplatform_scope\x18\b \x01(\bR\rplatformScope\x12!\n" +
 	"\finstance_ids\x18\t \x03(\tR\vinstanceIds\x12%\n" +
 	"\x0einstance_users\x18\n" +
-	" \x03(\tR\rinstanceUsersB\r\n" +
+	" \x03(\tR\rinstanceUsers\x12\x1f\n" +
+	"\vproject_ids\x18\v \x03(\tR\n" +
+	"projectIdsB\r\n" +
 	"\v_project_idJ\x04\b\x02\x10\x03R\x06env_id\"\xb0\x02\n" +
 	"\x16GetServiceGraphRequest\x121\n" +
 	"\x05scope\x18\x01 \x01(\v2\x1b.controlplane.v1.QueryScopeR\x05scope\x12\x17\n" +

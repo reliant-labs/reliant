@@ -61,6 +61,9 @@ const (
 	// TestsServiceHasCoverageBlobProcedure is the fully-qualified name of the TestsService's
 	// HasCoverageBlob RPC.
 	TestsServiceHasCoverageBlobProcedure = "/controlplane.v1.TestsService/HasCoverageBlob"
+	// TestsServiceGetTestPortfolioProcedure is the fully-qualified name of the TestsService's
+	// GetTestPortfolio RPC.
+	TestsServiceGetTestPortfolioProcedure = "/controlplane.v1.TestsService/GetTestPortfolio"
 )
 
 // TestsServiceClient is a client for the controlplane.v1.TestsService service.
@@ -135,6 +138,25 @@ type TestsServiceClient interface {
 	// tests:read never becomes a way to read any repository file. Another org's
 	// project is NotFound.
 	HasCoverageBlob(context.Context, *connect.Request[v1.HasCoverageBlobRequest]) (*connect.Response[v1.HasCoverageBlobResponse], error)
+	// GetTestPortfolio returns the test health of several projects at once:
+	// one row per project, each the figures GetTestSummary answers for that
+	// project on its own default branch (with the default trend_points and
+	// pass_rate_runs), and totals across them. The console's multi-project
+	// Tests and Coverage pages read it.
+	//
+	// TOTALS NEVER AVERAGE PERCENTAGES. The pass rate is weighted by each
+	// project's pass_rate_runs (passed runs over judged runs, summed); coverage
+	// is summed per (language, granularity) and weighted by statements
+	// (Σcovered / Σstatements), never mixed into one figure across languages
+	// or granularities; counts are summed.
+	//
+	// Authorized like GetTestSummary (tests:read for a machine credential,
+	// deploy:read for a person), across the whole org: a caller bound to some
+	// environments is refused, because every figure merges runs across
+	// environments. A named project with no runs is a row with has_runs false,
+	// never NotFound, so a project of another org reads the same as an empty
+	// one.
+	GetTestPortfolio(context.Context, *connect.Request[v1.GetTestPortfolioRequest]) (*connect.Response[v1.GetTestPortfolioResponse], error)
 }
 
 // NewTestsServiceClient constructs a client for the controlplane.v1.TestsService service. By
@@ -217,21 +239,29 @@ func NewTestsServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
+		getTestPortfolio: connect.NewClient[v1.GetTestPortfolioRequest, v1.GetTestPortfolioResponse](
+			httpClient,
+			baseURL+TestsServiceGetTestPortfolioProcedure,
+			connect.WithSchema(testsServiceMethods.ByName("GetTestPortfolio")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // testsServiceClient implements TestsServiceClient.
 type testsServiceClient struct {
-	recordTestRun   *connect.Client[v1.RecordTestRunRequest, v1.RecordTestRunResponse]
-	getTestSummary  *connect.Client[v1.GetTestSummaryRequest, v1.GetTestSummaryResponse]
-	listTestRuns    *connect.Client[v1.ListTestRunsRequest, v1.ListTestRunsResponse]
-	getTestRun      *connect.Client[v1.GetTestRunRequest, v1.GetTestRunResponse]
-	getCoverage     *connect.Client[v1.GetCoverageRequest, v1.GetCoverageResponse]
-	getFileCoverage *connect.Client[v1.GetFileCoverageRequest, v1.GetFileCoverageResponse]
-	getReleaseTests *connect.Client[v1.GetReleaseTestsRequest, v1.GetReleaseTestsResponse]
-	listFlakyTests  *connect.Client[v1.ListFlakyTestsRequest, v1.ListFlakyTestsResponse]
-	getTest         *connect.Client[v1.GetTestRequest, v1.GetTestResponse]
-	hasCoverageBlob *connect.Client[v1.HasCoverageBlobRequest, v1.HasCoverageBlobResponse]
+	recordTestRun    *connect.Client[v1.RecordTestRunRequest, v1.RecordTestRunResponse]
+	getTestSummary   *connect.Client[v1.GetTestSummaryRequest, v1.GetTestSummaryResponse]
+	listTestRuns     *connect.Client[v1.ListTestRunsRequest, v1.ListTestRunsResponse]
+	getTestRun       *connect.Client[v1.GetTestRunRequest, v1.GetTestRunResponse]
+	getCoverage      *connect.Client[v1.GetCoverageRequest, v1.GetCoverageResponse]
+	getFileCoverage  *connect.Client[v1.GetFileCoverageRequest, v1.GetFileCoverageResponse]
+	getReleaseTests  *connect.Client[v1.GetReleaseTestsRequest, v1.GetReleaseTestsResponse]
+	listFlakyTests   *connect.Client[v1.ListFlakyTestsRequest, v1.ListFlakyTestsResponse]
+	getTest          *connect.Client[v1.GetTestRequest, v1.GetTestResponse]
+	hasCoverageBlob  *connect.Client[v1.HasCoverageBlobRequest, v1.HasCoverageBlobResponse]
+	getTestPortfolio *connect.Client[v1.GetTestPortfolioRequest, v1.GetTestPortfolioResponse]
 }
 
 // RecordTestRun calls controlplane.v1.TestsService.RecordTestRun.
@@ -282,6 +312,11 @@ func (c *testsServiceClient) GetTest(ctx context.Context, req *connect.Request[v
 // HasCoverageBlob calls controlplane.v1.TestsService.HasCoverageBlob.
 func (c *testsServiceClient) HasCoverageBlob(ctx context.Context, req *connect.Request[v1.HasCoverageBlobRequest]) (*connect.Response[v1.HasCoverageBlobResponse], error) {
 	return c.hasCoverageBlob.CallUnary(ctx, req)
+}
+
+// GetTestPortfolio calls controlplane.v1.TestsService.GetTestPortfolio.
+func (c *testsServiceClient) GetTestPortfolio(ctx context.Context, req *connect.Request[v1.GetTestPortfolioRequest]) (*connect.Response[v1.GetTestPortfolioResponse], error) {
+	return c.getTestPortfolio.CallUnary(ctx, req)
 }
 
 // TestsServiceHandler is an implementation of the controlplane.v1.TestsService service.
@@ -356,6 +391,25 @@ type TestsServiceHandler interface {
 	// tests:read never becomes a way to read any repository file. Another org's
 	// project is NotFound.
 	HasCoverageBlob(context.Context, *connect.Request[v1.HasCoverageBlobRequest]) (*connect.Response[v1.HasCoverageBlobResponse], error)
+	// GetTestPortfolio returns the test health of several projects at once:
+	// one row per project, each the figures GetTestSummary answers for that
+	// project on its own default branch (with the default trend_points and
+	// pass_rate_runs), and totals across them. The console's multi-project
+	// Tests and Coverage pages read it.
+	//
+	// TOTALS NEVER AVERAGE PERCENTAGES. The pass rate is weighted by each
+	// project's pass_rate_runs (passed runs over judged runs, summed); coverage
+	// is summed per (language, granularity) and weighted by statements
+	// (Σcovered / Σstatements), never mixed into one figure across languages
+	// or granularities; counts are summed.
+	//
+	// Authorized like GetTestSummary (tests:read for a machine credential,
+	// deploy:read for a person), across the whole org: a caller bound to some
+	// environments is refused, because every figure merges runs across
+	// environments. A named project with no runs is a row with has_runs false,
+	// never NotFound, so a project of another org reads the same as an empty
+	// one.
+	GetTestPortfolio(context.Context, *connect.Request[v1.GetTestPortfolioRequest]) (*connect.Response[v1.GetTestPortfolioResponse], error)
 }
 
 // NewTestsServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -434,6 +488,13 @@ func NewTestsServiceHandler(svc TestsServiceHandler, opts ...connect.HandlerOpti
 		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
+	testsServiceGetTestPortfolioHandler := connect.NewUnaryHandler(
+		TestsServiceGetTestPortfolioProcedure,
+		svc.GetTestPortfolio,
+		connect.WithSchema(testsServiceMethods.ByName("GetTestPortfolio")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/controlplane.v1.TestsService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case TestsServiceRecordTestRunProcedure:
@@ -456,6 +517,8 @@ func NewTestsServiceHandler(svc TestsServiceHandler, opts ...connect.HandlerOpti
 			testsServiceGetTestHandler.ServeHTTP(w, r)
 		case TestsServiceHasCoverageBlobProcedure:
 			testsServiceHasCoverageBlobHandler.ServeHTTP(w, r)
+		case TestsServiceGetTestPortfolioProcedure:
+			testsServiceGetTestPortfolioHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -503,4 +566,8 @@ func (UnimplementedTestsServiceHandler) GetTest(context.Context, *connect.Reques
 
 func (UnimplementedTestsServiceHandler) HasCoverageBlob(context.Context, *connect.Request[v1.HasCoverageBlobRequest]) (*connect.Response[v1.HasCoverageBlobResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.TestsService.HasCoverageBlob is not implemented"))
+}
+
+func (UnimplementedTestsServiceHandler) GetTestPortfolio(context.Context, *connect.Request[v1.GetTestPortfolioRequest]) (*connect.Response[v1.GetTestPortfolioResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.TestsService.GetTestPortfolio is not implemented"))
 }
