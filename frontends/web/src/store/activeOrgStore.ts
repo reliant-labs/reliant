@@ -241,6 +241,8 @@ export const ORG_SCOPED_QUERY_ROOTS: readonly string[] = [
   // Every DashboardService read on its generated keys: the index, templates,
   // one dashboard and its versions, each scoped by its request's org.
   "controlplane.v1.DashboardService",
+  // Legacy dashboard keys may still be restored from a persisted cache.
+  "dashboards",
   // The machine → org map (services/controlPlane/machineOrgs.ts).
   "controlPlane",
   "orgs-members",
