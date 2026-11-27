@@ -1,0 +1,190 @@
+# Product-led growth: the product itself acquires, activates and converts
+# users, with sales and support stepping in where they add the most.
+entries:
+  - key: activation-checklist-trial
+    category: product_led_growth
+    name: Self-serve trial with an activation checklist
+    summary: >-
+      Give new sign-ups a short checklist of the three to five steps that lead
+      to the first real result, show progress, and celebrate completion. Cut
+      every step that is not needed for that first result.
+    why_it_works: >-
+      Users who reach the first result early are far more likely to stay and
+      pay. A checklist makes the path obvious, and the cut steps are friction
+      that only cost users.
+    fits:
+      business_types: [b2b_saas, developer_tools, b2c_app]
+      business_models: [subscription, freemium, usage_based]
+    stages: [launch, early_traction, growth]
+    objective: activation
+    effort: medium
+    cost: free
+    signal_days: 21
+    tailor_questions:
+      - What is the first real result a new user should reach?
+      - Which steps between sign-up and that result can be removed or done for the user?
+      - Where do most new users drop off today?
+    channel_types: [in-product]
+    kpis: [activation rate, time to first result, trial-to-paid conversion]
+
+  - key: try-before-signup-sandbox
+    category: product_led_growth
+    name: Interactive demo or sandbox without sign-up
+    summary: >-
+      Let visitors try the product before creating an account, through an
+      interactive guided demo, a sandbox with sample data, or a playground,
+      and let them keep what they made by signing up at the end.
+    why_it_works: >-
+      A sign-up form before any value is the biggest drop-off point for many
+      products. Letting people feel the value first means those who sign up
+      are already convinced.
+    fits:
+      business_types: [b2b_saas, developer_tools, b2c_app, open_source]
+    stages: [launch, early_traction, growth]
+    objective: activation
+    effort: high
+    cost: low
+    signal_days: 30
+    tailor_questions:
+      - What can a visitor accomplish in two minutes without an account?
+      - What sample data makes the demo feel real?
+      - What will visitors keep if they sign up at the end?
+    channel_types: [website, in-product]
+    kpis: [demo starts, demo-to-sign-up conversion, activation rate of demo users]
+
+  - key: starter-templates
+    category: product_led_growth
+    name: Starter templates for common use cases
+    summary: >-
+      Offer a small set of ready-made starting points for the most common use
+      cases, so a new user starts with something working and edits it rather
+      than facing a blank screen. Ask one question at sign-up to pick the
+      right template.
+    why_it_works: >-
+      A blank screen makes users do the hardest part alone. Templates show
+      what good looks like, shorten time to value, and teach the product by
+      example.
+    fits:
+      business_types: [b2b_saas, b2c_app, developer_tools, creator_media, open_source]
+    stages: [launch, early_traction, growth]
+    objective: activation
+    effort: medium
+    cost: free
+    signal_days: 21
+    tailor_questions:
+      - What are the three most common things customers set up first?
+      - What single question at sign-up best predicts the right template?
+      - Which successful customer setups could be turned into templates?
+    channel_types: [in-product]
+    kpis: [template use rate, activation rate by template, time to first result]
+
+  - key: behaviour-triggered-onboarding-email
+    category: product_led_growth
+    name: Behaviour-triggered onboarding messages
+    summary: >-
+      Replace a fixed onboarding email schedule with messages triggered by
+      what each user did or did not do: help when they stall on a step, the
+      next step after a success, and a personal note from the founder if they
+      go quiet after sign-up.
+    why_it_works: >-
+      Generic sequences are ignored because they ignore the user. Messages
+      that respond to real behaviour arrive when they are relevant, which
+      lifts activation without more volume.
+    stages: [launch, early_traction, growth, scale]
+    objective: activation
+    effort: medium
+    cost: low
+    signal_days: 21
+    tailor_questions:
+      - Which steps do new users most often stall on?
+      - What help would get a stalled user moving again?
+      - After how many quiet days should a person reach out?
+    suggested_workflow: >-
+      Daily, find new users who stalled on each onboarding step for more than
+      two days, send the help message for that step, and list users who went
+      quiet after sign-up for a personal founder note that a person writes or
+      approves.
+    channel_types: [email, in-product]
+    kpis: [activation rate, onboarding message click-through, stalled users recovered]
+
+  - key: product-qualified-lead-alerts
+    category: product_led_growth
+    name: Product-qualified lead alerts for sales
+    summary: >-
+      Define which in-product behaviours signal a buyer (several teammates
+      invited, a key feature used repeatedly, a company domain at a target
+      size, hitting a limit), and alert a salesperson or the founder to offer
+      help, not a pitch.
+    why_it_works: >-
+      Usage tells the business who is ready far better than a form fill.
+      Reaching out to these accounts with help at the right time converts
+      self-serve users into larger plans without cold outreach.
+    fits:
+      business_types: [b2b_saas, developer_tools]
+      business_models: [freemium, subscription, usage_based]
+    stages: [growth, scale]
+    objective: conversion
+    effort: medium
+    cost: free
+    signal_days: 30
+    tailor_questions:
+      - Which behaviours did paying customers show before they upgraded?
+      - What size or type of account is worth a person's time?
+      - What help can the person offer that the product cannot?
+    suggested_workflow: >-
+      Each day, score active free and trial accounts on the agreed behaviours,
+      send the accounts above the threshold to the owner with the behaviours
+      that triggered it and suggested talking points, and record outcomes to
+      tune the threshold.
+    channel_types: [in-product, outbound]
+    kpis: [qualified accounts per week, conversion of contacted accounts, revenue from product-qualified leads]
+
+  - key: fast-time-to-first-success-for-developers
+    category: product_led_growth
+    name: Minutes to first success for developers
+    summary: >-
+      Measure and relentlessly shorten the time it takes a developer to get a
+      first working result: a one-line install, a copy-paste example that runs,
+      sensible defaults, helpful error messages, and keys or credentials that
+      work immediately.
+    why_it_works: >-
+      Developers evaluate quickly and quietly leave when something breaks.
+      Every minute removed from the first success lifts adoption, and a smooth
+      start becomes something developers tell each other about.
+    fits:
+      business_types: [developer_tools, open_source]
+    stages: [launch, early_traction, growth, scale]
+    objective: activation
+    effort: medium
+    cost: free
+    signal_days: 14
+    tailor_questions:
+      - How long does a first success take for a developer who has never seen the product?
+      - Which errors do new users hit most often?
+      - Which setup steps could be done automatically?
+    channel_types: [in-product, website]
+    kpis: [time to first success, install-to-active rate, setup-related support questions]
+
+  - key: aha-moment-instrumentation
+    category: product_led_growth
+    name: Find and design for the moment of value
+    summary: >-
+      Compare retained and churned users to find the early action most linked
+      to staying (for example, "created three projects in the first week"),
+      then redesign onboarding, emails and prompts to get more users to that
+      action faster.
+    why_it_works: >-
+      Most products have a specific early action that predicts retention.
+      Knowing it turns onboarding from guesswork into a single measurable
+      goal the whole team can push on.
+    stages: [early_traction, growth]
+    objective: activation
+    effort: medium
+    cost: free
+    signal_days: 45
+    tailor_questions:
+      - Which early actions do retained users take that churned users do not?
+      - Is the link causal, or only a sign of already-motivated users?
+      - What changes would get more users to that action in their first week?
+    channel_types: [in-product]
+    kpis: [share of new users reaching the key action, week-four retention, time to key action]

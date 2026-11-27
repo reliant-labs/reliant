@@ -1,0 +1,226 @@
+# Launches and press: concentrated moments of attention, from a first launch
+# to a recurring rhythm of announcements.
+entries:
+  - key: launch-directory-day
+    category: launches_pr
+    name: Launch on a launch directory
+    summary: >-
+      Launch on a popular launch directory on a planned day: a clear tagline,
+      a short demo video, a first comment from the founder telling the story,
+      and a team ready to answer every comment all day. Tell existing
+      supporters the day before, without asking for votes.
+    why_it_works: >-
+      Launch directories concentrate early adopters looking for new products.
+      A well-prepared launch brings a spike of sign-ups, feedback and links,
+      and the founder's presence in the comments turns visitors into fans.
+    fits:
+      business_types: [b2c_app, b2b_saas, developer_tools, open_source, hardware]
+    stages: [launch]
+    objective: awareness
+    effort: medium
+    cost: free
+    signal_days: 3
+    tailor_questions:
+      - Which launch directories does the target audience browse?
+      - What does the product do in one sentence a stranger understands?
+      - Who will answer comments throughout launch day?
+      - What will a visitor get by signing up on launch day?
+    suggested_workflow: >-
+      On launch day, collect every comment and question from the listing into
+      one place every hour, flag unanswered ones for the team, and the next
+      day summarise the feedback themes and the sign-ups from the launch.
+    channel_types: [directory, social, email]
+    kpis: [launch-day sign-ups, comments answered, links and mentions earned]
+
+  - key: developer-forum-show-post
+    category: launches_pr
+    name: A "show" post on a developer forum
+    summary: >-
+      Share the product on a developer or technical forum in the format the
+      community expects: a plain title, a link that works without sign-up
+      where possible, and a first comment from the maker explaining what it
+      does, how it works and what is not done yet.
+    why_it_works: >-
+      Technical communities reward candour and craft. An honest, technical
+      post can bring thousands of the right visitors in a day, and the
+      discussion gives sharp feedback that is hard to get elsewhere.
+    fits:
+      business_types: [developer_tools, open_source, b2b_saas]
+    stages: [launch, early_traction]
+    objective: awareness
+    effort: low
+    cost: free
+    signal_days: 2
+    tailor_questions:
+      - What is technically interesting about how the product works?
+      - Can visitors try it without creating an account?
+      - What limitations should the post admit up front?
+    channel_types: [forum, community]
+    kpis: [visits from the post, sign-ups or installs, substantive comments]
+
+  - key: launch-week
+    category: launches_pr
+    name: A launch week of daily announcements
+    summary: >-
+      Bundle several improvements into one week with a new announcement each
+      day, a short post and demo for each, and a recap at the end. Build up to
+      it with a schedule announced in advance.
+    why_it_works: >-
+      A single release is easy to miss; a week of daily news creates
+      sustained attention and gives people several reasons to come back and
+      share. It also gives the team a clear shipping deadline.
+    fits:
+      business_types: [developer_tools, b2b_saas, open_source, b2c_app]
+    stages: [growth, scale]
+    objective: awareness
+    effort: high
+    cost: low
+    signal_days: 7
+    tailor_questions:
+      - Which five improvements could be ready on the same date?
+      - Which one should land on day one to set the tone?
+      - Which channels will carry each day's announcement?
+    suggested_workflow: >-
+      Two weeks before the launch week, build a calendar of the five days with
+      a draft post, demo clip and social copy per day, check readiness of each
+      item every morning, and hold every post for a person to approve before
+      it publishes.
+    channel_types: [blog, social, email, video]
+    kpis: [visits during the week, sign-ups during the week, mentions and shares]
+
+  - key: trade-press-pitch
+    category: launches_pr
+    name: Pitch niche trade press and reporters
+    summary: >-
+      Identify the reporters and trade publications that cover the niche,
+      read what they recently wrote, and send a short pitch that offers a
+      story they would want anyway: a trend backed by data, a surprising
+      customer story, or an expert view on news.
+    why_it_works: >-
+      Trade publications reach exactly the buyers in an industry and carry
+      credibility that ads cannot buy. Reporters respond to stories, not
+      product announcements.
+    fits:
+      business_types: [b2b_saas, hardware, local_business, marketplace, agency_services]
+    stages: [launch, early_traction, growth, scale]
+    objective: awareness
+    effort: medium
+    cost: free
+    signal_days: 30
+    tailor_questions:
+      - Which publications do target buyers read for industry news?
+      - What story does the business have that is news, not promotion?
+      - Which customers would agree to be interviewed?
+    suggested_workflow: >-
+      Maintain a list of relevant reporters with their recent articles; when
+      the business has a story, draft a personalised pitch per reporter that
+      references their recent work, for a person to review and send, and
+      track responses.
+    channel_types: [press, email]
+    kpis: [articles and mentions, referral traffic from coverage, inbound leads after coverage]
+
+  - key: public-changelog-releases
+    category: launches_pr
+    name: A public changelog as a launch rhythm
+    summary: >-
+      Publish every meaningful improvement in a public changelog with a short
+      explanation, a screenshot or clip, and credit to customers who asked for
+      it, and send a monthly digest to users.
+    why_it_works: >-
+      A steady changelog shows momentum to prospects and users alike. Credit
+      to requesters shows customers they are heard, and each entry is a small
+      launch to share.
+    fits:
+      business_types: [b2b_saas, developer_tools, b2c_app, open_source]
+    stages: [launch, early_traction, growth, scale]
+    objective: retention
+    effort: low
+    cost: free
+    signal_days: 30
+    tailor_questions:
+      - How often does the team ship something customers would notice?
+      - Who writes the changelog entries, and when?
+      - Which customers asked for recent improvements and should be told?
+    suggested_workflow: >-
+      When work is marked released, draft a changelog entry from its
+      description in plain language, list the customers who requested it so
+      they can be notified, and at month end assemble the digest for review.
+    channel_types: [website, email, in-product]
+    kpis: [changelog views, feature adoption after announcement, requesters notified]
+
+  - key: crowdfunding-campaign
+    category: launches_pr
+    name: Crowdfunding campaign
+    summary: >-
+      For a physical product or creative project, pre-sell through a
+      crowdfunding campaign with a clear video, honest timelines, reward tiers
+      priced for margin, and an early list of supporters ready to back on day
+      one.
+    why_it_works: >-
+      Crowdfunding validates demand and funds production before inventory is
+      bought. Strong early backing makes campaigns visible to the platform's
+      own audience.
+    fits:
+      business_types: [hardware, creator_media, ecommerce]
+      business_models: [one_time]
+    stages: [pre_launch, launch]
+    objective: conversion
+    effort: high
+    cost: medium
+    signal_days: 30
+    tailor_questions:
+      - How many supporters are ready to back on the first day?
+      - Are production costs and timelines known well enough to promise dates?
+      - Which reward tiers protect margin after fees and shipping?
+    channel_types: [website, email, social, video]
+    kpis: [first-day funding share, backers, funds raised versus goal]
+
+  - key: awards-and-lists
+    category: launches_pr
+    name: Awards, rankings and industry lists
+    summary: >-
+      Track the industry awards, "best of" lists and rankings that buyers in
+      the niche pay attention to, and submit strong, evidence-based entries
+      with customer quotes and metrics before their deadlines.
+    why_it_works: >-
+      Third-party recognition is a credible trust signal for prospects, and a
+      win or listing is reusable on the website, in sales decks and in
+      announcements.
+    fits:
+      business_types: [b2b_saas, agency_services, local_business, ecommerce, hardware]
+    stages: [growth, scale]
+    objective: awareness
+    effort: low
+    cost: low
+    signal_days: 90
+    tailor_questions:
+      - Which awards or lists do buyers in this market actually notice?
+      - What evidence (metrics, customer quotes) can support an entry?
+      - Who keeps track of submission deadlines?
+    channel_types: [press, website]
+    kpis: [submissions, awards or listings won, use of awards in won deals]
+
+  - key: expert-commentary-on-news
+    category: launches_pr
+    name: Expert commentary on industry news
+    summary: >-
+      When news breaks in the industry, publish a fast, thoughtful take from
+      the founder or an expert within a day, and offer it to reporters
+      covering the story as a source.
+    why_it_works: >-
+      Reporters need informed sources quickly, and audiences look for
+      interpretation when news breaks. Being consistently fast and insightful
+      makes the business the go-to voice.
+    fits:
+      business_types: [b2b_saas, developer_tools, agency_services, creator_media]
+    stages: [early_traction, growth, scale]
+    objective: awareness
+    effort: low
+    cost: free
+    signal_days: 14
+    tailor_questions:
+      - Which kinds of news does the founder have a genuinely informed view on?
+      - How quickly can a take be written and approved?
+      - Which reporters cover these topics regularly?
+    channel_types: [press, blog, social]
+    kpis: [quotes in coverage, views of commentary posts, reporter relationships]
