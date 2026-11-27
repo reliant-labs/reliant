@@ -1105,9 +1105,12 @@ func (a *WorkflowStatusActivity) trackAnalytics(ctx context.Context, input Workf
 		presets = selectedPresetNames(chat.SelectedPresets)
 	}
 
-	var projectID string
+	// The origin is read off the chat just loaded; a failed load sends
+	// unknown (an empty Origin) rather than failing the status update.
+	var projectID, origin string
 	if chat != nil {
 		projectID = chat.ProjectID
+		origin = core.ChatOriginLabel(chat.Origin)
 	}
 
 	metrics := analytics.WorkflowMetrics{
@@ -1120,6 +1123,7 @@ func (a *WorkflowStatusActivity) trackAnalytics(ctx context.Context, input Workf
 		Presets:      presets,
 		PresetTypes:  classifyPresetTypes(presets),
 		IsChild:      isChild,
+		Origin:       origin,
 	}
 
 	trackerFor := a.trackerFor

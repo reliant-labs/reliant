@@ -13,6 +13,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/analytics"
 	"github.com/reliant-labs/reliant/internal/chatproto"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/launch"
 	"github.com/reliant-labs/reliant/internal/logging"
 	rtemporal "github.com/reliant-labs/reliant/internal/temporal"
@@ -229,6 +230,10 @@ func (s *Service) trackMessageSent(ctx context.Context, userID string, chat *db.
 		}
 	}
 
+	// Who started the chat, from the row the caller already loaded: tells a
+	// person's chat from a run (automation, agent, CLI, ...).
+	origin := core.ChatOriginLabel(chat.Origin)
+
 	// Check if this is the first message in the chat by counting existing user messages
 	isFirstInChat := false
 	if threadID != "" {
@@ -248,6 +253,7 @@ func (s *Service) trackMessageSent(ctx context.Context, userID string, chat *db.
 		WorkflowName:   workflowName,
 		WorkflowType:   workflowType,
 		IsFirstInChat:  isFirstInChat,
+		Origin:         origin,
 	}
 	if chat.WorkflowID != nil {
 		metrics.WorkflowID = *chat.WorkflowID
@@ -285,6 +291,7 @@ func (s *Service) trackMessageSent(ctx context.Context, userID string, chat *db.
 			WorkflowName: workflowName,
 			WorkflowType: workflowType,
 			FirstForUser: firstForUser,
+			Origin:       origin,
 		})
 	}
 }
