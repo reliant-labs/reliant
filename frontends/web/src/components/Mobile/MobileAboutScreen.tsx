@@ -43,7 +43,7 @@ export function MobileAboutScreen({ onBack }: { onBack: () => void }) {
                 href={link.href}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex min-h-[44px] items-center justify-between border-b border-border px-4 py-3 text-sm text-foreground/80 last:border-b-0 active:bg-foreground/5"
+                className="flex min-h-[44px] items-center justify-between border-b border-border px-4 py-3 text-ui text-foreground/80 last:border-b-0 active:bg-foreground/5"
               >
                 <span className="flex items-center gap-3">
                   <link.icon className="h-4 w-4 text-muted-foreground" />
@@ -55,7 +55,7 @@ export function MobileAboutScreen({ onBack }: { onBack: () => void }) {
           </MobileCardGroup>
         </div>
 
-        <p className="mt-8 text-xs text-muted-foreground/60">
+        <p className="mt-8 text-meta text-muted-foreground/60">
           © {new Date().getFullYear()} Reliant Labs
         </p>
       </div>

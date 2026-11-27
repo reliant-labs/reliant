@@ -11,7 +11,7 @@
  */
 
 import type { Transport } from "@connectrpc/connect";
-import { create } from "@bufbuild/protobuf";
+import { create, type MessageInitShape } from "@bufbuild/protobuf";
 import { DurationSchema, TimestampSchema, type Duration, type Timestamp } from "@bufbuild/protobuf/wkt";
 
 import { DeliveryInsightsService, type ReleaseMarker as WirePromotion } from "@/gen/controlplane/services/delivery_insights/v1/delivery_insights_pb";
@@ -19,14 +19,15 @@ import {
   ObservabilityService,
   ReleaseFindingCode as WireFindingCode,
   ReleaseVerdict as WireVerdict,
+  type GetReleaseHealthRequestSchema,
   type GetReleaseHealthResponse,
   type ServiceWindowStats as WireWindowStats,
   type TimeRange as WireTimeRange,
 } from "@/gen/controlplane/services/observability/v1/observability_pb";
 
 import { getControlPlaneClient } from "../client";
-import { obsClient } from "./obsClient";
-import { msOf } from "./api";
+import { obsCall } from "./obsInterceptors";
+import { msOf, relativeWindow, wireTimeRange } from "./api";
 import {
   RELEASES_LIMIT,
   type DeliveryScope,
@@ -216,16 +217,19 @@ export function mapReleaseHealth(res: GetReleaseHealthResponse): ReleaseHealth {
 /**
  * The server's verdict on one promotion into one environment (the current one
  * when `promotionId` is absent). The scope must name exactly one environment;
- * the windows come from the promotion, so no time range is sent.
+ * the windows come from the promotion, so no real time range is sent.
  */
-export async function getReleaseHealth(req: ReleaseHealthRequest, options: { signal?: AbortSignal } = {}, transport?: Transport): Promise<ReleaseHealth> {
-  const now = Date.now();
-  const res = await obsClient(ObservabilityService, transport).getReleaseHealth({
+export function releaseHealthRequest(req: ReleaseHealthRequest): MessageInitShape<typeof GetReleaseHealthRequestSchema> {
+  return {
     // time_range is required on every QueryScope and ignored here (the
-    // promotion decides the windows): the last minute satisfies the validator.
-    scope: { ...wireDeliveryScope(req, { startMs: now - 60_000, endMs: now }), services: [], filters: [] },
+    // promotion decides the windows): the last minute, relative to the
+    // server's clock so the request (and its cache key) never moves, satisfies the validator.
+    scope: { orgId: req.orgId, projectId: req.projectId || undefined, envIds: req.envIds, services: [], filters: [], timeRange: wireTimeRange(relativeWindow(60_000)) },
     subject: req.promotionId ? { case: "promotionId", value: req.promotionId } : { case: undefined },
     window: req.windowMs ? duration(req.windowMs) : undefined,
-  }, options);
-  return mapReleaseHealth(res);
+  };
+}
+
+export async function getReleaseHealth(req: ReleaseHealthRequest, options: { signal?: AbortSignal } = {}, transport?: Transport): Promise<ReleaseHealth> {
+  return mapReleaseHealth(await getControlPlaneClient(ObservabilityService, transport).getReleaseHealth(releaseHealthRequest(req), obsCall(options)));
 }

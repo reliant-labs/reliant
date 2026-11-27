@@ -296,6 +296,7 @@ func ptrValue(s *string) string {
 // This activity executes multiple tool calls in parallel and returns all results
 type ExecuteToolsActivity struct {
 	repo         ExecuteToolsStore
+	updates      UserRefetcher
 	preemption   MailboxPreempter
 	rows         WorkspaceRows
 	toolCalls    ToolCalls
@@ -326,6 +327,13 @@ type ExecuteToolsActivity struct {
 	// usage records each call in the tool usage ledger. Set by
 	// WithToolUsage; nil records nothing.
 	usage ToolUsageRecorder
+}
+
+// WithUpdates sets what tells the owner's clients a workspace changed; nil
+// announces nothing.
+func (a *ExecuteToolsActivity) WithUpdates(u UserRefetcher) *ExecuteToolsActivity {
+	a.updates = u
+	return a
 }
 
 // WithToolUsage gives the tool-execution path the tool usage ledger, which
@@ -2092,7 +2100,10 @@ func (a *ExecuteToolsActivity) emitWorktreeRefetch(ctx context.Context, tec *too
 		projectPtr = &tec.project.ID
 	}
 
-	err := a.repo.EmitUserRefetch(ctx, tec.chat.UserID, db.RefetchWorktreeChanges, db.RefetchOpts{
+	if a.updates == nil {
+		return
+	}
+	err := a.updates.EmitUserRefetch(ctx, tec.chat.UserID, db.RefetchWorktreeChanges, db.RefetchOpts{
 		ProjectID:  projectPtr,
 		WorktreeID: worktreePtr,
 	})

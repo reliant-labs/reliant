@@ -604,8 +604,8 @@ the commit's `Release gate` job on Actions (the train's fallback, ci.yml
 dispatched at the RC branch, which publishes no note off main).
 
 The RC tag is `rc/…`, **not** `vX.Y.Z-rc.N`. A `v*.*.*` tag push runs
-`Release Electron App` (publishing to the alpha channel, a GitHub Release
-and a Homebrew tap dispatch) and `Build & Push Image`, for a commit nobody has
+`Release Electron App` (which now refuses a prerelease tag: the alpha
+channel is retired) and `Build & Push Image`, for a commit nobody has
 gated yet. Two `v*` tags on one commit would also make
 `scripts/release-identity.sh`'s `describe --exact-match` ambiguous. The
 `release/` branch and the `rc/` tag trigger no workflow.
