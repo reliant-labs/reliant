@@ -53,7 +53,6 @@ type Service interface {
 	UpdateCheckRun(ctx context.Context, repo ghport.Repo, id int64, in ghport.UpdateCheckRun) (ghport.CheckRun, error)
 	ListCheckRuns(ctx context.Context, repo ghport.Repo, sha string, opts ghport.ListCheckRuns) ([]ghport.CheckRun, error)
 
-	GetContents(ctx context.Context, repo ghport.Repo, path, ref string) ([]byte, error)
 	GetCommit(ctx context.Context, repo ghport.Repo, sha string) (ghport.Commit, error)
 	CreateCommit(ctx context.Context, repo ghport.Repo, in ghport.NewCommit) (ghport.Commit, error)
 
