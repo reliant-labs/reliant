@@ -225,7 +225,7 @@ export function RaiseCoverageButton({
     const reads: Promise<FileCoverage>[] = [];
     for (const path of paths) {
       reads.push(
-        client.fetchQuery(testsServiceQueries.getFileCoverage(fileCoverageRequest({ orgId, project, target, path }), { staleTime: SETTLED_MS })).then(fileCoverageOf)
+        client.fetchQuery(onControlPlane(testsServiceQueries.getFileCoverage(fileCoverageRequest({ orgId, project, target, path }), { staleTime: SETTLED_MS }))).then(fileCoverageOf)
       );
     }
     const files = await Promise.all(reads);
