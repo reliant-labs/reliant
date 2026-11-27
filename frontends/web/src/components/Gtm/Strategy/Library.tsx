@@ -75,6 +75,25 @@ function matches(e: GtmStrategyLibraryEntry, q: string, category: GtmStrategyCat
   return !needle || e.name.toLowerCase().includes(needle) || e.summaryMd.toLowerCase().includes(needle);
 }
 
+/** Words a facet value keeps as written: acronyms. */
+const ACRONYMS = new Set(["api", "ai", "b2b", "b2c", "b2b2c", "d2c", "dtc", "pr", "seo", "smb", "saas", "ugc", "abm", "plg", "gtm"]);
+const ACRONYM_CASE: Record<string, string> = { saas: "SaaS" };
+const PHRASES: Record<string, string> = { pre_launch: "Pre-launch", prelaunch: "Pre-launch", post_launch: "Post-launch" };
+
+/**
+ * A facet value as a person reads it. The library's vocabularies are free
+ * strings, often enum-shaped: "DEVELOPER_TOOLS" → "Developer tools",
+ * "PRE_LAUNCH" → "Pre-launch", "B2B" stays "B2B", "low" → "Low".
+ */
+export function humanize(value: string): string {
+  const key = value.trim().toLowerCase();
+  if (PHRASES[key]) return PHRASES[key];
+  const words = key.split(/[\s_-]+/).filter(Boolean);
+  return words
+    .map((w, i) => (ACRONYMS.has(w) ? (ACRONYM_CASE[w] ?? w.toUpperCase()) : i === 0 ? w.charAt(0).toUpperCase() + w.slice(1) : w))
+    .join(" ");
+}
+
 /** The library's own values for a facet, sorted. */
 const valuesOf = (entries: GtmStrategyLibraryEntry[], pick: (e: GtmStrategyLibraryEntry) => string[]) =>
   [...new Set(entries.flatMap(pick).filter(Boolean))].sort((a, b) => a.localeCompare(b));
@@ -111,7 +130,7 @@ function FacetSelect({ label, any, value, values, count, onChange }: { label: st
       <option value="">{any}</option>
       {values.map((v) => (
         <option key={v} value={v}>
-          {v} ({count(v)})
+          {label}: {humanize(v)} ({count(v)})
         </option>
       ))}
     </select>
@@ -121,11 +140,12 @@ function FacetSelect({ label, any, value, values, count, onChange }: { label: st
 export function LibraryView({ onStarted }: { onStarted: (strategyId: string) => void }) {
   const orgId = useGtmOrgId();
   const libraryQ = useListStrategyLibraryInfinite({ orgId, pageSize: LIBRARY_PAGE }, { enabled: !!orgId });
-  const { hasNextPage, isFetchingNextPage, fetchNextPage } = libraryQ;
+  const { hasNextPage, isFetchingNextPage, isFetchNextPageError, fetchNextPage } = libraryQ;
   // The whole library, page after page: the filters below work over all of it.
+  // A page that fails stops the walk (no retry loop); the page says so and offers a retry.
   useEffect(() => {
-    if (hasNextPage && !isFetchingNextPage) void fetchNextPage();
-  }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
+    if (hasNextPage && !isFetchingNextPage && !isFetchNextPageError) void fetchNextPage();
+  }, [hasNextPage, isFetchingNextPage, isFetchNextPageError, fetchNextPage]);
   const library = useMemo(() => libraryQ.data?.pages.flatMap((p) => p.entries) ?? [], [libraryQ.data]);
 
   const [q, setQ] = useState("");
@@ -190,7 +210,7 @@ export function LibraryView({ onStarted }: { onStarted: (strategyId: string) => 
       </div>
       {libraryQ.isPending ? (
         <SkeletonLoader variant="card" count={2} />
-      ) : libraryQ.isError ? (
+      ) : libraryQ.isError && library.length === 0 ? (
         <EmptyState title="Couldn't load the library" description="Something went wrong reading it." actionLabel="Try again" onAction={() => void libraryQ.refetch()} />
       ) : library.length === 0 ? (
         <EmptyState title="No library yet" description="Your org has not imported a strategy library. A person imports one with an access token; it shows here." />
@@ -199,6 +219,14 @@ export function LibraryView({ onStarted }: { onStarted: (strategyId: string) => 
           <p className="text-xs text-ink-muted" aria-live="polite">
             {rows.length} of {library.length} entries
           </p>
+          {isFetchNextPageError && (
+            <p className="flex flex-wrap items-center gap-2 text-sm text-ink-muted" role="alert" data-testid="gtm-library-partial">
+              The rest of the library could not be read, so these are only part of it.
+              <Button variant="ghost" size="xs" onClick={() => void fetchNextPage()}>
+                Try again
+              </Button>
+            </p>
+          )}
           {rows.length === 0 ? (
             <EmptyState title="Nothing matches" description="Try another category, or clear the filters." />
           ) : (
@@ -218,6 +246,16 @@ export function LibraryView({ onStarted }: { onStarted: (strategyId: string) => 
   );
 }
 
+/** An entry's facets, labelled: "Stage: Early", "Cost: Medium", "Difficulty: Medium", "Fits: B2B, Developer tools". */
+export function entryFacets(entry: Pick<GtmStrategyLibraryEntry, "stage" | "cost" | "difficulty" | "fits">): string[] {
+  return [
+    entry.stage && `Stage: ${humanize(entry.stage)}`,
+    entry.cost && `Cost: ${humanize(entry.cost)}`,
+    entry.difficulty && `Difficulty: ${humanize(entry.difficulty)}`,
+    entry.fits.length > 0 && `Fits: ${entry.fits.map(humanize).join(", ")}`,
+  ].filter(Boolean) as string[];
+}
+
 function LibraryCard({ entry, onUse }: { entry: GtmStrategyLibraryEntry; onUse: () => void }) {
   const facts = [entry.hours ? `~${entry.hours} h` : "", entry.northStar].filter(Boolean).join(" · ");
   return (
@@ -230,8 +268,8 @@ function LibraryCard({ entry, onUse }: { entry: GtmStrategyLibraryEntry; onUse: 
       <h3 className="mt-1 text-sm font-semibold text-ink">{entry.name}</h3>
       {entry.summaryMd && <p className="mt-1 line-clamp-4 whitespace-pre-wrap text-sm text-ink-muted">{entry.summaryMd}</p>}
       <div className="mt-3 flex flex-wrap gap-1.5">
-        {[entry.stage, entry.cost, entry.difficulty, ...entry.fits].filter(Boolean).map((t, i) => (
-          <Tag key={`${t}-${i}`}>{t}</Tag>
+        {entryFacets(entry).map((t) => (
+          <Tag key={t}>{t}</Tag>
         ))}
       </div>
       <div className="mt-auto flex flex-wrap items-center justify-between gap-2 pt-4">
@@ -336,10 +374,17 @@ function PruneBanner({ request }: { request: GtmLibraryPruneRequest }) {
   const orgId = useGtmOrgId();
   const queryClient = useQueryClient();
   const [showAll, setShowAll] = useState(false);
+  const [confirming, setConfirming] = useState(false);
   const onError = (e: unknown) => reportGtmWriteError(queryClient, e);
   const confirm = useConfirmLibraryPrune({
-    onSuccess: (r) => toast.success(`Removed ${r.removed} ${r.removed === 1 ? "entry" : "entries"} from the library.`),
-    onError,
+    onSuccess: (r) => {
+      setConfirming(false);
+      toast.success(`Removed ${r.removed} ${r.removed === 1 ? "entry" : "entries"} from the library.`);
+    },
+    onError: (e) => {
+      setConfirming(false);
+      onError(e);
+    },
   });
   const cancel = useCancelLibraryPrune({ onSuccess: () => toast.success("Prune cancelled. Nothing was removed."), onError });
   const keys = showAll ? request.removeKeys : request.removeKeys.slice(0, 8);
@@ -373,13 +418,45 @@ function PruneBanner({ request }: { request: GtmLibraryPruneRequest }) {
         )}
       </ul>
       <div className="mt-3 flex flex-wrap gap-2">
-        <Button variant="danger" size="sm" loading={confirm.isPending} disabled={busy} onClick={() => confirm.mutate({ orgId, requestId: request.id })}>
+        <Button variant="danger" size="sm" disabled={busy} onClick={() => setConfirming(true)} aria-haspopup="dialog">
           Remove them
         </Button>
         <Button variant="secondary" size="sm" loading={cancel.isPending} disabled={busy} onClick={() => cancel.mutate({ orgId, requestId: request.id })}>
           Keep them
         </Button>
       </div>
+      <Modal
+        open={confirming}
+        onClose={() => setConfirming(false)}
+        size="md"
+        sheetOnMobile
+        title={`Remove ${request.removeKeys.length} ${request.removeKeys.length === 1 ? "entry" : "entries"} from the library?`}
+        description="Each key below that is still in the library, and was not imported again since, is removed."
+        footer={
+          <div className="flex w-full justify-end gap-2">
+            <Button variant="secondary" size="sm" onClick={() => setConfirming(false)} disabled={confirm.isPending}>
+              Cancel
+            </Button>
+            <Button variant="danger" size="sm" loading={confirm.isPending} onClick={() => confirm.mutate({ orgId, requestId: request.id })}>
+              Remove {request.removeKeys.length}
+            </Button>
+          </div>
+        }
+      >
+        <div className="space-y-3 text-sm" data-testid="gtm-prune-confirm">
+          <div className="flex items-center gap-2">
+            <PersonOnlyTag />
+            <span className="text-ink-muted">Agents cannot do this.</span>
+          </div>
+          <ul className="max-h-64 space-y-1 overflow-y-auto rounded-md border border-border bg-surface-sunken p-2" aria-label="Every key to remove" tabIndex={0}>
+            {request.removeKeys.map((k) => (
+              <li key={k}>
+                <Mono value={k} copy={false} className="text-xs text-ink" />
+              </li>
+            ))}
+          </ul>
+        </div>
+      </Modal>
     </section>
   );
 }

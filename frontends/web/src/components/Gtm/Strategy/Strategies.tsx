@@ -11,6 +11,7 @@
  * ACTIVE at once.
  */
 
+import { Code } from "@connectrpc/connect";
 import { ArrowLeft, Pencil, Plus } from "lucide-react";
 import { useState } from "react";
 
@@ -133,6 +134,14 @@ export function StrategyDetail({ id }: { id: string }) {
   );
   if (q.isPending) return <SkeletonLoader variant="card" count={2} />;
   const strategy = q.data?.strategy;
+  if (q.isError && q.error.code !== Code.NotFound) {
+    return (
+      <div className="space-y-3">
+        {back}
+        <EmptyState title="Couldn't load this strategy" description="Something went wrong reading it." actionLabel="Try again" onAction={() => void q.refetch()} />
+      </div>
+    );
+  }
   if (!strategy) {
     return (
       <div className="space-y-3">
@@ -201,7 +210,8 @@ export function StrategyDetail({ id }: { id: string }) {
         )}
         {q.data?.truncated && <p className="text-xs text-ink-muted">Showing the first 200 campaigns.</p>}
       </section>
-      {editing && <StrategyForm strategy={strategy} onClose={() => setEditing(false)} />}
+      {/* Keyed on the revision: when a conflict re-reads the strategy, the form starts again from the current version. */}
+      {editing && <StrategyForm key={`${strategy.id}@${strategy.revision}`} strategy={strategy} onClose={() => setEditing(false)} />}
     </div>
   );
 }
@@ -252,23 +262,32 @@ function StrategyForm({ strategy, onClose, onSaved }: { strategy?: GtmStrategy; 
   const updateS = useUpdateStrategy({ onSuccess: (r) => done(r.strategy?.id), onError });
   const busy = createS.isPending || updateS.isPending;
   const badPeriod = start !== "" && end !== "" && end < start;
-  const categoryField = category === GtmStrategyCategory.UNSPECIFIED ? {} : { category };
 
   function save() {
     if (!strategy) {
-      createS.mutate({ orgId, name: name.trim(), goalMd: goal, targetMetric: target, periodStart: start, periodEnd: end, ...categoryField });
+      createS.mutate({
+        orgId,
+        name: name.trim(),
+        goalMd: goal,
+        targetMetric: target,
+        periodStart: start,
+        periodEnd: end,
+        ...(category === GtmStrategyCategory.UNSPECIFIED ? {} : { category }),
+      });
       return;
     }
+    // Only what changed, on the revision this form was opened on. A category
+    // set back to "No category" is sent as UNSPECIFIED, which clears it.
     updateS.mutate({
       orgId,
       id: strategy.id,
       expectedRevision: strategy.revision,
-      name: name.trim(),
-      goalMd: goal,
-      targetMetric: target,
-      periodStart: start,
-      periodEnd: end,
-      ...categoryField,
+      ...(name.trim() !== strategy.name ? { name: name.trim() } : {}),
+      ...(goal !== strategy.goalMd ? { goalMd: goal } : {}),
+      ...(target !== strategy.targetMetric ? { targetMetric: target } : {}),
+      ...(start !== strategy.periodStart ? { periodStart: start } : {}),
+      ...(end !== strategy.periodEnd ? { periodEnd: end } : {}),
+      ...(category !== strategy.category ? { category } : {}),
     });
   }
 
