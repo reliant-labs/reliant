@@ -927,7 +927,7 @@ const SURFACES: Surface[] = [
     name: 'shell-sandboxes-dashboard',
     path: '/forge/p/shop/observability/dashboards/release/sandboxes',
     on: ['desktop'],
-    ready: (page) => page.getByText('Self-hosted sandboxes: memory available').first(),
+    ready: (page) => page.getByText('Noisiest sandboxes', { exact: true }).first(),
     beforeShot: fitViewportToContent,
     harness: { overlays: ['sandboxes-dashboard'] },
   },
