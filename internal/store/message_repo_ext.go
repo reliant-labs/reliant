@@ -495,6 +495,9 @@ func CountMessagesInChatOutsideThread(ctx context.Context, db orm.Context, chatI
 // row and claim nothing, and since the row references no message, deleting
 // the user's history cannot reset it.
 func ClaimUserActivation(ctx context.Context, db orm.Context, userID, chatID, messageID string) (bool, error) {
+	if userID == "" || chatID == "" || messageID == "" {
+		return false, fmt.Errorf("user, chat and message IDs are required")
+	}
 	role := int32(reliantv1.MessageRole_MESSAGE_ROLE_USER)
 	auto, agent := int32(core.ChatOriginAutomation), int32(core.ChatOriginAgent)
 	var claimed []string

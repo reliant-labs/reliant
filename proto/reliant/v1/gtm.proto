@@ -114,10 +114,12 @@ service GtmService {
   // ListChannels lists the org's channels by key. An allowlisted org with no
   // channel yet is given the default set on its first List or Get (blog,
   // email, hacker-news, reddit, linkedin, x, youtube), each with a small
-  // generic channel_types set: a write, so the rpc is IDEMPOTENT rather than
-  // side-effect free. connection_state is computed per caller.
+  // generic channel_types set. That seed is the read's only write: it is
+  // idempotent (ON CONFLICT DO NOTHING) and leaves the org as any first read
+  // would, so the rpc is a read (NO_SIDE_EFFECTS) that a client may cache or
+  // retry. connection_state is computed per caller.
   rpc ListChannels(ListChannelsRequest) returns (ListChannelsResponse) {
-    option idempotency_level = IDEMPOTENT;
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {
       auth_required: true
       activity: {none: "read-only (the first read seeds the default channels, idempotently)"}
@@ -126,7 +128,7 @@ service GtmService {
 
   // GetChannel returns one channel (seeding the defaults as ListChannels does).
   rpc GetChannel(GetChannelRequest) returns (GetChannelResponse) {
-    option idempotency_level = IDEMPOTENT;
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {
       auth_required: true
       activity: {none: "read-only (the first read seeds the default channels, idempotently)"}
@@ -1085,7 +1087,9 @@ message GtmChannel {
 message GtmChannelTypeList {
   repeated string types = 1 [(buf.validate.field).repeated = {
     max_items: 32
-    items: {string: {pattern: "^[a-z0-9-]{1,32}$"}}
+    items: {
+      string: {pattern: "^[a-z0-9-]{1,32}$"}
+    }
   }];
 }
 
@@ -1574,7 +1578,9 @@ message CreateChannelRequest {
   }];
   repeated string channel_types = 9 [(buf.validate.field).repeated = {
     max_items: 32
-    items: {string: {pattern: "^[a-z0-9-]{1,32}$"}}
+    items: {
+      string: {pattern: "^[a-z0-9-]{1,32}$"}
+    }
   }];
 }
 
@@ -1780,7 +1786,9 @@ message ImportStrategyLibraryRequest {
   // in it (InvalidArgument otherwise). Ignored without prune.
   repeated string all_keys = 5 [(buf.validate.field).repeated = {
     max_items: 5000
-    items: {string: {pattern: "^[a-z0-9][a-z0-9_-]{0,127}$"}}
+    items: {
+      string: {pattern: "^[a-z0-9][a-z0-9_-]{0,127}$"}
+    }
   }];
 }
 

@@ -73,6 +73,7 @@
         "PauseService",
         "PayloadGC",
         "PayloadStore",
+        "Pipeline",
         "Plan",
         "Preset",
         "Privacy",
@@ -92,6 +93,7 @@
         "RepoUpdateFeed",
         "ResetGuard",
         "Run",
+        "RunLifecycle",
         "Scenario",
         "ScheduleSyncer",
         "Seatmatch",
@@ -296,6 +298,13 @@
         {
           "component": "PackageCommands",
           "service": "reliant.v1.PackageCommandsService",
+          "route_set": "UserRoutes",
+          "audience": "user",
+          "resolution": "declared_route_set"
+        },
+        {
+          "component": "Pipeline",
+          "service": "reliant.v1.PipelineService",
           "route_set": "UserRoutes",
           "audience": "user",
           "resolution": "declared_route_set"
@@ -539,6 +548,7 @@
         "IntegrationsWriteledger",
         "LedgerRetention",
         "MachineController",
+        "MergeQueue",
         "NATSConn",
         "OrgMoves",
         "OrgPolicyResolver",
@@ -553,6 +563,7 @@
         "Projectaccess",
         "Projectpurge",
         "Providerbackoff",
+        "RecordDueScanner",
         "RecordOnlyChecks",
         "RemoteExecutor",
         "RepoUpdateFeed",
@@ -1891,7 +1902,7 @@
           "output": "reliant.v1.ListOrphanedAutomationsResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -1901,7 +1912,7 @@
           "output": "reliant.v1.ListTriggerOffersResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -1930,7 +1941,8 @@
             "AuthRequired": true,
             "Errors": null,
             "Custom": true,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.ListOrphanedAutomationsRequest",
             "OutputTypeFQ": "reliant.v1.ListOrphanedAutomationsResponse",
             "InputProtoFile": "reliant/v1/automation_takeover.proto",
@@ -1990,7 +2002,8 @@
             "AuthRequired": true,
             "Errors": null,
             "Custom": true,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.ListTriggerOffersRequest",
             "OutputTypeFQ": "reliant.v1.ListTriggerOffersResponse",
             "InputProtoFile": "reliant/v1/automation_takeover.proto",
@@ -2347,6 +2360,12 @@
               "kind": "string"
             }
           ],
+          "reliant.v1.RecordDueSource": [
+            {
+              "name": "table",
+              "kind": "string"
+            }
+          ],
           "reliant.v1.RevokeTriggerOfferRequest": [
             {
               "name": "offer_id",
@@ -2520,6 +2539,12 @@
               "name": "workflow_event",
               "kind": "message",
               "type_name": "reliant.v1.WorkflowEventSource",
+              "oneof": "source"
+            },
+            {
+              "name": "record_due",
+              "kind": "message",
+              "type_name": "reliant.v1.RecordDueSource",
               "oneof": "source"
             },
             {
@@ -3003,6 +3028,7 @@
           "reliant.v1.ListTriggerOffersResponse": "reliant/v1/automation_takeover.proto",
           "reliant.v1.OrphanedTrigger": "reliant/v1/automation_takeover.proto",
           "reliant.v1.OrphanedWorkflow": "reliant/v1/automation_takeover.proto",
+          "reliant.v1.RecordDueSource": "reliant/v1/trigger.proto",
           "reliant.v1.RevokeTriggerOfferRequest": "reliant/v1/automation_takeover.proto",
           "reliant.v1.RevokeTriggerOfferResponse": "reliant/v1/automation_takeover.proto",
           "reliant.v1.ScheduleSource": "reliant/v1/trigger.proto",
@@ -3055,7 +3081,8 @@
             "TRIGGER_EVENT_KIND_INTEGRATION",
             "TRIGGER_EVENT_KIND_WORKFLOW_EVENT",
             "TRIGGER_EVENT_KIND_MANUAL_RUN",
-            "TRIGGER_EVENT_KIND_CLI_RUN"
+            "TRIGGER_EVENT_KIND_CLI_RUN",
+            "TRIGGER_EVENT_KIND_RECORD_DUE"
           ],
           "reliant.v1.TriggerEventOutcome": [
             "TRIGGER_EVENT_OUTCOME_UNSPECIFIED",
@@ -3130,7 +3157,8 @@
             6,
             7,
             8,
-            9
+            9,
+            10
           ],
           "reliant.v1.TriggerEventOutcome": [
             0,
@@ -3770,7 +3798,7 @@
           "output": "reliant.v1.ListInputOptionsResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -4000,7 +4028,8 @@
             "ServerStreaming": false,
             "AuthRequired": true,
             "Errors": null,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.ListInputOptionsRequest",
             "OutputTypeFQ": "reliant.v1.ListInputOptionsResponse",
             "InputProtoFile": "reliant/v1/catalog.proto",
@@ -15255,7 +15284,7 @@
           "output": "reliant.v1.GetFileContentResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -15265,7 +15294,7 @@
           "output": "reliant.v1.GetFileMetadataResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -15275,7 +15304,7 @@
           "output": "reliant.v1.GetFilePreviewResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -15285,7 +15314,7 @@
           "output": "reliant.v1.GetFilePreviewInfoResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -15295,7 +15324,7 @@
           "output": "reliant.v1.GetFileTreeResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -15305,7 +15334,7 @@
           "output": "reliant.v1.ListDirectoryResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -15335,7 +15364,7 @@
           "output": "reliant.v1.SearchFilesResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         }
       ],
@@ -15353,7 +15382,8 @@
             "ServerStreaming": false,
             "AuthRequired": true,
             "Errors": null,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.GetFileTreeRequest",
             "OutputTypeFQ": "reliant.v1.GetFileTreeResponse",
             "InputProtoFile": "reliant/v1/filesystem.proto",
@@ -15370,7 +15400,8 @@
             "ServerStreaming": false,
             "AuthRequired": true,
             "Errors": null,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.GetFileContentRequest",
             "OutputTypeFQ": "reliant.v1.GetFileContentResponse",
             "InputProtoFile": "reliant/v1/filesystem.proto",
@@ -15406,7 +15437,8 @@
             "ServerStreaming": false,
             "AuthRequired": true,
             "Errors": null,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.GetFileMetadataRequest",
             "OutputTypeFQ": "reliant.v1.GetFileMetadataResponse",
             "InputProtoFile": "reliant/v1/filesystem.proto",
@@ -15423,7 +15455,8 @@
             "ServerStreaming": false,
             "AuthRequired": true,
             "Errors": null,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.GetFilePreviewInfoRequest",
             "OutputTypeFQ": "reliant.v1.GetFilePreviewInfoResponse",
             "InputProtoFile": "reliant/v1/filesystem.proto",
@@ -15440,7 +15473,8 @@
             "ServerStreaming": false,
             "AuthRequired": true,
             "Errors": null,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.GetFilePreviewRequest",
             "OutputTypeFQ": "reliant.v1.GetFilePreviewResponse",
             "InputProtoFile": "reliant/v1/filesystem.proto",
@@ -15514,7 +15548,8 @@
             "ServerStreaming": false,
             "AuthRequired": true,
             "Errors": null,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.SearchFilesRequest",
             "OutputTypeFQ": "reliant.v1.SearchFilesResponse",
             "InputProtoFile": "reliant/v1/filesystem.proto",
@@ -15550,7 +15585,8 @@
             "ServerStreaming": false,
             "AuthRequired": true,
             "Errors": null,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.ListDirectoryRequest",
             "OutputTypeFQ": "reliant.v1.ListDirectoryResponse",
             "InputProtoFile": "reliant/v1/filesystem.proto",
@@ -16951,7 +16987,7 @@
           "output": "reliant.v1.GetForgeEnvShapeResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -16961,7 +16997,7 @@
           "output": "reliant.v1.GetForgeEnvStatusResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -16971,7 +17007,7 @@
           "output": "reliant.v1.GetForgeTopologyResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -16981,7 +17017,7 @@
           "output": "reliant.v1.ListForgeSecretsResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -17049,7 +17085,8 @@
             "ServerStreaming": false,
             "AuthRequired": true,
             "Errors": null,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.GetForgeTopologyRequest",
             "OutputTypeFQ": "reliant.v1.GetForgeTopologyResponse",
             "InputProtoFile": "reliant/v1/forge.proto",
@@ -17085,7 +17122,8 @@
             "ServerStreaming": false,
             "AuthRequired": true,
             "Errors": null,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.ListForgeSecretsRequest",
             "OutputTypeFQ": "reliant.v1.ListForgeSecretsResponse",
             "InputProtoFile": "reliant/v1/forge.proto",
@@ -17102,7 +17140,8 @@
             "ServerStreaming": false,
             "AuthRequired": true,
             "Errors": null,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.GetForgeEnvStatusRequest",
             "OutputTypeFQ": "reliant.v1.GetForgeEnvStatusResponse",
             "InputProtoFile": "reliant/v1/forge.proto",
@@ -17119,7 +17158,8 @@
             "ServerStreaming": false,
             "AuthRequired": true,
             "Errors": null,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.GetForgeEnvShapeRequest",
             "OutputTypeFQ": "reliant.v1.GetForgeEnvShapeResponse",
             "InputProtoFile": "reliant/v1/forge.proto",
@@ -18408,7 +18448,7 @@
           "output": "reliant.v1.GetChannelResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "IDEMPOTENT",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -18508,7 +18548,7 @@
           "output": "reliant.v1.ListChannelsResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "IDEMPOTENT",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -18798,7 +18838,8 @@
             "ServerStreaming": false,
             "AuthRequired": true,
             "Errors": null,
-            "Idempotency": "IDEMPOTENT",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.ListChannelsRequest",
             "OutputTypeFQ": "reliant.v1.ListChannelsResponse",
             "InputProtoFile": "reliant/v1/gtm.proto",
@@ -18817,7 +18858,8 @@
             "ServerStreaming": false,
             "AuthRequired": true,
             "Errors": null,
-            "Idempotency": "IDEMPOTENT",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.GetChannelRequest",
             "OutputTypeFQ": "reliant.v1.GetChannelResponse",
             "InputProtoFile": "reliant/v1/gtm.proto",
@@ -26008,7 +26050,7 @@
           "output": "reliant.v1.GetServerToolsResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -26142,7 +26184,8 @@
             "ServerStreaming": false,
             "AuthRequired": true,
             "Errors": null,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.GetServerToolsRequest",
             "OutputTypeFQ": "reliant.v1.GetServerToolsResponse",
             "InputProtoFile": "reliant/v1/mcp.proto",
@@ -30781,6 +30824,560 @@
       }
     },
     {
+      "name": "reliant.v1.PipelineService",
+      "proto_file": "reliant/v1/pipeline.proto",
+      "methods": [
+        {
+          "id": "reliant.v1.PipelineService/EnrolRepository",
+          "name": "EnrolRepository",
+          "input": "reliant.v1.EnrolRepositoryRequest",
+          "output": "reliant.v1.EnrolRepositoryResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "IDEMPOTENT",
+          "auth_required": true
+        },
+        {
+          "id": "reliant.v1.PipelineService/GetPipelineState",
+          "name": "GetPipelineState",
+          "input": "reliant.v1.GetPipelineStateRequest",
+          "output": "reliant.v1.GetPipelineStateResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "NO_SIDE_EFFECTS",
+          "auth_required": true
+        },
+        {
+          "id": "reliant.v1.PipelineService/ListQueue",
+          "name": "ListQueue",
+          "input": "reliant.v1.ListQueueRequest",
+          "output": "reliant.v1.ListQueueResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "NO_SIDE_EFFECTS",
+          "auth_required": true
+        },
+        {
+          "id": "reliant.v1.PipelineService/SetPipelineMode",
+          "name": "SetPipelineMode",
+          "input": "reliant.v1.SetPipelineModeRequest",
+          "output": "reliant.v1.SetPipelineModeResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "UNKNOWN",
+          "auth_required": true
+        }
+      ],
+      "descriptor": {
+        "Name": "PipelineService",
+        "Package": "reliant.v1",
+        "GoPackage": "github.com/reliant-labs/reliant/gen/reliant/v1",
+        "PkgName": "reliantv1",
+        "Methods": [
+          {
+            "Name": "EnrolRepository",
+            "InputType": "EnrolRepositoryRequest",
+            "OutputType": "EnrolRepositoryResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "Idempotency": "IDEMPOTENT",
+            "InputTypeFQ": "reliant.v1.EnrolRepositoryRequest",
+            "OutputTypeFQ": "reliant.v1.EnrolRepositoryResponse",
+            "InputProtoFile": "reliant/v1/pipeline.proto",
+            "OutputProtoFile": "reliant/v1/pipeline.proto",
+            "Activity": {
+              "Mutating": true,
+              "Declared": true,
+              "Verb": "enrol",
+              "TargetKind": "pipeline_repo",
+              "Writer": "INTERCEPTOR"
+            }
+          },
+          {
+            "Name": "SetPipelineMode",
+            "InputType": "SetPipelineModeRequest",
+            "OutputType": "SetPipelineModeResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "InputTypeFQ": "reliant.v1.SetPipelineModeRequest",
+            "OutputTypeFQ": "reliant.v1.SetPipelineModeResponse",
+            "InputProtoFile": "reliant/v1/pipeline.proto",
+            "OutputProtoFile": "reliant/v1/pipeline.proto",
+            "Activity": {
+              "Mutating": true,
+              "Declared": true,
+              "Verb": "set_mode",
+              "TargetKind": "pipeline_repo",
+              "Writer": "INTERCEPTOR"
+            }
+          },
+          {
+            "Name": "GetPipelineState",
+            "InputType": "GetPipelineStateRequest",
+            "OutputType": "GetPipelineStateResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
+            "InputTypeFQ": "reliant.v1.GetPipelineStateRequest",
+            "OutputTypeFQ": "reliant.v1.GetPipelineStateResponse",
+            "InputProtoFile": "reliant/v1/pipeline.proto",
+            "OutputProtoFile": "reliant/v1/pipeline.proto",
+            "Activity": {
+              "Mutating": false
+            }
+          },
+          {
+            "Name": "ListQueue",
+            "InputType": "ListQueueRequest",
+            "OutputType": "ListQueueResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
+            "InputTypeFQ": "reliant.v1.ListQueueRequest",
+            "OutputTypeFQ": "reliant.v1.ListQueueResponse",
+            "InputProtoFile": "reliant/v1/pipeline.proto",
+            "OutputProtoFile": "reliant/v1/pipeline.proto",
+            "Activity": {
+              "Mutating": false
+            }
+          }
+        ],
+        "ProtoFile": "reliant/v1/pipeline.proto",
+        "ModulePath": "github.com/reliant-labs/reliant",
+        "Messages": {
+          "EnrolRepositoryRequest": [
+            {
+              "Name": "project_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "provider",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "repository",
+              "ProtoType": "string",
+              "IsOptional": false
+            }
+          ],
+          "EnrolRepositoryResponse": [
+            {
+              "Name": "repository",
+              "ProtoType": "message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.PipelineRepository"
+            }
+          ],
+          "GetPipelineStateRequest": [
+            {
+              "Name": "repo_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "repository",
+              "ProtoType": "string",
+              "IsOptional": false
+            }
+          ],
+          "GetPipelineStateResponse": [
+            {
+              "Name": "repository",
+              "ProtoType": "message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.PipelineRepository"
+            },
+            {
+              "Name": "pr_states",
+              "ProtoType": "[]message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.PipelineStateCount"
+            },
+            {
+              "Name": "latest_batches",
+              "ProtoType": "[]message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.PipelineQueueBatch"
+            },
+            {
+              "Name": "main_health",
+              "ProtoType": "message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.PipelineMainHealth"
+            }
+          ],
+          "ListQueueRequest": [
+            {
+              "Name": "repo_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            }
+          ],
+          "ListQueueResponse": [
+            {
+              "Name": "entries",
+              "ProtoType": "[]message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.PipelineQueueEntry"
+            },
+            {
+              "Name": "current_batch",
+              "ProtoType": "message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.PipelineQueueBatch"
+            }
+          ],
+          "SetPipelineModeRequest": [
+            {
+              "Name": "repo_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "mode",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "expected_version",
+              "ProtoType": "int64",
+              "IsOptional": false
+            }
+          ],
+          "SetPipelineModeResponse": [
+            {
+              "Name": "repository",
+              "ProtoType": "message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.PipelineRepository"
+            }
+          ]
+        },
+        "Audience": "user",
+        "Schemas": {
+          "reliant.v1.EnrolRepositoryRequest": [
+            {
+              "name": "project_id",
+              "kind": "string",
+              "validate": {
+                "required": true
+              }
+            },
+            {
+              "name": "provider",
+              "kind": "string"
+            },
+            {
+              "name": "repository",
+              "kind": "string",
+              "validate": {
+                "required": true
+              }
+            }
+          ],
+          "reliant.v1.EnrolRepositoryResponse": [
+            {
+              "name": "repository",
+              "kind": "message",
+              "type_name": "reliant.v1.PipelineRepository"
+            }
+          ],
+          "reliant.v1.GetPipelineStateRequest": [
+            {
+              "name": "repo_id",
+              "kind": "string"
+            },
+            {
+              "name": "repository",
+              "kind": "string"
+            }
+          ],
+          "reliant.v1.GetPipelineStateResponse": [
+            {
+              "name": "repository",
+              "kind": "message",
+              "type_name": "reliant.v1.PipelineRepository"
+            },
+            {
+              "name": "pr_states",
+              "kind": "message",
+              "type_name": "reliant.v1.PipelineStateCount",
+              "repeated": true
+            },
+            {
+              "name": "latest_batches",
+              "kind": "message",
+              "type_name": "reliant.v1.PipelineQueueBatch",
+              "repeated": true
+            },
+            {
+              "name": "main_health",
+              "kind": "message",
+              "type_name": "reliant.v1.PipelineMainHealth"
+            }
+          ],
+          "reliant.v1.ListQueueRequest": [
+            {
+              "name": "repo_id",
+              "kind": "string",
+              "validate": {
+                "required": true
+              }
+            }
+          ],
+          "reliant.v1.ListQueueResponse": [
+            {
+              "name": "entries",
+              "kind": "message",
+              "type_name": "reliant.v1.PipelineQueueEntry",
+              "repeated": true
+            },
+            {
+              "name": "current_batch",
+              "kind": "message",
+              "type_name": "reliant.v1.PipelineQueueBatch"
+            }
+          ],
+          "reliant.v1.PipelineMainHealth": [
+            {
+              "name": "sha",
+              "kind": "string"
+            },
+            {
+              "name": "source",
+              "kind": "string"
+            },
+            {
+              "name": "verdict",
+              "kind": "string"
+            },
+            {
+              "name": "signature",
+              "kind": "string"
+            },
+            {
+              "name": "batch_id",
+              "kind": "string"
+            },
+            {
+              "name": "observed_at",
+              "kind": "message",
+              "type_name": "google.protobuf.Timestamp"
+            }
+          ],
+          "reliant.v1.PipelineQueueBatch": [
+            {
+              "name": "id",
+              "kind": "string"
+            },
+            {
+              "name": "base_sha",
+              "kind": "string"
+            },
+            {
+              "name": "candidate_sha",
+              "kind": "string"
+            },
+            {
+              "name": "kind",
+              "kind": "string"
+            },
+            {
+              "name": "state",
+              "kind": "string"
+            },
+            {
+              "name": "attempt",
+              "kind": "int32"
+            },
+            {
+              "name": "isolation_backend",
+              "kind": "string"
+            },
+            {
+              "name": "gate_runner",
+              "kind": "string"
+            },
+            {
+              "name": "landed_sha",
+              "kind": "string"
+            },
+            {
+              "name": "started_at",
+              "kind": "message",
+              "type_name": "google.protobuf.Timestamp"
+            },
+            {
+              "name": "finished_at",
+              "kind": "message",
+              "type_name": "google.protobuf.Timestamp"
+            }
+          ],
+          "reliant.v1.PipelineQueueEntry": [
+            {
+              "name": "id",
+              "kind": "string"
+            },
+            {
+              "name": "record_id",
+              "kind": "string"
+            },
+            {
+              "name": "number",
+              "kind": "int32"
+            },
+            {
+              "name": "head_sha",
+              "kind": "string"
+            },
+            {
+              "name": "priority",
+              "kind": "int32"
+            },
+            {
+              "name": "enqueued_at",
+              "kind": "message",
+              "type_name": "google.protobuf.Timestamp"
+            },
+            {
+              "name": "batch_id",
+              "kind": "string"
+            },
+            {
+              "name": "state",
+              "kind": "string"
+            }
+          ],
+          "reliant.v1.PipelineRepository": [
+            {
+              "name": "id",
+              "kind": "string"
+            },
+            {
+              "name": "org_id",
+              "kind": "string"
+            },
+            {
+              "name": "project_id",
+              "kind": "string"
+            },
+            {
+              "name": "provider",
+              "kind": "string"
+            },
+            {
+              "name": "account_key",
+              "kind": "string"
+            },
+            {
+              "name": "repository_id",
+              "kind": "string"
+            },
+            {
+              "name": "repository",
+              "kind": "string"
+            },
+            {
+              "name": "base_branch",
+              "kind": "string"
+            },
+            {
+              "name": "mode",
+              "kind": "string"
+            },
+            {
+              "name": "config_sha",
+              "kind": "string"
+            },
+            {
+              "name": "queue_state",
+              "kind": "string"
+            },
+            {
+              "name": "created_by_user_id",
+              "kind": "string"
+            },
+            {
+              "name": "created_at",
+              "kind": "message",
+              "type_name": "google.protobuf.Timestamp"
+            },
+            {
+              "name": "updated_at",
+              "kind": "message",
+              "type_name": "google.protobuf.Timestamp"
+            },
+            {
+              "name": "version",
+              "kind": "int64"
+            }
+          ],
+          "reliant.v1.PipelineStateCount": [
+            {
+              "name": "state",
+              "kind": "string"
+            },
+            {
+              "name": "count",
+              "kind": "int32"
+            }
+          ],
+          "reliant.v1.SetPipelineModeRequest": [
+            {
+              "name": "repo_id",
+              "kind": "string",
+              "validate": {
+                "required": true
+              }
+            },
+            {
+              "name": "mode",
+              "kind": "string"
+            },
+            {
+              "name": "expected_version",
+              "kind": "int64"
+            }
+          ],
+          "reliant.v1.SetPipelineModeResponse": [
+            {
+              "name": "repository",
+              "kind": "message",
+              "type_name": "reliant.v1.PipelineRepository"
+            }
+          ]
+        },
+        "SchemaFiles": {
+          "reliant.v1.EnrolRepositoryRequest": "reliant/v1/pipeline.proto",
+          "reliant.v1.EnrolRepositoryResponse": "reliant/v1/pipeline.proto",
+          "reliant.v1.GetPipelineStateRequest": "reliant/v1/pipeline.proto",
+          "reliant.v1.GetPipelineStateResponse": "reliant/v1/pipeline.proto",
+          "reliant.v1.ListQueueRequest": "reliant/v1/pipeline.proto",
+          "reliant.v1.ListQueueResponse": "reliant/v1/pipeline.proto",
+          "reliant.v1.PipelineMainHealth": "reliant/v1/pipeline.proto",
+          "reliant.v1.PipelineQueueBatch": "reliant/v1/pipeline.proto",
+          "reliant.v1.PipelineQueueEntry": "reliant/v1/pipeline.proto",
+          "reliant.v1.PipelineRepository": "reliant/v1/pipeline.proto",
+          "reliant.v1.PipelineStateCount": "reliant/v1/pipeline.proto",
+          "reliant.v1.SetPipelineModeRequest": "reliant/v1/pipeline.proto",
+          "reliant.v1.SetPipelineModeResponse": "reliant/v1/pipeline.proto"
+        }
+      }
+    },
+    {
       "name": "reliant.v1.PlanService",
       "proto_file": "reliant/v1/plan.proto",
       "methods": [
@@ -32460,7 +33057,7 @@
           "output": "reliant.v1.GetProjectResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -32810,7 +33407,8 @@
             "AuthRequired": true,
             "Errors": null,
             "Custom": true,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.GetProjectRequest",
             "OutputTypeFQ": "reliant.v1.GetProjectResponse",
             "InputProtoFile": "reliant/v1/project.proto",
@@ -40736,7 +41334,7 @@
           "output": "reliant.v1.GetConfigHealthResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -41586,7 +42184,8 @@
             "ServerStreaming": false,
             "AuthRequired": true,
             "Errors": null,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.GetConfigHealthRequest",
             "OutputTypeFQ": "reliant.v1.GetConfigHealthResponse",
             "InputProtoFile": "reliant/v1/settings.proto",
@@ -44358,7 +44957,7 @@
           "output": "reliant.v1.ListSharedWorkflowDraftsResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -44530,7 +45129,8 @@
             "AuthRequired": true,
             "Errors": null,
             "Custom": true,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.ListSharedWorkflowDraftsRequest",
             "OutputTypeFQ": "reliant.v1.ListSharedWorkflowDraftsResponse",
             "InputProtoFile": "reliant/v1/sharing.proto",
@@ -53313,6 +53913,12 @@
               "kind": "string"
             }
           ],
+          "reliant.v1.RecordDueSource": [
+            {
+              "name": "table",
+              "kind": "string"
+            }
+          ],
           "reliant.v1.ReplayCandidate": [
             {
               "name": "event",
@@ -53585,6 +54191,12 @@
               "oneof": "source"
             },
             {
+              "name": "record_due",
+              "kind": "message",
+              "type_name": "reliant.v1.RecordDueSource",
+              "oneof": "source"
+            },
+            {
               "name": "connection_id",
               "kind": "string",
               "optional": true
@@ -53772,6 +54384,12 @@
               "name": "workflow_event",
               "kind": "message",
               "type_name": "reliant.v1.WorkflowEventSource",
+              "oneof": "source"
+            },
+            {
+              "name": "record_due",
+              "kind": "message",
+              "type_name": "reliant.v1.RecordDueSource",
               "oneof": "source"
             },
             {
@@ -54224,6 +54842,7 @@
           "reliant.v1.ListTriggersResponse": "reliant/v1/trigger.proto",
           "reliant.v1.PreviewReplayRequest": "reliant/v1/trigger.proto",
           "reliant.v1.PreviewReplayResponse": "reliant/v1/trigger.proto",
+          "reliant.v1.RecordDueSource": "reliant/v1/trigger.proto",
           "reliant.v1.ReplayCandidate": "reliant/v1/trigger.proto",
           "reliant.v1.ReplayEvent": "reliant/v1/chat.proto",
           "reliant.v1.ResolveTriggerSendersRequest": "reliant/v1/trigger.proto",
@@ -54288,7 +54907,8 @@
             "TRIGGER_EVENT_KIND_INTEGRATION",
             "TRIGGER_EVENT_KIND_WORKFLOW_EVENT",
             "TRIGGER_EVENT_KIND_MANUAL_RUN",
-            "TRIGGER_EVENT_KIND_CLI_RUN"
+            "TRIGGER_EVENT_KIND_CLI_RUN",
+            "TRIGGER_EVENT_KIND_RECORD_DUE"
           ],
           "reliant.v1.TriggerEventOutcome": [
             "TRIGGER_EVENT_OUTCOME_UNSPECIFIED",
@@ -54373,7 +54993,8 @@
             6,
             7,
             8,
-            9
+            9,
+            10
           ],
           "reliant.v1.TriggerEventOutcome": [
             0,
@@ -57265,6 +57886,11 @@
               "kind": "string"
             },
             {
+              "name": "preflight",
+              "kind": "message",
+              "type_name": "reliant.v1.NodePreflight"
+            },
+            {
               "name": "secret_refs",
               "kind": "message",
               "type_name": "reliant.v1.NodeSecretRef",
@@ -57391,6 +58017,29 @@
               "kind": "message",
               "type_name": "reliant.v1.ObserveMetric",
               "repeated": true
+            }
+          ],
+          "reliant.v1.NodePreflight": [
+            {
+              "name": "tools",
+              "kind": "string",
+              "repeated": true
+            },
+            {
+              "name": "min_free_disk",
+              "kind": "string"
+            },
+            {
+              "name": "max_load",
+              "kind": "double"
+            },
+            {
+              "name": "allow_root",
+              "kind": "bool"
+            },
+            {
+              "name": "max_machines",
+              "kind": "int32"
             }
           ],
           "reliant.v1.NodeRouterCandidate": [
@@ -57612,6 +58261,12 @@
               "name": "required",
               "kind": "string",
               "repeated": true
+            }
+          ],
+          "reliant.v1.RecordDueSource": [
+            {
+              "name": "table",
+              "kind": "string"
             }
           ],
           "reliant.v1.ResponseTool": [
@@ -58895,6 +59550,12 @@
               "kind": "message",
               "type_name": "reliant.v1.WorkflowEventSource",
               "oneof": "source"
+            },
+            {
+              "name": "record_due",
+              "kind": "message",
+              "type_name": "reliant.v1.RecordDueSource",
+              "oneof": "source"
             }
           ],
           "reliant.v1.WorkflowUI": [
@@ -58982,6 +59643,7 @@
           "reliant.v1.ModelSelector": "reliant/v1/workflow_v2.proto",
           "reliant.v1.Node": "reliant/v1/workflow_v2.proto",
           "reliant.v1.NodeObserve": "reliant/v1/workflow_v2.proto",
+          "reliant.v1.NodePreflight": "reliant/v1/workflow_v2.proto",
           "reliant.v1.NodeRouterCandidate": "reliant/v1/workflow_v2.proto",
           "reliant.v1.NodeSecretRef": "reliant/v1/workflow_v2.proto",
           "reliant.v1.NumberInputConfig": "reliant/v1/workflow_v2.proto",
@@ -58993,6 +59655,7 @@
           "reliant.v1.PresetsConfig": "reliant/v1/workflow_v2.proto",
           "reliant.v1.ProjectConfig": "reliant/v1/workflow_v2.proto",
           "reliant.v1.PropertySchema": "reliant/v1/workflow_v2.proto",
+          "reliant.v1.RecordDueSource": "reliant/v1/trigger.proto",
           "reliant.v1.ResponseTool": "reliant/v1/workflow_v2.proto",
           "reliant.v1.ReviewArgs": "reliant/v1/workflow_v2.proto",
           "reliant.v1.RouterArgs": "reliant/v1/workflow_v2.proto",
@@ -59362,7 +60025,7 @@
           "output": "reliant.v1.GetWorktreeChangesResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -59372,7 +60035,7 @@
           "output": "reliant.v1.GetWorktreeCommitsResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -59382,7 +60045,7 @@
           "output": "reliant.v1.GetWorktreeGitStatusResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -59392,7 +60055,7 @@
           "output": "reliant.v1.GetWorktreePRResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -59432,7 +60095,7 @@
           "output": "reliant.v1.ListWorktreeRepoStatusesResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -59442,7 +60105,7 @@
           "output": "reliant.v1.ListWorktreesResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -59645,7 +60308,8 @@
             "AuthRequired": true,
             "Errors": null,
             "Custom": true,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.ListWorktreesRequest",
             "OutputTypeFQ": "reliant.v1.ListWorktreesResponse",
             "InputProtoFile": "reliant/v1/worktree.proto",
@@ -59867,7 +60531,8 @@
             "ServerStreaming": false,
             "AuthRequired": true,
             "Errors": null,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.GetWorktreeChangesRequest",
             "OutputTypeFQ": "reliant.v1.GetWorktreeChangesResponse",
             "InputProtoFile": "reliant/v1/worktree.proto",
@@ -59884,7 +60549,8 @@
             "ServerStreaming": false,
             "AuthRequired": true,
             "Errors": null,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.GetWorktreeGitStatusRequest",
             "OutputTypeFQ": "reliant.v1.GetWorktreeGitStatusResponse",
             "InputProtoFile": "reliant/v1/worktree.proto",
@@ -59901,7 +60567,8 @@
             "ServerStreaming": false,
             "AuthRequired": true,
             "Errors": null,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.GetWorktreeCommitsRequest",
             "OutputTypeFQ": "reliant.v1.GetWorktreeCommitsResponse",
             "InputProtoFile": "reliant/v1/worktree.proto",
@@ -59918,7 +60585,8 @@
             "ServerStreaming": false,
             "AuthRequired": true,
             "Errors": null,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.ListWorktreeRepoStatusesRequest",
             "OutputTypeFQ": "reliant.v1.ListWorktreeRepoStatusesResponse",
             "InputProtoFile": "reliant/v1/worktree.proto",
@@ -60057,7 +60725,8 @@
             "ServerStreaming": false,
             "AuthRequired": true,
             "Errors": null,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.GetWorktreePRRequest",
             "OutputTypeFQ": "reliant.v1.GetWorktreePRResponse",
             "InputProtoFile": "reliant/v1/worktree.proto",
@@ -63270,6 +63939,18 @@
       "implementation_candidates": []
     },
     {
+      "id": "MergeQueue",
+      "name": "MergeQueue",
+      "kind": "provider",
+      "type": "*github.com/reliant-labs/reliant/internal/app.MergeQueue",
+      "source": {
+        "path": "internal/app/providers_mergequeue.go",
+        "symbol": "NewMergeQueue"
+      },
+      "methods": [],
+      "implementation_candidates": []
+    },
+    {
       "id": "Message",
       "name": "Message",
       "kind": "component",
@@ -63469,6 +64150,18 @@
       "source": {
         "path": "internal/app/providers.go",
         "symbol": "NewPayloadStore"
+      },
+      "methods": [],
+      "implementation_candidates": []
+    },
+    {
+      "id": "Pipeline",
+      "name": "Pipeline",
+      "kind": "component",
+      "type": "*github.com/reliant-labs/reliant/internal/handlers/pipeline.Service",
+      "source": {
+        "path": "internal/handlers/pipeline/service.go",
+        "symbol": "New"
       },
       "methods": [],
       "implementation_candidates": []
@@ -63769,6 +64462,18 @@
       "source": {
         "path": "internal/app/providers_api.go",
         "symbol": "NewQueuedDelivery"
+      },
+      "methods": [],
+      "implementation_candidates": []
+    },
+    {
+      "id": "RecordDueScanner",
+      "name": "RecordDueScanner",
+      "kind": "provider",
+      "type": "github.com/reliant-labs/reliant/internal/triggers/recorddue.Service",
+      "source": {
+        "path": "internal/app/providers_worker.go",
+        "symbol": "NewRecordDueScanner"
       },
       "methods": [],
       "implementation_candidates": []
@@ -64828,12 +65533,10 @@
     },
     {
       "consumer": "AutomationTakeover",
-      "field": "Repo",
-      "interface": "github.com/reliant-labs/reliant/internal/handlers/automation_takeover.Repository",
+      "field": "TriggerReads",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/automation_takeover.TriggerReads",
       "methods": [],
-      "candidates": [
-        "Database"
-      ],
+      "candidates": [],
       "providers": [
         "Database"
       ],
@@ -65183,6 +65886,17 @@
       "consumer": "Chat",
       "field": "TriggerEvents",
       "interface": "github.com/reliant-labs/reliant/internal/launch.TriggerEventStore",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Chat",
+      "field": "TriggerReads",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/chat.TriggerReads",
       "methods": [],
       "candidates": [],
       "providers": [
@@ -66532,6 +67246,19 @@
       "resolution": "unresolved"
     },
     {
+      "consumer": "Pipeline",
+      "field": "Store",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/pipeline.Store",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
       "consumer": "Plan",
       "field": "Chats",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/plan.ChatStore",
@@ -67305,7 +68032,9 @@
       "field": "RunLists",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/run.RunLists",
       "methods": [],
-      "candidates": [],
+      "candidates": [
+        "Database"
+      ],
       "providers": [
         "Database"
       ],
@@ -67763,6 +68492,17 @@
       "consumer": "Streaming",
       "field": "SpawnCalls",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/streaming.SpawnCalls",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Streaming",
+      "field": "TriggerReads",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/streaming.TriggerReads",
       "methods": [],
       "candidates": [],
       "providers": [

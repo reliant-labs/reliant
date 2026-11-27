@@ -12,6 +12,7 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/diskwatch"
 	"github.com/reliant-labs/reliant/internal/ptr"
 )
 
@@ -112,4 +113,47 @@ func TestListInbox_WorktreeReclaimItemIsOnePerSetOfProposals(t *testing.T) {
 
 	putProposals(t, f, daemonID, reclaimProposal("p-a", "fp-a2", "approve", now), reclaimProposal("p-b", "fp-b", "decline", now))
 	assert.Empty(t, f.reclaimItems(t), "nothing left to decide")
+}
+
+// putProposalsInEpisode reports the proposals of a machine whose disk is
+// under pressure since sinceMs (0: not under pressure), stored as the gateway
+// stores it after stamping.
+func putProposalsInEpisode(t *testing.T, f *inboxFixture, daemonID string, sinceMs int64, proposals ...*reliantv1.WorktreeReclaimProposal) {
+	t.Helper()
+	stored, err := diskwatch.Encode(&reliantv1.DiskReport{
+		ReportedAtMs:    reclaimAt.UnixMilli(),
+		PressureSinceMs: sinceMs,
+		Volumes:         []*reliantv1.DiskVolume{{Label: "home", TotalBytes: 100 << 30, FreeBytes: 50 << 30, Pressure: sinceMs > 0}},
+		WorktreeReclaim: &reliantv1.WorktreeReclaimProposals{Mode: "on", Total: int32(len(proposals)), Proposals: proposals},
+	})
+	require.NoError(t, err)
+	require.NoError(t, f.repo.SetDaemonStorageState(f.ctx, daemonID, stored))
+}
+
+// A dismissed set of proposals is asked about again when the machine starts
+// running out of disk, once per low-disk episode: what those worktrees hold
+// is then what would free it. Within one episode a dismissal holds.
+func TestListInbox_WorktreeReclaimItemReturnsInEachLowDiskEpisode(t *testing.T) {
+	f, daemonID := reclaimMachine(t)
+	p := reclaimProposal("p-a", "fp-a", "", reclaimAt)
+
+	putProposalsInEpisode(t, f, daemonID, 0, p)
+	calm := f.reclaimItems(t)
+	require.Len(t, calm, 1)
+	f.dismiss(t, calm[0].ItemId)
+	assert.Empty(t, f.reclaimItems(t), "dismissed while the disk is fine")
+
+	first := reclaimAt.UnixMilli()
+	putProposalsInEpisode(t, f, daemonID, first, p)
+	low := f.reclaimItems(t)
+	require.Len(t, low, 1, "the same proposals come back once the disk runs low")
+	assert.NotEqual(t, calm[0].ItemId, low[0].ItemId)
+	f.dismiss(t, low[0].ItemId)
+	putProposalsInEpisode(t, f, daemonID, first, p)
+	assert.Empty(t, f.reclaimItems(t), "a dismissal holds for the rest of the episode")
+
+	putProposalsInEpisode(t, f, daemonID, first+int64(time.Hour/time.Millisecond), p)
+	again := f.reclaimItems(t)
+	require.Len(t, again, 1, "a later low-disk episode asks again")
+	assert.NotEqual(t, low[0].ItemId, again[0].ItemId)
 }

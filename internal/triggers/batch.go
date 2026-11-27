@@ -4,10 +4,13 @@ package triggers
 import (
 	"context"
 	"sync"
+	"time"
 
 	"github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/launch"
+	"github.com/reliant-labs/reliant/internal/triggers/lineage"
 	"github.com/reliant-labs/reliant/internal/workflow/workflowsource"
 )
 
@@ -36,10 +39,63 @@ import (
 // made after its first pin, which is right for triggers fired together and
 // wrong for anything that lives longer. Its zero value is not usable; a nil
 // *Batch is, and memoizes nothing.
+//
+// The same holds for what an Accept reads about the event and the owner
+// rather than the trigger: the write-ledger match and the writing run's
+// lineage (OriginEnricher), and the owner's GitHub identity every filter scope
+// carries (OwnerOf, through batchOwners). A pull_request.labeled delivery
+// reaches about eight label triggers, most of which skip it; each read those
+// again, two or three times over for the owner.
 type Batch struct {
 	pins   batchMemo[db.CatalogPinScope, string]
 	pinned batchMemo[string, pinnedAnswer]
 	names  batchMemo[string, string]
+
+	echoes   batchMemo[string, echoMatch]
+	lineages batchMemo[string, lineage.Lineage]
+	conns    batchMemo[connectionKey, *core.Connection]
+	subjects batchMemo[subjectKey, string]
+}
+
+type connectionKey struct{ userID, id string }
+
+type subjectKey struct{ userID, integrationID string }
+
+// inBatch is in with its owner reads memoized for b (batchOwners); in itself
+// when b is nil.
+func (in *Intake) inBatch(b *Batch) *Intake {
+	if b == nil {
+		return in
+	}
+	if _, ok := in.repo.(batchOwners); ok {
+		return in
+	}
+	shared := *in
+	shared.repo = batchOwners{IntakeRepo: in.repo, batch: b}
+	return &shared
+}
+
+// batchOwners is an intake's repo whose OwnerSource reads are memoized for one
+// Batch. Every other read and write is the repo's own.
+type batchOwners struct {
+	IntakeRepo
+	batch *Batch
+}
+
+// GetConnection reads a connection once per Batch.
+func (o batchOwners) GetConnection(ctx context.Context, userID, id string) (*core.Connection, error) {
+	return o.batch.conns.get(connectionKey{userID, id}, func() (*core.Connection, error) {
+		return o.IntakeRepo.GetConnection(ctx, userID, id)
+	})
+}
+
+// GetIntegrationAccessSubject reads the subject once per Batch. freshAfter
+// is "now, less the freshness window" for every asker of one arrival, a few
+// milliseconds apart, so the first asker's answer stands for the rest.
+func (o batchOwners) GetIntegrationAccessSubject(ctx context.Context, userID, integrationID string, freshAfter time.Time) (string, error) {
+	return o.batch.subjects.get(subjectKey{userID, integrationID}, func() (string, error) {
+		return o.IntakeRepo.GetIntegrationAccessSubject(ctx, userID, integrationID, freshAfter)
+	})
 }
 
 type pinnedAnswer struct {

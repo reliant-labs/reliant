@@ -99,14 +99,30 @@
           // Applied here rather than in React so there is no flash of
           // small text before hydration. MobileLayout re-applies it on
           // client-side navigation into and out of /m/*.
+          //
+          // A phone gets the phone scale on every page, so its nav does not
+          // change size between /m/* and the pages it shares with the desktop.
+          // A copy of lib/phoneShape's isPhoneDevice (narrow AND touch, not
+          // opted out with ?desktop=1); rootFontSize.test.ts runs this script
+          // against the same cases.
           var fontSizeMap = { xs: '12px', sm: '13px', md: '14px', lg: '15px', xl: '16px' };
           var mobileFontSizeMap = { xs: '14px', sm: '15px', md: '16px', lg: '17px', xl: '18px' };
-          var onMobileSurface =
+          var optedOutOfPhone = new URLSearchParams(window.location.search).has('desktop');
+          try {
+            if (optedOutOfPhone) localStorage.setItem('reliant-force-desktop', '1');
+            optedOutOfPhone = optedOutOfPhone || localStorage.getItem('reliant-force-desktop') === '1';
+          } catch (e) {}
+          var phoneShaped =
+            !optedOutOfPhone &&
+            window.innerWidth <= 768 &&
+            !!(window.matchMedia && window.matchMedia('(pointer: coarse), (hover: none)').matches);
+          var phoneScale =
+            phoneShaped ||
             window.location.pathname === '/m' ||
             window.location.pathname.indexOf('/m/') === 0;
-          var sizeMap = onMobileSurface ? mobileFontSizeMap : fontSizeMap;
+          var sizeMap = phoneScale ? mobileFontSizeMap : fontSizeMap;
           // Fallback pair is the 'lg' default resolved on each surface.
-          document.documentElement.style.fontSize = sizeMap[fontSize] || (onMobileSurface ? '17px' : '15px');
+          document.documentElement.style.fontSize = sizeMap[fontSize] || (phoneScale ? '17px' : '15px');
           
           // Mark that initial theme has been applied
           window.__THEME_APPLIED__ = true;

@@ -246,7 +246,7 @@ func TestEnableWorkflow_AFundingOnlyChangeIsNotANoOp(t *testing.T) {
 			}
 			row := func(id string) *core.Trigger {
 				t.Helper()
-				r, err := env.repo.GetTrigger(context.Background(), id)
+				r, err := store.GetTrigger(context.Background(), env.repo.ORM(), id)
 				require.NoError(t, err)
 				return r
 			}

@@ -14,7 +14,8 @@ import { vi } from "vitest";
 
 import { createTestQueryClient } from "@/test/renderWithQuery";
 import type { PromotionList } from "@/services/controlPlane/observability/deliveryTypes";
-import { ObservabilityApiProvider, type ObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
+import { type ObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
+import { ObservabilityFixtures } from "@/test/observabilityFixtures";
 import { ReleasesApiProvider, type ReleasesApi } from "@/services/forge/ReleasesApiContext";
 
 import { createFixtureApi } from "../../Observability/__fixtures__/fixtureApi";
@@ -38,9 +39,9 @@ export function fixtureObsApi(over: Partial<ObservabilityApi> = {}): Observabili
 function wrap(api: ReleasesApi, obs: ObservabilityApi, ui: ReactElement, client = createTestQueryClient()): RenderResult {
   return render(
     <QueryClientProvider client={client}>
-      <ObservabilityApiProvider api={obs}>
+      <ObservabilityFixtures api={obs}>
         <ReleasesApiProvider api={api}>{ui}</ReleasesApiProvider>
-      </ObservabilityApiProvider>
+      </ObservabilityFixtures>
     </QueryClientProvider>
   );
 }

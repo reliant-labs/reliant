@@ -61,7 +61,7 @@ export function MobileWorkflowScreen({
     <div className="flex h-full min-h-0 flex-col">
       <MobileScreenHeader
         title={getWorkflowDisplayName(workflow.name || "", true)}
-        titleClassName="text-base font-semibold"
+        titleClassName="text-section font-semibold"
         leading={
           <Link
             to={backTo}
@@ -86,7 +86,7 @@ export function MobileWorkflowScreen({
 
       {/* Read-only surface — editing (drag-and-drop graph, CEL/YAML) is
           desktop-only, so this is the entirety of the "edit" affordance. */}
-      <p className="shrink-0 border-t border-border px-4 py-2 text-center text-xs text-muted-foreground">
+      <p className="shrink-0 border-t border-border px-4 py-2 text-center text-meta text-muted-foreground">
         Edit this workflow on desktop.
       </p>
 

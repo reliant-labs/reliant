@@ -236,7 +236,7 @@ mirrors:
 ## What this does not do
 
 - No rollback: recover by deploying a fix or an earlier release ([Recover from a bad deploy](/guides/hosting/recover-from-bad-deploy)).
-- No autoscaling: `_cluster_replicas` is a fixed floor.
+- No autoscaling unless you declare it: `_cluster_replicas` is a fixed floor. Add `autoscale = forge.Autoscale {...}` to a workload and set `_cluster_replicas = 1` to scale it on CPU ([Autoscaling](/forge/deploy/autoscaling)).
 - It installs no platform. Ingress needs a Gateway API controller and the routes in `deploy/kcl/ingress.k`; a `forge.ManagedDatabase` on the cluster needs the CloudNativePG operator ([What gets deployed](/forge/deploy/what-gets-deployed#a-database-on-your-cluster)).
 - No sign-in: set `jwt_issuer` and `oidc_client_id` for your own issuer in `deploy/kcl/k8s/config.k`; until then authenticated RPCs are refused.
 - No frontend: bind `web` to your own bucket ([Environments](/forge/deploy/environments)) or ship it elsewhere.

@@ -10288,9 +10288,9 @@ const file_reliant_v1_gtm_proto_rawDesc = "" +
 	"\x0eUpdateStrategy\x12!.reliant.v1.UpdateStrategyRequest\x1a\".reliant.v1.UpdateStrategyResponse\"^\xa2\xbb\x18Z\b\x01:V\n" +
 	"\x06update\x12*\n" +
 	"\fgtm_strategy\x12\x02id\x1a\x16response.strategy.name\"\x06org_id*\x18response.strategy.status\x12\xa3\x01\n" +
-	"\fListChannels\x12\x1f.reliant.v1.ListChannelsRequest\x1a .reliant.v1.ListChannelsResponse\"P\xa2\xbb\x18I\b\x01:E:Cread-only (the first read seeds the default channels, idempotently)\x90\x02\x02\x12\x9d\x01\n" +
+	"\fListChannels\x12\x1f.reliant.v1.ListChannelsRequest\x1a .reliant.v1.ListChannelsResponse\"P\xa2\xbb\x18I\b\x01:E:Cread-only (the first read seeds the default channels, idempotently)\x90\x02\x01\x12\x9d\x01\n" +
 	"\n" +
-	"GetChannel\x12\x1d.reliant.v1.GetChannelRequest\x1a\x1e.reliant.v1.GetChannelResponse\"P\xa2\xbb\x18I\b\x01:E:Cread-only (the first read seeds the default channels, idempotently)\x90\x02\x02\x12\xa9\x01\n" +
+	"GetChannel\x12\x1d.reliant.v1.GetChannelRequest\x1a\x1e.reliant.v1.GetChannelResponse\"P\xa2\xbb\x18I\b\x01:E:Cread-only (the first read seeds the default channels, idempotently)\x90\x02\x01\x12\xa9\x01\n" +
 	"\rCreateChannel\x12 .reliant.v1.CreateChannelRequest\x1a!.reliant.v1.CreateChannelResponse\"S\xa2\xbb\x18O\b\x01:K\n" +
 	"\x06create\x129\n" +
 	"\vgtm_channel\x12\x13response.channel.id\x1a\x15response.channel.name\"\x06org_id\x12\xb1\x01\n" +

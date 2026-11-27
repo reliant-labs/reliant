@@ -35,25 +35,28 @@
  * So there is no reveal here because there is no RPC that could serve one, and
  * adding a field capable of carrying a value to any RESPONSE message fails
  * control-plane's TestSecretStoreResponsesCarryNoSecretValueFields — a
- * reflection test over an allow-list. `setSecret` below takes a value because
- * it travels INBOUND and is the one such field in the whole surface; it is
- * accepted, forwarded, and never stored in this module, never returned, and
- * never logged.
+ * reflection test over an allow-list. SetSecret's request takes a value
+ * because it travels INBOUND and is the one such field in the whole surface;
+ * useSetManagedSecret (hooks/forge-queries.ts) accepts it, forwards it, and
+ * never stores, returns or logs it.
  *
  * That is why `SetSecretResult` carries a version number and a timestamp rather
  * than an echo of what was written: a write-only field that echoed back would
  * be a read path wearing a write path's name.
  */
 
-import { ConnectError, Code, type Transport } from "@connectrpc/connect";
+import { ConnectError, Code } from "@connectrpc/connect";
 import { timestampDate, type Timestamp } from "@bufbuild/protobuf/wkt";
 
 import {
   SecretAuthorKind,
-  SecretStoreService,
+  type BeginStepUpResponse,
+  type CompleteStepUpResponse,
+  type GetSecretVersionsResponse,
+  type ListSecretsResponse,
+  type SetSecretResponse,
 } from "@/gen/controlplane/services/secret_store/v1/secret_store_pb";
 import { hasErrorReason } from "@/lib/errorReasons";
-import { getControlPlaneClient } from "@/services/controlPlane/client";
 import { CONTROL_PLANE_API_URL } from "@/services/controlPlane/config";
 import type { SendFailure, VerifyFailure } from "./stepUp";
 import { destinationOf } from "./topology";
@@ -444,19 +447,19 @@ function toAuthor(msg: { kind: SecretAuthorKind; email: string } | undefined): S
   }
 }
 
-// ── RPCs ────────────────────────────────────────────────────────────────────
-
-function client(transport: Transport) {
-  return getControlPlaneClient(SecretStoreService, transport);
-}
+// ── Answers ─────────────────────────────────────────────────────────────────
+//
+// The RPCs themselves run on the generated SecretStoreService hooks
+// (hooks/controlplane/secret-store-service-hooks_gen.ts), from
+// hooks/forge-queries.ts and the step-up gate. What stays here is what each
+// answer means: these mappings, run in a read's `select` or after a write.
 
 /**
- * Metadata for every secret in one environment, sorted by name, plus the
- * environment's protection and the caller's step-up grant — the two facts a
- * console needs to know BEFORE the user types a value.
+ * ListSecrets: metadata for every secret in one environment, sorted by name,
+ * plus the environment's protection and the caller's step-up grant — the two
+ * facts a console needs to know BEFORE the user types a value.
  */
-export async function listSecrets(transport: Transport, environmentId: string): Promise<ManagedSecretListing> {
-  const res = await client(transport).listSecrets({ environmentId });
+export function listingOf(res: ListSecretsResponse): ManagedSecretListing {
   const stepUpValidUntil = toISO(res.stepUpValidUntil);
   return {
     secrets: (res.secrets ?? [])
@@ -524,42 +527,32 @@ export function verifyFailureOf(err: unknown): VerifyFailure {
 }
 
 /**
- * Email a one-time code to the caller's verified address. Org admin only.
- * The code is never in the response — only where it went.
+ * BeginStepUp emails a one-time code to the caller's verified address (org
+ * admin only). The code is never in the response — only where it went.
  */
-export async function beginStepUp(transport: Transport, environmentId: string): Promise<StepUpChallenge> {
-  const res = await client(transport).beginStepUp({ environmentId });
+export function stepUpChallengeOf(res: BeginStepUpResponse): StepUpChallenge {
   const expiresAt = toISO(res.expiresAt);
   return { sentTo: res.sentTo, ...(expiresAt ? { expiresAt } : {}) };
 }
 
 /**
- * Redeem the code. On success the caller may change this environment's
- * secrets until `validUntil`. The code travels inbound only and is not kept.
+ * CompleteStepUp redeems the code. On success the caller may change this
+ * environment's secrets until `validUntil`. The code travels inbound only and
+ * is not kept.
  */
-export async function completeStepUp(
-  transport: Transport,
-  environmentId: string,
-  code: string
-): Promise<{ validUntil?: string }> {
-  const res = await client(transport).completeStepUp({ environmentId, code });
+export function stepUpGrantOf(res: CompleteStepUpResponse): { validUntil?: string } {
   const validUntil = toISO(res.validUntil);
   return validUntil ? { validUntil } : {};
 }
 
 /**
- * One secret's full version history, newest first.
+ * GetSecretVersions: one secret's full version history, newest first.
  *
  * Sorted descending here rather than in the view because "newest first" is a
  * property of how version history is READ, not of one component's layout, and
  * every consumer wants the same order.
  */
-export async function getSecretVersions(
-  transport: Transport,
-  environmentId: string,
-  name: string
-): Promise<ManagedSecretHistory> {
-  const res = await client(transport).getSecretVersions({ environmentId, name });
+export function historyOf(res: GetSecretVersionsResponse): ManagedSecretHistory {
   return {
     summary: res.summary ? toSummary(res.summary) : null,
     versions: (res.versions ?? []).map(toVersion).sort((a, b) => b.version - a.version),
@@ -567,29 +560,10 @@ export async function getSecretVersions(
 }
 
 /**
- * Write a new version.
- *
- * `cas` is KV-v2 check-and-set and is how CREATE is distinguished from UPDATE:
- * passing 0 means "must not exist yet", so a create that races another create
- * fails loudly instead of silently clobbering. Passing the current version
- * means "update, and only if nobody else has written since I read this".
- * Omitting it writes unconditionally.
- *
- * The value is forwarded and then forgotten. It is not returned, not cached,
- * and deliberately not included in any error this function can raise.
+ * What SetSecret answers: the version it created and when, never an echo of
+ * the value (see the module comment).
  */
-export async function setSecret(transport: Transport, args: {
-  environmentId: string;
-  name: string;
-  value: string;
-  cas?: number;
-}): Promise<SetSecretResult> {
-  const res = await client(transport).setSecret({
-    environmentId: args.environmentId,
-    name: args.name,
-    secretValue: args.value,
-    ...(args.cas === undefined ? {} : { cas: args.cas }),
-  });
+export function setSecretResultOf(res: SetSecretResponse): SetSecretResult {
   return { version: res.version, createdAt: toISO(res.createdTime) };
 }
 
@@ -617,57 +591,6 @@ export async function setSecret(transport: Transport, args: {
  * and every secret write is §10 state 1 — control plane only, daemon offline,
  * forever.
  */
-
-/**
- * Soft-delete versions. Reversible via {@link undeleteSecret}.
- *
- * An empty `versions` means the current version only, which is KV-v2's own
- * default and the one this UI uses for the row-level "Delete" action.
- */
-export async function deleteSecret(transport: Transport, args: {
-  environmentId: string;
-  name: string;
-  versions?: number[];
-}): Promise<void> {
-  await client(transport).deleteSecret({
-    environmentId: args.environmentId,
-    name: args.name,
-    versions: args.versions ?? [],
-  });
-}
-
-/** Restore soft-deleted versions. Cannot restore a destroyed one — that data is gone. */
-export async function undeleteSecret(transport: Transport, args: {
-  environmentId: string;
-  name: string;
-  versions: number[];
-}): Promise<void> {
-  await client(transport).undeleteSecret({
-    environmentId: args.environmentId,
-    name: args.name,
-    versions: args.versions,
-  });
-}
-
-/**
- * Permanently destroy versions. IRREVERSIBLE.
- *
- * A separate function against a separate RPC against a separate Bao path,
- * mirroring how KV-v2 models it — not a flag on delete. The shape of the API
- * is the first place the difference between "recoverable" and "gone" should be
- * visible, before any confirmation dialog gets a chance to be dismissed.
- */
-export async function destroySecret(transport: Transport, args: {
-  environmentId: string;
-  name: string;
-  versions: number[];
-}): Promise<void> {
-  await client(transport).destroySecret({
-    environmentId: args.environmentId,
-    name: args.name,
-    versions: args.versions,
-  });
-}
 
 // ── Projections ─────────────────────────────────────────────────────────────
 

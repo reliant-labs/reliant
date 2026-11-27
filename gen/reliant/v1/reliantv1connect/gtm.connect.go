@@ -168,8 +168,10 @@ type GtmServiceClient interface {
 	// ListChannels lists the org's channels by key. An allowlisted org with no
 	// channel yet is given the default set on its first List or Get (blog,
 	// email, hacker-news, reddit, linkedin, x, youtube), each with a small
-	// generic channel_types set: a write, so the rpc is IDEMPOTENT rather than
-	// side-effect free. connection_state is computed per caller.
+	// generic channel_types set. That seed is the read's only write: it is
+	// idempotent (ON CONFLICT DO NOTHING) and leaves the org as any first read
+	// would, so the rpc is a read (NO_SIDE_EFFECTS) that a client may cache or
+	// retry. connection_state is computed per caller.
 	ListChannels(context.Context, *connect.Request[v1.ListChannelsRequest]) (*connect.Response[v1.ListChannelsResponse], error)
 	// GetChannel returns one channel (seeding the defaults as ListChannels does).
 	GetChannel(context.Context, *connect.Request[v1.GetChannelRequest]) (*connect.Response[v1.GetChannelResponse], error)
@@ -416,14 +418,14 @@ func NewGtmServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...
 			httpClient,
 			baseURL+GtmServiceListChannelsProcedure,
 			connect.WithSchema(gtmServiceMethods.ByName("ListChannels")),
-			connect.WithIdempotency(connect.IdempotencyIdempotent),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getChannel: connect.NewClient[v1.GetChannelRequest, v1.GetChannelResponse](
 			httpClient,
 			baseURL+GtmServiceGetChannelProcedure,
 			connect.WithSchema(gtmServiceMethods.ByName("GetChannel")),
-			connect.WithIdempotency(connect.IdempotencyIdempotent),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		createChannel: connect.NewClient[v1.CreateChannelRequest, v1.CreateChannelResponse](
@@ -935,8 +937,10 @@ type GtmServiceHandler interface {
 	// ListChannels lists the org's channels by key. An allowlisted org with no
 	// channel yet is given the default set on its first List or Get (blog,
 	// email, hacker-news, reddit, linkedin, x, youtube), each with a small
-	// generic channel_types set: a write, so the rpc is IDEMPOTENT rather than
-	// side-effect free. connection_state is computed per caller.
+	// generic channel_types set. That seed is the read's only write: it is
+	// idempotent (ON CONFLICT DO NOTHING) and leaves the org as any first read
+	// would, so the rpc is a read (NO_SIDE_EFFECTS) that a client may cache or
+	// retry. connection_state is computed per caller.
 	ListChannels(context.Context, *connect.Request[v1.ListChannelsRequest]) (*connect.Response[v1.ListChannelsResponse], error)
 	// GetChannel returns one channel (seeding the defaults as ListChannels does).
 	GetChannel(context.Context, *connect.Request[v1.GetChannelRequest]) (*connect.Response[v1.GetChannelResponse], error)
@@ -1179,14 +1183,14 @@ func NewGtmServiceHandler(svc GtmServiceHandler, opts ...connect.HandlerOption) 
 		GtmServiceListChannelsProcedure,
 		svc.ListChannels,
 		connect.WithSchema(gtmServiceMethods.ByName("ListChannels")),
-		connect.WithIdempotency(connect.IdempotencyIdempotent),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	gtmServiceGetChannelHandler := connect.NewUnaryHandler(
 		GtmServiceGetChannelProcedure,
 		svc.GetChannel,
 		connect.WithSchema(gtmServiceMethods.ByName("GetChannel")),
-		connect.WithIdempotency(connect.IdempotencyIdempotent),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	gtmServiceCreateChannelHandler := connect.NewUnaryHandler(
