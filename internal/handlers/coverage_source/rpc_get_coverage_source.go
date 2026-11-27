@@ -23,7 +23,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/githubrepo"
 	"github.com/reliant-labs/reliant/internal/integrations/ghaccess"
-	"github.com/reliant-labs/reliant/internal/integrations/ghblobs"
 	"github.com/reliant-labs/reliant/internal/orgs"
 )
 
@@ -106,11 +105,11 @@ func (s *Service) GetCoverageSource(
 			// Bytes that are not the blob are no answer; never cached.
 			s.deps.Logger.WarnContext(ctx, "coverage source: GitHub answered other bytes for a blob id",
 				"owner", r.owner, "repo", r.repo, "blob_id", blobID)
-		case errors.Is(err, ghaccess.ErrNotConnected), errors.Is(err, ghaccess.ErrNeedsReconnect), errors.Is(err, ghblobs.ErrTokenRejected):
+		case errors.Is(err, ghaccess.ErrNotConnected), errors.Is(err, ghaccess.ErrNeedsReconnect), errors.Is(err, ErrTokenRejected):
 			return unavailable(pb.CoverageSourceUnavailable_COVERAGE_SOURCE_UNAVAILABLE_REVOKED), nil
-		case errors.Is(err, ghblobs.ErrTooLarge):
+		case errors.Is(err, ErrTooLarge):
 			return unavailable(pb.CoverageSourceUnavailable_COVERAGE_SOURCE_UNAVAILABLE_TOO_LARGE), nil
-		case errors.Is(err, ghblobs.ErrNotFound), errors.Is(err, ghblobs.ErrInvalid):
+		case errors.Is(err, ErrNotFound), errors.Is(err, ErrInvalid):
 		default:
 			failed = err
 		}

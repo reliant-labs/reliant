@@ -65,22 +65,3 @@ func (v GateVerifier) Verify(ctx context.Context, req lander.VerifyRequest) (lan
 type Credentials interface {
 	Client(ctx context.Context, repo *core.PipelineRepo) (ghport.Client, lander.Identity, error)
 }
-
-// TokenSource is the token git fetches and pushes with.
-type TokenSource func(ctx context.Context, repo *core.PipelineRepo) (string, error)
-
-// AccessOf is the [GitHubAccess] over the lander's credentials and a token
-// source: the same identity reads, builds and lands.
-func AccessOf(c Credentials, token TokenSource) GitHubAccess {
-	return func(ctx context.Context, repo *core.PipelineRepo) (ghport.Client, string, error) {
-		client, _, err := c.Client(ctx, repo)
-		if err != nil {
-			return nil, "", err
-		}
-		tok, err := token(ctx, repo)
-		if err != nil {
-			return nil, "", err
-		}
-		return client, tok, nil
-	}
-}

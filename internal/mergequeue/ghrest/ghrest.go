@@ -5,7 +5,6 @@ package ghrest
 import (
 	"bytes"
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -366,41 +365,7 @@ func (c *Client) ListCheckRuns(ctx context.Context, repo ghport.Repo, sha string
 	return out, nil
 }
 
-// ---- contents and commits ----
-
-// GetContents implements [ghport.Client].
-func (c *Client) GetContents(ctx context.Context, repo ghport.Repo, path, ref string) ([]byte, error) {
-	segs := strings.Split(strings.Trim(path, "/"), "/")
-	for i, s := range segs {
-		segs[i] = url.PathEscape(s)
-	}
-	endpoint := "contents/" + strings.Join(segs, "/")
-	if ref != "" {
-		endpoint += "?ref=" + url.QueryEscape(ref)
-	}
-	what := fmt.Sprintf("file %s at %s", path, ref)
-	var raw json.RawMessage
-	if err := c.do(ctx, repo, http.MethodGet, endpoint, nil, &raw, what); err != nil {
-		return nil, err
-	}
-	var file struct {
-		Type     string `json:"type"`
-		Encoding string `json:"encoding"`
-		Content  string `json:"content"`
-	}
-	// A directory is a JSON array: not a regular file.
-	if err := json.Unmarshal(raw, &file); err != nil || file.Type != "file" {
-		return nil, &ghport.NotFoundError{What: what}
-	}
-	if file.Encoding != "base64" {
-		return nil, fmt.Errorf("ghrest: %s is too large for the contents API (encoding %q)", what, file.Encoding)
-	}
-	data, err := base64.StdEncoding.DecodeString(strings.ReplaceAll(file.Content, "\n", ""))
-	if err != nil {
-		return nil, fmt.Errorf("ghrest: decoding %s: %w", what, err)
-	}
-	return data, nil
-}
+// ---- commits ----
 
 type commitBody struct {
 	SHA  string `json:"sha"`
