@@ -33,7 +33,6 @@ type Repository interface {
 	// Projects a daemon reports, the installs it finishes, and the project
 	// config it pushes. GetProjectMachineCatalogPushedAt reads the one column
 	// the staleness check needs, never the whole (large) record.
-	GetProjectWithUserCheck(ctx context.Context, id string, userID string) (*db.Project, error)
 	CreateProject(ctx context.Context, project *db.Project) error
 	SyncProjectConfigSnapshot(ctx context.Context, record *db.ProjectConfigRecord, force bool, scope *core.OrgScope) (bool, error)
 	GetProjectMachineCatalogPushedAt(ctx context.Context, projectID, daemonID string) (time.Time, error)

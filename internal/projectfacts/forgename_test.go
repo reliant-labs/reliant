@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
 )
 
 // A FRESHLY CLONED FORGE PROJECT MUST KNOW ITS OWN FORGE NAME.
@@ -92,7 +93,7 @@ func seedProjectForForgeName(t *testing.T, repo *db.Repo, userID string) *db.Pro
 	}
 	require.NoError(t, repo.CreateProject(context.Background(), project))
 
-	stored, err := repo.GetProjectWithUserCheck(context.Background(), project.ID, userID)
+	stored, err := projectaccesstest.For(repo).GetProjectWithUserCheck(context.Background(), project.ID, userID)
 	require.NoError(t, err)
 	require.Nil(t, stored.ForgeProjectName, "precondition: the clone left no forge name")
 	require.False(t, stored.IsForge, "precondition: the row is not marked a forge project yet")
@@ -112,7 +113,7 @@ func TestLearnForgeProjectName_PersistsTheNameFromForgeYAML(t *testing.T) {
 		userID, daemonID, project.ID, project.Path)
 	assert.Equal(t, "barksocial", got)
 
-	stored, err := repo.GetProjectWithUserCheck(context.Background(), project.ID, userID)
+	stored, err := projectaccesstest.For(repo).GetProjectWithUserCheck(context.Background(), project.ID, userID)
 	require.NoError(t, err)
 	require.NotNil(t, stored.ForgeProjectName,
 		"the daemon that cloned the repo read forge.yaml; the project must not still say the name was never read")
@@ -154,7 +155,7 @@ func TestLearnForgeProjectName_LeavesANonForgeRepoUnmarked(t *testing.T) {
 	assert.Empty(t, LearnForgeName(context.Background(), daemon, repo,
 		userID, uuid.NewString(), project.ID, project.Path))
 
-	stored, err := repo.GetProjectWithUserCheck(context.Background(), project.ID, userID)
+	stored, err := projectaccesstest.For(repo).GetProjectWithUserCheck(context.Background(), project.ID, userID)
 	require.NoError(t, err)
 	assert.Nil(t, stored.ForgeProjectName, "a repo with no forge.yaml must record no forge name")
 	assert.False(t, stored.IsForge, "a plain git repo must not be marked a forge project")
@@ -174,7 +175,7 @@ func TestLearnForgeProjectName_ADroppedDaemonDefersRatherThanCorrupts(t *testing
 	assert.Empty(t, LearnForgeName(context.Background(), daemon, repo,
 		userID, uuid.NewString(), project.ID, project.Path))
 
-	stored, err := repo.GetProjectWithUserCheck(context.Background(), project.ID, userID)
+	stored, err := projectaccesstest.For(repo).GetProjectWithUserCheck(context.Background(), project.ID, userID)
 	require.NoError(t, err)
 	assert.Nil(t, stored.ForgeProjectName)
 	assert.False(t, stored.IsForge)

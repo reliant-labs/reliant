@@ -34,6 +34,7 @@ var ErrNoDatabase = errors.New("rowreads: no database")
 type Reads struct {
 	daemons   store.DaemonExtStore
 	repos     store.RepoExtStore
+	threads   store.ThreadExtStore
 	projects  store.ProjectExtStore
 	worktrees store.WorktreeExtStore
 }
@@ -44,7 +45,7 @@ func New(db orm.Context) Reads {
 	if db == nil {
 		return Reads{}
 	}
-	return Reads{daemons: store.NewDaemonExtStore(db), repos: store.NewRepoExtStore(db), projects: store.NewProjectExtStore(db), worktrees: store.NewWorktreeExtStore(db)}
+	return Reads{daemons: store.NewDaemonExtStore(db), repos: store.NewRepoExtStore(db), threads: store.NewThreadExtStore(db), projects: store.NewProjectExtStore(db), worktrees: store.NewWorktreeExtStore(db)}
 }
 
 // Of is the reads over the database handle of s (a *db.Repo), or reads that
@@ -73,6 +74,18 @@ func (r Reads) GetDaemon(ctx context.Context, id string) (*core.Daemon, error) {
 		return nil, fmt.Errorf("failed to get daemon %s: %w", id, err)
 	}
 	return d, err
+}
+
+// GetThread reads a thread row. It checks no owner: every caller holds a chat
+// or run it already authorized.
+func (r Reads) GetThread(ctx context.Context, id string) (*core.Thread, error) {
+	if r.threads == nil {
+		return nil, ErrNoDatabase
+	}
+	if id == "" {
+		return nil, fmt.Errorf("thread ID cannot be empty")
+	}
+	return r.threads.GetThread(ctx, id)
 }
 
 // GetProject reads a project row. It checks no owner: a read that must is

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
 	"github.com/reliant-labs/reliant/internal/rowreads"
 
 	"connectrpc.com/connect"
@@ -63,7 +64,7 @@ func TestCreateProject_PersistsForgeProjectName(t *testing.T) {
 	assert.True(t, resp.Msg.GetProject().GetIsForge())
 	assert.Equal(t, "hounders", resp.Msg.GetProject().GetForgeProjectName())
 
-	row, err := repo.GetProjectWithUserCheck(ctx, resp.Msg.GetProject().GetId(), userID)
+	row, err := projectaccesstest.For(repo).GetProjectWithUserCheck(ctx, resp.Msg.GetProject().GetId(), userID)
 	require.NoError(t, err)
 	require.NotNil(t, row.ForgeProjectName)
 	assert.Equal(t, "hounders", *row.ForgeProjectName)
@@ -102,7 +103,7 @@ func TestSetProjectForgeName_IdempotentAndOwnerScoped(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, changed)
 
-	row, err := repo.GetProjectWithUserCheck(ctx, projectID, userID)
+	row, err := projectaccesstest.For(repo).GetProjectWithUserCheck(ctx, projectID, userID)
 	require.NoError(t, err)
 	assert.True(t, row.IsForge, "naming a project in forge's terms marks it a forge project")
 	require.NotNil(t, row.ForgeProjectName)

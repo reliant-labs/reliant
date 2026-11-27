@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
 	"github.com/reliant-labs/reliant/internal/rowreads"
 
 	"github.com/google/uuid"
@@ -124,7 +125,7 @@ func TestSettledClone_LearnsTheForgeNameWithoutTheForgeTab(t *testing.T) {
 	// The read is dispatched off the receive loop on purpose (waiting on it
 	// there would deadlock), so settle for eventual consistency.
 	require.Eventually(t, func() bool {
-		stored, err := repo.GetProjectWithUserCheck(context.Background(), project.ID, userID)
+		stored, err := projectaccesstest.For(repo).GetProjectWithUserCheck(context.Background(), project.ID, userID)
 		return err == nil && stored.ForgeProjectName != nil && *stored.ForgeProjectName == "barksocial"
 	}, forgeNameTestWait, forgeNameTestTick,
 		"a settled clone must leave the project knowing its forge name, with no Forge tab opened")

@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
 	"github.com/reliant-labs/reliant/internal/rowreads"
 
 	"connectrpc.com/connect"
@@ -32,7 +33,7 @@ import (
 // repo exercises the in-memory routing alone.
 func newTestService(repo Repository, checkouts ...MachineCheckouts) *Service {
 	var co MachineCheckouts = &MockMachineCheckouts{}
-	deps := Deps{Logger: slog.New(slog.DiscardHandler), Config: &typedconfig.Config{}, Repo: repo}
+	deps := Deps{Logger: slog.New(slog.DiscardHandler), Config: &typedconfig.Config{}, Repo: repo, Access: projectaccesstest.For(repo)}
 	if r, ok := repo.(interface{ ORM() *orm.Client }); ok {
 		// A real repository also gets the stores over its database, as the
 		// composition root wires them; a fake gets none, so the writes it
@@ -86,7 +87,7 @@ func newTestServiceWithLeases(repo Repository, leases Attachments, models LocalM
 	if p, ok := repo.(ProjectLookups); ok {
 		projects = p
 	}
-	return newService(Deps{Logger: slog.New(slog.DiscardHandler), Config: &typedconfig.Config{}, Repo: repo, Projects: projects, Installs: noInstalls(), Refetch: &MockUserRefetch{EmitUserRefetchFunc: func(context.Context, string, core.RefetchType, core.RefetchOpts) error { return nil }}, Attachments: leases, LocalModels: models, Checkouts: &MockMachineCheckouts{}, Pools: poolsOf(repo)})
+	return newService(Deps{Logger: slog.New(slog.DiscardHandler), Config: &typedconfig.Config{}, Repo: repo, Projects: projects, Access: projectaccesstest.For(repo), Installs: noInstalls(), Refetch: &MockUserRefetch{EmitUserRefetchFunc: func(context.Context, string, core.RefetchType, core.RefetchOpts) error { return nil }}, Attachments: leases, LocalModels: models, Checkouts: &MockMachineCheckouts{}, Pools: poolsOf(repo)})
 }
 
 // realLeases is the generated stores over a real database: what the composition

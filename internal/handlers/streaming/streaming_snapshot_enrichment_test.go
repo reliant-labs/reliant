@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
@@ -83,7 +85,7 @@ func TestChatSnapshot_CarriesSpawnChildWorkflowID(t *testing.T) {
 		RequestedAt:     now, CreatedAt: now, UpdatedAt: now,
 	}))
 
-	svc := NewTestStreaming(t, WithStreamingDeps(withRoles(Deps{Repo: repo})))
+	svc := NewTestStreaming(t, WithStreamingDeps(withRoles(Deps{Repo: rowreads.WithRepo(repo)})))
 	snapshot, _, err := svc.buildChatSnapshotByID(ctx, chatID)
 	require.NoError(t, err)
 
@@ -129,7 +131,7 @@ func TestChatSnapshot_ToolCallUpdateUsesDurableStatus(t *testing.T) {
 		Status:     db.ToolCallStatusExecuting,
 	}))
 
-	snapshot, _, err := NewTestStreaming(t, WithStreamingDeps(withRoles(Deps{Repo: repo}))).buildChatSnapshotByID(ctx, fixture.ChatID)
+	snapshot, _, err := NewTestStreaming(t, WithStreamingDeps(withRoles(Deps{Repo: rowreads.WithRepo(repo)}))).buildChatSnapshotByID(ctx, fixture.ChatID)
 	require.NoError(t, err)
 
 	var block *reliantv1.ContentBlock

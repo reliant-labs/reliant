@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -22,7 +24,7 @@ import (
 // (recordStartSelection). Every other start records none.
 func TestRecordStartSelection_PersonPickMatrix(t *testing.T) {
 	repo, ctx, projectID, _ := launchFixture(t)
-	l, _ := newTestLauncher(t, repo, &fakeStarter{})
+	l, _ := newTestLauncher(t, rowreads.WithRepo(repo), &fakeStarter{})
 	userCtx := context.WithValue(ctx, auth.UserIDContextKey, launchTestUserID)
 	rootModel := map[string]*structpb.Value{"model": structpb.NewStructValue(&structpb.Struct{Fields: map[string]*structpb.Value{
 		"id": structpb.NewStringValue("gpt-5.6-sol@codex"),

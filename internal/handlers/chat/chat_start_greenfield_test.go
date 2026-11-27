@@ -7,6 +7,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
 	"github.com/reliant-labs/reliant/internal/rowreads"
 
 	"connectrpc.com/connect"
@@ -92,13 +93,14 @@ func TestStartChatDoesNotWaitOnTheGreenfieldProbe(t *testing.T) {
 	e.svc = &Service{
 		deps: Deps{
 			Repo:        rowreads.WithRepo(e.repo),
+			Projects:    projectaccesstest.For(e.repo),
 			Workflows:   store.NewWorkflowExtStore(e.repo.ORM()),
 			Worktrees:   store.NewWorktreeExtStore(e.repo.ORM()),
 			ProjectRows: store.NewProjectExtStore(e.repo.ORM()), TriggerEvents: store.NewTriggerEventExtStore(e.repo.ORM()),
 			Spawns: store.NewToolCallExtStore(e.repo.ORM()), Selections: store.NewChatSelectionExtStore(e.repo.ORM()), Messages: store.NewMessageExtStore(e.repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(e.repo.ORM()), Senders: store.NewThreadExtStore(e.repo.ORM()), Temporal: e.temporal, Router: router,
 			Mailbox:       agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(e.repo.ORM()), Announcer: e.repo}),
 			AgentMessages: store.NewAgentMessageExtStore(e.repo.ORM()),
-		}, threads: threads.New(threads.Deps{Repo: e.repo, Messages: store.NewMessageExtStore(e.repo.ORM()), Senders: store.NewThreadExtStore(e.repo.ORM())}),
+		}, threads: threads.New(threads.Deps{Repo: rowreads.WithRepo(e.repo), Messages: store.NewMessageExtStore(e.repo.ORM()), Senders: store.NewThreadExtStore(e.repo.ORM())}),
 		runs: runs.New(runs.Deps{Repo: e.repo, Resolver: questions.NewFromRepo(e.repo), Chats: store.NewChatsWithActivityExtStore(e.repo.ORM()), Workflows: store.NewWorkflowExtStore(e.repo.ORM()), Questions: store.NewQuestionExtStore(e.repo.ORM()), Temporal: e.temporal, Pause: nil}),
 	}
 
@@ -175,6 +177,7 @@ func newFirstTurnSendFixture(t *testing.T) (*Service, *codePresenceHangingRouter
 	svc := &Service{
 		deps: Deps{
 			Repo:        rowreads.WithRepo(repo),
+			Projects:    projectaccesstest.For(repo),
 			Workflows:   store.NewWorkflowExtStore(repo.ORM()),
 			Worktrees:   store.NewWorktreeExtStore(repo.ORM()),
 			ProjectRows: store.NewProjectExtStore(repo.ORM()), TriggerEvents: store.NewTriggerEventExtStore(repo.ORM()),

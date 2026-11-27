@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
@@ -109,7 +111,7 @@ func TestChatSnapshot_DoesNotReplayAnsweredQuestion(t *testing.T) {
 		QuestionID: questionID, ChatID: chatID, Status: "resolved",
 	}))
 
-	snapshot, _, err := NewTestStreaming(t, WithStreamingDeps(withRoles(Deps{Repo: repo}))).buildChatSnapshotByID(ctx, chatID)
+	snapshot, _, err := NewTestStreaming(t, WithStreamingDeps(withRoles(Deps{Repo: rowreads.WithRepo(repo)}))).buildChatSnapshotByID(ctx, chatID)
 	require.NoError(t, err)
 
 	statuses := questionStatusesInSnapshot(t, snapshot)
@@ -146,7 +148,7 @@ func TestChatSnapshot_StillDeliversUnansweredQuestion(t *testing.T) {
 		Metadata: `{"type":"ask_user","questions":[{"question":"Which branch?"}]}`,
 	}))
 
-	snapshot, _, err := NewTestStreaming(t, WithStreamingDeps(withRoles(Deps{Repo: repo}))).buildChatSnapshotByID(ctx, chatID)
+	snapshot, _, err := NewTestStreaming(t, WithStreamingDeps(withRoles(Deps{Repo: rowreads.WithRepo(repo)}))).buildChatSnapshotByID(ctx, chatID)
 	require.NoError(t, err)
 
 	statuses := questionStatusesInSnapshot(t, snapshot)
@@ -192,7 +194,7 @@ func TestTerminateChat_EmitsQuestionResolved(t *testing.T) {
 	require.Equal(t, db.QuestionStatusResolved, q.Status,
 		"terminate must void the pending question")
 
-	snapshot, _, err := NewTestStreaming(t, WithStreamingDeps(withRoles(Deps{Repo: repo}))).buildChatSnapshotByID(ctx, chatID)
+	snapshot, _, err := NewTestStreaming(t, WithStreamingDeps(withRoles(Deps{Repo: rowreads.WithRepo(repo)}))).buildChatSnapshotByID(ctx, chatID)
 	require.NoError(t, err)
 
 	statuses := questionStatusesInSnapshot(t, snapshot)

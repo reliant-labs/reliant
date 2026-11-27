@@ -9,6 +9,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -89,7 +91,7 @@ func TestConcurrentLaunchesForDistinctUsersAllSucceed(t *testing.T) {
 
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
-	launcher, _ := newTestLauncher(t, repo, &fakeStarter{})
+	launcher, _ := newTestLauncher(t, rowreads.WithRepo(repo), &fakeStarter{})
 
 	const users = 16
 	userIDs := make([]string, users)
@@ -153,7 +155,7 @@ func TestLaunchSucceedsWhenThePostCommitActivityEmitFails(t *testing.T) {
 
 	repo, raw, cleanup := db.SetupTestDBWithRawDB(t)
 	t.Cleanup(cleanup)
-	launcher, _ := newTestLauncher(t, repo, &fakeStarter{})
+	launcher, _ := newTestLauncher(t, rowreads.WithRepo(repo), &fakeStarter{})
 	userID := "emit-failure-user-" + uuid.NewString()[:8]
 	projectID := seedLaunchUser(t, repo, userID)
 	injectActivityEventFailure(t, raw)

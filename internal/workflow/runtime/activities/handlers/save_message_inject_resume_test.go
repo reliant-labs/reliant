@@ -67,7 +67,7 @@ func newInjectFixture(t *testing.T) *injectFixture {
 		h:        h,
 		chatID:   chatID,
 		threadID: threadID,
-		activity: NewSaveMessageActivity(SaveMessageDeps{Store: rowreads.WithRepo(h.Repo()), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())})}),
+		activity: NewSaveMessageActivity(SaveMessageDeps{Store: rowreads.WithRepo(h.Repo()), Threads: threads.New(threads.Deps{Repo: rowreads.WithRepo(h.Repo()), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())})}),
 	}
 }
 

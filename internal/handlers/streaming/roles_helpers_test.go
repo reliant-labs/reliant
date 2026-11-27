@@ -2,6 +2,7 @@ package streaming
 
 import (
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/rowreads"
 	"github.com/reliant-labs/reliant/internal/store"
 )
 
@@ -39,8 +40,8 @@ func withRoles(d Deps) Deps {
 
 func roleOf[T any](repo Repository, fromDB func(*db.Repo) T) T {
 	var zero T
-	if r, ok := repo.(*db.Repo); ok {
-		return fromDB(r)
+	if r, ok := repo.(rowreads.Repo); ok {
+		return fromDB(r.Repo)
 	}
 	if r, ok := repo.(T); ok {
 		return r

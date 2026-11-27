@@ -16,6 +16,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
 )
 
 // down is a membership whose every answer is an outage.
@@ -46,7 +47,7 @@ func TestGetProjectWithUserCheck_RefusalsCarryWhy(t *testing.T) {
 		"another user":                {ctx: authz.WithMembership(context.Background(), liveIn{"acme": true}), caller: "someone-else"},
 	} {
 		t.Run(name, func(t *testing.T) {
-			_, err := repo.GetProjectWithUserCheck(tc.ctx, project.ID, tc.caller)
+			_, err := projectaccesstest.For(repo).GetProjectWithUserCheck(tc.ctx, project.ID, tc.caller)
 			require.Error(t, err)
 			assert.ErrorIs(t, err, core.ErrProjectNotFound)
 			assert.Equal(t, connect.CodeNotFound, svcerr.Code(err))
@@ -61,7 +62,7 @@ func TestGetProjectWithUserCheck_RefusalsCarryWhy(t *testing.T) {
 		})
 	}
 
-	got, err := repo.GetProjectWithUserCheck(authz.WithMembership(context.Background(), liveIn{"acme": true}), project.ID, userID)
+	got, err := projectaccesstest.For(repo).GetProjectWithUserCheck(authz.WithMembership(context.Background(), liveIn{"acme": true}), project.ID, userID)
 	require.NoError(t, err)
 	assert.Equal(t, project.ID, got.ID)
 }

@@ -220,6 +220,7 @@ func (g *Graph) newToolsDaemon() (*tools_daemon.Service, error) {
 		Config:          g.Cfg,
 		Repo:            rowreads.WithRepo(g.Database()),
 		Projects:        store.NewProjectExtStore(g.Database().ORM()),
+		Access:          g.Projectaccess(),
 		Installs:        store.NewProjectDaemonExtStore(g.Database().ORM()),
 		Attachments:     store.NewDaemonAttachmentExtStore(g.Database().ORM()),
 		LocalModels:     store.NewDaemonExtStore(g.Database().ORM()),
@@ -555,6 +556,7 @@ func (g *Graph) newWorkerChat() (*WorkerChat, error) {
 		Pause:    g.PauseService(),
 		Router:   g.WorkerDaemonRouter(),
 		DB:       g.Database(),
+		Projects: g.Projectaccess(),
 		Updates:  g.chatUpdates(),
 		Backoff:  g.Providerbackoff(),
 	})
@@ -1197,6 +1199,7 @@ func (g *Graph) newChat() (*chat.Service, error) {
 		Config:           g.Cfg,
 		Repo:             rowreads.WithRepo(g.Database()),
 		Chats:            chataccess.NewFromORM(g.Database().ORM()),
+		Projects:         g.Projectaccess(),
 		ChatRows:         store.NewChatExtStore(g.Database().ORM()),
 		ChatViews:        store.NewChatsWithActivityExtStore(g.Database().ORM()),
 		QuestionResolver: questions.NewFromRepo(g.Database()),
@@ -1600,7 +1603,7 @@ func (g *Graph) newStreaming() (*streaminghandler.Service, error) {
 	return streaminghandler.New(streaminghandler.Deps{
 		Logger:      g.Log,
 		Config:      g.Cfg,
-		Repo:        g.Database(),
+		Repo:        rowreads.WithRepo(g.Database()),
 		ChatRows:    store.NewChatExtStore(g.Database().ORM()),
 		Senders:     store.NewThreadExtStore(g.Database().ORM()),
 		Projects:    store.NewProjectExtStore(g.Database().ORM()),
@@ -1991,7 +1994,7 @@ func (g *Graph) newWriteLedgerStore() (writeledger.Store, error) {
 // newProjectaccess constructs the projectaccess package (internal/projectaccess).
 func (g *Graph) newProjectaccess() (projectaccess.Service, error) {
 	return projectaccess.NewServiceWithForgeMiddleware(projectaccess.New(projectaccess.Deps{
-		Store: g.Database(),
+		Store: store.NewProjectExtStore(g.Database().ORM()),
 	})), nil
 }
 

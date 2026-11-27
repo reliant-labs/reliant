@@ -28,7 +28,7 @@ func (s *Service) newChatOrgs(ctx context.Context, userID, projectID, requested 
 	// a blank org_id would skip the project's org and its membership check.
 	requested = strings.TrimSpace(requested)
 	if requested == "" && projectID != "" {
-		project, err := s.deps.Repo.GetProjectWithUserCheck(ctx, projectID, userID)
+		project, err := s.deps.Projects.GetProjectWithUserCheck(ctx, projectID, userID)
 		if err == nil && project.OrgID != nil {
 			requested = *project.OrgID
 		}

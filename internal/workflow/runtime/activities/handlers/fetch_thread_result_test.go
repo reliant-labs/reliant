@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -98,7 +100,7 @@ func (f *fetchResultFixture) saveAssistant(t *testing.T, text *string, toolName 
 
 func (f *fetchResultFixture) fetch(t *testing.T) FetchThreadResultOutput {
 	t.Helper()
-	activityInstance := NewFetchThreadResultActivity(threads.New(threads.Deps{Repo: f.h.Repo(), Messages: store.NewMessageExtStore(f.h.Repo().ORM()), Senders: store.NewThreadExtStore(f.h.Repo().ORM())}))
+	activityInstance := NewFetchThreadResultActivity(threads.New(threads.Deps{Repo: rowreads.WithRepo(f.h.Repo()), Messages: store.NewMessageExtStore(f.h.Repo().ORM()), Senders: store.NewThreadExtStore(f.h.Repo().ORM())}))
 
 	var output FetchThreadResultOutput
 	require.NoError(t, f.h.ExecuteActivity(activityInstance.Execute, FetchThreadResultInput{

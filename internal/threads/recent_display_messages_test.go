@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"github.com/reliant-labs/reliant/internal/db"
 )
 
@@ -200,7 +202,7 @@ func TestLoadRecentDisplayMessages_ReadsOnlyTheWindowsItNeeds(t *testing.T) {
 	ctx := context.Background()
 
 	leaf, newest := forkCompactionChain(t, h)
-	repo := &windowReadCounter{Repository: h.repo}
+	repo := &windowReadCounter{Repository: rowreads.WithRepo(h.repo)}
 	svc := New(Deps{Repo: repo})
 
 	if _, err := svc.LoadRecentDisplayMessages(ctx, leaf, newest); err != nil {
@@ -211,7 +213,7 @@ func TestLoadRecentDisplayMessages_ReadsOnlyTheWindowsItNeeds(t *testing.T) {
 			repo.boundedReads, repo.fullReads)
 	}
 
-	*repo = windowReadCounter{Repository: h.repo}
+	*repo = windowReadCounter{Repository: rowreads.WithRepo(h.repo)}
 	// newest (5) + b2 cw1's 5 + 1 from b2 cw0: three windows, not seven.
 	if _, err := svc.LoadRecentDisplayMessages(ctx, leaf, newest+6); err != nil {
 		t.Fatalf("LoadRecentDisplayMessages: %v", err)

@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -24,7 +26,7 @@ import (
 func TestLaunchNoMachineRecordsItOnTheChat(t *testing.T) {
 	repo, ctx, projectID, _ := launchFixture(t)
 	starter := &fakeStarter{}
-	launcher, _ := newTestLauncher(t, repo, starter)
+	launcher, _ := newTestLauncher(t, rowreads.WithRepo(repo), starter)
 
 	result, err := launcher.Launch(ctx, chatStartEvent(), Spec{
 		OwnerUserID: launchTestUserID, ProjectID: projectID, Workflow: "builtin://agent",
@@ -45,7 +47,7 @@ func TestLaunchNoMachineRecordsItOnTheChat(t *testing.T) {
 func TestLaunchNoMachineRefusesAWorkflowThatHardRequiresAMachine(t *testing.T) {
 	repo, ctx, projectID, _ := launchFixture(t)
 	starter := &fakeStarter{}
-	launcher, _ := newTestLauncher(t, repo, starter)
+	launcher, _ := newTestLauncher(t, rowreads.WithRepo(repo), starter)
 
 	_, err := launcher.Launch(ctx, chatStartEvent(), Spec{
 		OwnerUserID: launchTestUserID, ProjectID: projectID, Workflow: "builtin://parallel-compete",
@@ -68,7 +70,7 @@ func TestLaunchNoMachineRefusesAWorkflowThatHardRequiresAMachine(t *testing.T) {
 func TestLaunchClientParamsCannotWriteEngineInjectedInputs(t *testing.T) {
 	repo, ctx, projectID, _ := launchFixture(t)
 	starter := &fakeStarter{}
-	launcher, _ := newTestLauncher(t, repo, starter)
+	launcher, _ := newTestLauncher(t, rowreads.WithRepo(repo), starter)
 
 	params := mockModelParams(t)
 	params["unattended"] = structpb.NewBoolValue(true)
@@ -93,7 +95,7 @@ func TestLaunchClientParamsCannotWriteEngineInjectedInputs(t *testing.T) {
 func TestLaunchUnattendedIsAnEngineInjectedInput(t *testing.T) {
 	repo, ctx, projectID, _ := launchFixture(t)
 	starter := &fakeStarter{}
-	launcher, _ := newTestLauncher(t, repo, starter)
+	launcher, _ := newTestLauncher(t, rowreads.WithRepo(repo), starter)
 
 	_, err := launcher.Launch(ctx, Event{Kind: core.TriggerEventKindSchedule, DedupeKey: uuid.NewString()}, Spec{
 		OwnerUserID: launchTestUserID, ProjectID: projectID, Workflow: "builtin://agent",
@@ -109,7 +111,7 @@ func TestLaunchUnattendedIsAnEngineInjectedInput(t *testing.T) {
 // NoMachine and DaemonID contradict each other.
 func TestLaunchNoMachineWithADaemonIsInvalid(t *testing.T) {
 	repo, ctx, projectID, _ := launchFixture(t)
-	launcher, _ := newTestLauncher(t, repo, &fakeStarter{})
+	launcher, _ := newTestLauncher(t, rowreads.WithRepo(repo), &fakeStarter{})
 
 	_, err := launcher.Launch(ctx, chatStartEvent(), Spec{
 		OwnerUserID: launchTestUserID, ProjectID: projectID, Workflow: "builtin://agent",
@@ -125,7 +127,7 @@ func TestLaunchNoMachineWithADaemonIsInvalid(t *testing.T) {
 // daemon, as every no-machine chat does.
 func TestLaunchNoMachineRefusesAMachineBoundWorktree(t *testing.T) {
 	repo, ctx, projectID, mainWorktreeID := launchFixture(t)
-	launcher, _ := newTestLauncher(t, repo, &fakeStarter{})
+	launcher, _ := newTestLauncher(t, rowreads.WithRepo(repo), &fakeStarter{})
 
 	daemonID := "daemon-" + uuid.NewString()
 	branchWorktreeID := uuid.NewString()
@@ -190,7 +192,7 @@ nodes:
 	}))
 
 	starter := &fakeStarter{}
-	launcher, _ := newTestLauncher(t, repo, starter)
+	launcher, _ := newTestLauncher(t, rowreads.WithRepo(repo), starter)
 	_, err = launcher.Launch(ctx, Event{
 		Kind: core.TriggerEventKindSchedule, TriggerID: triggerID, DedupeKey: "fire-" + uuid.NewString(), OccurredAt: now,
 	}, Spec{
@@ -223,7 +225,7 @@ func TestAutomationPrecedenceSurvivesTriggerDeletion(t *testing.T) {
 		Config: []byte(`{"interval":"1h"}`), CreatedAt: now, UpdatedAt: now,
 	}))
 	starter := &fakeStarter{}
-	launcher, _ := newTestLauncher(t, repo, starter)
+	launcher, _ := newTestLauncher(t, rowreads.WithRepo(repo), starter)
 	result, err := launcher.Launch(ctx, Event{
 		Kind: core.TriggerEventKindSchedule, TriggerID: triggerID, DedupeKey: "fire-" + uuid.NewString(), OccurredAt: now,
 	}, Spec{
@@ -271,7 +273,7 @@ func TestLaunchAutomationBuildsInputsFromTheProjectWorkflow(t *testing.T) {
 	}))
 
 	starter := &fakeStarter{}
-	launcher, _ := newTestLauncher(t, repo, starter)
+	launcher, _ := newTestLauncher(t, rowreads.WithRepo(repo), starter)
 	_, err = launcher.Launch(ctx, Event{
 		Kind: core.TriggerEventKindSchedule, TriggerID: triggerID, DedupeKey: "fire-" + uuid.NewString(), OccurredAt: now,
 	}, Spec{

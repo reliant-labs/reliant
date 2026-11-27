@@ -49,7 +49,7 @@ func runChatProjectsTurn(t *testing.T, h *IdempotencyTestHelper, chatID string, 
 	t.Helper()
 	driver := &requestShapeDriver{}
 	act := NewCallLLMActivity(CallLLMDeps{Mailbox: store.NewAgentMessageExtStore(h.Repo().ORM()), ToolResults: toolCallsOf(h.Repo()), Store: rowreads.WithRepo(h.Repo()),
-		Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())}),
+		Threads: threads.New(threads.Deps{Repo: rowreads.WithRepo(h.Repo()), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())}),
 		Spawns:  store.NewToolCallExtStore(h.Repo().ORM()), ToolsFactory: tools.NewToolsFactory(&tools.ToolsOptions{Repo: h.Repo()}),
 		ConfigProvider: &staticConfigProvider{},
 		DriverResolver: func(context.Context, string, models.Preferences, ...llm.DriverOption) (llm.Driver, error) {

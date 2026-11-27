@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
@@ -165,7 +167,7 @@ func TestChatSnapshot_OmitsSpawnThreadTranscripts(t *testing.T) {
 
 	f := seedSpawnSiblingsChat(t, repo, ctx, 3, 250)
 
-	snapshot, _, err := NewTestStreaming(t, WithStreamingDeps(withRoles(Deps{Repo: repo}))).buildChatSnapshotByID(ctx, f.chatID)
+	snapshot, _, err := NewTestStreaming(t, WithStreamingDeps(withRoles(Deps{Repo: rowreads.WithRepo(repo)}))).buildChatSnapshotByID(ctx, f.chatID)
 	require.NoError(t, err)
 
 	got := make(map[string]bool, len(snapshot.Messages))
@@ -226,7 +228,7 @@ func TestChatSnapshot_HasMoreWhenMainThreadOutgrowsWindow(t *testing.T) {
 
 	f := seedSpawnSiblingsChat(t, repo, ctx, snapshotMessageLimit+5, 3)
 
-	snapshot, _, err := NewTestStreaming(t, WithStreamingDeps(withRoles(Deps{Repo: repo}))).buildChatSnapshotByID(ctx, f.chatID)
+	snapshot, _, err := NewTestStreaming(t, WithStreamingDeps(withRoles(Deps{Repo: rowreads.WithRepo(repo)}))).buildChatSnapshotByID(ctx, f.chatID)
 	require.NoError(t, err)
 
 	mainCount := 0

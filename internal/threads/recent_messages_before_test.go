@@ -6,6 +6,8 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"github.com/reliant-labs/forge/pkg/testkit"
 
 	"github.com/reliant-labs/reliant/internal/db"
@@ -175,7 +177,7 @@ func TestLoadRecentMessagesBefore_CompactedThreadReadsOnlyTheWindowsItNeeds(t *t
 	defer h.Close()
 
 	leaf, newest := forkCompactionChain(t, h)
-	repo := &windowReadCounter{Repository: h.repo}
+	repo := &windowReadCounter{Repository: rowreads.WithRepo(h.repo)}
 	svc := New(Deps{Repo: repo})
 
 	if _, _, err := svc.LoadRecentMessagesBefore(context.Background(), leaf, 0, newest-1); err != nil {

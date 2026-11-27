@@ -15,6 +15,7 @@ import (
 	"github.com/reliant-labs/forge/pkg/testkit"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
 	"github.com/reliant-labs/reliant/internal/projectpurge"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/store/triggertest"
@@ -107,7 +108,7 @@ func TestProjectDeleteScheduleHidesAndRestoreBringsBack(t *testing.T) {
 	projects, chats := f.listed(t)
 	assert.False(t, projects, "a scheduled project leaves the project list")
 	assert.False(t, chats, "its chats leave the chat list")
-	_, err = f.repo.GetProjectWithUserCheck(f.ctx, f.project, f.owner)
+	_, err = projectaccesstest.For(f.repo).GetProjectWithUserCheck(f.ctx, f.project, f.owner)
 	assert.ErrorIs(t, err, core.ErrProjectNotFound)
 	deleted, err := f.purges.ListDeletedProjects(f.ctx, f.owner, nil, false)
 	require.NoError(t, err)
@@ -134,7 +135,7 @@ func TestProjectDeleteScheduleHidesAndRestoreBringsBack(t *testing.T) {
 	projects, chats = f.listed(t)
 	assert.True(t, projects)
 	assert.True(t, chats)
-	p, err := f.repo.GetProjectWithUserCheck(f.ctx, f.project, f.owner)
+	p, err := projectaccesstest.For(f.repo).GetProjectWithUserCheck(f.ctx, f.project, f.owner)
 	require.NoError(t, err)
 	assert.Nil(t, p.DeleteAfter)
 	assert.Nil(t, p.DeletedBy)

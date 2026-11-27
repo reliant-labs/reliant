@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/reliant-labs/forge/pkg/testkit"
+
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // TestReviveThread is the inverse of TestReapOrphanedThreads, and pins the
@@ -65,7 +67,7 @@ func TestReviveThread(t *testing.T) {
 				t.Fatalf("ReviveThread moved %d rows, want 1", rows)
 			}
 
-			thread, err := repo.GetThread(ctx, threadID)
+			thread, err := store.GetThread(ctx, repo.ORM(), threadID)
 			if err != nil {
 				t.Fatalf("GetThread: %v", err)
 			}
@@ -116,7 +118,7 @@ func TestReviveThread_LeavesLiveThreadsAlone(t *testing.T) {
 				t.Fatalf("ReviveThread moved %d rows on a non-terminal thread, want 0", rows)
 			}
 
-			thread, err := repo.GetThread(ctx, threadID)
+			thread, err := store.GetThread(ctx, repo.ORM(), threadID)
 			if err != nil {
 				t.Fatalf("GetThread: %v", err)
 			}
@@ -152,7 +154,7 @@ func TestReviveThread_OnlyTargetThread(t *testing.T) {
 		t.Fatalf("ReviveThread: %v", err)
 	}
 
-	spawn, err := repo.GetThread(ctx, "th-scope-spawn")
+	spawn, err := store.GetThread(ctx, repo.ORM(), "th-scope-spawn")
 	if err != nil {
 		t.Fatalf("GetThread: %v", err)
 	}

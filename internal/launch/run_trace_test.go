@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"github.com/reliant-labs/reliant/internal/daemonplacement"
 
 	"github.com/reliant-labs/reliant/internal/projectaccess"
@@ -82,7 +84,7 @@ func TestLaunch_TriggerFanOutStartsATraceOfItsOwnPerRun(t *testing.T) {
 	repo, ctx, projectID, _ := launchFixture(t)
 	tp := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(tracetest.NewSpanRecorder()))
 	starter := newTracingStarter(t, tp)
-	launcher := New(Deps{Store: repo, Chats: store.NewChatsWithActivityExtStore(repo.ORM()), Workflows: store.NewWorkflowExtStore(repo.ORM()), Worktrees: store.NewWorktreeExtStore(repo.ORM()), Installs: daemonplacement.NewRecords(repo.ORM()), ProjectRows: store.NewProjectExtStore(repo.ORM()), TriggerEvents: store.NewTriggerEventExtStore(repo.ORM()), Projects: projectaccess.NewFromORM(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Threads: threads.New(threads.Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())}), Temporal: starter, Runs: &recordingRunRecorder{repo: repo, chats: store.NewChatsWithActivityExtStore(repo.ORM())}, TaskQueue: "test-task-queue"})
+	launcher := New(Deps{Store: repo, Chats: store.NewChatsWithActivityExtStore(repo.ORM()), Workflows: store.NewWorkflowExtStore(repo.ORM()), Worktrees: store.NewWorktreeExtStore(repo.ORM()), Installs: daemonplacement.NewRecords(repo.ORM()), ProjectRows: store.NewProjectExtStore(repo.ORM()), TriggerEvents: store.NewTriggerEventExtStore(repo.ORM()), Projects: projectaccess.NewFromORM(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Threads: threads.New(threads.Deps{Repo: rowreads.WithRepo(repo), Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())}), Temporal: starter, Runs: &recordingRunRecorder{repo: repo, chats: store.NewChatsWithActivityExtStore(repo.ORM())}, TaskQueue: "test-task-queue"})
 
 	fireCtx, firing := tp.Tracer("test").Start(ctx, "trigger.fire integration")
 	defer firing.End()
@@ -125,7 +127,7 @@ func TestLaunch_AttendedStartStaysInItsCallersTrace(t *testing.T) {
 	repo, ctx, projectID, _ := launchFixture(t)
 	tp := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(tracetest.NewSpanRecorder()))
 	starter := newTracingStarter(t, tp)
-	launcher := New(Deps{Store: repo, Chats: store.NewChatsWithActivityExtStore(repo.ORM()), Workflows: store.NewWorkflowExtStore(repo.ORM()), Worktrees: store.NewWorktreeExtStore(repo.ORM()), Installs: daemonplacement.NewRecords(repo.ORM()), ProjectRows: store.NewProjectExtStore(repo.ORM()), TriggerEvents: store.NewTriggerEventExtStore(repo.ORM()), Projects: projectaccess.NewFromORM(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Threads: threads.New(threads.Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())}), Temporal: starter, Runs: &recordingRunRecorder{repo: repo, chats: store.NewChatsWithActivityExtStore(repo.ORM())}, TaskQueue: "test-task-queue"})
+	launcher := New(Deps{Store: repo, Chats: store.NewChatsWithActivityExtStore(repo.ORM()), Workflows: store.NewWorkflowExtStore(repo.ORM()), Worktrees: store.NewWorktreeExtStore(repo.ORM()), Installs: daemonplacement.NewRecords(repo.ORM()), ProjectRows: store.NewProjectExtStore(repo.ORM()), TriggerEvents: store.NewTriggerEventExtStore(repo.ORM()), Projects: projectaccess.NewFromORM(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Threads: threads.New(threads.Deps{Repo: rowreads.WithRepo(repo), Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())}), Temporal: starter, Runs: &recordingRunRecorder{repo: repo, chats: store.NewChatsWithActivityExtStore(repo.ORM())}, TaskQueue: "test-task-queue"})
 
 	reqCtx, request := tp.Tracer("test").Start(ctx, "ChatService/CreateChat")
 	defer request.End()

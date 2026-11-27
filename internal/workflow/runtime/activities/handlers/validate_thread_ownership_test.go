@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -56,7 +58,7 @@ func TestValidateThreadOwnership_ValidOwnership(t *testing.T) {
 	require.NoError(t, err)
 
 	// Test: Validate that thread belongs to the correct chat
-	activity := NewValidateThreadOwnershipActivity(repo)
+	activity := NewValidateThreadOwnershipActivity(rowreads.WithRepo(repo))
 
 	// Use Temporal test suite to provide proper activity context
 	suite := &temporaltest.WorkflowTestSuite{}
@@ -130,7 +132,7 @@ func TestValidateThreadOwnership_InvalidOwnership(t *testing.T) {
 	require.NoError(t, err)
 
 	// Test: Try to validate thread from Chat A against Chat B (should fail)
-	activity := NewValidateThreadOwnershipActivity(repo)
+	activity := NewValidateThreadOwnershipActivity(rowreads.WithRepo(repo))
 
 	// Use Temporal test suite to provide proper activity context
 	suite := &temporaltest.WorkflowTestSuite{}
@@ -157,7 +159,7 @@ func TestValidateThreadOwnership_ThreadNotFound(t *testing.T) {
 	defer repo.Close()
 
 	// Test: Validate a non-existent thread
-	activity := NewValidateThreadOwnershipActivity(repo)
+	activity := NewValidateThreadOwnershipActivity(rowreads.WithRepo(repo))
 
 	// Use Temporal test suite to provide proper activity context
 	suite := &temporaltest.WorkflowTestSuite{}
@@ -229,7 +231,7 @@ func TestValidateThreadOwnership_SubAgentThread(t *testing.T) {
 	require.NoError(t, err)
 
 	// Test: Validate that sub-agent thread belongs to the same chat
-	activity := NewValidateThreadOwnershipActivity(repo)
+	activity := NewValidateThreadOwnershipActivity(rowreads.WithRepo(repo))
 
 	// Use Temporal test suite to provide proper activity context
 	suite := &temporaltest.WorkflowTestSuite{}

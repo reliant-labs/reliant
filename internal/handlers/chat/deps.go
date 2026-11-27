@@ -170,9 +170,6 @@ type Repository interface {
 	launch.Store
 	// GetChat is the chat read launch.Store and runs.Repository no longer
 	// carry; the handlers read it through ChatViews.
-	// GetProjectWithUserCheck is the org-aware project read the handlers and the
-	// launcher share; db.Repo delegates it to projectaccess.
-	GetProjectWithUserCheck(ctx context.Context, id string, userID string) (*db.Project, error)
 	// GetProject reads a project the handler already authorized (the
 	// workspace-machine and move-to-project paths).
 	GetProject(ctx context.Context, id string) (*db.Project, error)

@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
 	"github.com/reliant-labs/reliant/internal/rowreads"
 	"github.com/reliant-labs/reliant/internal/store"
 
@@ -138,7 +139,7 @@ func TestRefreshForgeApps_RecordsEveryAppInAWorkspace(t *testing.T) {
 	}
 
 	// The project row's root forge identity is a public surface, untouched.
-	stored, err := repo.GetProjectWithUserCheck(context.Background(), project.ID, userID)
+	stored, err := projectaccesstest.For(repo).GetProjectWithUserCheck(context.Background(), project.ID, userID)
 	require.NoError(t, err)
 	assert.False(t, stored.IsForge)
 	assert.Nil(t, stored.ForgeProjectName)

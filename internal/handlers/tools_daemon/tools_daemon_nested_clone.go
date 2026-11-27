@@ -194,7 +194,7 @@ func (s *Service) nestedCloneAuthorizer(conn *daemonConnection, projectID string
 		if err != nil {
 			return nil, err
 		}
-		project, err := s.deps.Repo.GetProjectWithUserCheck(ctx, projectID, conn.userID)
+		project, err := s.deps.Access.GetProjectWithUserCheck(ctx, projectID, conn.userID)
 		if err != nil {
 			return nil, err
 		}

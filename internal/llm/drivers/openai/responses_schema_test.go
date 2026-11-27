@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/llm"
 	"github.com/reliant-labs/reliant/internal/llm/models"
@@ -52,8 +54,8 @@ func TestResponsesToolSchemaNormalization(t *testing.T) {
 
 	// We only need one tool to reproduce the strictest schema issues.
 	repo := &db.Repo{} // schema generation doesn't touch the repo
-	addTask := llmtools.NewAddTaskTool(repo, nil, nil)
-	updateTask := llmtools.NewUpdateTaskTool(repo, nil, nil)
+	addTask := llmtools.NewAddTaskTool(rowreads.WithRepo(repo), nil, nil)
+	updateTask := llmtools.NewUpdateTaskTool(rowreads.WithRepo(repo), nil, nil)
 	// Simulate a malformed/underspecified MCP schema that still must become
 	// a strict root object for OpenAI Responses.
 	brokenMCP := llmtools.NewSchemaOnlyTool(

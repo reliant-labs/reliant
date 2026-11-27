@@ -359,7 +359,7 @@ func NewRunLauncher(d RunLauncherDeps) (*launch.Launcher, error) {
 		TriggerEvents: store.NewTriggerEventExtStore(d.DB.ORM()),
 		Projects:      d.Projects,
 		Selections:    store.NewChatSelectionExtStore(d.DB.ORM()),
-		Threads:       threads.New(threads.Deps{Repo: d.DB}),
+		Threads:       threads.New(threads.Deps{Repo: rowreads.WithRepo(d.DB)}),
 		Temporal:      d.Temporal.Client,
 		Runs:          d.Runs,
 		TaskQueue:     v2workflow.SharedTaskQueue,
@@ -379,6 +379,8 @@ type WorkerChatDeps struct {
 	Temporal *TemporalClient
 	Pause    *v2workflow.PauseService
 	Router   *WorkerDaemonRouter
+	// Projects reads a project the chat's owner may write (projectaccess).
+	Projects projectaccess.Service
 	// Updates writes the chat's refetch signals and publishes them to the hubs.
 	Updates chatupdates.Service
 }
@@ -393,6 +395,7 @@ func NewWorkerChat(d WorkerChatDeps) (*WorkerChat, error) {
 		Config:           d.Config,
 		Repo:             rowreads.WithRepo(d.DB),
 		Chats:            chataccess.NewFromORM(d.DB.ORM()),
+		Projects:         d.Projects,
 		ChatRows:         store.NewChatExtStore(d.DB.ORM()),
 		ChatViews:        store.NewChatsWithActivityExtStore(d.DB.ORM()),
 		QuestionResolver: questions.NewFromRepo(d.DB),

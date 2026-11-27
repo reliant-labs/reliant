@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"github.com/reliant-labs/reliant/internal/store"
 
 	"github.com/google/uuid"
@@ -61,7 +63,7 @@ func TestSpawnStop_DirectChild_RequestsStopWithBothIDs(t *testing.T) {
 	parentID, childID, toolCallID := seedSpawnRelationship(t, repo, ctx, chatID, db.ThreadStatusRunning)
 
 	stopper := &recordingSpawnStopper{}
-	tool := NewSpawnStopTool(SpawnStopDeps{Store: repo, Tree: store.NewToolCallExtStore(repo.ORM()), Stopper: stopper})
+	tool := NewSpawnStopTool(SpawnStopDeps{Store: rowreads.WithRepo(repo), Tree: store.NewToolCallExtStore(repo.ORM()), Stopper: stopper})
 	rc := rctx.NewToolContext(ctx, chatID, parentID, nil, nil)
 
 	resp := runSpawnStop(t, tool, rc, SpawnStopParams{AgentID: childID, Reason: "fan-out already answered"})
@@ -126,7 +128,7 @@ func TestSpawnStop_ResumedSpawn_TargetsLatestResumption(t *testing.T) {
 		"the whole bug depends on the resumed workflow id differing from the thread id")
 
 	stopper := &recordingSpawnStopper{}
-	tool := NewSpawnStopTool(SpawnStopDeps{Store: repo, Tree: store.NewToolCallExtStore(repo.ORM()), Stopper: stopper})
+	tool := NewSpawnStopTool(SpawnStopDeps{Store: rowreads.WithRepo(repo), Tree: store.NewToolCallExtStore(repo.ORM()), Stopper: stopper})
 	rc := rctx.NewToolContext(ctx, chatID, parentID, nil, nil)
 
 	resp := runSpawnStop(t, tool, rc, SpawnStopParams{AgentID: childID})
@@ -154,7 +156,7 @@ func TestSpawnStop_Receipt_SaysRequestedNotStopped(t *testing.T) {
 
 	parentID, childID, _ := seedSpawnRelationship(t, repo, ctx, chatID, db.ThreadStatusRunning)
 
-	tool := NewSpawnStopTool(SpawnStopDeps{Store: repo, Tree: store.NewToolCallExtStore(repo.ORM()), Stopper: &recordingSpawnStopper{}})
+	tool := NewSpawnStopTool(SpawnStopDeps{Store: rowreads.WithRepo(repo), Tree: store.NewToolCallExtStore(repo.ORM()), Stopper: &recordingSpawnStopper{}})
 	rc := rctx.NewToolContext(ctx, chatID, parentID, nil, nil)
 
 	resp := runSpawnStop(t, tool, rc, SpawnStopParams{AgentID: childID})
@@ -178,7 +180,7 @@ func TestSpawnStop_Parent_Rejected(t *testing.T) {
 	parentID, childID, _ := seedSpawnRelationship(t, repo, ctx, chatID, db.ThreadStatusRunning)
 
 	stopper := &recordingSpawnStopper{}
-	tool := NewSpawnStopTool(SpawnStopDeps{Store: repo, Tree: store.NewToolCallExtStore(repo.ORM()), Stopper: stopper})
+	tool := NewSpawnStopTool(SpawnStopDeps{Store: rowreads.WithRepo(repo), Tree: store.NewToolCallExtStore(repo.ORM()), Stopper: stopper})
 	// The CHILD is the caller here, trying to stop its parent.
 	rc := rctx.NewToolContext(ctx, chatID, childID, nil, nil)
 
@@ -206,7 +208,7 @@ func TestSpawnStop_UnrelatedThread_Rejected(t *testing.T) {
 	require.NoError(t, err)
 
 	stopper := &recordingSpawnStopper{}
-	tool := NewSpawnStopTool(SpawnStopDeps{Store: repo, Tree: store.NewToolCallExtStore(repo.ORM()), Stopper: stopper})
+	tool := NewSpawnStopTool(SpawnStopDeps{Store: rowreads.WithRepo(repo), Tree: store.NewToolCallExtStore(repo.ORM()), Stopper: stopper})
 	rc := rctx.NewToolContext(ctx, chatID, parentID, nil, nil)
 
 	resp := runSpawnStop(t, tool, rc, SpawnStopParams{AgentID: otherID})
@@ -229,7 +231,7 @@ func TestSpawnStop_AlreadyFinished_ReportsWithoutError(t *testing.T) {
 	parentID, childID, _ := seedSpawnRelationship(t, repo, ctx, chatID, db.ThreadStatusCompleted)
 
 	stopper := &recordingSpawnStopper{}
-	tool := NewSpawnStopTool(SpawnStopDeps{Store: repo, Tree: store.NewToolCallExtStore(repo.ORM()), Stopper: stopper})
+	tool := NewSpawnStopTool(SpawnStopDeps{Store: rowreads.WithRepo(repo), Tree: store.NewToolCallExtStore(repo.ORM()), Stopper: stopper})
 	rc := rctx.NewToolContext(ctx, chatID, parentID, nil, nil)
 
 	resp := runSpawnStop(t, tool, rc, SpawnStopParams{AgentID: childID})
@@ -252,7 +254,7 @@ func TestSpawnStop_NilStopper_ReportsUnavailable(t *testing.T) {
 
 	parentID, childID, _ := seedSpawnRelationship(t, repo, ctx, chatID, db.ThreadStatusRunning)
 
-	tool := NewSpawnStopTool(SpawnStopDeps{Store: repo, Tree: store.NewToolCallExtStore(repo.ORM()), Stopper: nil})
+	tool := NewSpawnStopTool(SpawnStopDeps{Store: rowreads.WithRepo(repo), Tree: store.NewToolCallExtStore(repo.ORM()), Stopper: nil})
 	rc := rctx.NewToolContext(ctx, chatID, parentID, nil, nil)
 
 	resp := runSpawnStop(t, tool, rc, SpawnStopParams{AgentID: childID})
@@ -274,7 +276,7 @@ func TestSpawnStop_DeliveryFails_SaysStillRunning(t *testing.T) {
 	parentID, childID, _ := seedSpawnRelationship(t, repo, ctx, chatID, db.ThreadStatusRunning)
 
 	stopper := &recordingSpawnStopper{err: errors.New("workflow not found")}
-	tool := NewSpawnStopTool(SpawnStopDeps{Store: repo, Tree: store.NewToolCallExtStore(repo.ORM()), Stopper: stopper})
+	tool := NewSpawnStopTool(SpawnStopDeps{Store: rowreads.WithRepo(repo), Tree: store.NewToolCallExtStore(repo.ORM()), Stopper: stopper})
 	rc := rctx.NewToolContext(ctx, chatID, parentID, nil, nil)
 
 	resp := runSpawnStop(t, tool, rc, SpawnStopParams{AgentID: childID})
@@ -294,7 +296,7 @@ func TestSpawnStop_SelfRejected(t *testing.T) {
 	parentID, _, _ := seedSpawnRelationship(t, repo, ctx, chatID, db.ThreadStatusRunning)
 
 	stopper := &recordingSpawnStopper{}
-	tool := NewSpawnStopTool(SpawnStopDeps{Store: repo, Tree: store.NewToolCallExtStore(repo.ORM()), Stopper: stopper})
+	tool := NewSpawnStopTool(SpawnStopDeps{Store: rowreads.WithRepo(repo), Tree: store.NewToolCallExtStore(repo.ORM()), Stopper: stopper})
 	rc := rctx.NewToolContext(ctx, chatID, parentID, nil, nil)
 
 	resp := runSpawnStop(t, tool, rc, SpawnStopParams{AgentID: parentID})

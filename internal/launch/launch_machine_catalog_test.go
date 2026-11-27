@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"github.com/reliant-labs/reliant/internal/daemonplacement"
 
 	"github.com/reliant-labs/reliant/internal/projectaccess"
@@ -56,7 +58,7 @@ func TestLaunchOnAMachineReadsThatMachinesCatalog(t *testing.T) {
 	}})
 
 	starter := &fakeStarter{}
-	launcher, _ := newTestLauncher(t, repo, starter)
+	launcher, _ := newTestLauncher(t, rowreads.WithRepo(repo), starter)
 
 	_, err := launcher.Launch(ctx, chatStartEvent(), Spec{
 		OwnerUserID: launchTestUserID, ProjectID: projectID, Workflow: "builtin://agent", DaemonID: cicd,
@@ -123,7 +125,7 @@ func TestLaunchRefusesAPresetOnlyAnotherMachineSynced(t *testing.T) {
 	}
 
 	starter := &fakeStarter{}
-	launcher, _ := newTestLauncher(t, repo, starter)
+	launcher, _ := newTestLauncher(t, rowreads.WithRepo(repo), starter)
 	spec := func(daemonID string) Spec {
 		return Spec{
 			OwnerUserID: launchTestUserID, ProjectID: projectID, Workflow: "builtin://agent", DaemonID: daemonID,
@@ -170,7 +172,7 @@ func TestResolveProviderPolicyKeepsTheRunsPolicyWhenAPresetIsGone(t *testing.T) 
 		CreatedAt: now, UpdatedAt: now,
 	}))
 
-	launcher, _ := newTestLauncher(t, repo, &fakeStarter{})
+	launcher, _ := newTestLauncher(t, rowreads.WithRepo(repo), &fakeStarter{})
 	chat := &db.Chat{ID: uuid.NewString(), UserID: launchTestUserID, ProjectID: projectID, ActiveDaemonID: &cicd}
 	held := types.RunProviderPolicy{OnLimit: "wait", PreferredAccount: map[string]string{"claude": "work@acme.com"}}
 	inputs := map[string]interface{}{
@@ -233,7 +235,7 @@ func TestLaunchUnpinnedPendingChatReadsTheMachineItWillBePinnedTo(t *testing.T) 
 	chatID := pendingBranch(t, repo, ctx, projectID, mainWorktreeID)
 
 	starter := &fakeStarter{}
-	launcher := New(Deps{Store: repo, Chats: store.NewChatsWithActivityExtStore(repo.ORM()), Workflows: store.NewWorkflowExtStore(repo.ORM()), Worktrees: store.NewWorktreeExtStore(repo.ORM()), Installs: daemonplacement.NewRecords(repo.ORM()), ProjectRows: store.NewProjectExtStore(repo.ORM()), TriggerEvents: store.NewTriggerEventExtStore(repo.ORM()), Projects: projectaccess.NewFromORM(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Threads: threads.New(threads.Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())}), Temporal: starter, Runs: &recordingRunRecorder{repo: repo, chats: store.NewChatsWithActivityExtStore(repo.ORM())}, TaskQueue: "test-task-queue", Pinner: fixedPinner{repo: repo, id: cicd}})
+	launcher := New(Deps{Store: repo, Chats: store.NewChatsWithActivityExtStore(repo.ORM()), Workflows: store.NewWorkflowExtStore(repo.ORM()), Worktrees: store.NewWorktreeExtStore(repo.ORM()), Installs: daemonplacement.NewRecords(repo.ORM()), ProjectRows: store.NewProjectExtStore(repo.ORM()), TriggerEvents: store.NewTriggerEventExtStore(repo.ORM()), Projects: projectaccess.NewFromORM(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Threads: threads.New(threads.Deps{Repo: rowreads.WithRepo(repo), Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())}), Temporal: starter, Runs: &recordingRunRecorder{repo: repo, chats: store.NewChatsWithActivityExtStore(repo.ORM())}, TaskQueue: "test-task-queue", Pinner: fixedPinner{repo: repo, id: cicd}})
 	_, err := launcher.Launch(ctx, Event{Kind: core.TriggerEventKindChatStart, DedupeKey: chatID}, Spec{
 		OwnerUserID: launchTestUserID, ChatID: chatID, Workflow: "deploy", Messages: userSeed("go"),
 	})
@@ -283,7 +285,7 @@ func TestLaunchPendingNoMachineBranchStartedOnAMachineReadsThatMachine(t *testin
 	require.NoError(t, err)
 
 	starter := &fakeStarter{}
-	launcher, _ := newTestLauncher(t, repo, starter)
+	launcher, _ := newTestLauncher(t, rowreads.WithRepo(repo), starter)
 	_, err = launcher.Launch(ctx, Event{Kind: core.TriggerEventKindChatStart, DedupeKey: chatID}, Spec{
 		OwnerUserID: launchTestUserID, ChatID: chatID, Workflow: "deploy", DaemonID: cicd, Messages: userSeed("go"),
 	})

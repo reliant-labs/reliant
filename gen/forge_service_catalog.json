@@ -481,6 +481,7 @@
         "OrgPolicyResolver",
         "OrgResolver",
         "Pprof",
+        "Projectaccess",
         "StateDerivation",
         "TLSFiles",
         "TokenAuthority",
@@ -58616,6 +58617,19 @@
     },
     {
       "consumer": "Chat",
+      "field": "Projects",
+      "interface": "github.com/reliant-labs/reliant/internal/projectaccess.Service",
+      "methods": [],
+      "candidates": [
+        "Projectaccess"
+      ],
+      "providers": [
+        "Projectaccess"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Chat",
       "field": "QuestionResolver",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/chat.QuestionResolver",
       "methods": [],
@@ -59207,7 +59221,6 @@
       "interface": "github.com/reliant-labs/reliant/internal/projectaccess.Service",
       "methods": [],
       "candidates": [
-        "Database",
         "Projectaccess"
       ],
       "providers": [
@@ -59613,7 +59626,6 @@
       "interface": "github.com/reliant-labs/reliant/internal/projectaccess.Service",
       "methods": [],
       "candidates": [
-        "Database",
         "Projectaccess"
       ],
       "providers": [
@@ -60000,7 +60012,6 @@
       "interface": "github.com/reliant-labs/reliant/internal/projectaccess.Service",
       "methods": [],
       "candidates": [
-        "Database",
         "Projectaccess"
       ],
       "providers": [
@@ -60097,9 +60108,7 @@
       "field": "Threads",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/plan.ThreadStore",
       "methods": [],
-      "candidates": [
-        "Database"
-      ],
+      "candidates": [],
       "providers": [],
       "resolution": "unresolved"
     },
@@ -60123,7 +60132,6 @@
       "interface": "github.com/reliant-labs/reliant/internal/projectaccess.Service",
       "methods": [],
       "candidates": [
-        "Database",
         "Projectaccess"
       ],
       "providers": [
@@ -60319,7 +60327,6 @@
       "interface": "github.com/reliant-labs/reliant/internal/projectaccess.Service",
       "methods": [],
       "candidates": [
-        "Database",
         "Projectaccess"
       ],
       "providers": [
@@ -60414,9 +60421,7 @@
       "field": "Store",
       "interface": "github.com/reliant-labs/reliant/internal/projectaccess.Store",
       "methods": [],
-      "candidates": [
-        "Database"
-      ],
+      "candidates": [],
       "providers": [
         "Database"
       ],
@@ -60698,7 +60703,6 @@
       "interface": "github.com/reliant-labs/reliant/internal/projectaccess.Service",
       "methods": [],
       "candidates": [
-        "Database",
         "Projectaccess"
       ],
       "providers": [
@@ -60838,7 +60842,6 @@
       "interface": "github.com/reliant-labs/reliant/internal/projectaccess.Service",
       "methods": [],
       "candidates": [
-        "Database",
         "Projectaccess"
       ],
       "providers": [
@@ -60902,7 +60905,6 @@
       "interface": "github.com/reliant-labs/reliant/internal/projectaccess.Service",
       "methods": [],
       "candidates": [
-        "Database",
         "Projectaccess"
       ],
       "providers": [
@@ -61237,9 +61239,7 @@
       "field": "Repo",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/streaming.Repository",
       "methods": [],
-      "candidates": [
-        "Database"
-      ],
+      "candidates": [],
       "providers": [
         "Database"
       ],
@@ -61388,9 +61388,7 @@
       "field": "Threads",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/task.ThreadStore",
       "methods": [],
-      "candidates": [
-        "Database"
-      ],
+      "candidates": [],
       "providers": [],
       "resolution": "unresolved"
     },
@@ -61596,6 +61594,19 @@
       "candidates": [],
       "providers": [
         "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "ToolsDaemon",
+      "field": "Access",
+      "interface": "github.com/reliant-labs/reliant/internal/projectaccess.Service",
+      "methods": [],
+      "candidates": [
+        "Projectaccess"
+      ],
+      "providers": [
+        "Projectaccess"
       ],
       "resolution": "composition_expression"
     },
@@ -61905,7 +61916,6 @@
       "interface": "github.com/reliant-labs/reliant/internal/projectaccess.Service",
       "methods": [],
       "candidates": [
-        "Database",
         "Projectaccess"
       ],
       "providers": [
@@ -62145,6 +62155,19 @@
       ],
       "providers": [
         "Providerbackoff"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "WorkerChat",
+      "field": "Projects",
+      "interface": "github.com/reliant-labs/reliant/internal/projectaccess.Service",
+      "methods": [],
+      "candidates": [
+        "Projectaccess"
+      ],
+      "providers": [
+        "Projectaccess"
       ],
       "resolution": "composition_expression"
     },
@@ -62408,7 +62431,6 @@
       "interface": "github.com/reliant-labs/reliant/internal/projectaccess.Service",
       "methods": [],
       "candidates": [
-        "Database",
         "Projectaccess"
       ],
       "providers": [
@@ -62560,7 +62582,6 @@
       "interface": "github.com/reliant-labs/reliant/internal/projectaccess.Service",
       "methods": [],
       "candidates": [
-        "Database",
         "Projectaccess"
       ],
       "providers": [

@@ -6,6 +6,8 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -43,7 +45,7 @@ func TestChatSnapshotSkipTotal(t *testing.T) {
 
 	open := func(t *testing.T, skipTotal bool) (*reliantv1.ChatSyncSnapshot, int32) {
 		t.Helper()
-		spy := &countSpyRepo{Repository: repo}
+		spy := &countSpyRepo{Repository: rowreads.WithRepo(repo)}
 		svc := NewTestStreaming(t, WithStreamingDeps(withRoles(Deps{Repo: spy, ChatRows: store.NewChatExtStore(repo.ORM())})))
 		events := chatStreamEvents(t, svc, &reliantv1.StreamChatUpdatesRequest{ChatId: f.ChatID, SkipTotal: skipTotal})
 		snapshot := nextChatEvent(t, events).GetSnapshot()

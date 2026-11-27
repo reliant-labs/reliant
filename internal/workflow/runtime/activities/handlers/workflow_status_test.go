@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/rowreads"
+	"github.com/reliant-labs/reliant/internal/store"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -49,7 +50,7 @@ func TestWorkflowStatus_RootWorkflowUpdatesThread(t *testing.T) {
 	h.CreateTestChat(ctx, chatID, projectID, userID)
 
 	// Verify the thread exists but has NULL workflow_id (simulating ChatService creation)
-	thread, err := h.Repo().GetThread(ctx, chatID)
+	thread, err := store.GetThread(ctx, h.Repo().ORM(), chatID)
 	require.NoError(t, err)
 	assert.Nil(t, thread.WorkflowID, "Thread should have NULL workflow_id initially")
 
@@ -72,7 +73,7 @@ func TestWorkflowStatus_RootWorkflowUpdatesThread(t *testing.T) {
 		assert.True(t, output.Success)
 
 		// Verify thread now has the workflow_id
-		updatedThread, err := h.Repo().GetThread(ctx, chatID)
+		updatedThread, err := store.GetThread(ctx, h.Repo().ORM(), chatID)
 		require.NoError(t, err)
 		require.NotNil(t, updatedThread.WorkflowID, "Thread should have workflow_id after root workflow started")
 		assert.Equal(t, workflowID, *updatedThread.WorkflowID, "Thread workflow_id should match the workflow")
@@ -701,7 +702,7 @@ func TestWorkflowStatus_StartedRevivesTerminalThread(t *testing.T) {
 	// Turn 2 starts on the SAME thread. Both halves must come back to life.
 	require.NoError(t, h.ExecuteActivity(activity.Execute, startedInput, &output))
 
-	thread, err := h.Repo().GetThread(ctx, chatID)
+	thread, err := store.GetThread(ctx, h.Repo().ORM(), chatID)
 	require.NoError(t, err)
 	assert.Equal(t, db.ThreadStatusRunning, thread.Status,
 		"a thread executing a new turn must not still read as finished")
@@ -753,7 +754,7 @@ func TestWorkflowStatus_StartedRevivesThreadWhenWorkflowAlreadyRunning(t *testin
 
 	require.NoError(t, h.ExecuteActivity(activity.Execute, startedInput, &output))
 
-	thread, err := h.Repo().GetThread(ctx, chatID)
+	thread, err := store.GetThread(ctx, h.Repo().ORM(), chatID)
 	require.NoError(t, err)
 	assert.Equal(t, db.ThreadStatusRunning, thread.Status,
 		"the revival must not sit behind trackWorkflow's already-running early return")
@@ -791,7 +792,7 @@ func TestWorkflowStatus_TerminalStatusDoesNotReviveThread(t *testing.T) {
 		Status: "completed", Thread: chatID,
 	}, &output))
 
-	thread, err := h.Repo().GetThread(ctx, chatID)
+	thread, err := store.GetThread(ctx, h.Repo().ORM(), chatID)
 	require.NoError(t, err)
 	assert.Equal(t, db.ThreadStatusCompleted, thread.Status,
 		"a terminal notification must never revive the thread it is closing")
