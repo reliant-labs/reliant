@@ -95,26 +95,45 @@ func checkSlug(field, v string, vocab []string) error {
 	return nil
 }
 
+// The library filter lists' caps, the proto's max_items: a list holds each
+// value of its vocabulary at most once.
+const (
+	MaxLibraryCategories     = 13
+	MaxLibraryBusinessTypes  = 10
+	MaxLibraryBusinessModels = 8
+)
+
+// libraryList checks one filter list: at most maxLen values (counted as
+// sent, as the proto counts them), each in vocab; it returns them mapped to
+// bank values with repeats dropped, in first-seen order.
+func libraryList[T ~string](field string, vs []T, maxLen int, vocab []T, slug func(T) string) ([]string, error) {
+	if len(vs) > maxLen {
+		return nil, invalid(field, fmt.Sprintf("at most %d", maxLen))
+	}
+	var out []string
+	for _, v := range vs {
+		if !slices.Contains(vocab, v) {
+			return nil, invalid(field, fmt.Sprintf("unknown value %q", v))
+		}
+		if b := slug(v); !slices.Contains(out, b) {
+			out = append(out, b)
+		}
+	}
+	return out, nil
+}
+
 // libraryQuery checks in's filters and maps them to a bank query.
 func libraryQuery(in ListStrategyLibraryInput) (library.Query, error) {
 	var q library.Query
-	for _, c := range in.Categories {
-		if !slices.Contains(strategyCategories, c) {
-			return q, invalid("category", fmt.Sprintf("unknown category %q", c))
-		}
-		q.Categories = append(q.Categories, bankCategory(c))
+	var err error
+	if q.Categories, err = libraryList("categories", in.Categories, MaxLibraryCategories, strategyCategories, bankCategory); err != nil {
+		return q, err
 	}
-	for _, t := range in.BusinessTypes {
-		if !slices.Contains(businessTypes, t) {
-			return q, invalid("business_types", fmt.Sprintf("unknown business type %q", t))
-		}
-		q.BusinessTypes = append(q.BusinessTypes, bankBusinessType(t))
+	if q.BusinessTypes, err = libraryList("business_types", in.BusinessTypes, MaxLibraryBusinessTypes, businessTypes, bankBusinessType); err != nil {
+		return q, err
 	}
-	for _, m := range in.BusinessModels {
-		if !slices.Contains(businessModels, m) {
-			return q, invalid("business_models", fmt.Sprintf("unknown business model %q", m))
-		}
-		q.BusinessModels = append(q.BusinessModels, bankBusinessModel(m))
+	if q.BusinessModels, err = libraryList("business_models", in.BusinessModels, MaxLibraryBusinessModels, businessModels, bankBusinessModel); err != nil {
+		return q, err
 	}
 	if err := firstErr(
 		checkSlug("stage", in.Stage, library.Stages()),

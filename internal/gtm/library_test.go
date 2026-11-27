@@ -136,6 +136,43 @@ func TestStrategyLibrary(t *testing.T) {
 			require.ErrorIs(t, err, ErrInvalidArgument, name)
 		}
 	})
+	t.Run("filter lists are capped as the proto caps them, and deduplicated", func(t *testing.T) {
+		f := newFixture(t)
+		assert.Equal(t, len(library.Categories()), MaxLibraryCategories)
+		assert.Equal(t, len(library.BusinessTypes()), MaxLibraryBusinessTypes)
+		assert.Equal(t, len(library.BusinessModels()), MaxLibraryBusinessModels)
+
+		full, err := f.svc.ListStrategyLibrary(ctx(), agent, ListStrategyLibraryInput{
+			Categories: strategyCategories, BusinessTypes: businessTypes, BusinessModels: businessModels, PageSize: MaxLibraryPageSize,
+		})
+		require.NoError(t, err, "every value once is exactly at the caps")
+		assert.Len(t, full.Entries, min(len(all), MaxLibraryPageSize))
+
+		for name, in := range map[string]ListStrategyLibraryInput{
+			"categories":      {Categories: append(slices.Clone(strategyCategories), CategoryLaunchesPR)},
+			"business_types":  {BusinessTypes: append(slices.Clone(businessTypes), BusinessHardware)},
+			"business_models": {BusinessModels: append(slices.Clone(businessModels), ModelFreemium)},
+		} {
+			_, err := f.svc.ListStrategyLibrary(ctx(), agent, in)
+			require.ErrorIs(t, err, ErrInvalidArgument, name)
+			assert.Contains(t, err.Error(), name, "names the list")
+		}
+
+		q, err := libraryQuery(ListStrategyLibraryInput{
+			Categories:     []StrategyCategory{CategoryLaunchesPR, CategoryCommunityEvents, CategoryLaunchesPR},
+			BusinessTypes:  []BusinessType{BusinessB2BSaaS, BusinessB2BSaaS},
+			BusinessModels: []BusinessModel{ModelFreemium, ModelSubscription, ModelFreemium},
+		})
+		require.NoError(t, err)
+		assert.Equal(t, []string{library.CategoryLaunchesPR, library.CategoryCommunityEvents}, q.Categories)
+		assert.Equal(t, []string{library.BusinessTypeB2BSaaS}, q.BusinessTypes)
+		assert.Equal(t, []string{library.BusinessModelFreemium, library.BusinessModelSubscription}, q.BusinessModels)
+		dup, err := f.svc.ListStrategyLibrary(ctx(), agent, ListStrategyLibraryInput{Categories: []StrategyCategory{CategoryLaunchesPR, CategoryLaunchesPR}, PageSize: MaxLibraryPageSize})
+		require.NoError(t, err)
+		one, err := f.svc.ListStrategyLibrary(ctx(), agent, ListStrategyLibraryInput{Categories: []StrategyCategory{CategoryLaunchesPR}, PageSize: MaxLibraryPageSize})
+		require.NoError(t, err)
+		assert.Equal(t, libraryKeys(one.Entries), libraryKeys(dup.Entries), "a repeat counts once")
+	})
 	t.Run("fits my business reads the org's positioning", func(t *testing.T) {
 		f := newFixture(t)
 		in := ListStrategyLibraryInput{FitsMyBusiness: true, PageSize: MaxLibraryPageSize}

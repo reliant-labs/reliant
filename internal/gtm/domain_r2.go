@@ -490,7 +490,10 @@ type AttachFromAttachmentInput struct {
 // ListStrategyLibraryInput is the input to Service.ListStrategyLibrary.
 // Every empty filter matches anything; set ones combine.
 type ListStrategyLibraryInput struct {
-	// Categories: the entry's category is one of these.
+	// Categories: the entry's category is one of these. Each list is
+	// capped as the proto caps it (MaxLibraryCategories,
+	// MaxLibraryBusinessTypes, MaxLibraryBusinessModels; past that is
+	// InvalidArgument) and a repeated value counts once.
 	Categories []StrategyCategory
 	// BusinessTypes, BusinessModels: the entry fits any, or one of these.
 	BusinessTypes  []BusinessType
