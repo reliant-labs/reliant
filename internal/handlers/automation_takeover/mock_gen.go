@@ -16,41 +16,63 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 )
 
-// forge:section MockRepository
-// forge:hash=adbb01275a0187a357398bd1c50d237d2c03c22c1d7720880276aa5943b81a15
+// forge:section MockTriggerReads
+// forge:hash=691c8ac51e2a64a970c03e1d14b6d20de2d7f2cabb65f06fc85741739fea7040
 
-// MockRepository is a test mock for the Repository interface.
+// MockTriggerReads is a test mock for the TriggerReads interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockRepository.<Method>Func not set" error.
-type MockRepository struct {
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockTriggerReads.<Method>Func not set" error.
+type MockTriggerReads struct {
 	contractkit.Recorder
 	GetTriggerFunc func(context.Context, string) (*core.Trigger, error)
 }
 
 // GetTrigger records the call and delegates to GetTriggerFunc when set.
-func (m *MockRepository) GetTrigger(ctx context.Context, id string) (*core.Trigger, error) {
+func (m *MockTriggerReads) GetTrigger(ctx context.Context, id string) (*core.Trigger, error) {
 	m.Recorder.Record("GetTrigger", ctx, id)
 	if m.GetTriggerFunc != nil {
 		return m.GetTriggerFunc(ctx, id)
 	}
-	return nil, contractkit.MockNotSet("MockRepository", "GetTrigger")
+	return nil, contractkit.MockNotSet("MockTriggerReads", "GetTrigger")
+}
+
+// MockTriggerReadsGetTriggerCall is one recorded call of MockTriggerReads.GetTrigger, one
+// field per parameter.
+type MockTriggerReadsGetTriggerCall struct {
+	Ctx context.Context
+	ID  string
+}
+
+// GetTriggerCalls returns every recorded GetTrigger call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetTrigger").
+func (m *MockTriggerReads) GetTriggerCalls() []MockTriggerReadsGetTriggerCall {
+	var out []MockTriggerReadsGetTriggerCall
+	for _, c := range m.Recorder.Calls("GetTrigger") {
+		var r MockTriggerReadsGetTriggerCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
 }
 
 // Compile-time check.
-var _ Repository = (*MockRepository)(nil)
+var _ TriggerReads = (*MockTriggerReads)(nil)
 
 // forge:section MockOffers
-// forge:hash=93daf27c68eefdd74ad42a0f0d2cce888af00ffb5b6682d3071173dd1b9f9965
+// forge:hash=db715125c60903f14ca9b807440b34e8ef0460353646be529a754bcfe15d3301
 
 // MockOffers is a test mock for the Offers interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockOffers.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockOffers.<Method>Func not set" error.
 type MockOffers struct {
 	contractkit.Recorder
 	ListOrgTriggersFunc          func(context.Context, string) ([]*core.Trigger, error)
@@ -115,18 +137,143 @@ func (m *MockOffers) SettleTriggerOffer(ctx context.Context, id string, status s
 	return false, contractkit.MockNotSet("MockOffers", "SettleTriggerOffer")
 }
 
+// MockOffersListOrgTriggersCall is one recorded call of MockOffers.ListOrgTriggers, one
+// field per parameter.
+type MockOffersListOrgTriggersCall struct {
+	Ctx   context.Context
+	OrgID string
+}
+
+// ListOrgTriggersCalls returns every recorded ListOrgTriggers call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListOrgTriggers").
+func (m *MockOffers) ListOrgTriggersCalls() []MockOffersListOrgTriggersCall {
+	var out []MockOffersListOrgTriggersCall
+	for _, c := range m.Recorder.Calls("ListOrgTriggers") {
+		var r MockOffersListOrgTriggersCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.OrgID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockOffersListOrgWorkflowDraftsCall is one recorded call of MockOffers.ListOrgWorkflowDrafts, one
+// field per parameter.
+type MockOffersListOrgWorkflowDraftsCall struct {
+	Ctx   context.Context
+	OrgID string
+}
+
+// ListOrgWorkflowDraftsCalls returns every recorded ListOrgWorkflowDrafts call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListOrgWorkflowDrafts").
+func (m *MockOffers) ListOrgWorkflowDraftsCalls() []MockOffersListOrgWorkflowDraftsCall {
+	var out []MockOffersListOrgWorkflowDraftsCall
+	for _, c := range m.Recorder.Calls("ListOrgWorkflowDrafts") {
+		var r MockOffersListOrgWorkflowDraftsCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.OrgID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockOffersCreateTriggerOfferCall is one recorded call of MockOffers.CreateTriggerOffer, one
+// field per parameter.
+type MockOffersCreateTriggerOfferCall struct {
+	Ctx context.Context
+	O   *core.TriggerOffer
+}
+
+// CreateTriggerOfferCalls returns every recorded CreateTriggerOffer call, oldest first, with
+// its arguments typed. It reads the same log as Calls("CreateTriggerOffer").
+func (m *MockOffers) CreateTriggerOfferCalls() []MockOffersCreateTriggerOfferCall {
+	var out []MockOffersCreateTriggerOfferCall
+	for _, c := range m.Recorder.Calls("CreateTriggerOffer") {
+		var r MockOffersCreateTriggerOfferCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.O, _ = c.Args[1].(*core.TriggerOffer)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockOffersGetTriggerOfferCall is one recorded call of MockOffers.GetTriggerOffer, one
+// field per parameter.
+type MockOffersGetTriggerOfferCall struct {
+	Ctx context.Context
+	ID  string
+}
+
+// GetTriggerOfferCalls returns every recorded GetTriggerOffer call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetTriggerOffer").
+func (m *MockOffers) GetTriggerOfferCalls() []MockOffersGetTriggerOfferCall {
+	var out []MockOffersGetTriggerOfferCall
+	for _, c := range m.Recorder.Calls("GetTriggerOffer") {
+		var r MockOffersGetTriggerOfferCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockOffersListPendingTriggerOffersCall is one recorded call of MockOffers.ListPendingTriggerOffers, one
+// field per parameter.
+type MockOffersListPendingTriggerOffersCall struct {
+	Ctx context.Context
+	F   core.TriggerOfferFilters
+}
+
+// ListPendingTriggerOffersCalls returns every recorded ListPendingTriggerOffers call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListPendingTriggerOffers").
+func (m *MockOffers) ListPendingTriggerOffersCalls() []MockOffersListPendingTriggerOffersCall {
+	var out []MockOffersListPendingTriggerOffersCall
+	for _, c := range m.Recorder.Calls("ListPendingTriggerOffers") {
+		var r MockOffersListPendingTriggerOffersCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.F, _ = c.Args[1].(core.TriggerOfferFilters)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockOffersSettleTriggerOfferCall is one recorded call of MockOffers.SettleTriggerOffer, one
+// field per parameter.
+type MockOffersSettleTriggerOfferCall struct {
+	Ctx    context.Context
+	ID     string
+	Status string
+	Reason string
+}
+
+// SettleTriggerOfferCalls returns every recorded SettleTriggerOffer call, oldest first, with
+// its arguments typed. It reads the same log as Calls("SettleTriggerOffer").
+func (m *MockOffers) SettleTriggerOfferCalls() []MockOffersSettleTriggerOfferCall {
+	var out []MockOffersSettleTriggerOfferCall
+	for _, c := range m.Recorder.Calls("SettleTriggerOffer") {
+		var r MockOffersSettleTriggerOfferCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ID, _ = c.Args[1].(string)
+		r.Status, _ = c.Args[2].(string)
+		r.Reason, _ = c.Args[3].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ Offers = (*MockOffers)(nil)
 
 // forge:section MockTriggerAdopter
-// forge:hash=406f5806d0816bbc034a2a8b0b5af634f3be669d825d178d3dcbed1f5637f181
+// forge:hash=d0f6f7aa9add347cf988aca031642b1a93f2c39f160873d50d073e0d8dbed906
 
 // MockTriggerAdopter is a test mock for the TriggerAdopter interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockTriggerAdopter.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockTriggerAdopter.<Method>Func not set" error.
 type MockTriggerAdopter struct {
 	contractkit.Recorder
 	AdoptAsFunc          func(context.Context, *core.Trigger, string, *pb.TriggerRebinding, string) (*pb.AcceptTriggerOfferResponse, error)
@@ -149,6 +296,52 @@ func (m *MockTriggerAdopter) RenderDefinition(ctx context.Context, t *core.Trigg
 		return m.RenderDefinitionFunc(ctx, t)
 	}
 	return nil, nil
+}
+
+// MockTriggerAdopterAdoptAsCall is one recorded call of MockTriggerAdopter.AdoptAs, one
+// field per parameter.
+type MockTriggerAdopterAdoptAsCall struct {
+	Ctx       context.Context
+	T         *core.Trigger
+	AdopterID string
+	Rb        *pb.TriggerRebinding
+	OfferID   string
+}
+
+// AdoptAsCalls returns every recorded AdoptAs call, oldest first, with
+// its arguments typed. It reads the same log as Calls("AdoptAs").
+func (m *MockTriggerAdopter) AdoptAsCalls() []MockTriggerAdopterAdoptAsCall {
+	var out []MockTriggerAdopterAdoptAsCall
+	for _, c := range m.Recorder.Calls("AdoptAs") {
+		var r MockTriggerAdopterAdoptAsCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.T, _ = c.Args[1].(*core.Trigger)
+		r.AdopterID, _ = c.Args[2].(string)
+		r.Rb, _ = c.Args[3].(*pb.TriggerRebinding)
+		r.OfferID, _ = c.Args[4].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockTriggerAdopterRenderDefinitionCall is one recorded call of MockTriggerAdopter.RenderDefinition, one
+// field per parameter.
+type MockTriggerAdopterRenderDefinitionCall struct {
+	Ctx context.Context
+	T   *core.Trigger
+}
+
+// RenderDefinitionCalls returns every recorded RenderDefinition call, oldest first, with
+// its arguments typed. It reads the same log as Calls("RenderDefinition").
+func (m *MockTriggerAdopter) RenderDefinitionCalls() []MockTriggerAdopterRenderDefinitionCall {
+	var out []MockTriggerAdopterRenderDefinitionCall
+	for _, c := range m.Recorder.Calls("RenderDefinition") {
+		var r MockTriggerAdopterRenderDefinitionCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.T, _ = c.Args[1].(*core.Trigger)
+		out = append(out, r)
+	}
+	return out
 }
 
 // Compile-time check.

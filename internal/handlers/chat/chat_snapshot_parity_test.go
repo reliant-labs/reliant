@@ -102,7 +102,7 @@ func TestChatSnapshot_MatchesListMessagesEnrichment(t *testing.T) {
 	require.NotNil(t, fromSnapshot)
 
 	recent := int32(50)
-	resp, err := (&Service{deps: Deps{Repo: repo, Chats: chataccess.NewFromORM(repo.ORM()), Workflows: store.NewWorkflowExtStore(repo.ORM()), Worktrees: store.NewWorktreeExtStore(repo.ORM()), ProjectRows: store.NewProjectExtStore(repo.ORM()), TriggerEvents: store.NewTriggerEventExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()), Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo}), AgentMessages: store.NewAgentMessageExtStore(repo.ORM())}}).ListMessages(ctx, connect.NewRequest(&reliantv1.ListMessagesRequest{
+	resp, err := (&Service{deps: Deps{Repo: repo, Chats: chataccess.NewFromORM(repo.ORM()), Workflows: store.NewWorkflowExtStore(repo.ORM()), Worktrees: store.NewWorktreeExtStore(repo.ORM()), ProjectRows: store.NewProjectExtStore(repo.ORM()), TriggerEvents: store.NewTriggerEventExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()), Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo.UpdateWriter()}), AgentMessages: store.NewAgentMessageExtStore(repo.ORM())}}).ListMessages(ctx, connect.NewRequest(&reliantv1.ListMessagesRequest{
 		ChatId: chatID, Recent: &recent,
 	}))
 	require.NoError(t, err)
@@ -122,16 +122,17 @@ func chatSnapshotOverStream(t *testing.T, repo *db.Repo, userID, chatID string) 
 	t.Helper()
 
 	svc, err := streaming.New(streaming.Deps{
-		Logger:     slog.Default(),
-		Config:     &typedconfig.Config{},
-		Repo:       repo,
-		ChatRows:   store.NewChatExtStore(repo.ORM()),
-		Senders:    store.NewThreadExtStore(repo.ORM()),
-		Heads:      store.NewChatUpdateExtStore(repo.ORM()),
-		UserLog:    store.NewUserUpdateExtStore(repo.ORM()),
-		OrgFeed:    store.NewOrgUpdateExtStore(repo.ORM()),
-		Siblings:   store.NewMessageExtStore(repo.ORM()),
-		SpawnCalls: store.NewToolCallExtStore(repo.ORM()),
+		Logger:       slog.Default(),
+		Config:       &typedconfig.Config{},
+		Repo:         repo,
+		TriggerReads: store.NewTriggerEventExtStore(repo.ORM()),
+		ChatRows:     store.NewChatExtStore(repo.ORM()),
+		Senders:      store.NewThreadExtStore(repo.ORM()),
+		Heads:        store.NewChatUpdateExtStore(repo.ORM()),
+		UserLog:      store.NewUserUpdateExtStore(repo.ORM()),
+		OrgFeed:      store.NewOrgUpdateExtStore(repo.ORM()),
+		Siblings:     store.NewMessageExtStore(repo.ORM()),
+		SpawnCalls:   store.NewToolCallExtStore(repo.ORM()),
 	})
 	require.NoError(t, err)
 

@@ -648,6 +648,12 @@ func (e *InlineWorkflowExecutor) Execute() (map[string]interface{}, error) {
 	if err != nil {
 		return nil, err
 	}
+	// A node that sets preflight checks the machine its body runs on first,
+	// and moves off one that fails (node_preflight.go).
+	placed, err = preflightStructural(e.ctx, e.chatID, e.workflowID, e.nodePath(), e.node, resolveNodeDaemonSelector(e.node, e.daemonScope), placed)
+	if err != nil {
+		return nil, err
+	}
 	e.execContext = placed
 
 	// Emit thread_created for all threads this node owns
@@ -660,6 +666,17 @@ func (e *InlineWorkflowExecutor) Execute() (map[string]interface{}, error) {
 		return nil, fmt.Errorf("failed to load sub-workflow %s: %w", e.subWorkflowName, err)
 	}
 
+	// A review node (lowered to this workflow node, review_node.go) runs in
+	// the reviewer session its caller derived (workflowNodeContext), before
+	// this executor or the session's thread existed: every model call in it
+	// is held to the reviewer's tools, at any depth. One that arrives without
+	// that session fails closed rather than running a reviewer unclamped, or
+	// in a thread an earlier round wrote.
+	review := model.IsLoweredReviewNode(e.node)
+	if review && (e.execContext == nil || !e.execContext.Reviewer) {
+		return nil, fmt.Errorf("review node %s: reached without a reviewer session", e.nodeID)
+	}
+
 	// Execute sub-workflow. A ref'd child with its own on_failure runs it
 	// when it fails, before the failure reaches the parent.
 	failureScope := e.beginChildFailureScope()
@@ -667,6 +684,15 @@ func (e *InlineWorkflowExecutor) Execute() (map[string]interface{}, error) {
 	e.finishChildFailureScope(failureScope, err)
 	if err != nil {
 		return nil, fmt.Errorf("sub-workflow %s failed: %w", e.subWorkflowName, err)
+	}
+
+	// The review node's output is its verdict, checked, with the session it
+	// ran in and its role; a missing or malformed verdict fails the node.
+	if review {
+		outputs, err = reviewNodeOutputs(outputs, e.execContext)
+		if err != nil {
+			return nil, fmt.Errorf("review node %s: %w", e.nodeID, err)
+		}
 	}
 
 	// Emit thread_completed for all threads this node owns
@@ -1548,7 +1574,7 @@ func (e *InlineWorkflowExecutor) executeNestedWorkflow(
 		WithNodePathPrefix(e.nodePath()).
 		WithInvocationContract(contract)
 	if e.execContext != nil {
-		childExecCtx := e.execContext.ForChild(nid, model.NodeThreadMode(evalResult), nestedWorkflowName, true)
+		childExecCtx := workflowNodeContext(e.ctx, e.childTracker, e.execContext, node, joinNodePath(e.nodePath(), nid), model.NodeThreadMode(evalResult), nestedWorkflowName, true)
 
 		// Create child thread and optionally save inject message
 		// For non-inherit modes, this creates the thread with proper fork metadata

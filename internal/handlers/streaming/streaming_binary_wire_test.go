@@ -23,7 +23,7 @@ import (
 // and heartbeat frames decode.
 func TestStreamChatUpdates_BinaryConnectWire(t *testing.T) {
 	contentTypes := make(chan string, 1)
-	svc := NewTestStreaming(t, WithStreamingDeps(withRoles(Deps{Repo: newCatchupChatRepo(42), Deltas: noopHub{}})))
+	svc := NewTestStreaming(t, WithStreamingDeps(withRoles(Deps{TriggerReads: &MockTriggerReads{}, Repo: newCatchupChatRepo(42), Deltas: noopHub{}})))
 	// The frame's encoding is what is under test, not the 30s production
 	// cadence, so the heartbeat comes fast. It still comes from the real
 	// ticker in the real stream loop, after the initial snapshot.

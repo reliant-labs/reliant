@@ -130,7 +130,7 @@ func TestTwilioMessagesLaunchRunsEndToEnd(t *testing.T) {
 	inbound.Register(func(p string, h http.Handler) { mux.Handle(p, h) })
 	server := httptest.NewServer(mux)
 	defer server.Close()
-	svc := NewTestTrigger(t, WithTriggerDeps(realStores(repo, Deps{Repo: repo, Projects: projectaccesstest.For(repo), Integrations: &configv1.IntegrationsConfig{PublicUrl: publicURL}, Catalog: registry, Intake: intake})))
+	svc := NewTestTrigger(t, WithTriggerDeps(realStores(repo, Deps{Repo: repo, Triggers: store.NewTriggerExtStore(repo.ORM()), FiringReads: store.NewTriggerEventExtStore(repo.ORM()), Registrations: store.NewTriggerRegistrationExtStore(repo.ORM()), Projects: projectaccesstest.For(repo), Integrations: &configv1.IntegrationsConfig{PublicUrl: publicURL}, Catalog: registry, Intake: intake})))
 
 	// --- three users -----------------------------------------------------
 	type tenant struct {
@@ -235,7 +235,7 @@ func TestTwilioMessagesLaunchRunsEndToEnd(t *testing.T) {
 // run's nodes see (the chat's launch event, as LoadChatTrigger rebuilds it).
 func assertRunSees(t *testing.T, repo *db.Repo, chatID, condition string) {
 	t.Helper()
-	info := launch.LoadChatTrigger(context.Background(), repo, chatID)
+	info := launch.LoadChatTrigger(context.Background(), store.NewTriggerEventExtStore(repo.ORM()), chatID)
 	require.NotNil(t, info)
 	f, err := triggers.CompileFilter(condition)
 	require.NoError(t, err)

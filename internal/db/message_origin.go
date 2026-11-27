@@ -4,42 +4,16 @@ package db
 import (
 	"context"
 
-	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/store"
 )
 
-// MessageOrigin attributes a user-role message that an agent, not the human,
-// sent through a path built for the human's own input: send_to_run reaches
-// another run through RunService.SignalRun, which is ChatService.SendMessage
-// underneath. Without it that message is stored, and shown, as if the human
-// had typed it.
-//
-// It travels on the context, not on the request, on purpose: the requests are
-// public RPCs, and a sender a client could set is a sender a client could
-// forge. Only in-process callers can put a value on a Go context.
-type MessageOrigin struct {
-	// ThreadID is the thread that sent the message (for a run, its main
-	// thread). Stored as messages.sender_thread_id / agent_messages.from_thread_id.
-	ThreadID string
-	// Kind is the sender kind recorded on the message.
-	Kind reliantv1.AgentMessageKind
-	// Subject is the sender's one-line summary, "" when it gave none.
-	Subject string
-}
+// MessageOrigin is trusted in-process attribution, defined in core.
+type MessageOrigin = core.MessageOrigin
 
-type messageOriginKey struct{}
-
-// WithMessageOrigin returns ctx carrying origin: the user-role messages saved
-// or queued under it are attributed to origin's thread. A zero ThreadID
-// returns ctx unchanged.
+// WithMessageOrigin returns ctx carrying trusted attribution.
 func WithMessageOrigin(ctx context.Context, origin MessageOrigin) context.Context {
-	if origin.ThreadID == "" {
-		return ctx
-	}
-	if origin.Kind == reliantv1.AgentMessageKind_AGENT_MESSAGE_KIND_UNSPECIFIED {
-		origin.Kind = reliantv1.AgentMessageKind_AGENT_MESSAGE_KIND_MESSAGE
-	}
-	return context.WithValue(ctx, messageOriginKey{}, origin)
+	return core.WithMessageOrigin(ctx, origin)
 }
 
 // senderTitle is store.SenderTitlesByThreadIDs for one thread, nil when it resolves to none.
@@ -58,38 +32,13 @@ func (r *Repo) senderTitle(ctx context.Context, threadID string) *string {
 }
 
 // MessageOriginFrom reports the origin ctx carries, if any.
-func MessageOriginFrom(ctx context.Context) (MessageOrigin, bool) {
-	origin, ok := ctx.Value(messageOriginKey{}).(MessageOrigin)
-	return origin, ok && origin.ThreadID != ""
-}
+func MessageOriginFrom(ctx context.Context) (MessageOrigin, bool) { return core.MessageOriginFrom(ctx) }
 
-type llmOnlyDeliveryKey struct{}
-
-// WithLLMOnlyDelivery returns ctx under which the user-role message saved or
-// queued is for the model only: it is stored HIDDEN, so it reaches the agent
-// through its history but the transcript never draws it. The answer to an
-// async ask_user question is one — the user gave it on the question's card,
-// which shows it there ("Answered: …"); as a free-standing user message it
-// would appear twice, the second time as words the user never typed.
-//
-// A context value for the reason MessageOrigin is: the send requests are
-// public, and a hidden user message is not something a client may ask for.
-func WithLLMOnlyDelivery(ctx context.Context) context.Context {
-	return context.WithValue(ctx, llmOnlyDeliveryKey{}, true)
-}
+// WithLLMOnlyDelivery marks a user message as hidden from the transcript.
+func WithLLMOnlyDelivery(ctx context.Context) context.Context { return core.WithLLMOnlyDelivery(ctx) }
 
 // LLMOnlyDelivery reports whether ctx is an LLM-only delivery.
-func LLMOnlyDelivery(ctx context.Context) bool {
-	v, _ := ctx.Value(llmOnlyDeliveryKey{}).(bool)
-	return v
-}
+func LLMOnlyDelivery(ctx context.Context) bool { return core.LLMOnlyDelivery(ctx) }
 
-// QueuedDisplayStyle is the display style to queue a user-role mailbox row
-// with under ctx: HIDDEN for an LLM-only delivery, nil otherwise.
-func QueuedDisplayStyle(ctx context.Context) *int32 {
-	if !LLMOnlyDelivery(ctx) {
-		return nil
-	}
-	hidden := int32(reliantv1.DisplayStyle_DISPLAY_STYLE_HIDDEN)
-	return &hidden
-}
+// QueuedDisplayStyle returns the display style for a model-only delivery.
+func QueuedDisplayStyle(ctx context.Context) *int32 { return core.QueuedDisplayStyle(ctx) }

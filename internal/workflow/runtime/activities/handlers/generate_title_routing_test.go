@@ -81,7 +81,7 @@ func titleRoutingEnv(t *testing.T, accounts *titleAccounts) (*routingEnv, *Gener
 	t.Helper()
 	env := newRoutingEnv(t)
 	env.routing.DriverFor = accounts.driverFor
-	return env, NewGenerateTitleActivity(nil, nil).WithAccountRouting(env.routing)
+	return env, NewGenerateTitleActivity(nil, nil, nil).WithAccountRouting(env.routing)
 }
 
 func sevenDayLimit(reset time.Time) error {

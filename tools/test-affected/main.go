@@ -80,7 +80,7 @@ func main() {
 	budgetFlag := fs.String("test-budget", "", "with run: fail a Go test this change adds or edits that runs longer than this (a duration; \"auto\" is 10s scaled by the load per core; empty or 0 is off), and report every other test over it")
 	webFullFlag := fs.String("web-full", webFullAll, "with run: what a FULL web lane runs: all (the whole vitest suite) or reached (only the vitest files the diff's own web modules reach, at -reach's cut; the merge gate's choice, dev-docs/testing-affected.md)")
 	webShardFlag := fs.String("web-shard", "", "with run: run only shard i of n of the web lane's vitest files (i/n, vitest --shard): the merge queue's vitest job splits the SAME selected file list across n runners, one leg each")
-	captureFlag := fs.Bool("capture", false, "with run: record the Go and web steps through scripts/test-capture.sh (`forge test capture`, lanes "+captureLaneGo+" and "+captureLaneWeb+"): results and coverage under .forge/tests/runs/, the verdict unchanged; the merge gate's choice")
+	captureFlag := fs.Bool("capture", false, "with run: record the Go and web steps through scripts/test-capture.sh (`forge test capture`, lanes "+captureLaneGo+" and "+captureLaneWeb+"): results under .forge/tests/runs/ (no coverage: the release gate measures it), the verdict unchanged; the merge gate's choice")
 	reachFlag := fs.String("reach", "", "Go and web lane fan-out: all (every package whose test binary, every vitest file whose import closure, contains a change; the default, also $TEST_REACH) or direct (changed packages + their direct importers; the vitest files that import a changed module or a module importing it: the merge tier)")
 	reachCapFlag := fs.Int("go-reach-cap", 0, "with -reach direct: also select the Go packages -reach all would add when they number at most this (the merge gate's transitive budget, MG_REACH_CAP); 0 keeps the direct cut")
 	if err := fs.Parse(args); err != nil {
@@ -146,7 +146,7 @@ func main() {
 	}
 	if cmd == "run" {
 		r := &runner{root: mustAbs(*root), out: os.Stdout, errOut: os.Stderr, dry: *dry, goP: *gotestP, jobs: *jobs, webFull: *webFullFlag, webShard: *webShardFlag,
-			slot: strings.Fields(os.Getenv("TEST_AFFECTED_SLOT")), capture: *captureFlag}
+			slot: strings.Fields(os.Getenv("TEST_AFFECTED_SLOT")), goVet: strings.Fields(os.Getenv("GO_TEST_VET")), capture: *captureFlag}
 		if err := r.setBudget(ctx, *budgetFlag, pl.Base); err != nil {
 			fmt.Fprintln(os.Stderr, "test-affected:", err)
 			os.Exit(2)
@@ -239,6 +239,7 @@ func plan(ctx context.Context, root, baseFlag string, forceFull bool, whatIf []s
 	}
 	g.Web = BuildWebGraph(append(append([]string{}, tracked...), untracked...), diskReader(root))
 	g.ElectronText = electronTexts(root)
+	g.ForgePin = planForgePin(ctx, root, base, changes, len(whatIf) > 0, g, goModDownload)
 	pl := ClassifyReachCap(changes, g, reachMode, reachCap)
 	pl.Base, pl.Head = base, head
 	if pl.ForgeGen.HooksOnly {
@@ -622,6 +623,11 @@ type runner struct {
 	// webShard is -web-shard: "i/n" runs vitest's shard i of n over the
 	// web step's files; empty runs them all.
 	webShard string
+	// goVet is GO_TEST_VET (Taskfile.yml says what it is): the root module's
+	// Go step carries it, so the merge gate, whose vet phase vets every
+	// package that step tests, runs it with -vet=off. The SDK module's step
+	// never does: no gate vets sdk/go, so go test's own vet is its only one.
+	goVet []string
 	// capture is -capture: the root module's Go step and the web step run
 	// through scripts/test-capture.sh, which records them with `forge test
 	// capture` (lanes captureLaneGo and captureLaneWeb) and exits with the
@@ -642,8 +648,8 @@ func (r *runner) captureScript() string {
 }
 
 // goTest is a Go step's command: `go test <args>`, or under -capture the
-// same lane through scripts/test-capture.sh, which adds -json and the cover
-// flags and prints what `go test` prints. raw puts the -json stream on
+// same lane through scripts/test-capture.sh, which adds -json (the cover
+// flags too, but rootGoSteps turns them off) and prints what `go test` prints. raw puts the -json stream on
 // stdout instead, for the budget filter.
 func (r *runner) goTest(args []string, raw bool) []string {
 	if !r.capture {
@@ -828,9 +834,30 @@ func (r *runner) goSteps(pl *Plan) []step {
 }
 
 func (r *runner) rootGoSteps(pl *Plan) []step {
+	steps := r.rootGoStepsOf(pl)
+	if r.capture {
+		// The merge tier records the Go step's results, not its coverage
+		// (scripts/test-capture.sh reads FORGE_TEST_COVERAGE). -covermode
+		// compiles every package it tests a second time, instrumented: those
+		// builds share nothing with the plain ones task test:short, the
+		// testbuild phase and every agent's go test write, and no test result
+		// either. On the shared build machine (ovh-build-1, 2026-11-25) 56% of
+		// the bytes the Go build cache took in an hour (70 of 124 GiB) were
+		// cover-instrumented, and a gate's packages took 1.89 GiB of new cache
+		// with coverage against 0.16 GiB without, at the same commit. Nothing
+		// reads a merge-tier run's coverage: the release gate's lanes (task
+		// test, uploaded from main) measure it.
+		for i := range steps {
+			steps[i].env = append(steps[i].env, "FORGE_TEST_COVERAGE=off")
+		}
+	}
+	return steps
+}
+
+func (r *runner) rootGoStepsOf(pl *Plan) []step {
 	// -timeout is per package binary and matches task test:short's (5m): the
 	// DB-backed packages run under -short too (sized in Taskfile.yml).
-	base := []string{"-buildvcs=false", "-short", "-timeout", "5m"}
+	base := append(append([]string{}, r.goVet...), "-buildvcs=false", "-short", "-timeout", "5m")
 	if r.goP > 0 {
 		base = append(base, "-p", fmt.Sprint(r.goP))
 	}

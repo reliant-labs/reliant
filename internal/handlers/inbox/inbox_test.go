@@ -42,7 +42,7 @@ func newInboxFixture(t *testing.T) *inboxFixture {
 // enabled.
 func (f *inboxFixture) withSweeper(t *testing.T, sweeper Sweeper) {
 	t.Helper()
-	f.inbox = NewTestInbox(t, withDeps(Deps{Repo: f.repo, Sweeper: sweeper}))
+	f.inbox = NewTestInbox(t, withDeps(Deps{Repo: f.repo, Registrations: store.NewTriggerRegistrationExtStore(f.repo.ORM()), Sweeper: sweeper}))
 }
 
 // otherUser returns a context and project for a second, unrelated user in the
@@ -385,7 +385,7 @@ func TestListInbox_LaunchFailedItemCountsTheEpisode(t *testing.T) {
 func (f *inboxFixture) notifyingTrigger(t *testing.T, id string, notify bool) {
 	t.Helper()
 	f.trigger(t, id)
-	tr, err := f.repo.GetTrigger(f.ctx, id)
+	tr, err := store.GetTrigger(f.ctx, f.repo.ORM(), id)
 	require.NoError(t, err)
 	tr.NotifyOnComplete = notify
 	require.NoError(t, triggertest.Update(f.ctx, f.repo, tr))

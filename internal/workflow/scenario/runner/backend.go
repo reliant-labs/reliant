@@ -93,6 +93,13 @@ type Options struct {
 	// been sent. The runner never executes a command; this is how a test gets
 	// the rendered command to inspect it, or to run it inside a sandbox.
 	OnRunStep func(nodePath, command string)
+	// OnNodeActivity, when set, receives every node activity the runtime
+	// dispatches (CallLLM, ExecuteTools, SaveMessage, ...), with its qualified
+	// node path and the input exactly as the runtime built it: the evaluated
+	// node and its runtime context (thread, node path). The runner still
+	// answers it from the scenario; this is how a test inspects what an
+	// activity would have been sent, such as the tools a model is offered.
+	OnNodeActivity func(nodePath, activityName string, in types.ActivityInput)
 }
 
 // Runner executes scenarios for a single workflow definition against
@@ -114,6 +121,12 @@ type Runner struct {
 
 	// onRunStep is Options.OnRunStep.
 	onRunStep func(nodePath, command string)
+	// onNodeActivity is Options.OnNodeActivity.
+	onNodeActivity func(nodePath, activityName string, in types.ActivityInput)
+
+	// lowerErr is why the workflow could not be prepared to run
+	// (runtime.LowerForExecution); every run reports it.
+	lowerErr error
 
 	// cancelAtRunStep, when set, is the path of a `run` node whose dispatch
 	// cancels the whole run, the way control_run cancel does, while the
@@ -121,12 +134,28 @@ type Runner struct {
 	// (finally) and what it leaves alone (on_failure).
 	cancelAtRunStep string
 
+	// holdRunStep, when set, is the path of a `run` node whose command keeps
+	// running for holdRunStepFor before it completes as the scenario says,
+	// unless the run cancels it first — a test seam for what ends a run
+	// from inside (its timeout) while a command runs.
+	holdRunStep    string
+	holdRunStepFor time.Duration
+
+	// onWorkflowStatus, when set, sees every WorkflowStatus call — a test
+	// seam for how a run reported its ending.
+	onWorkflowStatus func(in map[string]interface{})
+
 	// launchedBy, when set, makes the run the launch run this trigger event
 	// fired (WorkflowInput.Trigger and the launch-run input): a test seam for
 	// what only such a run does, such as reporting to its `check:`.
 	launchedBy *runtime.TriggerInfo
 	// checkReports records the run's reports to its check, in order.
 	checkReports *checkReports
+
+	// refOverrides, when set, replaces these refs' definitions, builtins
+	// included — a test seam standing in for a builtin whose file has been
+	// altered, such as a review-agent that widens its own tools.
+	refOverrides map[string]*reliantv1.Workflow
 }
 
 // checkReports is what a run reported to its workflow's check
@@ -156,7 +185,14 @@ func New(wf *reliantv1.Workflow, opts Options) *Runner {
 	if timeout <= 0 {
 		timeout = DefaultTimeout
 	}
-	return &Runner{workflow: wf, loader: loader, timeout: timeout, onRunStep: opts.OnRunStep}
+	// The runner sees the definition the runtime runs: a review node is the
+	// workflow node it is lowered to, so its body is a ref the scenario can
+	// reach into (review.agent_loop.call_llm) or mock as a whole.
+	lowered, lowerErr := runtime.LowerForExecution(wf)
+	if lowerErr == nil {
+		wf = lowered
+	}
+	return &Runner{workflow: wf, loader: loader, timeout: timeout, onRunStep: opts.OnRunStep, onNodeActivity: opts.OnNodeActivity, lowerErr: lowerErr}
 }
 
 // LoadBuiltinWorkflow resolves builtin:// refs by the one resolution rule
@@ -174,6 +210,9 @@ func LoadBuiltinWorkflow(ref string) (*reliantv1.Workflow, error) {
 // loadRef resolves a ref through the runner's loader. A builtin:// ref always
 // resolves from the embedded builtins, whatever loader was configured.
 func (r *Runner) loadRef(ref string) (*reliantv1.Workflow, error) {
+	if wf, ok := r.refOverrides[ref]; ok {
+		return proto.Clone(wf).(*reliantv1.Workflow), nil
+	}
 	if parsed, err := workflowref.Parse(ref); err == nil && parsed.Kind == workflowref.Builtin {
 		return LoadBuiltinWorkflow(ref)
 	}
@@ -847,6 +886,10 @@ func (r *Runner) RunContext(ctx context.Context, sc *scenario.Scenario) (result 
 		}
 	}()
 
+	if r.lowerErr != nil {
+		return errorResult(sc, r.lowerErr, start)
+	}
+
 	validation := scenario.ValidateScenario(sc, r.workflow)
 	if !validation.Valid {
 		res := errorResult(sc, fmt.Errorf("validation failed: %s", strings.Join(validation.Errors, "; ")), start)
@@ -1287,6 +1330,9 @@ var infrastructureActivities = []string{
 	// the run would check, not what a scenario tests.
 	"PreflightRequirements",
 	"MachineResumeWake",
+	// A scenario has no machine to check: a node's preflight passes (the
+	// stub's empty answer is a machine that passed).
+	"MachinePreflight",
 	// A scenario has no machine pools: the stub places nothing, so a pool
 	// or labels-only `daemon:` leaves the run unpinned.
 	machinepool.PlaceRunActivityName,
@@ -2190,6 +2236,9 @@ func (r *Runner) registerActivities(
 				return nil, err
 			}
 			rec.recordWorkflowStatus(in)
+			if r.onWorkflowStatus != nil {
+				r.onWorkflowStatus(in)
+			}
 			return map[string]interface{}{}, nil
 		},
 		activity.RegisterOptions{Name: "WorkflowStatus"},
@@ -2286,6 +2335,13 @@ func (r *Runner) registerActivities(
 						<-ctx.Done()
 						return nil, ctx.Err()
 					}
+					if r.holdRunStep != "" && id == r.holdRunStep {
+						select {
+						case <-ctx.Done():
+							return nil, ctx.Err()
+						case <-time.After(r.holdRunStepFor):
+						}
+					}
 					out := normalizeOutput(events.next(id), activityName)
 					var req *types.SaveMessageRequest
 					if raw, ok := in[types.RunStepSaveMessageKey]; ok && raw != nil {
@@ -2309,6 +2365,9 @@ func (r *Runner) registerActivities(
 				return nil, err
 			}
 			id := qualifiedNodeID(in.Runtime)
+			if r.onNodeActivity != nil {
+				r.onNodeActivity(id, activityName, in)
+			}
 			if routerID, ok := nodeRoutingDecisionRouter(id); ok {
 				return nodeRoutingDecisionOutput(events, rec, routerID, activityName)
 			}

@@ -296,6 +296,8 @@ func ptrValue(s *string) string {
 // This activity executes multiple tool calls in parallel and returns all results
 type ExecuteToolsActivity struct {
 	repo         ExecuteToolsStore
+	triggers     AttendanceTriggers
+	updates      UserRefetcher
 	preemption   MailboxPreempter
 	rows         WorkspaceRows
 	toolCalls    ToolCalls
@@ -326,6 +328,13 @@ type ExecuteToolsActivity struct {
 	// usage records each call in the tool usage ledger. Set by
 	// WithToolUsage; nil records nothing.
 	usage ToolUsageRecorder
+}
+
+// WithUpdates sets what tells the owner's clients a workspace changed; nil
+// announces nothing.
+func (a *ExecuteToolsActivity) WithUpdates(u UserRefetcher) *ExecuteToolsActivity {
+	a.updates = u
+	return a
 }
 
 // WithToolUsage gives the tool-execution path the tool usage ledger, which
@@ -408,6 +417,7 @@ func NewExecuteToolsActivity(storeOrDeps any, legacy ...any) *ExecuteToolsActivi
 func NewExecuteToolsActivityWithDeps(deps ExecuteToolsDeps) *ExecuteToolsActivity {
 	return &ExecuteToolsActivity{
 		repo:         deps.Store,
+		triggers:     deps.Triggers,
 		rows:         deps.Rows,
 		toolCalls:    deps.ToolCalls,
 		preemption:   deps.Preemption,
@@ -1025,7 +1035,7 @@ func (a *ExecuteToolsActivity) executeSingleTool(
 // tool asks.
 func (a *ExecuteToolsActivity) runScope(ctx context.Context, chat *db.Chat) func() (drivers.Scope, drivers.RunFunding) {
 	return func() (drivers.Scope, drivers.RunFunding) {
-		who := chatAttendance(ctx, a.repo, chat)
+		who := chatAttendance(ctx, a.repo, a.triggers, chat)
 		scope := llmCallSpec{UserID: chat.UserID, OrgID: chatOrgID(chat), Attended: who.attended, UnattendedAnySource: who.anySource}.scope()
 		if scope.Personal() {
 			return scope, drivers.RunFunding{}
@@ -2092,7 +2102,10 @@ func (a *ExecuteToolsActivity) emitWorktreeRefetch(ctx context.Context, tec *too
 		projectPtr = &tec.project.ID
 	}
 
-	err := a.repo.EmitUserRefetch(ctx, tec.chat.UserID, db.RefetchWorktreeChanges, db.RefetchOpts{
+	if a.updates == nil {
+		return
+	}
+	err := a.updates.EmitUserRefetch(ctx, tec.chat.UserID, db.RefetchWorktreeChanges, db.RefetchOpts{
 		ProjectID:  projectPtr,
 		WorktreeID: worktreePtr,
 	})

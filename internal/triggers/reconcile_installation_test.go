@@ -98,7 +98,7 @@ func TestReconcileKeepsInstallationOnlyRouting(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 2, report.Updated, "both projections were stale and rewritten")
 
-	got, err := repo.GetTrigger(ctx, bound.ID)
+	got, err := store.GetTrigger(ctx, repo.ORM(), bound.ID)
 	require.NoError(t, err)
 	assert.Equal(t, "100", installationIn(t, got.Config), "the binding survives the rewrite")
 
@@ -164,16 +164,16 @@ func TestReconcileNeverOverwritesABindingCommittedAfterItsRead(t *testing.T) {
 			}
 			require.NoError(t, triggertest.Create(ctx, repo, tr))
 
-			store := &afterRead{Stores: NewStores(repo), step: func() {
+			stores := &afterRead{Stores: NewStores(repo), step: func() {
 				// What UpdateTrigger commits: the row's whole config, rebound.
 				_, err := repo.DB.DB(ctx).ExecContext(ctx, `UPDATE triggers SET config = $1 WHERE id = $2`, string(config(tc.after)), tr.ID)
 				require.NoError(t, err)
 			}}
-			report, err := NewReconciler(store, fakeWorkflows{yaml: map[string]string{"triage": declaringWorkflow}}, nil).ReconcileAll(ctx)
+			report, err := NewReconciler(stores, fakeWorkflows{yaml: map[string]string{"triage": declaringWorkflow}}, nil).ReconcileAll(ctx)
 			require.NoError(t, err)
 			require.Equal(t, 1, report.Updated, "the stale events forced a write from the old snapshot")
 
-			got, err := repo.GetTrigger(ctx, tr.ID)
+			got, err := store.GetTrigger(ctx, repo.ORM(), tr.ID)
 			require.NoError(t, err)
 			assert.Equal(t, tc.after, installationIn(t, got.Config), "the binding committed after the read is the one kept")
 			assert.Equal(t, []string{"issues.opened"}, scopeOf(t, got.Config).Events, "the declaration's part is still re-projected")
@@ -204,7 +204,7 @@ func TestProjectionWriteNeverIntroducesABinding(t *testing.T) {
 	require.NoError(t, NewStores(repo).SetTriggerProjection(ctx, tr.ID, core.TriggerProjection{
 		Config: json.RawMessage(`{"integration":"github","events":["issues.opened"],"installation":"100"}`),
 	}))
-	got, err := repo.GetTrigger(ctx, tr.ID)
+	got, err := store.GetTrigger(ctx, repo.ORM(), tr.ID)
 	require.NoError(t, err)
 	assert.Empty(t, installationIn(t, got.Config))
 	assert.Equal(t, []string{"issues.opened"}, scopeOf(t, got.Config).Events)

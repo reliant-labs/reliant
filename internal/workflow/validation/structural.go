@@ -298,6 +298,9 @@ func validateStructure(wf *reliantv1.Workflow, types ValueTypes, result *Result)
 func validateNodeArgs(node *reliantv1.Node, nodePath []string, result *Result) {
 	nodeType := node.GetType()
 
+	validateNodeRole(node, nodePath, result)
+	validateNodePreflight(node, nodePath, result)
+
 	switch nodeType {
 	case model.NodeTypeCallLLM:
 		args := node.GetCallLlm()
@@ -325,6 +328,9 @@ func validateNodeArgs(node *reliantv1.Node, nodePath []string, result *Result) {
 
 	case model.NodeTypeGitPublish:
 		validateGitPublishNode(node, nodePath, result)
+
+	case model.NodeTypeReview:
+		validateReviewNode(node, nodePath, result)
 
 	case model.NodeTypeInvokeTool:
 		validateInvokeToolNode(node, nodePath, result)

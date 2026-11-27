@@ -1,7 +1,8 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * One change: what the release declares for it, who gets it, the preview
+ * One change: what the release declares for it, whether its revision
+ * reached the environment's apps (ChangeDelivery), who gets it, the preview
  * list, its results and its history, and the kill switch.
  *
  * ── EVERY WRITE, ONE PATH (`write`) ─────────────────────────────────────────
@@ -39,9 +40,11 @@ import { approvalCodeFrom, changeFrom } from "@/services/controlPlane/changes/ch
 import { changeErrorKind, describeChangeError } from "@/services/controlPlane/changes/errors";
 
 import { FIELD } from "../controlStyles";
+import { useObsReadOnly } from "../Observability/obsReadOnly";
 import { BetaTag } from "./BetaTag";
 import { ChangeHistory } from "./ChangeHistory";
 import { ChangeResults } from "./ChangeResults";
+import { ChangeDelivery } from "./ChangeDelivery";
 import { ageOf, changedFields, deliveryPhrase, MODE_LABELS, type WhoGetsIt as Who } from "./changeModel";
 import type { NewChangeEnv } from "./NewChangeDialog";
 import { PreviewEditor } from "./PreviewEditor";
@@ -61,6 +64,7 @@ const WHO_VALUES: readonly Who[] = ["everyone", "some", "compare"];
 export function ChangeDetail({ changeId, envs, backHref }: { changeId: string; envs: NewChangeEnv[]; backHref: string }) {
   const writes = useChangeWrites();
   const queryClient = useQueryClient();
+  const lock = useObsReadOnly();
   const query = useChange(changeId);
   const search = useSearch({ strict: false }) as { who?: string };
   const initialWho = WHO_VALUES.find((w) => w === search.who);
@@ -152,7 +156,7 @@ export function ChangeDetail({ changeId, envs, backHref }: { changeId: string; e
             All changes
           </Link>
         }
-        actions={[{ label: "Stop", onClick: () => setStopping(true), variant: "danger", icon: <Octagon className="h-4 w-4" aria-hidden="true" /> }]}
+        actions={[{ label: "Stop", onClick: () => setStopping(true), variant: "danger", disabled: lock.readOnly, icon: <Octagon className="h-4 w-4" aria-hidden="true" /> }]}
       />
 
       {!declaration && (
@@ -223,6 +227,7 @@ export function ChangeDetail({ changeId, envs, backHref }: { changeId: string; e
         </Card>
       )}
 
+      <ChangeDelivery change={change} envName={envName} />
       <WhoGetsIt change={change} initialWho={initialWho} busy={busy} onWrite={onWrite} />
       <PreviewEditor change={change} busy={busy} onWrite={onWrite} />
       <ChangeResults change={change} />

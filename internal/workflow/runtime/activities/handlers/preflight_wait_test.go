@@ -18,6 +18,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/chatviews"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/errclass"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	activitytypes "github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
@@ -126,7 +127,7 @@ func newWaitFixture(t *testing.T, noMachine bool, router toolexec.DaemonRouter) 
 	require.NoError(t, base.CreateChat(ctx, &db.Chat{ID: chatID, UserID: "u1", Title: "t", ProjectID: projectID,
 		State: db.ChatStateIdle, NoMachine: noMachine, CreatedAt: time.Now(), UpdatedAt: time.Now()}))
 	repo := &markerRepo{Repo: base}
-	a := NewPreflightDaemonCheckActivity(repo, workspaceRowsOf(repo), toolexec.NewRemoteExecutor(router))
+	a := NewPreflightDaemonCheckActivity(repo, NewTriggerReads(repo.ORM()), workspaceRowsOf(repo), toolexec.NewRemoteExecutor(router))
 	a.pollInterval = 10 * time.Millisecond
 	return a, repo, chatID
 }
@@ -247,7 +248,7 @@ func TestPreflightWait_QueueRecordsTheMachineTheRunWaitedFor(t *testing.T) {
 		DaemonSelector: &activitytypes.DaemonSelector{Name: "cicd"}})
 	require.Error(t, err)
 
-	queued, err := repo.ListChatsQueuedForMachine(context.Background(), "u1", 10)
+	queued, err := store.NewChatExtStore(repo.ORM()).ListChatsQueuedForMachine(context.Background(), "u1", 10)
 	require.NoError(t, err)
 	require.Len(t, queued, 1)
 	assert.Equal(t, chatID, queued[0].ChatID)
@@ -259,7 +260,7 @@ func TestPreflightWait_QueueRecordsTheMachineTheRunWaitedFor(t *testing.T) {
 	require.NoError(t, err)
 	_, err = repo.SetChatQueuedForMachine(context.Background(), chatID, true)
 	require.NoError(t, err)
-	queued, err = repo.ListChatsQueuedForMachine(context.Background(), "u1", 10)
+	queued, err = store.NewChatExtStore(repo.ORM()).ListChatsQueuedForMachine(context.Background(), "u1", 10)
 	require.NoError(t, err)
 	require.Len(t, queued, 1)
 	require.NotNil(t, queued[0].Machine)

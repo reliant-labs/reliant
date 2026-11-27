@@ -92,6 +92,15 @@ func (s *Service) MoveProjectToOrg(
 			"work is running in this project (%d chats, %d runs, %d background processes); stop it, then move the project",
 			blockers.ChatsTotal, blockers.LiveRuns, blockers.BackgroundProcesses)), ReasonProjectBusy)
 	}
+	// Its pipeline rows carry the org (pipeline redesign §13, G1): an
+	// enrolled repository is unenrolled first. MoveProjectOrg checks again
+	// in the transaction that would move it.
+	switch enrolled, err := s.deps.Ledger.ProjectPipelineEnrolled(ctx, projectID); {
+	case err != nil:
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to read the project's pipeline enrolments"))
+	case enrolled:
+		return nil, svcerr.Wrap(core.ErrProjectPipelineEnrolled)
+	}
 	// A project the backfill has not reached is in the owner's default org,
 	// which authz resolved as from: stamp it there first, so the commit
 	// decides on a real org rather than on a default that may change.

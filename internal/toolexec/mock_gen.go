@@ -17,14 +17,15 @@ import (
 )
 
 // forge:section MockDaemonRecords
-// forge:hash=5b2e1b5a9b41367f86ce9b6a40d3502f6159dce630172bab7703c291dba94091
+// forge:hash=091b5c4d62ddb2bcb11ee20903773f5fa66250bf0b9f4005ad758fa21e9d4e89
 
 // MockDaemonRecords is a test mock for the DaemonRecords interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockDaemonRecords.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockDaemonRecords.<Method>Func not set" error.
 type MockDaemonRecords struct {
 	contractkit.Recorder
 	ListDaemonsByUserIDFunc          func(context.Context, string) ([]*db.Daemon, error)
@@ -77,6 +78,114 @@ func (m *MockDaemonRecords) DaemonLastSeenAt(ctx context.Context, userID string,
 		return m.DaemonLastSeenAtFunc(ctx, userID, daemonID)
 	}
 	return *new(time.Time), contractkit.MockNotSet("MockDaemonRecords", "DaemonLastSeenAt")
+}
+
+// MockDaemonRecordsListDaemonsByUserIDCall is one recorded call of MockDaemonRecords.ListDaemonsByUserID, one
+// field per parameter.
+type MockDaemonRecordsListDaemonsByUserIDCall struct {
+	Ctx    context.Context
+	UserID string
+}
+
+// ListDaemonsByUserIDCalls returns every recorded ListDaemonsByUserID call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListDaemonsByUserID").
+func (m *MockDaemonRecords) ListDaemonsByUserIDCalls() []MockDaemonRecordsListDaemonsByUserIDCall {
+	var out []MockDaemonRecordsListDaemonsByUserIDCall
+	for _, c := range m.Recorder.Calls("ListDaemonsByUserID") {
+		var r MockDaemonRecordsListDaemonsByUserIDCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockDaemonRecordsListAttachedDaemonIDsForUserCall is one recorded call of MockDaemonRecords.ListAttachedDaemonIDsForUser, one
+// field per parameter.
+type MockDaemonRecordsListAttachedDaemonIDsForUserCall struct {
+	Ctx            context.Context
+	UserID         string
+	StaleThreshold time.Duration
+}
+
+// ListAttachedDaemonIDsForUserCalls returns every recorded ListAttachedDaemonIDsForUser call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListAttachedDaemonIDsForUser").
+func (m *MockDaemonRecords) ListAttachedDaemonIDsForUserCalls() []MockDaemonRecordsListAttachedDaemonIDsForUserCall {
+	var out []MockDaemonRecordsListAttachedDaemonIDsForUserCall
+	for _, c := range m.Recorder.Calls("ListAttachedDaemonIDsForUser") {
+		var r MockDaemonRecordsListAttachedDaemonIDsForUserCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.StaleThreshold, _ = c.Args[2].(time.Duration)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockDaemonRecordsIsDaemonAttachedCall is one recorded call of MockDaemonRecords.IsDaemonAttached, one
+// field per parameter.
+type MockDaemonRecordsIsDaemonAttachedCall struct {
+	Ctx            context.Context
+	UserID         string
+	StaleThreshold time.Duration
+}
+
+// IsDaemonAttachedCalls returns every recorded IsDaemonAttached call, oldest first, with
+// its arguments typed. It reads the same log as Calls("IsDaemonAttached").
+func (m *MockDaemonRecords) IsDaemonAttachedCalls() []MockDaemonRecordsIsDaemonAttachedCall {
+	var out []MockDaemonRecordsIsDaemonAttachedCall
+	for _, c := range m.Recorder.Calls("IsDaemonAttached") {
+		var r MockDaemonRecordsIsDaemonAttachedCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.StaleThreshold, _ = c.Args[2].(time.Duration)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockDaemonRecordsIsDaemonIDAttachedCall is one recorded call of MockDaemonRecords.IsDaemonIDAttached, one
+// field per parameter.
+type MockDaemonRecordsIsDaemonIDAttachedCall struct {
+	Ctx            context.Context
+	DaemonID       string
+	StaleThreshold time.Duration
+}
+
+// IsDaemonIDAttachedCalls returns every recorded IsDaemonIDAttached call, oldest first, with
+// its arguments typed. It reads the same log as Calls("IsDaemonIDAttached").
+func (m *MockDaemonRecords) IsDaemonIDAttachedCalls() []MockDaemonRecordsIsDaemonIDAttachedCall {
+	var out []MockDaemonRecordsIsDaemonIDAttachedCall
+	for _, c := range m.Recorder.Calls("IsDaemonIDAttached") {
+		var r MockDaemonRecordsIsDaemonIDAttachedCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.DaemonID, _ = c.Args[1].(string)
+		r.StaleThreshold, _ = c.Args[2].(time.Duration)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockDaemonRecordsDaemonLastSeenAtCall is one recorded call of MockDaemonRecords.DaemonLastSeenAt, one
+// field per parameter.
+type MockDaemonRecordsDaemonLastSeenAtCall struct {
+	Ctx      context.Context
+	UserID   string
+	DaemonID string
+}
+
+// DaemonLastSeenAtCalls returns every recorded DaemonLastSeenAt call, oldest first, with
+// its arguments typed. It reads the same log as Calls("DaemonLastSeenAt").
+func (m *MockDaemonRecords) DaemonLastSeenAtCalls() []MockDaemonRecordsDaemonLastSeenAtCall {
+	var out []MockDaemonRecordsDaemonLastSeenAtCall
+	for _, c := range m.Recorder.Calls("DaemonLastSeenAt") {
+		var r MockDaemonRecordsDaemonLastSeenAtCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.DaemonID, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
 }
 
 // Compile-time check.

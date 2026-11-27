@@ -15,14 +15,15 @@ import (
 )
 
 // forge:section MockService
-// forge:hash=34e75a2de70dbf27400e5274a7f0e00a20ab5c73842d1a9cab811be7655c2201
+// forge:hash=442b08deb93c63d083569dab90e5279d3de802ead8135cfde4223c2e7cd18b8d
 
 // MockService is a test mock for the Service interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockService.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockService.<Method>Func not set" error.
 type MockService struct {
 	contractkit.Recorder
 	AssignFunc       func(context.Context, Request) (Result, error)
@@ -47,18 +48,61 @@ func (m *MockService) Alternatives(ctx context.Context, req Request, exclude str
 	return false, Earliest{}, contractkit.MockNotSet("MockService", "Alternatives")
 }
 
+// MockServiceAssignCall is one recorded call of MockService.Assign, one
+// field per parameter.
+type MockServiceAssignCall struct {
+	Ctx context.Context
+	Req Request
+}
+
+// AssignCalls returns every recorded Assign call, oldest first, with
+// its arguments typed. It reads the same log as Calls("Assign").
+func (m *MockService) AssignCalls() []MockServiceAssignCall {
+	var out []MockServiceAssignCall
+	for _, c := range m.Recorder.Calls("Assign") {
+		var r MockServiceAssignCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Req, _ = c.Args[1].(Request)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceAlternativesCall is one recorded call of MockService.Alternatives, one
+// field per parameter.
+type MockServiceAlternativesCall struct {
+	Ctx     context.Context
+	Req     Request
+	Exclude string
+}
+
+// AlternativesCalls returns every recorded Alternatives call, oldest first, with
+// its arguments typed. It reads the same log as Calls("Alternatives").
+func (m *MockService) AlternativesCalls() []MockServiceAlternativesCall {
+	var out []MockServiceAlternativesCall
+	for _, c := range m.Recorder.Calls("Alternatives") {
+		var r MockServiceAlternativesCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Req, _ = c.Args[1].(Request)
+		r.Exclude, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ Service = (*MockService)(nil)
 
 // forge:section MockStore
-// forge:hash=aaa48c8b2f5bb289fb2f8b45a042834728ae85770d3a3c625c2bce0e79e912e7
+// forge:hash=804c96659464829b28ee81126edc026322348d85dd2926317ee0231fc7a1f357
 
 // MockStore is a test mock for the Store interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockStore.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockStore.<Method>Func not set" error.
 type MockStore struct {
 	contractkit.Recorder
 	GetThreadAssignmentFunc    func(context.Context, string, string) (*Assignment, error)
@@ -111,6 +155,112 @@ func (m *MockStore) RecentAssignmentCounts(ctx context.Context, accountIDs []str
 		return m.RecentAssignmentCountsFunc(ctx, accountIDs, since)
 	}
 	return nil, contractkit.MockNotSet("MockStore", "RecentAssignmentCounts")
+}
+
+// MockStoreGetThreadAssignmentCall is one recorded call of MockStore.GetThreadAssignment, one
+// field per parameter.
+type MockStoreGetThreadAssignmentCall struct {
+	Ctx      context.Context
+	ThreadID string
+	Provider string
+}
+
+// GetThreadAssignmentCalls returns every recorded GetThreadAssignment call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetThreadAssignment").
+func (m *MockStore) GetThreadAssignmentCalls() []MockStoreGetThreadAssignmentCall {
+	var out []MockStoreGetThreadAssignmentCall
+	for _, c := range m.Recorder.Calls("GetThreadAssignment") {
+		var r MockStoreGetThreadAssignmentCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ThreadID, _ = c.Args[1].(string)
+		r.Provider, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockStoreSetThreadAssignmentCall is one recorded call of MockStore.SetThreadAssignment, one
+// field per parameter.
+type MockStoreSetThreadAssignmentCall struct {
+	Ctx               context.Context
+	A                 Assignment
+	ExpectedAccountID string
+}
+
+// SetThreadAssignmentCalls returns every recorded SetThreadAssignment call, oldest first, with
+// its arguments typed. It reads the same log as Calls("SetThreadAssignment").
+func (m *MockStore) SetThreadAssignmentCalls() []MockStoreSetThreadAssignmentCall {
+	var out []MockStoreSetThreadAssignmentCall
+	for _, c := range m.Recorder.Calls("SetThreadAssignment") {
+		var r MockStoreSetThreadAssignmentCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.A, _ = c.Args[1].(Assignment)
+		r.ExpectedAccountID, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockStoreListAccountLimitsCall is one recorded call of MockStore.ListAccountLimits, one
+// field per parameter.
+type MockStoreListAccountLimitsCall struct {
+	Ctx    context.Context
+	UserID string
+}
+
+// ListAccountLimitsCalls returns every recorded ListAccountLimits call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListAccountLimits").
+func (m *MockStore) ListAccountLimitsCalls() []MockStoreListAccountLimitsCall {
+	var out []MockStoreListAccountLimitsCall
+	for _, c := range m.Recorder.Calls("ListAccountLimits") {
+		var r MockStoreListAccountLimitsCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockStoreListOrgAccountLimitsCall is one recorded call of MockStore.ListOrgAccountLimits, one
+// field per parameter.
+type MockStoreListOrgAccountLimitsCall struct {
+	Ctx   context.Context
+	OrgID string
+}
+
+// ListOrgAccountLimitsCalls returns every recorded ListOrgAccountLimits call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListOrgAccountLimits").
+func (m *MockStore) ListOrgAccountLimitsCalls() []MockStoreListOrgAccountLimitsCall {
+	var out []MockStoreListOrgAccountLimitsCall
+	for _, c := range m.Recorder.Calls("ListOrgAccountLimits") {
+		var r MockStoreListOrgAccountLimitsCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.OrgID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockStoreRecentAssignmentCountsCall is one recorded call of MockStore.RecentAssignmentCounts, one
+// field per parameter.
+type MockStoreRecentAssignmentCountsCall struct {
+	Ctx        context.Context
+	AccountIDs []string
+	Since      time.Time
+}
+
+// RecentAssignmentCountsCalls returns every recorded RecentAssignmentCounts call, oldest first, with
+// its arguments typed. It reads the same log as Calls("RecentAssignmentCounts").
+func (m *MockStore) RecentAssignmentCountsCalls() []MockStoreRecentAssignmentCountsCall {
+	var out []MockStoreRecentAssignmentCountsCall
+	for _, c := range m.Recorder.Calls("RecentAssignmentCounts") {
+		var r MockStoreRecentAssignmentCountsCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.AccountIDs, _ = c.Args[1].([]string)
+		r.Since, _ = c.Args[2].(time.Time)
+		out = append(out, r)
+	}
+	return out
 }
 
 // Compile-time check.

@@ -449,7 +449,7 @@ for the demo host (`Forge/Demo/demoHandoff.ts`), where the demo's cut runs.
 | fg-deployments (Deployments ▾, on Releases) | ✓ | | | |
 | fg-trace | ✓ | ✓ | ✓ | ✓ |
 | fg-hops (between services) | ✓ | ✓ | ✓ | ✓ |
-| fg-inside (inside a service) | | | ✓ | ✓ |
+| fg-inside (inside a service) | | | | ✓ |
 | fg-logs | ✓ | ✓ | ✓ | ✓ |
 | fg-profile | | ✓ | | ✓ |
 | fg-graph | | | | ✓ |
@@ -457,17 +457,24 @@ for the demo host (`Forge/Demo/demoHandoff.ts`), where the demo's cut runs.
 | fg-oncall | ✓ | ✓ | | ✓ |
 | fg-agent (what a coding agent reads) | | | | ✓ |
 | fg-ask | ✓ | ✓ | ✓ | ✓ |
+| fg-analytics (Analytics ▾, on Product overview) | ✓ | | ✓ | ✓ |
+| fg-data (Data, on staging: prod's reads ask a reason) | ✓ | | | ✓ |
 | fg-tests (Tests ▾) | ✓ | | | |
 | fg-security (Security ▾) | ✓ | | | |
 | fg-configure (Configure ▾, on Secrets) | ✓ | | | |
 | fg-built (the recorded forge run, a wide modal card, `card: { wide, modal }`) | | | ✓ | ✓ |
 | fg-done | ✓ | ✓ | ✓ | ✓ |
-| **steps** | 14 | 11 | 10 | 15 |
+| **steps** | 16 | 11 | 10 | 17 |
 
 fg-built is the demo's last step before the end card. It does not replace
 fg-instrumented, which runs in every cut; the short cut leaves out fg-agent
 instead (fg-built's card says what forge gives an agent, and fg-ask hands the
-issue to one).
+issue to one), and gives fg-inside's place to fg-analytics, so it stays at ten.
+
+On the demo host every console step names `env=prod`, the story's environment:
+the console remembers a page's scope (`Forge/Console/envScope.ts`), so
+fg-data's staging, or a visitor's dev, would otherwise carry into the steps
+after it.
 
 The short cut takes the best moments only; each view's tip covers the rest.
 `forgeJourney.test.tsx` pins it. `finish` returns null on the demo host, so

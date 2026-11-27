@@ -12,7 +12,8 @@ release. Details: [CI](#ci).
 **Target: ≤5 minutes wall time; slow suites gate releases, not merges (owner,
 2026-10-28).** The merge gate runs what the diff can affect. When the rules cannot
 scope a change (`go.mod`, `package.json`, config, an unclaimed path) it runs the
-whole Go `-short` lane and electron's tests (5m13s and 40s measured on a loaded
+whole Go `-short` lane (a forge pin move alone selects by the forge packages it
+changes: `dev-docs/testing-affected.md`, "A forge pin move") and electron's tests (5m13s and 40s measured on a loaded
 host), and for a full web fallback `tsc -b` over every web source plus the vitest
 files the diff's own web modules reach (below); the whole vitest suite (1033
 files, ~22 min loaded) is the one lane left to the release gate's `task test`,
@@ -66,6 +67,25 @@ implied `--skip-lint`, so the queue ran no forge lint at all, and #2696 (an
 unguarded optional dep) and #2662 (three log calls without their context) turned
 main red on findings the scoped lint names in about two minutes
 (`/home/workspace/designs/reverse-walk-backtest-2026-11-13.md`, "fast lints").
+
+**go test's own vet** (`GO_TEST_VET`, `Taskfile.yml`). `go test` runs a vet
+subset over each package it tests and, for printf facts, over every
+dependency, under action IDs no `go vet` run shares: cold, that is ~70s of the
+~90s `go test` spends before running `./cmd/reliant/cmd`'s tests. A gate whose
+own vet covers the packages it tests turns it off for its test step: the merge
+gate's default tier (its vet phase vets `go.build` + `go.packages`, test files
+included, and gate-verify fails the gate when that phase is missing) and the
+release gate's `test-go` (beside `vet.sh ./...`; a hotfix gate's merge step).
+Everywhere else it stays on: `--queue` and `--skip-lint` leave vet to the
+release gate, so go test's vet is the only one they run, as it is for the SDK
+module's step, `test:integration`, `test:e2e`, the flake gate and every plain
+`task test` / `task test:short`. `-vet` is not in Go's test-result cache key,
+so the gates still replay your `task test:short` results. An exported
+`GO_TEST_VET` (empty included) wins over a gate's default; `task test
+GO_TEST_VET=-vet=off` sets it for one run. There is no `-ldflags=-w` lane flag:
+`go test` already links every test binary it runs with `-s -w`; only `-c`, `-o`
+and the profile flags keep DWARF, and `task build:packages`' one `-c` link
+passes `-w` itself.
 
 It holds **one** host heavy slot for the whole run (`forge machine slot run`), and every
 phase nests inside that slot, within a CPU budget (below). It prints one row per phase:
@@ -146,8 +166,9 @@ The phases:
      (~620 CPU-seconds) after a change to `internal/workflowdrafts`, whose 152
      deferred test packages it compiles. main's `go-cache` job compiles the
      test packages too (`task build:packages`), so the queue's restored cache
-     holds them. A fixture that compiles and fails at run time (a "Deps.X is
-     required" panic in a slow test, #3448/#3507) is still the release gate's.
+     holds them. A fixture that compiles and fails at run time is the release
+     gate's, with one exception the test phase catches from source: a
+     construction that leaves a Deps field unset (below, "Deps fields").
    - **test** is `tools/test-affected run -plan <plan.json> -lanes go,web,electron
      -test-budget auto`. It runs the plan the plan phase wrote (re-planning
      loaded the whole package graph again: 17-141s), so the changed packages
@@ -435,6 +456,25 @@ These are the trade-offs. Each is caught by the release gate:
 
 - **Slow tests.** A test marked `testkit.Slow` (or an older
   `testing.Short()` skip) never runs before a merge.
+
+  **Deps fields** are the exception. A pull request that adds a field to a
+  service's `Deps` and wires only the tests the merge gate runs leaves the slow
+  and build-tagged constructions without it, and main goes red with a nil
+  panic (#3368 → #3589, #3599 → #3605, #3448/#3507). `internal/architecture`'s
+  `TestEveryConstructionSetsEveryRequiredDepsField` reads every Go file,
+  whatever its build tags, and fails a `Deps` literal that leaves out a field
+  not marked `// forge:optional-dep`: every one outside the declaring package,
+  and every one passed to `New` inside it. It runs on every Go change (a
+  walker). It reports only additional missing fields relative to the queue
+  base (`HEAD^1` on `merge_group`, otherwise the merge base with origin/main;
+  `DEPS_GUARD_BASE` overrides it). Baseline findings from unrelated queued PRs
+  cannot fail it. Counts are compared per file, Deps type and field, ignoring
+  line shifts. Adding a required field still checks unchanged constructions
+  everywhere; wire it everywhere or mark it optional. It cannot
+  see a construction that builds `Deps` field by field, nor tell which methods
+  need a field: `threads.Deps.Chats` (needed only by the interrupt and pause
+  paths) is exempt in `internal/threads`, whose tests mostly build a
+  creator-only service.
 - **Vitest files further from the change.** Those more than two imports away,
   or more than one from a hub. A FULL web fallback runs the same reached set,
   so a dependency bump that breaks a test no changed module reaches merges
@@ -583,8 +623,8 @@ the commit's `Release gate` job on Actions (the train's fallback, ci.yml
 dispatched at the RC branch, which publishes no note off main).
 
 The RC tag is `rc/…`, **not** `vX.Y.Z-rc.N`. A `v*.*.*` tag push runs
-`Release Electron App` (publishing to the alpha channel, a GitHub Release
-and a Homebrew tap dispatch) and `Build & Push Image`, for a commit nobody has
+`Release Electron App` (which now refuses a prerelease tag: the alpha
+channel is retired) and `Build & Push Image`, for a commit nobody has
 gated yet. Two `v*` tags on one commit would also make
 `scripts/release-identity.sh`'s `describe --exact-match` ambiguous. The
 `release/` branch and the `rc/` tag trigger no workflow.

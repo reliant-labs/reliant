@@ -1,0 +1,93 @@
+---
+title: "Autoscale a service or worker on your cluster"
+sidebarTitle: "Autoscaling"
+description: "Declare a replica range with forge.Autoscale and forge renders a HorizontalPodAutoscaler that holds average CPU at a target: the fields, how it scales, what it refuses, and why Reliant hosting does not apply it yet."
+keywords: ["forge autoscale", "HorizontalPodAutoscaler", "autoscaling workloads", "min max replicas", "cpuTargetPercent"]
+---
+
+{/* verified: 2026-11-27 · sources: forge v1.12.0 kcl/workload.k, kcl/tiers (Autoscale), pkg/deploy/workload_render.go (horizontalPodAutoscaler), pkg/release/bundle_features.go (CheckAutoscaledWorkloads), skills deploy/model and deploy/hosting; rendered on forge main against a scaffolded project */}
+
+A workload that declares a replica **range** instead of a fixed count lets the cluster add pods when the service is busy and remove them when it is not. You write the range on the workload, and forge renders a Kubernetes `HorizontalPodAutoscaler` (HPA) beside its Deployment. This page is about workloads that run on a cluster you operate. [Reliant hosting does not apply an autoscaled workload yet](#on-reliant-hosting), and `forge env deploy` says so before it changes anything.
+
+Autoscaling needs forge v1.12.0 or later.
+
+## Declare a range
+
+Add `autoscale` to the workload where it is bound to your cluster. In a scaffolded project that is the `_api` workload in `deploy/kcl/prod/main.k`, once its line in `_workloads` uses `_on_cluster` instead of `_hosted` (see [Environments](/forge/deploy/environments) for the binders):
+
+```python
+_api = fw.Workload {
+    name = "api"
+    kind = "service"
+    image = "REPLACE-ME-REGISTRY.invalid/demo"
+    build = forge.GoBuild {cmd = "./cmd/demo", output_name = "demo", flags = ["-trimpath"]}
+    args = ["server"]
+    root = "server"
+    ports = [fw.Port {name = "http", port = 8080, expose = True}]
+    config_secrets = ["DATABASE_URL"]
+    autoscale = forge.Autoscale {minReplicas = 2, maxReplicas = 6}
+}
+```
+
+The scaffold's cluster binder sets a capacity floor of three replicas through `_cluster_replicas`, which collides with `autoscale`: render fails with `replicas = 3 is set beside autoscale`. Set `_cluster_replicas = 1` in the same file so the autoscaler owns the count.
+
+Render the environment and look at what forge will apply:
+
+```bash terminal
+forge env render prod --kind HorizontalPodAutoscaler
+```
+
+The output is an `autoscaling/v2` HPA named after the workload (`api`), with `minReplicas: 2`, `maxReplicas: 6` and a CPU target of 70 percent. The Deployment it scales no longer states `spec.replicas`, because the HPA writes that field and a second writer would undo it on every apply.
+
+## What the fields mean
+
+| Field | Default | Range | Meaning |
+|---|---|---|---|
+| `minReplicas` | required | 1 to 10 | The fewest pods, and the count the workload starts at. Scale to zero is not offered. |
+| `maxReplicas` | required | 1 to 10 | The most pods. It must not be below `minReplicas`. |
+| `cpuTargetPercent` | 70 | 10 to 95 | The average CPU use, as a percent of the pods' CPU **request**, that the autoscaler holds. Above it the autoscaler adds pods, below it removes them. |
+
+The metric is CPU utilization across the whole pod: the sum of every container's use against the sum of every container's request, so a sidecar counts against the request that covers it. The target stops at 95 because a CPU limit equal to the request, which is the default, caps utilization near 100 percent. A higher target is one the pods can never exceed, and the workload would never scale up.
+
+Because the target is a percent of the request, **the CPU request is the real dial**. A pod that requests 250m and is held at 70 percent scales out when it averages 175m. If a workload is always idle against a generous request, no amount of traffic will move it. Set `resources` on the workload to match what one pod can comfortably do, then let the range handle the rest. The default entry shape requests 250m of CPU and 1 GiB of memory.
+
+## How it scales
+
+forge states the scaling behavior in the HPA instead of leaving it to the cluster's defaults, so a later change to Kubernetes' defaults cannot change how a running workload scales while nothing in your declaration moved.
+
+Scaling up has no waiting period. Every 60 seconds the autoscaler may double the pod count or add four pods, whichever is more, so a workload at one or two pods can still grow quickly. Scaling down waits: the autoscaler looks back 300 seconds and only scales down to the highest count any recommendation in that window asked for, so a short dip in load does not remove pods that the next burst needs again. Once the window allows it, it may remove every excess pod at once.
+
+The PodDisruptionBudget and the pod spread that forge renders above one replica are keyed on `maxReplicas`, so they stay put while the count moves. A workload whose maximum is 1 renders neither.
+
+## What forge refuses
+
+Each rule below fails at render, naming the workload and the fix.
+
+| Declaration | Why it is refused |
+|---|---|
+| `kind` other than `service` or `worker` | An operator elects one leader, so more pods buy it nothing, and a job, cron job or tool has no Deployment to scale. |
+| `replicas` set beside `autoscale` | The autoscaler owns the count. Set `minReplicas` instead. |
+| `storageGiB` | The volume is `ReadWriteOnce`, so a second replica could never mount it. Keep the data in a managed database or bucket. |
+| `strategy = "Recreate"` | Recreate declares the count a correctness bound, which a count the autoscaler moves contradicts. |
+| `Bundle.overrides` on the Deployment's `spec.replicas` or on the HPA | The patch would fight the autoscaler on every apply. Change `autoscale` instead. |
+| A runtime of `forge.OnHost`, compose or build-only | A host process runs once, compose runs no autoscaler, and a build-only workload is never run. |
+
+## Prerequisites on the cluster
+
+The HPA reads CPU from the cluster's metrics API, so the cluster needs `metrics-server`. k3d, GKE, EKS and AKS ship it. On a cluster without it the HPA exists but reports unknown metrics and never scales; `kubectl describe hpa api` says so.
+
+## On Reliant hosting
+
+A workload bound to `forge.OnHosted` can declare `autoscale`, and it passes forge's hosted checks, but Reliant hosting does not apply it yet. `forge env deploy` asks the control plane whether it advertises the `autoscales-workloads` capability before building. A control plane that does not would run the workload at one replica and never scale it, so forge refuses the deploy and names each workload:
+
+```text
+workload "api" declares autoscale, but this control plane does not apply HorizontalPodAutoscalers yet (it does not advertise "autoscales-workloads"); set replicas instead until it is upgraded
+```
+
+Until then, set `replicas` for a hosted environment, or bind the workload to a cluster you run and keep the rest hosted ([Deploy to your own Kubernetes cluster](/guides/hosting/deploy-to-your-own-kubernetes) walks through the binding). The same declaration then works on hosting without edits once the capability ships.
+
+## Related topics
+
+- [What gets deployed](/forge/deploy/what-gets-deployed): the Kubernetes objects an environment renders
+- [Environments](/forge/deploy/environments): binding a workload to a runtime per environment
+- [Escape hatches](/forge/deploy/escape-hatches): `overrides`, and why a replica patch is refused on an autoscaled workload

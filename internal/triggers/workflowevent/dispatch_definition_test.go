@@ -55,7 +55,7 @@ func TestDispatch_RecordedDefinitionIsTheOneThatRunsWhenAPushRacesTheLaunch(t *t
 
 			results, err := f.dispatcher.Dispatch(ctx, f.finish(f.humanRun("code-review"), core.RunEventFailed))
 			require.NoError(t, err)
-			launched, err := f.repo.GetTriggerEventByChatID(ctx, launchedChat(t, results, tr.ID))
+			launched, err := store.GetTriggerEventByChatID(ctx, f.repo.ORM(), launchedChat(t, results, tr.ID))
 			require.NoError(t, err)
 			def := launched.Definition
 			require.NotNil(t, def)
@@ -101,7 +101,7 @@ func TestDispatch_FiringRecordsItsDefinitionAndABrokenOneIsRefused(t *testing.T)
 
 	results, err := f.dispatcher.Dispatch(ctx, f.finish(f.humanRun("code-review"), core.RunEventFailed))
 	require.NoError(t, err)
-	launched, err := f.repo.GetTriggerEventByChatID(ctx, launchedChat(t, results, tr.ID))
+	launched, err := store.GetTriggerEventByChatID(ctx, f.repo.ORM(), launchedChat(t, results, tr.ID))
 	require.NoError(t, err)
 	require.NotNil(t, launched.Definition, "the launched row records the definition")
 	assert.Equal(t, reactorPath, launched.Definition.Path)

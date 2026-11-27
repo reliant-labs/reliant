@@ -18,14 +18,15 @@ import (
 )
 
 // forge:section MockPauseStore
-// forge:hash=1cb4ecfdaf9a046f6d5dc62da0f043fe8c003d6b74a89e8ef66546ce7b58c0ae
+// forge:hash=f4123d65bbe384bc1c1b6ce9dbc1b0a2cc87574a2fce7b0ae0d775c4d0dee14f
 
 // MockPauseStore is a test mock for the PauseStore interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockPauseStore.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockPauseStore.<Method>Func not set" error.
 type MockPauseStore struct {
 	contractkit.Recorder
 	UpdateWorkflowStatusFunc                 func(context.Context, string, db.WorkflowStatus) error
@@ -36,7 +37,6 @@ type MockPauseStore struct {
 	ReviveSubtreeLiveAtFunc                  func(context.Context, string, time.Time) (int64, int64, error)
 	CascadeTerminalStatusToDescendantsFunc   func(context.Context, string, db.WorkflowStopReason) error
 	CascadeTerminalStatusToThreadSubtreeFunc func(context.Context, string, db.WorkflowStopReason) error
-	EmitChatRefetchFunc                      func(context.Context, string, db.RefetchType) error
 	RunTxFunc                                func(context.Context, orm.TxPolicy, func(ctx context.Context) error) error
 }
 
@@ -112,15 +112,6 @@ func (m *MockPauseStore) CascadeTerminalStatusToThreadSubtree(ctx context.Contex
 	return contractkit.MockNotSet("MockPauseStore", "CascadeTerminalStatusToThreadSubtree")
 }
 
-// EmitChatRefetch records the call and delegates to EmitChatRefetchFunc when set.
-func (m *MockPauseStore) EmitChatRefetch(ctx context.Context, chatID string, refetchType db.RefetchType) error {
-	m.Recorder.Record("EmitChatRefetch", ctx, chatID, refetchType)
-	if m.EmitChatRefetchFunc != nil {
-		return m.EmitChatRefetchFunc(ctx, chatID, refetchType)
-	}
-	return contractkit.MockNotSet("MockPauseStore", "EmitChatRefetch")
-}
-
 // RunTx records the call and delegates to RunTxFunc when set.
 func (m *MockPauseStore) RunTx(p0 context.Context, policy orm.TxPolicy, f func(ctx context.Context) error) error {
 	m.Recorder.Record("RunTx", p0, policy, f)
@@ -130,18 +121,215 @@ func (m *MockPauseStore) RunTx(p0 context.Context, policy orm.TxPolicy, f func(c
 	return contractkit.MockNotSet("MockPauseStore", "RunTx")
 }
 
+// MockPauseStoreUpdateWorkflowStatusCall is one recorded call of MockPauseStore.UpdateWorkflowStatus, one
+// field per parameter.
+type MockPauseStoreUpdateWorkflowStatusCall struct {
+	Ctx    context.Context
+	ID     string
+	Status db.WorkflowStatus
+}
+
+// UpdateWorkflowStatusCalls returns every recorded UpdateWorkflowStatus call, oldest first, with
+// its arguments typed. It reads the same log as Calls("UpdateWorkflowStatus").
+func (m *MockPauseStore) UpdateWorkflowStatusCalls() []MockPauseStoreUpdateWorkflowStatusCall {
+	var out []MockPauseStoreUpdateWorkflowStatusCall
+	for _, c := range m.Recorder.Calls("UpdateWorkflowStatus") {
+		var r MockPauseStoreUpdateWorkflowStatusCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ID, _ = c.Args[1].(string)
+		r.Status, _ = c.Args[2].(db.WorkflowStatus)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockPauseStoreCompareAndSwapWorkflowStatusCall is one recorded call of MockPauseStore.CompareAndSwapWorkflowStatus, one
+// field per parameter.
+type MockPauseStoreCompareAndSwapWorkflowStatusCall struct {
+	Ctx            context.Context
+	ID             string
+	NewStatus      db.WorkflowStatus
+	ExpectedStatus db.WorkflowStatus
+}
+
+// CompareAndSwapWorkflowStatusCalls returns every recorded CompareAndSwapWorkflowStatus call, oldest first, with
+// its arguments typed. It reads the same log as Calls("CompareAndSwapWorkflowStatus").
+func (m *MockPauseStore) CompareAndSwapWorkflowStatusCalls() []MockPauseStoreCompareAndSwapWorkflowStatusCall {
+	var out []MockPauseStoreCompareAndSwapWorkflowStatusCall
+	for _, c := range m.Recorder.Calls("CompareAndSwapWorkflowStatus") {
+		var r MockPauseStoreCompareAndSwapWorkflowStatusCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ID, _ = c.Args[1].(string)
+		r.NewStatus, _ = c.Args[2].(db.WorkflowStatus)
+		r.ExpectedStatus, _ = c.Args[3].(db.WorkflowStatus)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockPauseStorePauseRunningWorkflowsByChatCall is one recorded call of MockPauseStore.PauseRunningWorkflowsByChat, one
+// field per parameter.
+type MockPauseStorePauseRunningWorkflowsByChatCall struct {
+	Ctx    context.Context
+	ChatID string
+}
+
+// PauseRunningWorkflowsByChatCalls returns every recorded PauseRunningWorkflowsByChat call, oldest first, with
+// its arguments typed. It reads the same log as Calls("PauseRunningWorkflowsByChat").
+func (m *MockPauseStore) PauseRunningWorkflowsByChatCalls() []MockPauseStorePauseRunningWorkflowsByChatCall {
+	var out []MockPauseStorePauseRunningWorkflowsByChatCall
+	for _, c := range m.Recorder.Calls("PauseRunningWorkflowsByChat") {
+		var r MockPauseStorePauseRunningWorkflowsByChatCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ChatID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockPauseStoreResumeWorkflowsByChatCall is one recorded call of MockPauseStore.ResumeWorkflowsByChat, one
+// field per parameter.
+type MockPauseStoreResumeWorkflowsByChatCall struct {
+	Ctx    context.Context
+	ChatID string
+}
+
+// ResumeWorkflowsByChatCalls returns every recorded ResumeWorkflowsByChat call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ResumeWorkflowsByChat").
+func (m *MockPauseStore) ResumeWorkflowsByChatCalls() []MockPauseStoreResumeWorkflowsByChatCall {
+	var out []MockPauseStoreResumeWorkflowsByChatCall
+	for _, c := range m.Recorder.Calls("ResumeWorkflowsByChat") {
+		var r MockPauseStoreResumeWorkflowsByChatCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ChatID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockPauseStoreSetChatPausedForMachineCall is one recorded call of MockPauseStore.SetChatPausedForMachine, one
+// field per parameter.
+type MockPauseStoreSetChatPausedForMachineCall struct {
+	Ctx    context.Context
+	ChatID string
+	Paused bool
+}
+
+// SetChatPausedForMachineCalls returns every recorded SetChatPausedForMachine call, oldest first, with
+// its arguments typed. It reads the same log as Calls("SetChatPausedForMachine").
+func (m *MockPauseStore) SetChatPausedForMachineCalls() []MockPauseStoreSetChatPausedForMachineCall {
+	var out []MockPauseStoreSetChatPausedForMachineCall
+	for _, c := range m.Recorder.Calls("SetChatPausedForMachine") {
+		var r MockPauseStoreSetChatPausedForMachineCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ChatID, _ = c.Args[1].(string)
+		r.Paused, _ = c.Args[2].(bool)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockPauseStoreReviveSubtreeLiveAtCall is one recorded call of MockPauseStore.ReviveSubtreeLiveAt, one
+// field per parameter.
+type MockPauseStoreReviveSubtreeLiveAtCall struct {
+	Ctx            context.Context
+	RootWorkflowID string
+	At             time.Time
+}
+
+// ReviveSubtreeLiveAtCalls returns every recorded ReviveSubtreeLiveAt call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ReviveSubtreeLiveAt").
+func (m *MockPauseStore) ReviveSubtreeLiveAtCalls() []MockPauseStoreReviveSubtreeLiveAtCall {
+	var out []MockPauseStoreReviveSubtreeLiveAtCall
+	for _, c := range m.Recorder.Calls("ReviveSubtreeLiveAt") {
+		var r MockPauseStoreReviveSubtreeLiveAtCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.RootWorkflowID, _ = c.Args[1].(string)
+		r.At, _ = c.Args[2].(time.Time)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockPauseStoreCascadeTerminalStatusToDescendantsCall is one recorded call of MockPauseStore.CascadeTerminalStatusToDescendants, one
+// field per parameter.
+type MockPauseStoreCascadeTerminalStatusToDescendantsCall struct {
+	Ctx              context.Context
+	ParentWorkflowID string
+	Reason           db.WorkflowStopReason
+}
+
+// CascadeTerminalStatusToDescendantsCalls returns every recorded CascadeTerminalStatusToDescendants call, oldest first, with
+// its arguments typed. It reads the same log as Calls("CascadeTerminalStatusToDescendants").
+func (m *MockPauseStore) CascadeTerminalStatusToDescendantsCalls() []MockPauseStoreCascadeTerminalStatusToDescendantsCall {
+	var out []MockPauseStoreCascadeTerminalStatusToDescendantsCall
+	for _, c := range m.Recorder.Calls("CascadeTerminalStatusToDescendants") {
+		var r MockPauseStoreCascadeTerminalStatusToDescendantsCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ParentWorkflowID, _ = c.Args[1].(string)
+		r.Reason, _ = c.Args[2].(db.WorkflowStopReason)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockPauseStoreCascadeTerminalStatusToThreadSubtreeCall is one recorded call of MockPauseStore.CascadeTerminalStatusToThreadSubtree, one
+// field per parameter.
+type MockPauseStoreCascadeTerminalStatusToThreadSubtreeCall struct {
+	Ctx        context.Context
+	WorkflowID string
+	Reason     db.WorkflowStopReason
+}
+
+// CascadeTerminalStatusToThreadSubtreeCalls returns every recorded CascadeTerminalStatusToThreadSubtree call, oldest first, with
+// its arguments typed. It reads the same log as Calls("CascadeTerminalStatusToThreadSubtree").
+func (m *MockPauseStore) CascadeTerminalStatusToThreadSubtreeCalls() []MockPauseStoreCascadeTerminalStatusToThreadSubtreeCall {
+	var out []MockPauseStoreCascadeTerminalStatusToThreadSubtreeCall
+	for _, c := range m.Recorder.Calls("CascadeTerminalStatusToThreadSubtree") {
+		var r MockPauseStoreCascadeTerminalStatusToThreadSubtreeCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.WorkflowID, _ = c.Args[1].(string)
+		r.Reason, _ = c.Args[2].(db.WorkflowStopReason)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockPauseStoreRunTxCall is one recorded call of MockPauseStore.RunTx, one
+// field per parameter.
+type MockPauseStoreRunTxCall struct {
+	Ctx    context.Context
+	Policy orm.TxPolicy
+	F      func(ctx context.Context) error
+}
+
+// RunTxCalls returns every recorded RunTx call, oldest first, with
+// its arguments typed. It reads the same log as Calls("RunTx").
+func (m *MockPauseStore) RunTxCalls() []MockPauseStoreRunTxCall {
+	var out []MockPauseStoreRunTxCall
+	for _, c := range m.Recorder.Calls("RunTx") {
+		var r MockPauseStoreRunTxCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Policy, _ = c.Args[1].(orm.TxPolicy)
+		r.F, _ = c.Args[2].(func(ctx context.Context) error)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ PauseStore = (*MockPauseStore)(nil)
 
 // forge:section MockWorkflowLoader
-// forge:hash=27de9052bc714bd51848a573063fd6021638e3ab686dcdb35a3c160c957c4b7a
+// forge:hash=a86c9107027d56d5efbb02dc83903037069a908ff9bf0298624f4ee96b610731
 
 // MockWorkflowLoader is a test mock for the WorkflowLoader interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockWorkflowLoader.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockWorkflowLoader.<Method>Func not set" error.
 type MockWorkflowLoader struct {
 	contractkit.Recorder
 	LoadWorkflowFunc func(context.Context, string) (*db.Workflow, error)
@@ -154,6 +342,26 @@ func (m *MockWorkflowLoader) LoadWorkflow(ctx context.Context, id string) (*db.W
 		return m.LoadWorkflowFunc(ctx, id)
 	}
 	return nil, contractkit.MockNotSet("MockWorkflowLoader", "LoadWorkflow")
+}
+
+// MockWorkflowLoaderLoadWorkflowCall is one recorded call of MockWorkflowLoader.LoadWorkflow, one
+// field per parameter.
+type MockWorkflowLoaderLoadWorkflowCall struct {
+	Ctx context.Context
+	ID  string
+}
+
+// LoadWorkflowCalls returns every recorded LoadWorkflow call, oldest first, with
+// its arguments typed. It reads the same log as Calls("LoadWorkflow").
+func (m *MockWorkflowLoader) LoadWorkflowCalls() []MockWorkflowLoaderLoadWorkflowCall {
+	var out []MockWorkflowLoaderLoadWorkflowCall
+	for _, c := range m.Recorder.Calls("LoadWorkflow") {
+		var r MockWorkflowLoaderLoadWorkflowCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
 }
 
 // Compile-time check.

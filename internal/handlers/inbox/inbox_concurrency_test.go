@@ -84,7 +84,7 @@ func newInflightRepo(hold time.Duration) *inflightRepo {
 		r.enter(ctx, hold)
 		return nil, nil
 	}
-	m.ListTriggersFunc = func(ctx context.Context, _ core.TriggerFilters) ([]*core.Trigger, error) {
+	r.notices.ListTriggersForUserFunc = func(ctx context.Context, _ core.TriggerFilters) ([]*core.Trigger, error) {
 		r.enter(ctx, hold)
 		return []*core.Trigger{trg}, nil
 	}
@@ -93,8 +93,10 @@ func newInflightRepo(hold time.Duration) *inflightRepo {
 		return nil, nil
 	}
 	r.firings.RecentTriggerOutcomesFunc = firings
-	r.firings.FiringsSinceLastSuccessFunc = firings
-	r.firings.FiringsSinceLastUnmanagedSuccessFunc = firings
+	r.firings.InboxEpisodeFailuresFunc = firings
+	r.firings.InboxEpisodesFunc = func(ctx context.Context, userID string, ids []string, per, _ int) (map[string][]*core.TriggerEventWithRun, error) {
+		return firings(ctx, userID, ids, per)
+	}
 	r.regs.ListTriggerRegistrationsForUserFunc = func(ctx context.Context, _ string, _ []string) (map[string]*core.TriggerRegistration, error) {
 		r.enter(ctx, hold)
 		return nil, nil
@@ -136,7 +138,7 @@ func TestListInbox_ReadsRunConcurrentlyWithinTheBound(t *testing.T) {
 	assert.GreaterOrEqual(t, repo.peak.Load(), int32(inboxReadConcurrency), "reads overlap")
 	assert.LessOrEqual(t, repo.peak.Load(), int32(inboxReadConcurrency+inboxHealthReadConcurrency), "up to the bound and no further")
 	// The triggers are read once for both automation sections.
-	assert.Len(t, repo.MockRepository.Calls("ListTriggers"), 1)
+	assert.Len(t, repo.notices.Calls("ListTriggersForUser"), 1)
 }
 
 // The two firing reads run together, on a budget of their own, even while the
@@ -165,7 +167,7 @@ func TestListInbox_FiringReadsDoNotQueueBehindTheOtherReads(t *testing.T) {
 		return nil, nil
 	}
 	repo.firings.RecentTriggerOutcomesFunc = firing
-	repo.firings.FiringsSinceLastSuccessFunc = firing
+	repo.firings.InboxEpisodeFailuresFunc = firing
 	repo.items.ListInboxPendingFunc = func(ctx context.Context, _ string) ([]*core.InboxPending, error) {
 		waitForBoth(ctx)
 		return nil, nil
@@ -185,18 +187,93 @@ func TestListInbox_FiringReadsDoNotQueueBehindTheOtherReads(t *testing.T) {
 	}
 }
 
-// Concurrent ListInbox calls of one user share one read: a burst costs one
-// set of queries, whatever scope and limit each call asked for.
-func TestListInbox_ConcurrentCallsShareOneRead(t *testing.T) {
-	repo := newInflightRepo(100 * time.Millisecond)
+// gateFirstPendingRead makes the first ListInboxPending hold until the returned
+// release is called; inFlight closes once it holds. Later reads return at once.
+func gateFirstPendingRead(t *testing.T, repo *inflightRepo) (inFlight <-chan struct{}, release func()) {
+	t.Helper()
+	held, gate := make(chan struct{}), make(chan struct{})
+	var reads atomic.Int32
+	repo.items.ListInboxPendingFunc = func(context.Context, string) ([]*core.InboxPending, error) {
+		if reads.Add(1) == 1 {
+			close(held)
+			<-gate
+		}
+		return nil, nil
+	}
+	var once sync.Once
+	release = func() { once.Do(func() { close(gate) }) }
+	t.Cleanup(release)
+	return held, release
+}
+
+// waitQueued waits until n ListInbox calls of userCtx's user wait on the read
+// queued behind the one in flight.
+func waitQueued(t *testing.T, svc *Service, n int) {
+	t.Helper()
+	key := sharedReadKey(userCtx(), "user-1")
+	require.Eventually(t, func() bool { return svc.inboxReads.queued(key) == n }, 10*time.Second, time.Millisecond,
+		"%d calls queued behind the read in flight", n)
+}
+
+// The refetch after answering a question must not get the list from before
+// the answer. A ListInbox arriving while an earlier read is in flight used to
+// join that read, which started before the answer committed and still listed
+// the question: the row disappeared, came back, and went again on the next
+// refetch. A call now joins only a read that starts after it arrived.
+func TestListInbox_ACallAfterAWriteDoesNotJoinAnEarlierRead(t *testing.T) {
+	repo := newInflightRepo(0)
+	var answered atomic.Bool
+	var reads atomic.Int32
+	held, gate := make(chan struct{}), make(chan struct{})
+	repo.items.ListInboxPendingFunc = func(context.Context, string) ([]*core.InboxPending, error) {
+		pending := !answered.Load() // what the read's snapshot sees
+		if reads.Add(1) == 1 {
+			close(held)
+			<-gate
+		}
+		if !pending {
+			return nil, nil
+		}
+		return []*core.InboxPending{{Kind: core.InboxPendingQuestion, ItemKey: "q1", ProjectID: "p1", WaitingSince: time.Now()}}, nil
+	}
 	svc := NewTestInbox(t, WithInboxDeps(repo.deps()))
+
+	first := make(chan []string, 1)
+	go func() {
+		first <- listItemIDs(t, svc)
+	}()
+	<-held
+	answered.Store(true) // ResolveQuestion commits while the first read is in flight
+
+	second := make(chan []string, 1)
+	go func() {
+		second <- listItemIDs(t, svc)
+	}()
+	waitQueued(t, svc, 1)
+	close(gate)
+
+	assert.Contains(t, <-first, "question:q1", "the first call's read started before the answer")
+	assert.NotContains(t, <-second, "question:q1", "the call after the answer reads after it")
+	assert.Len(t, repo.items.Calls("ListInboxPending"), 2)
+}
+
+// Concurrent ListInbox calls of one user share reads: a burst arriving during
+// one read costs one more set of queries, not one per call, whatever scope and
+// limit each call asked for.
+func TestListInbox_ConcurrentCallsShareOneRead(t *testing.T) {
+	repo := newInflightRepo(0)
+	held, release := gateFirstPendingRead(t, repo)
+	svc := NewTestInbox(t, WithInboxDeps(repo.deps()))
+
 	const callers = 8
-	var wg sync.WaitGroup
-	errs := make(chan error, callers)
+	errs := make(chan error, callers+1)
+	go func() {
+		_, err := svc.ListInbox(userCtx(), connect.NewRequest(&reliantv1.ListInboxRequest{}))
+		errs <- err
+	}()
+	<-held
 	for i := range callers {
-		wg.Add(1)
 		go func() {
-			defer wg.Done()
 			req := &reliantv1.ListInboxRequest{}
 			if i%2 == 0 {
 				limit := int32(0)
@@ -206,29 +283,63 @@ func TestListInbox_ConcurrentCallsShareOneRead(t *testing.T) {
 			errs <- err
 		}()
 	}
-	wg.Wait()
-	close(errs)
-	for err := range errs {
-		require.NoError(t, err)
+	waitQueued(t, svc, callers)
+	release()
+	for range callers + 1 {
+		require.NoError(t, <-errs)
 	}
-	assert.Len(t, repo.items.Calls("ListInboxPending"), 1, "%d concurrent calls read the inbox once", callers)
+	assert.Len(t, repo.items.Calls("ListInboxPending"), 2, "%d calls during one read share one more read", callers)
 }
 
-// One caller giving up does not fail the others sharing its read.
+// One caller giving up does not fail the others sharing its read, even the
+// caller whose request the read was started from.
 func TestListInbox_ACancelledCallerDoesNotFailASharedRead(t *testing.T) {
-	repo := newInflightRepo(100 * time.Millisecond)
+	repo := newInflightRepo(0)
+	held, release := gateFirstPendingRead(t, repo)
 	svc := NewTestInbox(t, WithInboxDeps(repo.deps()))
-	first, cancel := context.WithCancel(userCtx())
-	done := make(chan error, 1)
+
+	inFlight := make(chan error, 1)
 	go func() {
-		_, err := svc.ListInbox(first, connect.NewRequest(&reliantv1.ListInboxRequest{}))
-		done <- err
+		_, err := svc.ListInbox(userCtx(), connect.NewRequest(&reliantv1.ListInboxRequest{}))
+		inFlight <- err
 	}()
-	time.Sleep(20 * time.Millisecond) // the first call's read is in flight
+	<-held
+
+	// The queued read is started from the first caller to queue: this one.
+	starter, cancel := context.WithCancel(userCtx())
+	gaveUp := make(chan error, 1)
+	go func() {
+		_, err := svc.ListInbox(starter, connect.NewRequest(&reliantv1.ListInboxRequest{}))
+		gaveUp <- err
+	}()
+	waitQueued(t, svc, 1)
+	sharer := make(chan error, 1)
+	go func() {
+		_, err := svc.ListInbox(userCtx(), connect.NewRequest(&reliantv1.ListInboxRequest{}))
+		sharer <- err
+	}()
+	waitQueued(t, svc, 2)
+
 	cancel()
-	_, err := svc.ListInbox(userCtx(), connect.NewRequest(&reliantv1.ListInboxRequest{}))
-	require.NoError(t, err)
-	<-done
+	require.Error(t, <-gaveUp, "the caller that gave up returns at once, before any read finishes")
+	waitQueued(t, svc, 1)
+	release()
+	require.NoError(t, <-inFlight)
+	require.NoError(t, <-sharer, "the read the cancelled caller started still answers the others")
+	assert.Len(t, repo.items.Calls("ListInboxPending"), 2)
+}
+
+// listItemIDs is the IDs of the items a ListInbox of userCtx's user lists.
+func listItemIDs(t *testing.T, svc *Service) []string {
+	resp, err := svc.ListInbox(userCtx(), connect.NewRequest(&reliantv1.ListInboxRequest{}))
+	if !assert.NoError(t, err) {
+		return nil
+	}
+	ids := make([]string, 0, len(resp.Msg.Items))
+	for _, it := range resp.Msg.Items {
+		ids = append(ids, it.ItemId)
+	}
+	return ids
 }
 
 func TestListInbox_ARequiredReadFailingFailsTheRequest(t *testing.T) {
@@ -240,7 +351,7 @@ func TestListInbox_ARequiredReadFailingFailsTheRequest(t *testing.T) {
 			r.items.ListInboxPendingFunc = func(context.Context, string) ([]*core.InboxPending, error) { return nil, errors.New("boom") }
 		}},
 		{"automation health", func(r *inflightRepo) {
-			r.firings.FiringsSinceLastUnmanagedSuccessFunc = func(context.Context, string, []string, int) (map[string][]*core.TriggerEventWithRun, error) {
+			r.firings.InboxEpisodesFunc = func(context.Context, string, []string, int, int) (map[string][]*core.TriggerEventWithRun, error) {
 				return nil, errors.New("boom")
 			}
 		}},

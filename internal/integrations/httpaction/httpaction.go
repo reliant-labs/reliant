@@ -59,6 +59,11 @@ type Result struct {
 	// anything of the body.
 	Host      string
 	RateLimit *RateLimit
+	// RateLimited is set on a failure already judged retryable (by the
+	// manifest's rule or the defaults) whose response was a rate limit (a
+	// 429, or a 403 that says so): the provider refused the call, so it
+	// changed nothing, and RateLimitedError says when to retry it.
+	RateLimited RateLimitReason
 }
 
 // Runner executes actions through a guarded HTTP client, and dispatches
@@ -835,6 +840,12 @@ func stamp(res *Result, pages int, last *page) *Result {
 	if last != nil {
 		res.Host = last.host
 		res.RateLimit = rateLimitOf(last.headers, time.Now())
+		// Only a failure already judged retryable (by the manifest's rule or
+		// the defaults) is a rate limit to wait out: a manifest that calls a
+		// 429 permanent keeps the last word.
+		if res.IsError && res.Retryable && res.StatusCode == last.status {
+			res.RateLimited = rateLimitReasonOf(last)
+		}
 	}
 	return res
 }
