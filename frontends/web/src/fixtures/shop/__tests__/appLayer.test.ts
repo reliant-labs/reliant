@@ -198,7 +198,7 @@ describe("the app layer", () => {
   it("refuses app-layer mutations without forwarding them to real services", async () => {
     const unary = vi.fn<Transport["unary"]>();
     const stream = vi.fn<Transport["stream"]>();
-    const transport = createShopAppTransport({ now: FIXED_NOW, passthrough: { unary, stream } });
+    const transport = createShopAppTransport({ now: FIXED_NOW, passthrough: { fallback: { unary, stream } } });
     // Prove the public demo's app layer is selected, not just an unavailable service.
     const chats = createClient(ChatService, transport);
     expect((await chats.listMessages({ chatId: CHAT_IDS.cartTotals })).messages.length).toBeGreaterThan(0);
