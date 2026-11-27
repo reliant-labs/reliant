@@ -1954,18 +1954,25 @@ func (g *Graph) newWorkflowCheckSyncer() (*workflowcheck.Syncer, error) {
 }
 
 // newCoverageSource constructs the coverage-source handler
-// (internal/handlers/coverage_source). The API server holds no repository
-// bytes (owner, 2026-11-27): it no longer reads a covered file's blob from
-// GitHub, so every read is NOT_YET_AVAILABLE until a daemon-side reader
-// exists (internal/architecture's TestServerRolesRunNoCode).
+// (internal/handlers/coverage_source): a covered file's source, read from
+// GitHub with the viewer's own token once control-plane confirms a retained
+// coverage report names it. Without a control plane, or without a way to
+// read GitHub as the viewer, every read is NOT_YET_AVAILABLE. A read, never
+// a checkout or a build: the owner allowed it on the API server
+// (2026-11-27), bounded in memory (ghblobs.MaxBytes per blob, a bounded
+// number in flight, the handler's capped cache).
 func (g *Graph) newCoverageSource() (*coverage_source.Service, error) {
+	blobs, err := CoverageSourceBlobs(g.Database(), g.CredentialsConnectionvault(), g.Vault(), g.ServerProcessConfig.GetControlPlane(), g.IntegrationSettings())
+	if err != nil {
+		return nil, err
+	}
 	return coverage_source.New(coverage_source.Deps{
 		Logger:   g.Log,
 		Config:   g.Cfg,
 		Projects: g.Database(),
 		Orgs:     g.OrgResolver(),
 		Reports:  g.CallerControlPlane().Client(),
-		Blobs:    nil, // a server role reads no repository contents
+		Blobs:    blobs,
 		Now:      nil, // optional — no provider
 	})
 }

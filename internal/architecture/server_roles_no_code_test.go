@@ -22,9 +22,10 @@ import (
 // Owner decision, 2026-11-27: anything that touches a user's code, or does
 // per-user work on it, runs on the user's (untrusted) daemons, never on a
 // server role. The merge queue built git checkouts inside the worker pod
-// (internal/mergequeue's workdirs under /data/mergequeue), and the worker and
-// API server read repository files through the GitHub contents and blobs
-// APIs; all of it was removed, and this guard keeps it out.
+// (internal/mergequeue's workdirs under /data/mergequeue), and the worker
+// read pipeline.yaml through the GitHub contents API; both were removed, and
+// this guard keeps them out. A bounded read the owner allowed (the coverage
+// view's blob read) is on the reviewed list below.
 //
 // Every first-party package the server roles reach — the import closure of
 // internal/app, whose roots are `reliant server api|worker|gateway` — must
@@ -81,6 +82,10 @@ var serverCodeAllowed = map[string]struct {
 	"internal/filetree": {
 		[]string{findGoGit},
 		"internal/mcp links it; it uses go-git's gitignore matcher only (no repository access), on the daemon's file tree",
+	},
+	"internal/integrations/ghblobs": {
+		[]string{findContents},
+		"GetCoverageSource reads one covered file's blob as the viewer, for the Forge Tests coverage view: a read, never a checkout or a build. The owner allowed it on the API server (2026-11-27 15:11Z), bounded in memory: MaxBytes per blob, MaxInFlight reads at once, the handler's capped cache",
 	},
 	"internal/pipeline/practions": {
 		[]string{findContents},
