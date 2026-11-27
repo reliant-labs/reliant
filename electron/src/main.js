@@ -116,6 +116,7 @@ const {
   isUpdatePending,
   isUpgradeOverdue,
   nextUpdateState,
+  updateFeedFor,
   withDaemonUpgrade,
 } = require("./update-check");
 const crypto = require("crypto");
@@ -128,11 +129,12 @@ autoUpdater.logger.transports.file.level = "info";
 autoUpdater.autoDownload = false;
 autoUpdater.autoInstallOnAppQuit = false;
 
-// Determine update channel based on version
-// RC/alpha/beta builds use 'alpha' channel, stable builds use 'latest'
+// Every install follows the `latest` channel (updateFeedFor). isPrerelease
+// still labels telemetry and diagnostics; it no longer picks the feed.
 const currentVersion = app.getVersion();
 const isPrerelease = /-rc\.|rc[0-9]+|-beta\.|beta[0-9]+|-alpha\.|alpha[0-9]+/.test(currentVersion);
-const updateChannel = isPrerelease ? 'alpha' : 'latest';
+const updateFeed = updateFeedFor(currentVersion);
+const updateChannel = updateFeed.channel;
 
 log.info(`[AutoUpdater] App version: ${currentVersion}`);
 log.info(`[AutoUpdater] Update channel: ${updateChannel}`);
@@ -158,7 +160,7 @@ autoUpdater.setFeedURL({
 
 // Optimize download settings
 // Allow differential updates (blockmaps) if available
-autoUpdater.allowPrerelease = isPrerelease;
+autoUpdater.allowPrerelease = updateFeed.allowPrerelease;
 // Request headers to prevent compression issues
 // Accept-Encoding: identity prevents Cloudflare from compressing the response,
 // ensuring Content-Length matches actual file size

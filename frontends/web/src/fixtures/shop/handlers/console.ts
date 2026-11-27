@@ -68,7 +68,7 @@ import {
 
 const REPO = DEMO_REPO;
 /** The forge every release was cut with (provenance, deploy attempts, recorded test runs). */
-export const FORGE_VERSION = "v1.0.17";
+export const FORGE_VERSION = "v1.11.1";
 
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;

@@ -41,7 +41,7 @@ import { createWorktree } from "../../hooks/worktree-actions";
 import { type Worktree, fetchLiveWorktrees, getCachedWorktrees } from "../../hooks/worktree-queries";
 
 const MOBILE_FIELD =
-  "w-full min-h-[44px] rounded-lg border border-border bg-background px-3 font-mono text-sm text-foreground placeholder:font-sans placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring";
+  "w-full min-h-[44px] rounded-lg border border-border bg-background px-3 font-mono text-code text-foreground placeholder:font-sans placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring";
 
 /**
  * Base-branch choices, in the order the desktop picker uses: a detached HEAD
@@ -92,8 +92,8 @@ export async function reconcileAfterError(
 function StaticRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex min-h-[44px] items-center justify-between gap-3 px-4 py-3">
-      <p className="text-sm font-medium text-foreground">{label}</p>
-      <span className="truncate text-sm text-muted-foreground">{value}</span>
+      <p className="text-ui font-medium text-foreground">{label}</p>
+      <span className="truncate text-ui text-muted-foreground">{value}</span>
     </div>
   );
 }
@@ -210,7 +210,7 @@ export function MobileCreateWorkspaceSheet({
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
       >
         <div className="flex min-h-[56px] items-center justify-between border-b border-border px-4 py-2">
-          <span className="text-sm font-semibold text-foreground">New workspace</span>
+          <span className="text-ui font-semibold text-foreground">New workspace</span>
           <button
             type="button"
             onClick={onClose}
@@ -224,10 +224,10 @@ export function MobileCreateWorkspaceSheet({
 
         {!isGitRepo ? (
           <div className="space-y-2 p-4 pb-6">
-            <p className="text-sm font-medium text-foreground">
+            <p className="text-ui font-medium text-foreground">
               This project isn't a git repository yet
             </p>
-            <p className="text-sm text-muted-foreground">
+            <p className="text-ui text-muted-foreground">
               Each workspace is a git worktree on its own branch, so the project
               needs git first. Initialize it from the desktop app.
             </p>
@@ -245,14 +245,14 @@ export function MobileCreateWorkspaceSheet({
                 role="alert"
                 className="rounded-lg border border-destructive/30 bg-destructive/10 p-3"
               >
-                <p className="text-sm text-destructive-ink">{error}</p>
+                <p className="text-ui text-destructive-ink">{error}</p>
               </div>
             )}
 
             <div>
               <label
                 htmlFor="mobile-workspace-name"
-                className="mb-1 block text-xs font-semibold text-muted-foreground"
+                className="mb-1 block text-meta font-semibold text-muted-foreground"
               >
                 Name
               </label>
@@ -274,7 +274,7 @@ export function MobileCreateWorkspaceSheet({
               {/* The name is also the branch, and a space can't be in one —
                   say what will actually be created instead of surprising the
                   user with it in the branch list later. */}
-              <p className="mt-1 truncate text-xs text-muted-foreground">
+              <p className="mt-1 truncate text-meta text-muted-foreground">
                 {finalName ? (
                   <>
                     New branch <span className="font-mono text-foreground">{finalName}</span>

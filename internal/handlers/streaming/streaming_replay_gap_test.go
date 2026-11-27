@@ -92,7 +92,7 @@ func (noopSubscription) Unsubscribe()                            {}
 func firstChatSyncEvent(t *testing.T, repo Repository, chatSinceSeq int64) *reliantv1.ChatStreamEvent {
 	t.Helper()
 
-	svc := NewTestStreaming(t, WithStreamingDeps(withRoles(Deps{Repo: repo, Deltas: noopHub{}})))
+	svc := NewTestStreaming(t, WithStreamingDeps(withRoles(Deps{TriggerReads: fixtureTriggerReads(repo), Repo: repo, Deltas: noopHub{}})))
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	t.Cleanup(cancel)
 
@@ -198,7 +198,7 @@ func TestStreamChatUpdates_CursorAtCompactionWatermarkReplays(t *testing.T) {
 // until the first snapshot or the end of the stream.
 func replayEvents(t *testing.T, repo *replayGapRepo, cursor int64) (batches []*reliantv1.ChatUpdateBatch, snapshot *reliantv1.ChatSyncSnapshot, streamErr error) {
 	t.Helper()
-	svc := NewTestStreaming(t, WithStreamingDeps(withRoles(Deps{Repo: repo, Deltas: noopHub{}})))
+	svc := NewTestStreaming(t, WithStreamingDeps(withRoles(Deps{TriggerReads: fixtureTriggerReads(repo), Repo: repo, Deltas: noopHub{}})))
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	t.Cleanup(cancel)
 	stream, err := streamingTestClient(t, svc).

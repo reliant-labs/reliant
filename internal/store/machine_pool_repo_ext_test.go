@@ -176,7 +176,7 @@ func TestMachinePoolQueries(t *testing.T) {
 	if err := store.InsertTrigger(ctx, env.ORM, trg); err != nil {
 		t.Fatalf("InsertTrigger: %v", err)
 	}
-	if got, err := env.Repo.GetTrigger(ctx, "trg-pool"); err != nil || got.MachinePoolID != pool.ID || got.MachinePoolName != "cicd" || got.MachineState != "pool" {
+	if got, err := store.GetTrigger(ctx, env.Repo.ORM(), "trg-pool"); err != nil || got.MachinePoolID != pool.ID || got.MachinePoolName != "cicd" || got.MachineState != "pool" {
 		t.Fatalf("pool trigger read back = %+v, %v", got, err)
 	}
 	if err := store.DeleteMachinePoolByName(ctx, env.ORM, storetest.SeedUserID, "cicd"); !errors.Is(err, core.ErrMachinePoolInUse) {
