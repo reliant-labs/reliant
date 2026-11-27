@@ -1,12 +1,14 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * An in-memory StorageBrowserApi: a small app's buckets, answered the way
- * control-plane's StorageBrowserService answers (one level per listing with
- * "/" as the delimiter, opaque page tokens sealed to the environment, bucket
- * and prefix, the audited environment's confirmation, preview caps), so the
- * component tests exercise the real browser against real behaviour. (The
- * dev-only preview, /forge-storage-preview, renders the shop fixture pack.)
+ * An in-memory StorageBrowserService: a small app's buckets, answered the way
+ * control-plane's answers (one level per listing with "/" as the delimiter,
+ * opaque page tokens sealed to the environment, bucket and prefix, the
+ * audited environment's confirmation, preview caps), served as mock-transport
+ * handlers (`storageFixtureTransport`), so the component tests exercise the
+ * real browser, its real calls included, against real behaviour. (The
+ * dev-only preview, /forge-storage-preview, and the demo render the shop
+ * fixture pack's smaller handlers, fixtures/shop/handlers/storage.ts.)
  *
  *   environments  env-prod (prod, AUDITED), env-staging (staging, OPEN),
  *                 env-dev (dev, OPEN)
@@ -20,22 +22,38 @@
  *                 `#`, a `?`, non-ASCII, leading spaces, an empty segment)
  *   exports       daily/: 450 CSVs (three pages of 200)
  *
- * Every call is recorded in `calls`; `presigned` counts the URLs minted.
+ * Every call is recorded in `calls`, in the browser's terms (`asked`: the
+ * confirmation as `access`, an unset prefix as ""); `presigned` counts the
+ * URLs minted. Each rpc's handler is a field of the fixture, looked up per
+ * call: a test replaces one to change its answer.
  */
 
-import { Code, ConnectError } from "@connectrpc/connect";
+import type { MessageInitShape } from "@bufbuild/protobuf";
+import { timestampFromMs } from "@bufbuild/protobuf/wkt";
+import { Code, ConnectError, type Transport } from "@connectrpc/connect";
+import { createMockTransport, mockService } from "@reliantlabs/forge-web-runtime/mock-transport";
 
 import type { AccessConfirmation, AccessPolicyName } from "@/components/Forge/AuditedAccess/accessSession-model";
-import type {
-  ListObjectsInput,
-  ObjectInput,
-  PreviewKindName,
-  StorageBucket,
-  StorageObjectMeta,
-} from "@/services/controlPlane/storageBrowser/storageBrowserApi";
-import type { StorageBrowserApi } from "@/services/controlPlane/storageBrowser/StorageBrowserApiContext";
+import { completed } from "@/fixtures/shop/handlers/defaults";
+import {
+  BucketRuntimeKind,
+  ObjectPreviewKind,
+  StorageAccessPolicy,
+  StorageBrowserService,
+  type GetObjectMetadataRequest,
+  type GetObjectMetadataResponseSchema,
+  type ListBrowsableBucketsRequest,
+  type ListBrowsableBucketsResponseSchema,
+  type ListObjectsRequest,
+  type ListObjectsResponseSchema,
+  type PresignObjectDownloadRequest,
+  type PresignObjectDownloadResponseSchema,
+  type PreviewObjectRequest,
+  type PreviewObjectResponseSchema,
+} from "@/gen/controlplane/services/storage_browser/v1/storage_browser_pb";
+import type { PreviewKindName } from "@/services/controlPlane/storageBrowser/storageBrowserApi";
 
-type Method = keyof StorageBrowserApi;
+type Method = "listBrowsableBuckets" | "listObjects" | "getObjectMetadata" | "presignObjectDownload" | "previewObject";
 
 export interface StorageFixtureOptions {
   /** The policy, per environment id (default: prod audited, the rest open). */
@@ -44,15 +62,18 @@ export interface StorageFixtureOptions {
   noBuckets?: boolean;
   /** Fail this rpc with this code (and reason, sent as x-forge-error-reason). Only for `keys` when given. */
   fail?: { method: Method; code: Code; reason?: string; message?: string; keys?: string[] };
-  /** Answer after this many ms (loading states). */
-  delayMs?: number;
   /** A listing's page size when the request leaves it 0 (the server's default: 200). */
   defaultPageSize?: number;
   /** Exercise defensive handling of a future server that returns capped text rather than refusing an oversized object. */
   truncatedText?: boolean;
 }
 
-export interface StorageFixtureApi extends StorageBrowserApi {
+export interface StorageFixture {
+  listBrowsableBuckets(req: ListBrowsableBucketsRequest): Promise<MessageInitShape<typeof ListBrowsableBucketsResponseSchema>>;
+  listObjects(req: ListObjectsRequest): Promise<MessageInitShape<typeof ListObjectsResponseSchema>>;
+  getObjectMetadata(req: GetObjectMetadataRequest): Promise<MessageInitShape<typeof GetObjectMetadataResponseSchema>>;
+  presignObjectDownload(req: PresignObjectDownloadRequest): Promise<MessageInitShape<typeof PresignObjectDownloadResponseSchema>>;
+  previewObject(req: PreviewObjectRequest): Promise<MessageInitShape<typeof PreviewObjectResponseSchema>>;
   calls: { method: Method; req: unknown }[];
   presigned: number;
 }
@@ -115,11 +136,25 @@ const EXPORTS: FixtureObject[] = Array.from({ length: 450 }, (_, i) => ({
   body: () => "id,total\n1,42\n",
 }));
 
-const BUCKETS: StorageBucket[] = [
-  { name: "exports", runtime: "hosted", publicRead: false, reachable: true, unreachableReason: "" },
-  { name: "media", runtime: "minio", publicRead: false, reachable: false, unreachableReason: "self-managed MinIO: not reachable from the control plane" },
-  { name: "uploads", runtime: "hosted", publicRead: false, reachable: true, unreachableReason: "" },
+const BUCKETS = [
+  { name: "exports", runtime: BucketRuntimeKind.HOSTED, publicRead: false, reachable: true, unreachableReason: "" },
+  { name: "media", runtime: BucketRuntimeKind.MINIO, publicRead: false, reachable: false, unreachableReason: "self-managed MinIO: not reachable from the control plane" },
+  { name: "uploads", runtime: BucketRuntimeKind.HOSTED, publicRead: false, reachable: true, unreachableReason: "" },
 ];
+
+const POLICIES: Record<AccessPolicyName, StorageAccessPolicy> = {
+  open: StorageAccessPolicy.OPEN,
+  audited: StorageAccessPolicy.AUDITED,
+  deny: StorageAccessPolicy.DENY,
+  unknown: StorageAccessPolicy.UNSPECIFIED,
+};
+
+const PREVIEW_KINDS: Record<PreviewKindName, ObjectPreviewKind> = {
+  image: ObjectPreviewKind.IMAGE,
+  text: ObjectPreviewKind.TEXT,
+  json: ObjectPreviewKind.JSON,
+  none: ObjectPreviewKind.UNSPECIFIED,
+};
 
 /** A small text object's size is its body's (the log, over the cap, keeps its stated 3 MiB). */
 const sized = (object: FixtureObject): FixtureObject =>
@@ -142,16 +177,6 @@ function previewOf(object: FixtureObject): PreviewKindName {
   if (type === "application/json") return "json";
   if (type.startsWith("text/")) return "text";
   return "none";
-}
-
-function sleep(ms: number, signal?: AbortSignal): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(resolve, ms);
-    signal?.addEventListener("abort", () => {
-      clearTimeout(timer);
-      reject(new ConnectError("aborted", Code.Canceled));
-    });
-  });
 }
 
 function reasonError(message: string, code: Code, reason?: string): ConnectError {
@@ -192,20 +217,38 @@ function level(objects: FixtureObject[], prefix: string): ({ kind: "prefix"; nam
   });
 }
 
-export function createStorageFixtureApi(options: StorageFixtureOptions = {}): StorageFixtureApi {
+type Confirmed = { confirmEnvId?: string; reason?: string };
+
+/** The confirmation a request carried, as the browser names it: absent when it sent none. */
+function accessOf(req: Confirmed): { access?: AccessConfirmation } {
+  return req.confirmEnvId === undefined && req.reason === undefined ? {} : { access: { confirmEnvId: req.confirmEnvId ?? "", reason: req.reason ?? "" } };
+}
+
+/** A request, recorded in the browser's terms (storageBrowserApi.ts ListObjectsInput / ObjectInput). */
+type AnyRequest = Confirmed & { environmentId: string; bucket?: string; prefix?: string; pageToken?: string; pageSize?: number; openBucket?: boolean; key?: string };
+
+function asked(method: Method, req: AnyRequest): unknown {
+  if (method === "listBrowsableBuckets") return { environmentId: req.environmentId };
+  const target = { environmentId: req.environmentId, bucket: req.bucket ?? "" };
+  if (method === "listObjects") {
+    return { ...target, prefix: req.prefix ?? "", pageToken: req.pageToken ?? "", pageSize: req.pageSize ?? 0, openBucket: req.openBucket ?? false, ...accessOf(req) };
+  }
+  return { ...target, key: req.key ?? "", ...accessOf(req) };
+}
+
+export function createStorageFixture(options: StorageFixtureOptions = {}): StorageFixture {
   const policies: Record<string, AccessPolicyName> = { "env-prod": "audited", "env-staging": "open", "env-dev": "open", ...options.policy } as Record<string, AccessPolicyName>;
 
-  async function begin(method: Method, req: unknown, signal: AbortSignal | undefined, key?: string) {
-    api.calls.push({ method, req });
-    if (options.delayMs) await sleep(options.delayMs, signal);
+  function begin(method: Method, key?: string) {
     const fail = options.fail;
     if (fail?.method === method && (!fail.keys || (key !== undefined && fail.keys.includes(key)))) {
       throw reasonError(fail.message ?? "refused", fail.code, fail.reason);
     }
   }
 
-  function admit(environmentId: string, access: AccessConfirmation | undefined) {
+  function admit(environmentId: string, confirmed: Confirmed) {
     const policy = policies[environmentId] ?? "open";
+    const access = accessOf(confirmed).access;
     if (policy === "deny" || policy === "unknown") throw new ConnectError("the environment's storage access policy denies reads", Code.PermissionDenied);
     if (policy === "audited" && (!access || access.confirmEnvId !== environmentId || !access.reason)) {
       throw reasonError("this environment is audited: confirm_env_id and a reason are required", Code.FailedPrecondition, "confirmation_required");
@@ -223,68 +266,75 @@ export function createStorageFixtureApi(options: StorageFixtureOptions = {}): St
     return options.truncatedText && object.key === "docs/server.log" ? "text" : previewOf(object);
   }
 
-  function find(req: ObjectInput): FixtureObject {
-    admit(req.environmentId, req.access);
+  function find(req: { environmentId: string; bucket: string; key: string } & Confirmed): FixtureObject {
+    admit(req.environmentId, req);
     const object = contents(req.bucket).find((candidate) => candidate.key === req.key);
     if (!object) throw new ConnectError(`no object ${req.key}`, Code.NotFound);
     return object;
   }
 
-  const api: StorageFixtureApi = {
+  const fixture: StorageFixture = {
     calls: [],
     presigned: 0,
 
-    async listBrowsableBuckets(environmentId, opts = {}) {
-      await begin("listBrowsableBuckets", { environmentId }, opts.signal);
-      return { buckets: options.noBuckets ? [] : BUCKETS.map((bucket) => ({ ...bucket })), policy: policies[environmentId] ?? "open" };
+    async listBrowsableBuckets(req) {
+      begin("listBrowsableBuckets");
+      return {
+        buckets: options.noBuckets ? [] : BUCKETS.map((bucket) => ({ ...bucket })),
+        policy: POLICIES[policies[req.environmentId] ?? "open"] ?? StorageAccessPolicy.UNSPECIFIED,
+      };
     },
 
-    async listObjects(req: ListObjectsInput, opts = {}) {
-      await begin("listObjects", req, opts.signal);
-      admit(req.environmentId, req.access);
-      const entries = level(contents(req.bucket), req.prefix);
-      const start = req.pageToken ? unseal(req.pageToken, req.environmentId, req.bucket, req.prefix) : 0;
+    async listObjects(req) {
+      begin("listObjects");
+      admit(req.environmentId, req);
+      const prefix = req.prefix ?? "";
+      const entries = level(contents(req.bucket), prefix);
+      const start = req.pageToken ? unseal(req.pageToken, req.environmentId, req.bucket, prefix) : 0;
       const size = req.pageSize || options.defaultPageSize || 200;
       const page = entries.slice(start, start + size);
       const end = start + page.length;
       return {
         prefixes: page.flatMap((entry) => (entry.kind === "prefix" ? [entry.name] : [])),
         objects: page.flatMap((entry) =>
-          entry.kind === "object" ? [{ key: entry.object.key, size: entry.object.size, updatedMs: entry.object.updatedMs, etag: etagOf(entry.object) }] : []
+          entry.kind === "object"
+            ? [{ key: entry.object.key, size: BigInt(entry.object.size), updated: timestampFromMs(entry.object.updatedMs), etag: etagOf(entry.object) }]
+            : []
         ),
-        nextPageToken: end < entries.length ? seal(req.environmentId, req.bucket, req.prefix, end) : "",
+        nextPageToken: end < entries.length ? seal(req.environmentId, req.bucket, prefix, end) : "",
       };
     },
 
-    async getObjectMetadata(req, opts = {}) {
-      await begin("getObjectMetadata", req, opts.signal, req.key);
+    async getObjectMetadata(req) {
+      begin("getObjectMetadata", req.key);
       const object = find(req);
-      const meta: StorageObjectMeta = {
-        key: object.key,
-        size: object.size,
-        contentType: object.contentType,
-        updatedMs: object.updatedMs,
-        etag: etagOf(object),
-        metadata: { ...(object.metadata ?? {}) },
-        preview: fixturePreview(object),
-      };
-      return meta;
-    },
-
-    async presignObjectDownload(req, opts = {}) {
-      await begin("presignObjectDownload", req, opts.signal, req.key);
-      const object = find(req);
-      api.presigned++;
       return {
-        url: `https://storage.fixture.test/${req.bucket}/${encodeURIComponent(object.key)}?X-Goog-Signature=fixture-${api.presigned}`,
-        filename: object.key.slice(object.key.lastIndexOf("/") + 1),
-        size: object.size,
-        expiresAtMs: Date.now() + 5 * 60_000,
+        object: {
+          key: object.key,
+          size: BigInt(object.size),
+          contentType: object.contentType,
+          updated: timestampFromMs(object.updatedMs),
+          etag: etagOf(object),
+          metadata: { ...(object.metadata ?? {}) },
+          preview: PREVIEW_KINDS[fixturePreview(object)],
+        },
       };
     },
 
-    async previewObject(req, opts = {}) {
-      await begin("previewObject", req, opts.signal, req.key);
+    async presignObjectDownload(req) {
+      begin("presignObjectDownload", req.key);
+      const object = find(req);
+      fixture.presigned++;
+      return {
+        url: `https://storage.fixture.test/${req.bucket}/${encodeURIComponent(object.key)}?X-Goog-Signature=fixture-${fixture.presigned}`,
+        filename: object.key.slice(object.key.lastIndexOf("/") + 1),
+        size: BigInt(object.size),
+        expiresAt: timestampFromMs(Date.now() + 5 * 60_000),
+      };
+    },
+
+    async previewObject(req) {
+      begin("previewObject", req.key);
       const object = find(req);
       const kind = fixturePreview(object);
       if (kind === "none") {
@@ -294,15 +344,40 @@ export function createStorageFixtureApi(options: StorageFixtureOptions = {}): St
         }
         throw reasonError("not an image, text or JSON object", Code.FailedPrecondition, "not_previewable");
       }
+      const answer = { kind: PREVIEW_KINDS[kind], contentType: object.contentType, size: BigInt(object.size) };
       if (kind === "image") {
-        return { kind, contentType: object.contentType, size: object.size, image: { url: FIXTURE_PNG, expiresAtMs: Date.now() + 2 * 60_000 }, content: null };
+        return { ...answer, body: { case: "image", value: { url: FIXTURE_PNG, expiresAt: timestampFromMs(Date.now() + 2 * 60_000) } } };
       }
       const bytes = new TextEncoder().encode(object.body?.() ?? "");
-      return { kind, contentType: object.contentType, size: object.size, image: null, content: bytes.slice(0, TEXT_CAP) };
+      return { ...answer, body: { case: "content", value: bytes.slice(0, TEXT_CAP) } };
     },
   };
 
-  return api;
+  return fixture;
+}
+
+/**
+ * The fixture's StorageBrowserService, as mock-transport handlers: each call
+ * is recorded (`asked`), then answered by the fixture's handler of that name,
+ * read at call time so a test may have replaced it.
+ */
+export function storageFixtureHandlers(fixture: StorageFixture) {
+  const record = (method: Method, req: AnyRequest) => fixture.calls.push({ method, req: asked(method, req) });
+  return completed(
+    StorageBrowserService,
+    mockService(StorageBrowserService, {
+      listBrowsableBuckets: (req) => (record("listBrowsableBuckets", req), fixture.listBrowsableBuckets(req)),
+      listObjects: (req) => (record("listObjects", req), fixture.listObjects(req)),
+      getObjectMetadata: (req) => (record("getObjectMetadata", req), fixture.getObjectMetadata(req)),
+      presignObjectDownload: (req) => (record("presignObjectDownload", req), fixture.presignObjectDownload(req)),
+      previewObject: (req) => (record("previewObject", req), fixture.previewObject(req)),
+    })
+  );
+}
+
+/** A transport serving only the fixture's StorageBrowserService: what the Storage tests' TransportScope reads. */
+export function storageFixtureTransport(fixture: StorageFixture): Transport {
+  return createMockTransport({ scenario: { name: "storage-fixture", handlers: storageFixtureHandlers(fixture) } });
 }
 
 function etagOf(object: FixtureObject): string {
