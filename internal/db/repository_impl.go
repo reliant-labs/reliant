@@ -41,6 +41,20 @@ func (r *Repo) GetChatWithUserCheck(ctx context.Context, id, userID string) (*Ch
 	return store.GetChatWithUserCheck(ctx, r.ORM(), id, userID)
 }
 
+// GetLiveChatIDForWorktree returns one non-archived bound chat, or an empty string.
+//
+// Deprecated: use store.ChatExtStore.GetLiveChatIDForWorktree.
+func (r *Repo) GetLiveChatIDForWorktree(ctx context.Context, worktreeID string) (string, error) {
+	return store.GetLiveChatIDForWorktree(ctx, r.ORM(), worktreeID)
+}
+
+// ListWorktreeIDsWithRunningChat reports which worktrees have a run going in them.
+//
+// Deprecated: use store.ChatExtStore.ListWorktreeIDsWithRunningChat.
+func (r *Repo) ListWorktreeIDsWithRunningChat(ctx context.Context, worktreeIDs []string) (map[string]bool, error) {
+	return store.ListWorktreeIDsWithRunningChat(ctx, r.ORM(), worktreeIDs)
+}
+
 // ResolveThreadAmbientMemoryExclusion reads and latches the thread's memory exclusion policy.
 //
 // Deprecated: use store.ThreadExtStore.ResolveThreadAmbientMemoryExclusion.
