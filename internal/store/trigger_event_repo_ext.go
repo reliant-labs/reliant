@@ -577,10 +577,54 @@ CROSS JOIN LATERAL (
 ORDER BY e.trigger_id, e.occurred_at DESC, e.id DESC`
 }
 
-var (
-	recentTriggerFiringsFullSQL     = recentTriggerFiringsSQL(columnsOf[TriggerEvent])
-	recentTriggerFiringsOutcomesSQL = recentTriggerFiringsSQL(triggerOutcomeColumns)
-)
+// recentTriggerFiringsNewestBodySQL is recentTriggerFiringsSQL with the
+// bodies (payload, sender, origin) and the definition read for each trigger's
+// newest firing only, and NULL for the rest. Only the newest firing is ever
+// shown (a trigger's last_event); the others are judged for health and
+// failure detail, which read none of those columns. Reading them all was
+// most of ListTriggers' CPU in prod (2026-11-27): 834 firings carrying 4.3 MB
+// of payload JSON, each decoded into a map, for the ~90 that are rendered.
+//
+// The rank is computed over the capped walk (p), never beside it, as in
+// inboxEpisodeSQL; a value the CASE drops is never detoasted, so the bodies
+// of the other firings are neither decompressed nor sent.
+var recentTriggerFiringsNewestBodySQL = `SELECT ` + columnsOf[TriggerEvent]("e") + `,
+	` + triggerFiringRunColumns + `
+FROM (SELECT DISTINCT unnest(?1::text[]) AS id) t
+CROSS JOIN LATERAL (
+	SELECT ` + newestBodyColumns("k") + ` FROM (
+		SELECT ` + triggerEventColumnRefs("p") + `,
+			row_number() OVER (ORDER BY p.occurred_at DESC, p.id DESC) AS newest_rank
+		FROM (
+			SELECT ` + columnsOf[TriggerEvent]("x") + ` FROM trigger_events x
+			WHERE x.trigger_id = t.id AND x.user_id = ?0::text
+			ORDER BY x.occurred_at DESC, x.id DESC
+			LIMIT ?2::integer
+		) p
+	) k
+) e
+` + triggerFiringRunJoin + `
+ORDER BY e.trigger_id, e.occurred_at DESC, e.id DESC`
+
+// newestBodyColumns is every trigger_events column of alias, with the body
+// columns and the definition kept only on the row whose newest_rank is 1.
+func newestBodyColumns(alias string) string {
+	var b strings.Builder
+	for i, f := range modelTables.Get(reflect.TypeFor[TriggerEvent]()).Fields {
+		if i > 0 {
+			b.WriteString(", ")
+		}
+		col := alias + "." + string(f.SQLName)
+		if triggerEventBodyColumns[f.Name] || inboxEpisodeOmittedNames[f.Name] {
+			b.WriteString("CASE WHEN " + alias + ".newest_rank = 1 THEN " + col + " END AS " + string(f.SQLName))
+			continue
+		}
+		b.WriteString(col)
+	}
+	return b.String()
+}
+
+var recentTriggerFiringsOutcomesSQL = recentTriggerFiringsSQL(triggerOutcomeColumns)
 
 // InboxTriggerFiringsSQL returns the statements of RecentTriggerOutcomes and
 // FiringsSinceLastSuccess, with bun's ?0 (user), ?1 (trigger ids) and ?2 (per
@@ -592,12 +636,16 @@ func InboxTriggerFiringsSQL() (recentOutcomes, sinceLastSuccess string) {
 
 // RecentTriggerFirings returns each named trigger's newest perTrigger firings
 // (newest first, with their runs), keyed by trigger id. A trigger with no
-// firings has no entry; triggers belonging to other users never appear.
+// firings has no entry; triggers belonging to other users never appear. Only
+// each trigger's newest firing carries its body and definition (the one a
+// trigger shows as its last event); the older ones are read as
+// RecentTriggerOutcomes reads them, with an empty Payload and nil Sender,
+// Origin and Definition (recentTriggerFiringsNewestBodySQL).
 func RecentTriggerFirings(ctx context.Context, db orm.Context, userID string, triggerIDs []string, perTrigger int) (map[string][]*core.TriggerEventWithRun, error) {
 	if userID == "" {
 		return nil, errors.New("user ID cannot be empty")
 	}
-	return triggerFiringsByTrigger(ctx, db, "list recent trigger firings", recentTriggerFiringsFullSQL, userID, triggerIDs, perTrigger)
+	return triggerFiringsByTrigger(ctx, db, "list recent trigger firings", recentTriggerFiringsNewestBodySQL, userID, triggerIDs, perTrigger)
 }
 
 // RecentTriggerOutcomes is RecentTriggerFirings without the events' bodies:
