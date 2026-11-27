@@ -4,17 +4,28 @@ import (
 	"context"
 
 	"connectrpc.com/connect"
-	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
+	gtmsvc "github.com/reliant-labs/reliant/internal/gtm"
 )
 
-// CheckClaims implements the CheckClaims RPC.
-// FORGE_SCAFFOLD: implement business logic; remove this marker when done.
-// forge:gen unwired-stub symbol=gtm.CheckClaims
+// CheckClaims checks a text against the org's claims registry; it stores
+// nothing.
 func (s *Service) CheckClaims(
 	ctx context.Context,
 	req *connect.Request[pb.CheckClaimsRequest],
 ) (*connect.Response[pb.CheckClaimsResponse], error) {
-	return nil, svcerr.Wrap(svcerr.ScaffoldStub("CheckClaims"))
+	m := req.Msg
+	a, err := s.begin(ctx, m.GetOrgId(), m)
+	if err != nil {
+		return nil, err
+	}
+	res, err := s.deps.Service.CheckClaims(ctx, a, gtmsvc.CheckClaimsInput{Text: m.GetText()})
+	if err != nil {
+		return nil, wireErr(err)
+	}
+	return connect.NewResponse(&pb.CheckClaimsResponse{
+		Findings: findingsOut(res.Findings),
+		Blocking: res.Blocking,
+	}), nil
 }

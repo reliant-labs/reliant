@@ -1,41 +1,66 @@
 // yours: scaffolded once, never touched again — forge will not overwrite this file.
 // ONE RPC PER FILE, no package-level identifiers, so two RPCs' owners never collide; CRUD RPCs are
 // tested in handlers_crud_test.go.
-// TestCreateStrategy_Generated: rows for `tdd.RunRPCCases`. The scaffold row is SELF-DESTRUCTING: it matches only
-// forge's stub sentinel (not a bare CodeUnimplemented), so it fails once you implement CreateStrategy —
-// replace it then with Check / WantErr rows. Depth: `forge skill load testing/patterns`.
 package gtm_test
 
 import (
+	"context"
 	"testing"
 
 	"connectrpc.com/connect"
+	"github.com/stretchr/testify/assert"
 
 	"github.com/reliant-labs/forge/pkg/tdd"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
-
+	gtmsvc "github.com/reliant-labs/reliant/internal/gtm"
 	gtm "github.com/reliant-labs/reliant/internal/handlers/gtm"
 )
 
-// TestCreateStrategy_Generated runs the canonical scaffold rows for CreateStrategy.
-// Add more rows by appending tdd.RPCCase entries — never write a new
-// Test<X> function for what is really a new row in this table.
 func TestCreateStrategy_Generated(t *testing.T) {
 	t.Parallel()
-
-	// gtm.NewTestGtm (helpers_gen_test.go) returns the
-	// gtm *Service wired with stubbed dependencies. Override one
-	// with gtm.WithGtmDeps(...), or per-row via Case.Setup.
-	svc := gtm.NewTestGtm(t)
+	svc, m := mocked(t)
 
 	tdd.RunRPCCases(t, []tdd.RPCCase[pb.CreateStrategyRequest, pb.CreateStrategyResponse]{
 		{
-			Name: "unimplemented_scaffold", // delete this row once you implement CreateStrategy; it only asserts nobody has
-			Req:  connect.NewRequest(&pb.CreateStrategyRequest{}),
-			Ctx:  gtm.AuthedContext(t), // authenticated test claims (UserID "test-user", role "admin")
-			// replace with Check: func(t *testing.T, resp *connect.Response[pb.CreateStrategyResponse]) {...}, or WantErr: connect.CodeInvalidArgument
-			WantScaffoldStub: true,
+			Name: "maps the request",
+			Req: connect.NewRequest(&pb.CreateStrategyRequest{
+				OrgId: testOrg, Name: "Launch", GoalMd: "g", TargetMetric: "200 orgs",
+				PeriodStart: "2026-01-01", PeriodEnd: "2026-03-31",
+				Category: pb.GtmStrategyCategory_GTM_STRATEGY_CATEGORY_LAUNCHES_PR.Enum(),
+			}),
+			Ctx: gtm.AuthedContext(t),
+			Setup: func(t *testing.T) {
+				m.CreateStrategyFunc = func(_ context.Context, a gtmsvc.Actor, in gtmsvc.CreateStrategyInput) (gtmsvc.Strategy, error) {
+					asPerson(t, a)
+					assert.Equal(t, gtmsvc.CreateStrategyInput{
+						Name: "Launch", GoalMD: "g", TargetMetric: "200 orgs", PeriodStart: "2026-01-01", PeriodEnd: "2026-03-31",
+						Category: gtmsvc.CategoryLaunchesPR,
+					}, in)
+					return gtmsvc.Strategy{ID: "s1", Name: in.Name, Status: gtmsvc.StrategyDraft}, nil
+				}
+			},
+			Check: func(t *testing.T, resp *connect.Response[pb.CreateStrategyResponse]) {
+				assert.Equal(t, pb.GtmStrategyStatus_GTM_STRATEGY_STATUS_DRAFT, resp.Msg.GetStrategy().GetStatus())
+			},
+		},
+		{
+			Name: "a request breaking its rules is InvalidArgument for an admitted caller",
+			Req:  connect.NewRequest(&pb.CreateStrategyRequest{OrgId: testOrg}),
+			Ctx:  gtm.AuthedContext(t),
+			Setup: func(t *testing.T) {
+				m.GetAccessFunc = func(context.Context, gtmsvc.Actor) (gtmsvc.Access, error) { return gtmsvc.Access{Enabled: true}, nil }
+			},
+			WantErr: connect.CodeInvalidArgument,
+		},
+		{
+			Name: "and NotFound for a refused one",
+			Req:  connect.NewRequest(&pb.CreateStrategyRequest{OrgId: testOrg}),
+			Ctx:  gtm.AuthedContext(t),
+			Setup: func(t *testing.T) {
+				m.GetAccessFunc = func(context.Context, gtmsvc.Actor) (gtmsvc.Access, error) { return gtmsvc.Access{}, nil }
+			},
+			WantErr: connect.CodeNotFound,
 		},
 	}, svc.CreateStrategy)
 }

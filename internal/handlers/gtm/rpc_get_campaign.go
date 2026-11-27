@@ -4,17 +4,31 @@ import (
 	"context"
 
 	"connectrpc.com/connect"
-	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
+	gtmsvc "github.com/reliant-labs/reliant/internal/gtm"
 )
 
-// GetCampaign implements the GetCampaign RPC.
-// FORGE_SCAFFOLD: implement business logic; remove this marker when done.
-// forge:gen unwired-stub symbol=gtm.GetCampaign
+// GetCampaign returns a campaign with its ideas and items (capped) and its
+// coverage over all its items.
 func (s *Service) GetCampaign(
 	ctx context.Context,
 	req *connect.Request[pb.GetCampaignRequest],
 ) (*connect.Response[pb.GetCampaignResponse], error) {
-	return nil, svcerr.Wrap(svcerr.ScaffoldStub("GetCampaign"))
+	m := req.Msg
+	a, err := s.begin(ctx, m.GetOrgId(), m)
+	if err != nil {
+		return nil, err
+	}
+	d, err := s.deps.Service.GetCampaign(ctx, a, gtmsvc.GetCampaignInput{ID: m.GetId()})
+	if err != nil {
+		return nil, wireErr(err)
+	}
+	return connect.NewResponse(&pb.GetCampaignResponse{
+		Campaign:  campaignOut(d.Campaign),
+		Ideas:     ideasOut(d.Ideas),
+		Items:     itemsOut(d.Items),
+		Truncated: d.Truncated,
+		Coverage:  coverageOut(d.Coverage),
+	}), nil
 }

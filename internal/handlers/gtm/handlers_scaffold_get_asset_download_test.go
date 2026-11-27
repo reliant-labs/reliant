@@ -1,41 +1,54 @@
 // yours: scaffolded once, never touched again — forge will not overwrite this file.
 // ONE RPC PER FILE, no package-level identifiers, so two RPCs' owners never collide; CRUD RPCs are
 // tested in handlers_crud_test.go.
-// TestGetAssetDownload_Generated: rows for `tdd.RunRPCCases`. The scaffold row is SELF-DESTRUCTING: it matches only
-// forge's stub sentinel (not a bare CodeUnimplemented), so it fails once you implement GetAssetDownload —
-// replace it then with Check / WantErr rows. Depth: `forge skill load testing/patterns`.
 package gtm_test
 
 import (
+	"context"
 	"testing"
+	"time"
 
 	"connectrpc.com/connect"
+	"github.com/stretchr/testify/assert"
 
 	"github.com/reliant-labs/forge/pkg/tdd"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
-
+	gtmsvc "github.com/reliant-labs/reliant/internal/gtm"
 	gtm "github.com/reliant-labs/reliant/internal/handlers/gtm"
 )
 
-// TestGetAssetDownload_Generated runs the canonical scaffold rows for GetAssetDownload.
-// Add more rows by appending tdd.RPCCase entries — never write a new
-// Test<X> function for what is really a new row in this table.
 func TestGetAssetDownload_Generated(t *testing.T) {
 	t.Parallel()
-
-	// gtm.NewTestGtm (helpers_gen_test.go) returns the
-	// gtm *Service wired with stubbed dependencies. Override one
-	// with gtm.WithGtmDeps(...), or per-row via Case.Setup.
-	svc := gtm.NewTestGtm(t)
+	svc, m := mocked(t)
 
 	tdd.RunRPCCases(t, []tdd.RPCCase[pb.GetAssetDownloadRequest, pb.GetAssetDownloadResponse]{
 		{
-			Name: "unimplemented_scaffold", // delete this row once you implement GetAssetDownload; it only asserts nobody has
-			Req:  connect.NewRequest(&pb.GetAssetDownloadRequest{}),
-			Ctx:  gtm.AuthedContext(t), // authenticated test claims (UserID "test-user", role "admin")
-			// replace with Check: func(t *testing.T, resp *connect.Response[pb.GetAssetDownloadResponse]) {...}, or WantErr: connect.CodeInvalidArgument
-			WantScaffoldStub: true,
+			Name: "maps the URL to download_url",
+			Req:  connect.NewRequest(&pb.GetAssetDownloadRequest{OrgId: testOrg, AssetId: "as1"}),
+			Ctx:  gtm.AuthedContext(t),
+			Setup: func(t *testing.T) {
+				m.GetAssetDownloadFunc = func(_ context.Context, a gtmsvc.Actor, in gtmsvc.GetAssetDownloadInput) (gtmsvc.AssetDownload, error) {
+					asPerson(t, a)
+					assert.Equal(t, "as1", in.AssetID)
+					return gtmsvc.AssetDownload{URL: "https://bucket/get", ExpiresAt: time.Unix(100, 0)}, nil
+				}
+			},
+			Check: func(t *testing.T, resp *connect.Response[pb.GetAssetDownloadResponse]) {
+				assert.Equal(t, "https://bucket/get", resp.Msg.GetDownloadUrl())
+				assert.Equal(t, int64(100), resp.Msg.GetExpiresAt().GetSeconds())
+			},
+		},
+		{
+			Name: "a PENDING asset is FailedPrecondition",
+			Req:  connect.NewRequest(&pb.GetAssetDownloadRequest{OrgId: testOrg, AssetId: "as1"}),
+			Ctx:  gtm.AuthedContext(t),
+			Setup: func(t *testing.T) {
+				m.GetAssetDownloadFunc = func(context.Context, gtmsvc.Actor, gtmsvc.GetAssetDownloadInput) (gtmsvc.AssetDownload, error) {
+					return gtmsvc.AssetDownload{}, gtmsvc.ErrAssetNotReady
+				}
+			},
+			WantErr: connect.CodeFailedPrecondition,
 		},
 	}, svc.GetAssetDownload)
 }

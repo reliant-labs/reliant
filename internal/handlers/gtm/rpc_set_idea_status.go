@@ -4,17 +4,29 @@ import (
 	"context"
 
 	"connectrpc.com/connect"
-	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
+	gtmsvc "github.com/reliant-labs/reliant/internal/gtm"
 )
 
-// SetIdeaStatus implements the SetIdeaStatus RPC.
-// FORGE_SCAFFOLD: implement business logic; remove this marker when done.
-// forge:gen unwired-stub symbol=gtm.SetIdeaStatus
+// SetIdeaStatus moves an idea along its lifecycle; ACCEPTED and REJECTED are
+// a person's decision.
 func (s *Service) SetIdeaStatus(
 	ctx context.Context,
 	req *connect.Request[pb.SetIdeaStatusRequest],
 ) (*connect.Response[pb.SetIdeaStatusResponse], error) {
-	return nil, svcerr.Wrap(svcerr.ScaffoldStub("SetIdeaStatus"))
+	m := req.Msg
+	a, err := s.begin(ctx, m.GetOrgId(), m)
+	if err != nil {
+		return nil, err
+	}
+	idea, err := s.deps.Service.SetIdeaStatus(ctx, a, gtmsvc.SetIdeaStatusInput{
+		ID:               m.GetId(),
+		ExpectedRevision: m.GetExpectedRevision(),
+		Status:           enumIn[gtmsvc.IdeaStatus](m.GetStatus()),
+	})
+	if err != nil {
+		return nil, wireErr(err)
+	}
+	return connect.NewResponse(&pb.SetIdeaStatusResponse{Idea: ideaOut(idea)}), nil
 }

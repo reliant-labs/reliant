@@ -2176,7 +2176,8 @@ func (g *Graph) newPipeline() (*pipeline.Service, error) {
 // newSvcGtm constructs the gtm handler (internal/handlers/gtm).
 func (g *Graph) newSvcGtm() (*svcGtm.Service, error) {
 	return svcGtm.New(svcGtm.Deps{
-		Logger: g.Log,
-		Config: g.Cfg,
+		Logger:  g.Log,
+		Config:  g.Cfg,
+		Service: nil, // optional — no provider
 	})
 }

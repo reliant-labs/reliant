@@ -1,41 +1,70 @@
 // yours: scaffolded once, never touched again — forge will not overwrite this file.
 // ONE RPC PER FILE, no package-level identifiers, so two RPCs' owners never collide; CRUD RPCs are
 // tested in handlers_crud_test.go.
-// TestResolveItemSend_Generated: rows for `tdd.RunRPCCases`. The scaffold row is SELF-DESTRUCTING: it matches only
-// forge's stub sentinel (not a bare CodeUnimplemented), so it fails once you implement ResolveItemSend —
-// replace it then with Check / WantErr rows. Depth: `forge skill load testing/patterns`.
 package gtm_test
 
 import (
+	"context"
 	"testing"
 
 	"connectrpc.com/connect"
+	"github.com/stretchr/testify/assert"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/reliant-labs/forge/pkg/tdd"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
-
+	gtmsvc "github.com/reliant-labs/reliant/internal/gtm"
 	gtm "github.com/reliant-labs/reliant/internal/handlers/gtm"
 )
 
-// TestResolveItemSend_Generated runs the canonical scaffold rows for ResolveItemSend.
-// Add more rows by appending tdd.RPCCase entries — never write a new
-// Test<X> function for what is really a new row in this table.
 func TestResolveItemSend_Generated(t *testing.T) {
 	t.Parallel()
-
-	// gtm.NewTestGtm (helpers_gen_test.go) returns the
-	// gtm *Service wired with stubbed dependencies. Override one
-	// with gtm.WithGtmDeps(...), or per-row via Case.Setup.
-	svc := gtm.NewTestGtm(t)
+	svc, m := mocked(t)
 
 	tdd.RunRPCCases(t, []tdd.RPCCase[pb.ResolveItemSendRequest, pb.ResolveItemSendResponse]{
 		{
-			Name: "unimplemented_scaffold", // delete this row once you implement ResolveItemSend; it only asserts nobody has
-			Req:  connect.NewRequest(&pb.ResolveItemSendRequest{}),
-			Ctx:  gtm.AuthedContext(t), // authenticated test claims (UserID "test-user", role "admin")
-			// replace with Check: func(t *testing.T, resp *connect.Response[pb.ResolveItemSendResponse]) {...}, or WantErr: connect.CodeInvalidArgument
-			WantScaffoldStub: true,
+			Name: "a person records the send it found in Gmail (Service.ResolveInDoubtSend)",
+			Req: connect.NewRequest(&pb.ResolveItemSendRequest{
+				OrgId: testOrg, Id: "it1", ApprovalHash: "h", GmailMessageId: proto.String("g1"),
+			}),
+			Ctx: gtm.AuthedContext(t),
+			Setup: func(t *testing.T) {
+				m.ResolveInDoubtSendFunc = func(_ context.Context, a gtmsvc.Actor, in gtmsvc.ResolveInDoubtSendInput) (gtmsvc.Item, error) {
+					asPerson(t, a)
+					assert.Equal(t, "it1", in.ItemID)
+					assert.Equal(t, "h", in.ApprovalHash)
+					assert.Equal(t, "g1", *in.GmailMessageID)
+					return gtmsvc.Item{ID: "it1", Status: gtmsvc.ItemSent, GmailMessageID: "g1"}, nil
+				}
+			},
+			Check: func(t *testing.T, resp *connect.Response[pb.ResolveItemSendResponse]) {
+				assert.Equal(t, pb.GtmItemStatus_GTM_ITEM_STATUS_SENT, resp.Msg.GetItem().GetStatus())
+			},
+		},
+		{
+			Name: "a release while the send may run is FailedPrecondition",
+			Req:  connect.NewRequest(&pb.ResolveItemSendRequest{OrgId: testOrg, Id: "it1", ApprovalHash: "h"}),
+			Ctx:  gtm.AuthedContext(t),
+			Setup: func(t *testing.T) {
+				m.ResolveInDoubtSendFunc = func(_ context.Context, _ gtmsvc.Actor, in gtmsvc.ResolveInDoubtSendInput) (gtmsvc.Item, error) {
+					assert.Nil(t, in.GmailMessageID)
+					return gtmsvc.Item{}, &gtmsvc.SendInFlightError{ItemID: "it1"}
+				}
+			},
+			WantErr: connect.CodeFailedPrecondition,
+		},
+		{
+			Name: "an API token is an Agent: resolving is PermissionDenied",
+			Req:  connect.NewRequest(&pb.ResolveItemSendRequest{OrgId: testOrg, Id: "it1", ApprovalHash: "h"}),
+			Ctx:  tokenCtx("test-user", testOrg),
+			Setup: func(t *testing.T) {
+				m.ResolveInDoubtSendFunc = func(_ context.Context, a gtmsvc.Actor, _ gtmsvc.ResolveInDoubtSendInput) (gtmsvc.Item, error) {
+					assert.Equal(t, gtmsvc.ActorAgent, a.Kind)
+					return gtmsvc.Item{}, &gtmsvc.PersonOnlyError{Action: "resolve a send in doubt"}
+				}
+			},
+			WantErr: connect.CodePermissionDenied,
 		},
 	}, svc.ResolveItemSend)
 }

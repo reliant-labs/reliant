@@ -1,41 +1,61 @@
 // yours: scaffolded once, never touched again — forge will not overwrite this file.
 // ONE RPC PER FILE, no package-level identifiers, so two RPCs' owners never collide; CRUD RPCs are
 // tested in handlers_crud_test.go.
-// TestGetIdea_Generated: rows for `tdd.RunRPCCases`. The scaffold row is SELF-DESTRUCTING: it matches only
-// forge's stub sentinel (not a bare CodeUnimplemented), so it fails once you implement GetIdea —
-// replace it then with Check / WantErr rows. Depth: `forge skill load testing/patterns`.
 package gtm_test
 
 import (
+	"context"
 	"testing"
+	"time"
 
 	"connectrpc.com/connect"
+	"github.com/stretchr/testify/assert"
 
 	"github.com/reliant-labs/forge/pkg/tdd"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
-
+	gtmsvc "github.com/reliant-labs/reliant/internal/gtm"
 	gtm "github.com/reliant-labs/reliant/internal/handlers/gtm"
 )
 
-// TestGetIdea_Generated runs the canonical scaffold rows for GetIdea.
-// Add more rows by appending tdd.RPCCase entries — never write a new
-// Test<X> function for what is really a new row in this table.
 func TestGetIdea_Generated(t *testing.T) {
 	t.Parallel()
-
-	// gtm.NewTestGtm (helpers_gen_test.go) returns the
-	// gtm *Service wired with stubbed dependencies. Override one
-	// with gtm.WithGtmDeps(...), or per-row via Case.Setup.
-	svc := gtm.NewTestGtm(t)
+	svc, m := mocked(t)
+	observed := time.Date(2026, 2, 1, 0, 0, 0, 0, time.UTC)
 
 	tdd.RunRPCCases(t, []tdd.RPCCase[pb.GetIdeaRequest, pb.GetIdeaResponse]{
 		{
-			Name: "unimplemented_scaffold", // delete this row once you implement GetIdea; it only asserts nobody has
-			Req:  connect.NewRequest(&pb.GetIdeaRequest{}),
-			Ctx:  gtm.AuthedContext(t), // authenticated test claims (UserID "test-user", role "admin")
-			// replace with Check: func(t *testing.T, resp *connect.Response[pb.GetIdeaResponse]) {...}, or WantErr: connect.CodeInvalidArgument
-			WantScaffoldStub: true,
+			Name: "maps the idea and its evidence",
+			Req:  connect.NewRequest(&pb.GetIdeaRequest{OrgId: testOrg, Id: "i1"}),
+			Ctx:  gtm.AuthedContext(t),
+			Setup: func(t *testing.T) {
+				m.GetIdeaFunc = func(_ context.Context, a gtmsvc.Actor, in gtmsvc.GetIdeaInput) (gtmsvc.Idea, error) {
+					asPerson(t, a)
+					assert.Equal(t, "i1", in.ID)
+					return gtmsvc.Idea{
+						ID: "i1", Kind: gtmsvc.IdeaKindGTM, Status: gtmsvc.IdeaAccepted, Revision: 2,
+						Evidence: []gtmsvc.Evidence{{Kind: "analytics", URL: "https://x", ObservedAt: &observed}},
+					}, nil
+				}
+			},
+			Check: func(t *testing.T, resp *connect.Response[pb.GetIdeaResponse]) {
+				i := resp.Msg.GetIdea()
+				assert.Equal(t, pb.GtmIdeaKind_GTM_IDEA_KIND_GTM, i.GetKind())
+				assert.Equal(t, pb.GtmIdeaStatus_GTM_IDEA_STATUS_ACCEPTED, i.GetStatus())
+				assert.Equal(t, "https://x", i.GetEvidence()[0].GetUrl())
+				assert.True(t, observed.Equal(i.GetEvidence()[0].GetObservedAt().AsTime()))
+			},
+		},
+		{
+			Name: "a missing idea is NotFound",
+			Req:  connect.NewRequest(&pb.GetIdeaRequest{OrgId: testOrg, Id: "i1"}),
+			Ctx:  gtm.AuthedContext(t),
+			Setup: func(t *testing.T) {
+				m.GetIdeaFunc = func(context.Context, gtmsvc.Actor, gtmsvc.GetIdeaInput) (gtmsvc.Idea, error) {
+					return gtmsvc.Idea{}, gtmsvc.ErrNotFound
+				}
+			},
+			WantErr: connect.CodeNotFound,
 		},
 	}, svc.GetIdea)
 }

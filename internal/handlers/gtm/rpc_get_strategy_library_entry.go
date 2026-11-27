@@ -4,17 +4,24 @@ import (
 	"context"
 
 	"connectrpc.com/connect"
-	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
+	gtmsvc "github.com/reliant-labs/reliant/internal/gtm"
 )
 
-// GetStrategyLibraryEntry implements the GetStrategyLibraryEntry RPC.
-// FORGE_SCAFFOLD: implement business logic; remove this marker when done.
-// forge:gen unwired-stub symbol=gtm.GetStrategyLibraryEntry
+// GetStrategyLibraryEntry returns one library entry by key.
 func (s *Service) GetStrategyLibraryEntry(
 	ctx context.Context,
 	req *connect.Request[pb.GetStrategyLibraryEntryRequest],
 ) (*connect.Response[pb.GetStrategyLibraryEntryResponse], error) {
-	return nil, svcerr.Wrap(svcerr.ScaffoldStub("GetStrategyLibraryEntry"))
+	m := req.Msg
+	a, err := s.begin(ctx, m.GetOrgId(), m)
+	if err != nil {
+		return nil, err
+	}
+	e, err := s.deps.Service.GetStrategyLibraryEntry(ctx, a, gtmsvc.GetStrategyLibraryEntryInput{Key: m.GetKey()})
+	if err != nil {
+		return nil, wireErr(err)
+	}
+	return connect.NewResponse(&pb.GetStrategyLibraryEntryResponse{Entry: libraryEntryOut(e)}), nil
 }

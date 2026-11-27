@@ -68230,6 +68230,15 @@
       "resolution": "composition_expression"
     },
     {
+      "consumer": "SvcGtm",
+      "field": "Service",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/gtm.ServiceService",
+      "methods": [],
+      "candidates": [],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
       "consumer": "System",
       "field": "Repo",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/system.Pinger",
@@ -70010,6 +70019,14 @@
       "component": "Sharing.Tx",
       "source": {
         "path": "internal/handlers/sharing/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "SvcGtm.Service",
+      "source": {
+        "path": "internal/handlers/gtm/service.go",
         "symbol": "New"
       }
     },

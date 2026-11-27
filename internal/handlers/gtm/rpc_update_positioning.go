@@ -4,17 +4,32 @@ import (
 	"context"
 
 	"connectrpc.com/connect"
-	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
+	gtmsvc "github.com/reliant-labs/reliant/internal/gtm"
 )
 
-// UpdatePositioning implements the UpdatePositioning RPC.
-// FORGE_SCAFFOLD: implement business logic; remove this marker when done.
-// forge:gen unwired-stub symbol=gtm.UpdatePositioning
+// UpdatePositioning replaces the org's positioning whole, business type and
+// models included (a caller reads, changes and writes it back); expected
+// revision 0 creates it.
 func (s *Service) UpdatePositioning(
 	ctx context.Context,
 	req *connect.Request[pb.UpdatePositioningRequest],
 ) (*connect.Response[pb.UpdatePositioningResponse], error) {
-	return nil, svcerr.Wrap(svcerr.ScaffoldStub("UpdatePositioning"))
+	m := req.Msg
+	a, err := s.begin(ctx, m.GetOrgId(), m)
+	if err != nil {
+		return nil, err
+	}
+	p, err := s.deps.Service.UpdatePositioning(ctx, a, gtmsvc.UpdatePositioningInput{
+		ExpectedRevision: m.GetExpectedRevision(),
+		PositioningMD:    m.GetPositioningMd(),
+		Audiences:        m.GetAudiences(),
+		BusinessType:     enumIn[gtmsvc.BusinessType](m.GetBusinessType()),
+		BusinessModels:   enumsIn[gtmsvc.BusinessModel](m.GetBusinessModels()),
+	})
+	if err != nil {
+		return nil, wireErr(err)
+	}
+	return connect.NewResponse(&pb.UpdatePositioningResponse{Positioning: positioningOut(p)}), nil
 }

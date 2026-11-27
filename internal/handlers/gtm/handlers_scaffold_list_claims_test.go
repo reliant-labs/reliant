@@ -1,41 +1,59 @@
 // yours: scaffolded once, never touched again — forge will not overwrite this file.
 // ONE RPC PER FILE, no package-level identifiers, so two RPCs' owners never collide; CRUD RPCs are
 // tested in handlers_crud_test.go.
-// TestListClaims_Generated: rows for `tdd.RunRPCCases`. The scaffold row is SELF-DESTRUCTING: it matches only
-// forge's stub sentinel (not a bare CodeUnimplemented), so it fails once you implement ListClaims —
-// replace it then with Check / WantErr rows. Depth: `forge skill load testing/patterns`.
 package gtm_test
 
 import (
+	"context"
 	"testing"
 
 	"connectrpc.com/connect"
+	"github.com/stretchr/testify/assert"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/reliant-labs/forge/pkg/tdd"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
-
+	gtmsvc "github.com/reliant-labs/reliant/internal/gtm"
 	gtm "github.com/reliant-labs/reliant/internal/handlers/gtm"
 )
 
-// TestListClaims_Generated runs the canonical scaffold rows for ListClaims.
-// Add more rows by appending tdd.RPCCase entries — never write a new
-// Test<X> function for what is really a new row in this table.
 func TestListClaims_Generated(t *testing.T) {
 	t.Parallel()
-
-	// gtm.NewTestGtm (helpers_gen_test.go) returns the
-	// gtm *Service wired with stubbed dependencies. Override one
-	// with gtm.WithGtmDeps(...), or per-row via Case.Setup.
-	svc := gtm.NewTestGtm(t)
+	svc, m := mocked(t)
 
 	tdd.RunRPCCases(t, []tdd.RPCCase[pb.ListClaimsRequest, pb.ListClaimsResponse]{
 		{
-			Name: "unimplemented_scaffold", // delete this row once you implement ListClaims; it only asserts nobody has
-			Req:  connect.NewRequest(&pb.ListClaimsRequest{}),
-			Ctx:  gtm.AuthedContext(t), // authenticated test claims (UserID "test-user", role "admin")
-			// replace with Check: func(t *testing.T, resp *connect.Response[pb.ListClaimsResponse]) {...}, or WantErr: connect.CodeInvalidArgument
-			WantScaffoldStub: true,
+			Name: "maps the filters and the claims",
+			Req: connect.NewRequest(&pb.ListClaimsRequest{
+				OrgId: testOrg, Category: pb.GtmClaimCategory_GTM_CLAIM_CATEGORY_PRICING.Enum(), Search: proto.String("free"),
+			}),
+			Ctx: gtm.AuthedContext(t),
+			Setup: func(t *testing.T) {
+				m.ListClaimsFunc = func(_ context.Context, a gtmsvc.Actor, in gtmsvc.ListClaimsInput) (gtmsvc.ListClaimsResult, error) {
+					asPerson(t, a)
+					assert.Equal(t, gtmsvc.ListClaimsInput{Category: gtmsvc.ClaimPricing, Search: "free"}, in)
+					return gtmsvc.ListClaimsResult{Claims: []gtmsvc.Claim{{
+						ID: "cl1", Category: gtmsvc.ClaimPricing, Status: gtmsvc.ClaimUnverified, SourceKind: gtmsvc.ClaimSourceNone,
+					}}}, nil
+				}
+			},
+			Check: func(t *testing.T, resp *connect.Response[pb.ListClaimsResponse]) {
+				c := resp.Msg.GetClaims()[0]
+				assert.Equal(t, pb.GtmClaimStatus_GTM_CLAIM_STATUS_UNVERIFIED, c.GetStatus())
+				assert.Equal(t, pb.GtmClaimSourceKind_GTM_CLAIM_SOURCE_KIND_UNSPECIFIED, c.GetSourceKind())
+			},
+		},
+		{
+			Name: "a refusal is NotFound",
+			Req:  connect.NewRequest(&pb.ListClaimsRequest{OrgId: testOrg}),
+			Ctx:  gtm.AuthedContext(t),
+			Setup: func(t *testing.T) {
+				m.ListClaimsFunc = func(context.Context, gtmsvc.Actor, gtmsvc.ListClaimsInput) (gtmsvc.ListClaimsResult, error) {
+					return gtmsvc.ListClaimsResult{}, gtmsvc.ErrNotFound
+				}
+			},
+			WantErr: connect.CodeNotFound,
 		},
 	}, svc.ListClaims)
 }

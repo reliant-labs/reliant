@@ -19,9 +19,13 @@ import (
 type Deps struct {
 	Logger *slog.Logger
 	Config *config.Config
-	// Add your dependencies here (e.g. Repo Repository). Required ones get
-	// a validateDeps() check below. Tag intentionally-optional fields with
-	// the `forge:optional-dep` directive directly above the field.
+
+	// Service is the GTM domain (internal/gtm): the gate, org scoping,
+	// validation and who may do what are all its. nil (until internal/app's
+	// GTM provider wires it) is GTM absent: every rpc answers the bare
+	// NotFound a refusal gets, and GetGtmAccess answers enabled = false.
+	// forge:optional-dep
+	Service ServiceService
 }
 
 // validateDeps returns an error if any required Deps field is nil. The
@@ -33,8 +37,6 @@ func (d Deps) validateDeps() error {
 	if d.Config == nil {
 		return fmt.Errorf("gtm: Deps.Config is required")
 	}
-	// Add checks for your required Deps fields here. Example:
-	//   if d.Repo == nil { return fmt.Errorf("gtm: Deps.Repo is required") }
 	return nil
 }
 
