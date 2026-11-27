@@ -1225,6 +1225,7 @@ func (g *Graph) newChat() (*chat.Service, error) {
 		Logger:           g.Log,
 		Config:           g.Cfg,
 		Repo:             g.Database(),
+		TriggerReads:     store.NewTriggerEventExtStore(g.Database().ORM()),
 		Chats:            chataccess.NewFromORM(g.Database().ORM()),
 		ChatRows:         store.NewChatExtStore(g.Database().ORM()),
 		ChatViews:        store.NewChatsWithActivityExtStore(g.Database().ORM()),
@@ -1628,21 +1629,22 @@ func (g *Graph) newSettings() (*settings.Service, error) {
 // newStreaming constructs the streaming handler (internal/handlers/streaming).
 func (g *Graph) newStreaming() (*streaminghandler.Service, error) {
 	return streaminghandler.New(streaminghandler.Deps{
-		Logger:      g.Log,
-		Config:      g.Cfg,
-		Repo:        g.Database(),
-		ChatRows:    store.NewChatExtStore(g.Database().ORM()),
-		Senders:     store.NewThreadExtStore(g.Database().ORM()),
-		Projects:    store.NewProjectExtStore(g.Database().ORM()),
-		SpawnCalls:  store.NewToolCallExtStore(g.Database().ORM()),
-		Heads:       store.NewChatUpdateExtStore(g.Database().ORM()),
-		UserLog:     store.NewUserUpdateExtStore(g.Database().ORM()),
-		OrgFeed:     store.NewOrgUpdateExtStore(g.Database().ORM()),
-		Siblings:    store.NewMessageExtStore(g.Database().ORM()),
-		Deltas:      g.StreamingHub().Hub,
-		UserUpdates: g.UserUpdateHub(),
-		ChatUpdates: g.ChatUpdateHub(),
-		Orgs:        g.OrgResolver(),
+		Logger:       g.Log,
+		Config:       g.Cfg,
+		Repo:         g.Database(),
+		TriggerReads: store.NewTriggerEventExtStore(g.Database().ORM()),
+		ChatRows:     store.NewChatExtStore(g.Database().ORM()),
+		Senders:      store.NewThreadExtStore(g.Database().ORM()),
+		Projects:     store.NewProjectExtStore(g.Database().ORM()),
+		SpawnCalls:   store.NewToolCallExtStore(g.Database().ORM()),
+		Heads:        store.NewChatUpdateExtStore(g.Database().ORM()),
+		UserLog:      store.NewUserUpdateExtStore(g.Database().ORM()),
+		OrgFeed:      store.NewOrgUpdateExtStore(g.Database().ORM()),
+		Siblings:     store.NewMessageExtStore(g.Database().ORM()),
+		Deltas:       g.StreamingHub().Hub,
+		UserUpdates:  g.UserUpdateHub(),
+		ChatUpdates:  g.ChatUpdateHub(),
+		Orgs:         g.OrgResolver(),
 	})
 }
 
@@ -1782,12 +1784,12 @@ func (g *Graph) newSharing() (*sharing.Service, error) {
 // trigger handler does the adopting, re-validating it as its new owner.
 func (g *Graph) newAutomationTakeover() (*automation_takeover.Service, error) {
 	return automation_takeover.New(automation_takeover.Deps{
-		Logger:   g.Log,
-		Config:   g.Cfg,
-		Repo:     g.Database(),
-		Offers:   g.Triggerowner(),
-		Triggers: g.Trigger(),
-		Now:      nil, // optional — no provider
+		Logger:       g.Log,
+		Config:       g.Cfg,
+		TriggerReads: store.NewTriggerExtStore(g.Database().ORM()),
+		Offers:       g.Triggerowner(),
+		Triggers:     g.Trigger(),
+		Now:          nil, // optional — no provider
 	})
 }
 
