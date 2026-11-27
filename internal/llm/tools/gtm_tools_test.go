@@ -367,6 +367,18 @@ func TestGTMTools_HappyPaths(t *testing.T) {
 			assert.Equal(t, &[]gtm.TailorAnswer{{Question: "q", Answer: "a"}}, in.TailorAnswers)
 			assert.Nil(t, in.SuggestedWorkflowMD, "an omitted field is left alone")
 		}},
+		{ToolSaveGtmIdea, `{"id":"idea-1","expected_revision":1,"tailor_answers":[],"evidence":[]}`, func(t *testing.T, m *gtm.MockService, out map[string]any) {
+			in := lastInput[gtm.UpdateIdeaInput](t, m, "UpdateIdea")
+			assert.Equal(t, &[]gtm.TailorAnswer{}, in.TailorAnswers, "an empty list clears the answers")
+			assert.Equal(t, &[]gtm.Evidence{}, in.Evidence, "an empty list clears the evidence")
+			assert.Nil(t, in.LibraryKey)
+		}},
+		{ToolListGtmStrategyLibrary, `{"categories":[],"business_types":[],"business_models":[]}`, func(t *testing.T, m *gtm.MockService, out map[string]any) {
+			in := lastInput[gtm.ListStrategyLibraryInput](t, m, "ListStrategyLibrary")
+			assert.Empty(t, in.Categories, "an empty list filters nothing")
+			assert.Empty(t, in.BusinessTypes)
+			assert.Empty(t, in.BusinessModels)
+		}},
 		{ToolSaveGtmIdea, `{"id":"idea-1","expected_revision":1,"campaign_id":""}`, func(t *testing.T, m *gtm.MockService, out map[string]any) {
 			in := lastInput[gtm.UpdateIdeaInput](t, m, "UpdateIdea")
 			assert.Equal(t, int32(1), in.ExpectedRevision)
@@ -408,13 +420,13 @@ func TestGTMTools_HappyPaths(t *testing.T) {
 			assert.Equal(t, []any{"B2B_SAAS"}, e["business_types"])
 			assert.Equal(t, true, out["fits_my_business"])
 		}},
-		{ToolListGtmStrategyLibrary, `{"categories":["LAUNCHES_PR","community_events"],"business_types":["DEVELOPER_TOOLS"],"business_models":["FREEMIUM"],"stage":"launch","effort":"low","cost":"free","query":"meetup","fits_my_business":false,"limit":5,"page_token":"p2"}`, func(t *testing.T, m *gtm.MockService, out map[string]any) {
+		{ToolListGtmStrategyLibrary, `{"categories":["LAUNCHES_PR","community_events"],"business_types":["DEVELOPER_TOOLS"],"business_models":["FREEMIUM"],"stage":"launch","objective":"awareness","effort":"low","cost":"free","query":"meetup","fits_my_business":false,"limit":5,"page_token":"p2"}`, func(t *testing.T, m *gtm.MockService, out map[string]any) {
 			in := lastInput[gtm.ListStrategyLibraryInput](t, m, "ListStrategyLibrary")
 			assert.Equal(t, gtm.ListStrategyLibraryInput{
 				Categories:     []gtm.StrategyCategory{gtm.CategoryLaunchesPR, gtm.CategoryCommunityEvents},
 				BusinessTypes:  []gtm.BusinessType{gtm.BusinessDeveloperTools},
 				BusinessModels: []gtm.BusinessModel{gtm.ModelFreemium},
-				Stage:          "launch", Effort: "low", Cost: "free", Query: "meetup", PageSize: 5, PageToken: "p2",
+				Stage:          "launch", Objective: "awareness", Effort: "low", Cost: "free", Query: "meetup", PageSize: 5, PageToken: "p2",
 			}, in)
 			assert.Equal(t, false, out["fits_my_business"])
 		}},
@@ -866,6 +878,7 @@ func TestGTMTools_LibraryGuidance(t *testing.T) {
 		"meetups, conferences, hackathons, networking", "founder-led, high-touch outreach",
 		"unless the business makes them impossible", "say why",
 		"library_key", "tailor_questions", "tailor_answers",
+		"fits_my_business filters nothing, so ask the person to set them",
 	} {
 		assert.Contains(t, d, want)
 	}

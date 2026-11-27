@@ -988,6 +988,7 @@ var generatedToolParams = map[string]ToolParams{
 			"fits_my_business": {},
 			"key":              {},
 			"limit":            {},
+			"objective":        {},
 			"page_token":       {},
 			"query":            {},
 			"stage":            {},

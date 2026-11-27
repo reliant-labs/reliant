@@ -547,7 +547,7 @@ type SaveGtmIdeaParams struct {
 	CampaignID          *string             `json:"campaign_id,omitempty" jsonschema:"description=A campaign to link it to. On an edit an empty string unlinks it."`
 	LibraryKey          *string             `json:"library_key,omitempty" jsonschema:"description=The idea-bank entry it comes from (list_gtm_strategy_library key). Never guess one. On an edit an empty string clears it."`
 	TailorAnswers       *[]GtmTailorAnswer  `json:"tailor_answers,omitempty" jsonschema:"description=That entry's tailor_questions\\, each answered for this business (at most 20; each answer at most 2000 characters). On an edit it replaces the whole list."`
-	SuggestedWorkflowMD *string             `json:"suggested_workflow_md,omitempty" jsonschema:"description=How the idea could run as an automation\\, in markdown\\, tool-agnostic: the entry's suggested workflow tailored to this business. A suggestion only: nothing is created from it."`
+	SuggestedWorkflowMD *string             `json:"suggested_workflow_md,omitempty" jsonschema:"description=How the idea could run as an automation\\, in markdown\\, tool-agnostic: the entry's suggested workflow tailored to this business. A suggestion only: nothing is created from it. On an edit an empty string clears it."`
 }
 
 type GtmTailorAnswer struct {
@@ -672,7 +672,7 @@ type SaveGtmStrategyParams struct {
 	Category            *string `json:"category,omitempty" jsonschema:"description=One of PRICING_OFFERS_INCENTIVES REFERRAL_VIRAL_GROWTH PAID_ACQUISITION ORGANIC_CONTENT_SEO OUTBOUND_SALES_PROSPECTING PARTNERSHIPS_DISTRIBUTION LAUNCHES_PR COMMUNITY_EVENTS PRODUCT_LED_GROWTH CONVERSION_OPTIMIZATION RETENTION_EXPANSION TRUST_REPUTATION MARKET_RESEARCH_POSITIONING. On an edit an empty string clears it."`
 }
 
-const saveGtmStrategyDescription = "Draft a GTM strategy, or edit a DRAFT one. Every strategy you create is a DRAFT and you edit DRAFT strategies only: a person makes it ACTIVE, DONE or ARCHIVED, and edits it after that. Create from scratch with name (and goal_md, target_metric, period_start, period_end, category), or from a idea-bank entry with from_library_key, optionally with its first campaign. Edit with id and expected_revision; fields you omit are left alone."
+const saveGtmStrategyDescription = "Draft a GTM strategy, or edit a DRAFT one. Every strategy you create is a DRAFT and you edit DRAFT strategies only: a person makes it ACTIVE, DONE or ARCHIVED, and edits it after that. Create from scratch with name (and goal_md, target_metric, period_start, period_end, category), or from an idea-bank entry with from_library_key, optionally with its first campaign. Edit with id and expected_revision; fields you omit are left alone."
 
 func saveGtmStrategy(ctx context.Context, svc GTMService, actor gtm.Actor, p SaveGtmStrategyParams) ToolResponse {
 	id, key := strings.TrimSpace(p.ID), strings.TrimSpace(p.FromLibraryKey)
@@ -735,6 +735,7 @@ type ListGtmStrategyLibraryParams struct {
 	BusinessTypes  []string `json:"business_types,omitempty" jsonschema:"description=Only entries that fit one of these business types (or any): B2B_SAAS B2C_APP DEVELOPER_TOOLS ECOMMERCE MARKETPLACE AGENCY_SERVICES CREATOR_MEDIA LOCAL_BUSINESS OPEN_SOURCE HARDWARE."`
 	BusinessModels []string `json:"business_models,omitempty" jsonschema:"description=Only entries that fit one of these business models (or any): SUBSCRIPTION USAGE_BASED ONE_TIME FREEMIUM FREE_OSS MARKETPLACE SERVICES AD_SUPPORTED."`
 	Stage          string   `json:"stage,omitempty" jsonschema:"enum=pre_launch,enum=launch,enum=early_traction,enum=growth,enum=scale,description=Only entries that fit this stage (or any)."`
+	Objective      string   `json:"objective,omitempty" jsonschema:"enum=awareness,enum=acquisition,enum=activation,enum=conversion,enum=retention,enum=expansion,enum=referral,enum=research,description=Only entries with this objective."`
 	Effort         string   `json:"effort,omitempty" jsonschema:"enum=low,enum=medium,enum=high,description=Only entries of this effort."`
 	Cost           string   `json:"cost,omitempty" jsonschema:"enum=free,enum=low,enum=medium,enum=high,description=Only entries of this cost."`
 	Query          string   `json:"query,omitempty" jsonschema:"description=Words that must all appear in the name or summary."`
@@ -743,8 +744,8 @@ type ListGtmStrategyLibraryParams struct {
 	PageToken      string   `json:"page_token,omitempty" jsonschema:"description=next_page_token from the previous page (not with diverse)."`
 }
 
-const listGtmStrategyLibraryDescription = `Browse the GTM idea bank: generic go-to-market plays across 13 categories, filtered by default to the ones that fit the org's business (fits_my_business, from get_gtm_positioning's business type and models). The entries are generic jumping-off points to tailor to this business, not scripts to follow. Read one whole with key.
-When generating ideas, call it with diverse=true first, then narrow with categories, business_types, business_models, stage, effort, cost or query. Propose ideas from AT LEAST 4 different categories, including in-person and community ones (meetups, conferences, hackathons, networking) and founder-led, high-touch outreach, unless the business makes them impossible; when you skip one, say why. Each idea you propose (save_gtm_idea) cites the entry's library_key and answers that entry's tailor_questions in tailor_answers, one answer per question, for this business. An entry can also seed a draft strategy (save_gtm_strategy from_library_key). Read-only.`
+const listGtmStrategyLibraryDescription = `Browse the GTM idea bank: generic go-to-market plays across 13 categories, filtered by default to the ones that fit the org's business (fits_my_business, from get_gtm_positioning's business type and models). The entries are generic jumping-off points to tailor to this business, not scripts to follow. Read one whole with key. If the org has not set its business type and business models in Positioning (get_gtm_positioning shows neither), fits_my_business filters nothing, so ask the person to set them.
+When generating ideas, call it with diverse=true first, then narrow with categories, business_types, business_models, stage, objective, effort, cost or query. Propose ideas from AT LEAST 4 different categories, including in-person and community ones (meetups, conferences, hackathons, networking) and founder-led, high-touch outreach, unless the business makes them impossible; when you skip one, say why. Each idea you propose (save_gtm_idea) cites the entry's library_key and answers that entry's tailor_questions in tailor_answers, one answer per question, for this business. An entry can also seed a draft strategy (save_gtm_strategy from_library_key). Read-only.`
 
 type gtmLibraryView struct {
 	Key              string   `json:"key"`
@@ -818,8 +819,9 @@ func listGtmStrategyLibrary(ctx context.Context, svc GTMService, actor gtm.Actor
 		Categories:     gtmLongs[gtm.StrategyCategory](gtmCategory, p.Categories),
 		BusinessTypes:  gtmLongs[gtm.BusinessType](gtmBusinessType, p.BusinessTypes),
 		BusinessModels: gtmLongs[gtm.BusinessModel](gtmBusinessModel, p.BusinessModels),
-		Stage:          strings.ToLower(strings.TrimSpace(p.Stage)), Effort: strings.ToLower(strings.TrimSpace(p.Effort)),
-		Cost: strings.ToLower(strings.TrimSpace(p.Cost)), Query: strings.TrimSpace(p.Query),
+		Stage:          strings.ToLower(strings.TrimSpace(p.Stage)), Objective: strings.ToLower(strings.TrimSpace(p.Objective)),
+		Effort: strings.ToLower(strings.TrimSpace(p.Effort)),
+		Cost:   strings.ToLower(strings.TrimSpace(p.Cost)), Query: strings.TrimSpace(p.Query),
 		FitsMyBusiness: fits, Diverse: p.Diverse, PageSize: gtmPage(p.Limit), PageToken: p.PageToken,
 	})
 	if err != nil {
