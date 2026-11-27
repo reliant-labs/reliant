@@ -61,6 +61,20 @@ export function getAuthIdentity(): AuthIdentity | null {
   return useAuthStore.getState().identity;
 }
 
+/**
+ * The signed-in identity once the first restore has finished, whichever
+ * provider signs people in: the forge broker's /auth/session (the HttpOnly
+ * cookie) or Supabase's stored session. For a page that must decide "is
+ * anyone signed in in this browser?" before it navigates, and so cannot read
+ * {@link getAuthIdentity} before the store has restored. The restore is the
+ * store's one shared initialize, so this joins a run already in flight.
+ */
+export async function restoredAuthIdentity(): Promise<AuthIdentity | null> {
+  const store = useAuthStore.getState();
+  if (!store.initialized) await store.initialize();
+  return getAuthIdentity();
+}
+
 /** Subscribe to identity changes outside React. Returns the unsubscribe. */
 export function onAuthIdentityChange(listener: (next: AuthIdentity | null, previous: AuthIdentity | null) => void): () => void {
   return useAuthStore.subscribe((state, prev) => {

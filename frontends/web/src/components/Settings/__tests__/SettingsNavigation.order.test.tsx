@@ -26,6 +26,7 @@ describe("SettingsNavigation order", () => {
       "org-ai-accounts",
       "integrations",
       "git-connections",
+      "org-github",
       "mcp",
       "machines",
       "projects",
@@ -79,6 +80,7 @@ describe("SettingsNavigation order", () => {
     expect(mod.getVisibleSettingsSectionIds()).not.toContain("policies");
     expect(mod.getVisibleSettingsSectionIds()).not.toContain("org-ai-accounts");
     expect(mod.getVisibleSettingsSectionIds()).not.toContain("org-ai-usage");
+    expect(mod.getVisibleSettingsSectionIds()).not.toContain("org-github");
     expect(mod.getVisibleSettingsSectionIds()[0]).toBe("account");
     config.hasControlPlane = true;
   });

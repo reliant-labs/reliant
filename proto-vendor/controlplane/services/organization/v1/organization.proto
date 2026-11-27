@@ -336,6 +336,25 @@ service OrganizationService {
     };
   }
 
+  // ListLinkableGitHubAppInstallations lists the installations of this
+  // deployment's GitHub App that the caller's OWN GitHub account can reach
+  // (the same GET /user/installations proof LinkGitHubAppInstallation
+  // makes), each marked linked to this org, to another, or to none: how an
+  // admin links an App that is already installed, which never passes
+  // through the setup redirect. To link one, take a state from
+  // StartGitHubAppInstall (its `state`) and pass it with the installation_id
+  // to LinkGitHubAppInstallation, which checks everything again. Admin or
+  // owner. Errors: PERMISSION_DENIED "admin_required" / "not_org_member";
+  // FAILED_PRECONDITION "github_app_not_configured", or the git credential
+  // reasons when the caller has not connected GitHub.
+  rpc ListLinkableGitHubAppInstallations(ListLinkableGitHubAppInstallationsRequest) returns (ListLinkableGitHubAppInstallationsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+    };
+  }
+
   // UnlinkGitHubAppInstallation removes the link: the org's runs can no
   // longer mint bot tokens through it. The installation itself stays on
   // GitHub. Admin or owner. Unlinking one that is not linked to the org is
@@ -378,6 +397,10 @@ message StartGitHubAppInstallRequest {
 message StartGitHubAppInstallResponse {
   // github.com/apps/<slug>/installations/new?state=...
   string install_url = 1;
+  // The signed state install_url carries, for a client that links an
+  // installation the App already has (ListLinkableGitHubAppInstallations)
+  // without sending anyone to GitHub. It expires 30 minutes after issue.
+  string state = 2 [debug_redact = true];
 }
 
 message LinkGitHubAppInstallationRequest {
@@ -399,6 +422,35 @@ message ListGitHubAppInstallationsRequest {
 }
 message ListGitHubAppInstallationsResponse {
   repeated GitHubAppInstallation installations = 1;
+}
+
+// LinkableGitHubAppInstallation is an installation of the App the caller's
+// GitHub account can reach, and where it is linked.
+message LinkableGitHubAppInstallation {
+  // GitHub's installation id.
+  int64 installation_id = 1;
+  // The GitHub account the App is installed on, and its kind
+  // ("Organization" or "User").
+  string account_login = 2;
+  string account_type = 3;
+  // The account's avatar; "" when GitHub sent none.
+  string avatar_url = 4;
+  // "all" or "selected"; "" when GitHub did not say.
+  string repository_selection = 5;
+  // Linked to the org the request named.
+  bool linked_here = 6;
+  // Linked to some other org (which one is not said): linking it here is
+  // refused until it is unlinked there.
+  bool linked_elsewhere = 7;
+  // Set while GitHub reports the installation suspended.
+  google.protobuf.Timestamp suspended_at = 8;
+}
+
+message ListLinkableGitHubAppInstallationsRequest {
+  string org_id = 1 [(buf.validate.field).required = true];
+}
+message ListLinkableGitHubAppInstallationsResponse {
+  repeated LinkableGitHubAppInstallation installations = 1;
 }
 
 message UnlinkGitHubAppInstallationRequest {

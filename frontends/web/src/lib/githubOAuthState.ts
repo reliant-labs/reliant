@@ -5,10 +5,14 @@
  *
  * `state` is `base64url(JSON payload) + "." + base64url(HMAC)`. The payload
  * carries `uid`, `n`, `exp`, `rt` and, when a desktop app started the flow,
- * `lb`: the loopback URL its main process is listening on.
+ * `lb`: the loopback URL its main process is listening on. An org install of
+ * the GitHub App (OrganizationService.StartGitHubAppInstall) signs a state of
+ * its own kind, `k: "org_install"`, naming the org in `org`.
  *
  * The decode here is UNVERIFIED on purpose. The web callback page only uses
- * `lb` to decide where to relay the code, and a code is useless without a
+ * `lb` to decide where to relay the code, and `k` to decide which page
+ * finishes the flow (the org install's state is verified by the
+ * LinkGitHubAppInstallation it is handed to), and a code is useless without a
  * validly signed state — the control plane re-verifies the signature when the
  * desktop app exchanges it. A forged `lb` therefore cannot do more than send a
  * code and a state that nobody can redeem to a loopback address, which is why
@@ -20,7 +24,14 @@ export interface GitHubStatePayload {
   lb?: string
   /** Where the web flow returns to afterwards. */
   rt?: string
+  /** The state's kind: "org_install" for an org install of the App; unset for the connect flow. */
+  kind?: string
+  /** The org an org-install state names. */
+  org?: string
 }
+
+/** The kind of state StartGitHubAppInstall signs (control-plane gitcredential.orgInstallStateKind). */
+export const ORG_INSTALL_STATE_KIND = 'org_install'
 
 function decodeBase64Url(value: string): string {
   const base64 = value.replace(/-/g, '+').replace(/_/g, '/')
@@ -38,11 +49,9 @@ export function decodeGitHubState(state: string | undefined): GitHubStatePayload
   try {
     const payload: unknown = JSON.parse(decodeBase64Url(state.slice(0, dot)))
     if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return null
-    const { lb, rt } = payload as Record<string, unknown>
-    return {
-      lb: typeof lb === 'string' && lb !== '' ? lb : undefined,
-      rt: typeof rt === 'string' && rt !== '' ? rt : undefined,
-    }
+    const { lb, rt, k, org } = payload as Record<string, unknown>
+    const str = (v: unknown) => (typeof v === 'string' && v !== '' ? v : undefined)
+    return { lb: str(lb), rt: str(rt), kind: str(k), org: str(org) }
   } catch {
     return null
   }

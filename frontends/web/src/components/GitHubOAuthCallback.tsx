@@ -2,14 +2,14 @@ import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useSearch } from '@tanstack/react-router'
 import { CheckCircle2 } from 'lucide-react'
 import { gitService } from '@/services/controlPlane/git'
-import { supabase } from '@/lib/supabase'
+import { restoredAuthIdentity } from '@/lib/auth/use-auth'
 import { logger } from '@/lib/logger'
-import { decodeGitHubState, parseLoopbackRedirect } from '@/lib/githubOAuthState'
+import { decodeGitHubState, ORG_INSTALL_STATE_KIND, parseLoopbackRedirect } from '@/lib/githubOAuthState'
 import { isSafeReturnTo } from '@/lib/returnTo'
 import { forgeShellReturnUrl } from '@/lib/crossShellReturn'
 import { GradientBackground } from './GradientBackground'
 import { BrandMark } from './icons/BrandMark'
-import { homePath } from '@/lib/paths'
+import { homePath, settingsPath } from '@/lib/paths'
 
 /**
  * GitHubOAuthCallback owns the app-side `/auth/github/callback` route — the
@@ -49,6 +49,13 @@ import { homePath } from '@/lib/paths'
  * installation_id ("bad actors can hit this URL with a spoofed
  * installation_id... you should not rely on [its] validity").
  *
+ * AN ORG INSTALL carries a state too, but not the connect flow's: Settings →
+ * Organization GitHub (StartGitHubAppInstall) sends GitHub a state of kind
+ * `org_install`, and GitHub echoes it with installation_id on the setup
+ * redirect. That page finishes it (LinkGitHubAppInstallation verifies the
+ * state, the caller, and that the caller's own GitHub account reaches the
+ * installation), so this page forwards both there and exchanges nothing.
+ *
  * THREE MORE SHAPES, all about who finishes the flow and who is signed in.
  *
  *   Desktop relay      state carries `lb`, the loopback address of the desktop
@@ -79,12 +86,15 @@ const INSTALL_RETURN_KEY = 'reliant:github-install-return'
 
 type Terminal = 'relayed' | 'connected' | 'installed'
 
+/**
+ * Whether anyone is signed in to Reliant in this browser, by the active
+ * sign-in provider (lib/auth/use-auth): a Supabase session, or the forge login
+ * broker's cookie session, restored first. Reading Supabase alone told a
+ * signed-in forge-auth browser it had no session.
+ */
 async function hasSession(): Promise<boolean> {
   try {
-    const {
-      data: { session },
-    } = await supabase.auth.getSession()
-    return !!session
+    return (await restoredAuthIdentity()) !== null
   } catch {
     return false
   }
@@ -141,6 +151,7 @@ export function GitHubOAuthCallback() {
         error: errorParam,
         error_description: errorDescription,
         setup_action: setupAction,
+        installation_id: installationId,
       } = search
 
       // A desktop app started this flow: relay and stop. GitHub echoes `state`
@@ -166,6 +177,28 @@ export function GitHubOAuthCallback() {
       if (errorParam) {
         logger.error('[GitHubOAuthCallback] Error from GitHub', { error: errorParam, errorDescription })
         landBackHome('github_error', errorParam, errorDescription)
+        return
+      }
+
+      // An org install of the App, started on Settings → Organization GitHub:
+      // the state is StartGitHubAppInstall's, never a connect flow's, so a
+      // `code` beside it is not exchanged. That page links the installation;
+      // replace, so Back does not return here.
+      if (state && decodeGitHubState(state)?.kind === ORG_INSTALL_STATE_KIND) {
+        // Started from the desktop app, the install finishes in a system
+        // browser with no Reliant session: the app lists the new installation
+        // to link when the person goes back to it.
+        if (!(await hasSession())) {
+          setTerminal('installed')
+          return
+        }
+        const target = new URLSearchParams({ link_state: state })
+        if (installationId) target.set('installation_id', installationId)
+        logger.info('[GitHubOAuthCallback] GitHub App installed for an organization', {
+          setupAction,
+          hasInstallation: !!installationId,
+        })
+        window.location.replace(`${settingsPath('org-github')}?${target.toString()}`)
         return
       }
 

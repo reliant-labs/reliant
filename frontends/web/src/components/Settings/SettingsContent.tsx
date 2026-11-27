@@ -20,6 +20,7 @@ import { PoliciesPage } from "./cloud/policies/PoliciesPage";
 import { OrgAIAccountsPage } from "./cloud/aiAccounts/OrgAIAccountsPage";
 import { OrgAIUsagePage } from "./cloud/orgUsage/OrgAIUsagePage";
 import { GitConnectionsSettings } from "./GitConnectionsSettings";
+import { OrgGitHubPage } from "./cloud/github/OrgGitHubPage";
 import { IntegrationsSettings } from "./IntegrationsSettings";
 import type { SettingsSection } from "./SettingsNavigation";
 import { lazy, Suspense, type ReactNode } from "react";
@@ -118,6 +119,8 @@ export function SettingsContent({ activeSection }: SettingsContentProps) {
         return <OrgAIUsagePage />;
       case "git-connections":
         return <GitConnectionsSettings />;
+      case "org-github":
+        return <OrgGitHubPage />;
       case "integrations":
         return <IntegrationsSettings />;
       case "developer":
