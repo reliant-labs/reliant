@@ -42,7 +42,7 @@ import { AssetPanel } from "./Assets";
 import { useGtmOrgId } from "./GtmShell";
 import { canApprove, canEdit, canMarkPublished, canPause, canResume, canSchedule, editReturnsToReview, isEmailItem, isHeld, postsByHand } from "./lifecycle";
 import { EmailSendNote, PersonActionButton, PersonActionDialog, PersonOnlyTag } from "./PersonAction";
-import { Fields, formatAndChannel, formatLabel, formatWhen, ITEM_FORMATS, ItemStatusBadge } from "./ui";
+import { Fields, formatAndChannel, formatLabel, formatWhen, ITEM_FORMATS, ItemStatusBadge, OutboundLink } from "./ui";
 import { useGtmWriteError } from "./writes";
 
 export function ItemDialog({ item, onClose }: { item: GtmItem | null; onClose: () => void }) {
@@ -110,15 +110,10 @@ function OpenItemDialog({ item, onClose }: { item: GtmItem; onClose: () => void 
                   {
                     label: "Went out at",
                     value: (
-                      <Link
-                        href={item.publishedUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1 break-all underline underline-offset-2"
-                      >
+                      <OutboundLink url={item.publishedUrl} className="inline-flex items-center gap-1 break-all underline underline-offset-2">
                         {item.publishedUrl.replace(/^https?:\/\//, "")}
                         <ExternalLink className="size-3 shrink-0" aria-hidden="true" />
-                      </Link>
+                      </OutboundLink>
                     ),
                   },
                 ]

@@ -146,6 +146,12 @@ describe("ItemDialog", () => {
     const link = await screen.findByRole("link", { name: /blog\.example\/launch/ });
     expect(link).toHaveAttribute("target", "_blank");
     expect(link).toHaveAttribute("rel", "noopener noreferrer");
+    cleanup();
+
+    // Anything but http(s) is shown as text, never as a link.
+    renderGtm(<ItemDialog item={create(GtmItemSchema, { ...out, publishedUrl: "javascript:alert(1)" })} onClose={() => {}} />, reads);
+    expect(await screen.findByText("javascript:alert(1)")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /alert/ })).not.toBeInTheDocument();
   });
 
   it("checks the body's claims live, and counts what blocks", async () => {
