@@ -492,6 +492,9 @@ func Start(ctx context.Context, opts StartOptions) error {
 	// An Inbox approval (worktree.reclaim_approve) runs with the same roots,
 	// thresholds and mode.
 	setReclaimSweepConfig(opts.WorktreeReclaim)
+	// The caches only this daemon creates (the merge queue's job caches),
+	// pruned on the same poll in either mode (pipeline_job_prune.go).
+	registerOwnCaches(client.diskWatcher)
 	go client.diskWatcher.RunReaper(ctx)
 	// Scratch directories and idle worktrees' node_modules, on its own
 	// schedule; mode auto runs it where the storage reaper runs.

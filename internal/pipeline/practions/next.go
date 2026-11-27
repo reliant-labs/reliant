@@ -217,7 +217,7 @@ func (s *Service) decide(ctx context.Context, p *prCall, pr PullRequest, comment
 	}
 	v := latestOnHead(verdicts, head)
 	if v == nil {
-		return s.review(ctx, p, verdicts)
+		return s.review(ctx, p, pr, verdicts)
 	}
 	return s.afterVerdict(ctx, p, v)
 }
@@ -260,8 +260,10 @@ func (s *Service) passed(ctx context.Context, p *prCall, v *core.PRHeadVerdictRe
 }
 
 // review sends the head to the reviewer, or, for a low-risk head, passes it
-// here with no model.
-func (s *Service) review(ctx context.Context, p *prCall, verdicts []*core.PRHeadVerdictRecord) (decision, error) {
+// here with no model. The risk tier reads the head's changed files as a gate
+// pool daemon lists them (changedFiles); with no daemon to list them the
+// head is high risk.
+func (s *Service) review(ctx context.Context, p *prCall, pr PullRequest, verdicts []*core.PRHeadVerdictRecord) (decision, error) {
 	head := p.row.StateHeadSHA
 	modelRounds := 0
 	for _, v := range verdicts {
@@ -273,13 +275,14 @@ func (s *Service) review(ctx context.Context, p *prCall, verdicts []*core.PRHead
 		return decision{Next: NextEscalate, Head: head,
 			Reason: fmt.Sprintf("%d review rounds ran without the PR passing; a person needs to look", modelRounds)}, nil
 	}
-	files, err := s.deps.GitHub.ChangedFiles(ctx, p.as, p.rec.Repository, p.rec.Number)
+	files, known, err := s.changedFiles(ctx, p, pr)
 	if err != nil {
-		s.log.WarnContext(ctx, "pr.next could not read the PR's files", "pr", prName(p), "error", err)
-		return decision{}, &serveraction.Error{Code: serveraction.CodeUnavailable, Retryable: true,
-			Message: fmt.Sprintf("could not read %s's changed files from GitHub", prName(p))}
+		return decision{}, err
 	}
-	risk := prpolicy.AssessRisk(files.Diff, p.cfg)
+	risk := filesUnavailableRisk
+	if known {
+		risk = prpolicy.AssessRisk(files.Diff, p.cfg)
+	}
 	if !risk.NeedsModel() {
 		v, err := s.structuralVerdict(ctx, p, verdicts, risk, files)
 		if err != nil {
@@ -302,7 +305,8 @@ func (s *Service) review(ctx context.Context, p *prCall, verdicts []*core.PRHead
 			return err
 		}
 		if byExecution(reviews, key) == nil {
-			detail := attemptDetail{Kind: attemptReview, ExecutionKey: key, Risk: string(risk.Tier), RiskReasons: risk.Reasons, Files: files.Blobs}
+			detail := attemptDetail{Kind: attemptReview, ExecutionKey: key, Risk: string(risk.Tier), RiskReasons: risk.Reasons,
+				Files: files.Blobs, FilesUnknown: !known}
 			if _, err := s.deps.Store.NextPipelineAttempt(ctx, core.PipelineAttempt{
 				OrgID: p.repo.OrgID, ProjectID: p.repo.ProjectID, SubjectKind: core.PipelineAttemptSubjectPR, SubjectID: p.rec.ID,
 				HeadSHA: head, Stage: core.PipelineAttemptReview, RunID: p.as.RunID, DetailJSON: detail.raw(),
@@ -331,12 +335,20 @@ func (s *Service) structuralVerdict(ctx context.Context, p *prCall, verdicts []*
 	if v := latestOnHead(verdicts, head); v != nil {
 		round = v.Round + 1
 	}
+	// A structural pass approves as a model's does, so it is held to the
+	// same grant: in mode on the run's activation must hold approve.
+	if err := s.authorizeApprove(ctx, p); err != nil {
+		return nil, err
+	}
 	inv := p.req.Invocation
 	v, err := s.deps.Store.InsertPRHeadVerdict(ctx, core.PRHeadVerdictRecord{
 		OrgID: p.repo.OrgID, ProjectID: p.repo.ProjectID, RecordID: p.rec.ID, HeadSHA: head, Round: round,
 		Verdict: core.PRHeadVerdictPass, Rule: core.PRVerdictRule(risk.Rule), RiskTier: core.PRRiskTier(risk.Tier),
 		RequiredDecisions: requiredDecisions(p.cfg, head, diffPaths(files.Diff)),
 		RunID:             inv.RunID, NodeID: inv.NodeID, ReviewerPrincipal: principalName,
+		// The activation and machine of the run that wrote it, as a model
+		// verdict records them, so the land check can ask about them.
+		TriggerID: p.req.Principal.TriggerID, DaemonID: p.req.Principal.DaemonID,
 	})
 	if errors.Is(err, core.ErrPipelineVerdictExists) {
 		// A concurrent or retried pr.next wrote this round already.

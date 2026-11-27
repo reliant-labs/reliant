@@ -9,7 +9,11 @@
 //
 //   - pr.next decides what the PR needs next: review, fix, enqueue, close,
 //     escalate or none. A low-risk head needs no model: pr.next writes its
-//     verdict itself (rule no_model_low_risk or generated_only).
+//     verdict itself (rule no_model_low_risk or generated_only). The risk
+//     tier reads the head's changed files as a daemon of the repository's
+//     gate pool lists them (Deps.Files), never GitHub's files list, whose
+//     response carries the diff: the worker reads metadata only. With no
+//     gate pool daemon to list them the head is high risk.
 //   - pr.verdict records a reviewer's verdict. It is the only way a model
 //     verdict exists, and it writes one only for an engine-owned review node
 //     (role: reviewer) of a built-in workflow or of the repository's own
@@ -30,5 +34,5 @@
 // dispatcher (internal/serveraction) refuses every call before a handler
 // is reached.
 //
-//forge:exclude-contract: server-action handlers bound into internal/serveraction's dispatcher; every collaborator (Store, GitHub, Inbox) is a consumer-declared interface in deps.go
+//forge:exclude-contract: server-action handlers bound into internal/serveraction's dispatcher; every collaborator (Store, GitHub, Files, Inbox) is a consumer-declared interface in deps.go
 package practions
