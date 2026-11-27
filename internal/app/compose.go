@@ -593,6 +593,7 @@ func (g *Graph) newWorkerTrigger() (*WorkerTrigger, error) {
 		ControlPlane:    g.ServerProcessConfig.GetControlPlane(),
 		AutomationKeys:  g.CredentialsAutomationtokens(),
 		Owners:          g.Triggerowner(),
+		Gate:            nil, // optional — no provider
 	})
 }
 
