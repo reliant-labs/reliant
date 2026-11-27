@@ -16,14 +16,15 @@ import (
 )
 
 // forge:section MockStore
-// forge:hash=3a341b0bfcec035bd076225144cedd74408bbce55f3c9cff3bdf0dba710bea8c
+// forge:hash=2e008067f120121f590773fd16d6a7dc99b0f15344583b55bba4ec3dc0f3dbd6
 
 // MockStore is a test mock for the Store interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockStore.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockStore.<Method>Func not set" error.
 type MockStore struct {
 	contractkit.Recorder
 	HasEnabledTriggerOfKindFunc   func(context.Context, string, core.TriggerKind) (bool, error)
@@ -68,18 +69,103 @@ func (m *MockStore) CountOtherPendingBlockers(ctx context.Context, chatID string
 	return 0, contractkit.MockNotSet("MockStore", "CountOtherPendingBlockers")
 }
 
+// MockStoreHasEnabledTriggerOfKindCall is one recorded call of MockStore.HasEnabledTriggerOfKind, one
+// field per parameter.
+type MockStoreHasEnabledTriggerOfKindCall struct {
+	Ctx    context.Context
+	UserID string
+	Kind   core.TriggerKind
+}
+
+// HasEnabledTriggerOfKindCalls returns every recorded HasEnabledTriggerOfKind call, oldest first, with
+// its arguments typed. It reads the same log as Calls("HasEnabledTriggerOfKind").
+func (m *MockStore) HasEnabledTriggerOfKindCalls() []MockStoreHasEnabledTriggerOfKindCall {
+	var out []MockStoreHasEnabledTriggerOfKindCall
+	for _, c := range m.Recorder.Calls("HasEnabledTriggerOfKind") {
+		var r MockStoreHasEnabledTriggerOfKindCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.Kind, _ = c.Args[2].(core.TriggerKind)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockStoreCreateRunEventCall is one recorded call of MockStore.CreateRunEvent, one
+// field per parameter.
+type MockStoreCreateRunEventCall struct {
+	Ctx context.Context
+	Ev  *core.RunEvent
+}
+
+// CreateRunEventCalls returns every recorded CreateRunEvent call, oldest first, with
+// its arguments typed. It reads the same log as Calls("CreateRunEvent").
+func (m *MockStore) CreateRunEventCalls() []MockStoreCreateRunEventCall {
+	var out []MockStoreCreateRunEventCall
+	for _, c := range m.Recorder.Calls("CreateRunEvent") {
+		var r MockStoreCreateRunEventCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Ev, _ = c.Args[1].(*core.RunEvent)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockStoreLockChatForRunEventCall is one recorded call of MockStore.LockChatForRunEvent, one
+// field per parameter.
+type MockStoreLockChatForRunEventCall struct {
+	Ctx    context.Context
+	ChatID string
+}
+
+// LockChatForRunEventCalls returns every recorded LockChatForRunEvent call, oldest first, with
+// its arguments typed. It reads the same log as Calls("LockChatForRunEvent").
+func (m *MockStore) LockChatForRunEventCalls() []MockStoreLockChatForRunEventCall {
+	var out []MockStoreLockChatForRunEventCall
+	for _, c := range m.Recorder.Calls("LockChatForRunEvent") {
+		var r MockStoreLockChatForRunEventCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ChatID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockStoreCountOtherPendingBlockersCall is one recorded call of MockStore.CountOtherPendingBlockers, one
+// field per parameter.
+type MockStoreCountOtherPendingBlockersCall struct {
+	Ctx       context.Context
+	ChatID    string
+	ExcludeID string
+}
+
+// CountOtherPendingBlockersCalls returns every recorded CountOtherPendingBlockers call, oldest first, with
+// its arguments typed. It reads the same log as Calls("CountOtherPendingBlockers").
+func (m *MockStore) CountOtherPendingBlockersCalls() []MockStoreCountOtherPendingBlockersCall {
+	var out []MockStoreCountOtherPendingBlockersCall
+	for _, c := range m.Recorder.Calls("CountOtherPendingBlockers") {
+		var r MockStoreCountOtherPendingBlockersCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ChatID, _ = c.Args[1].(string)
+		r.ExcludeID, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ Store = (*MockStore)(nil)
 
 // forge:section MockChatStore
-// forge:hash=31ae1301cd28443f7a1f5b7f498d09cb0faf351e89cfca6fb620dd42bd6d45fa
+// forge:hash=e3277f22d4c0257c8f3240800090cc9105652cd3e8c2f418c708a36c0338ae09
 
 // MockChatStore is a test mock for the ChatStore interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockChatStore.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockChatStore.<Method>Func not set" error.
 type MockChatStore struct {
 	contractkit.Recorder
 	GetChatFunc                   func(context.Context, string) (*core.Chat, error)
@@ -132,6 +218,110 @@ func (m *MockChatStore) CountOtherPendingBlockers(ctx context.Context, chatID st
 		return m.CountOtherPendingBlockersFunc(ctx, chatID, excludeID)
 	}
 	return 0, contractkit.MockNotSet("MockChatStore", "CountOtherPendingBlockers")
+}
+
+// MockChatStoreGetChatCall is one recorded call of MockChatStore.GetChat, one
+// field per parameter.
+type MockChatStoreGetChatCall struct {
+	Ctx context.Context
+	ID  string
+}
+
+// GetChatCalls returns every recorded GetChat call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetChat").
+func (m *MockChatStore) GetChatCalls() []MockChatStoreGetChatCall {
+	var out []MockChatStoreGetChatCall
+	for _, c := range m.Recorder.Calls("GetChat") {
+		var r MockChatStoreGetChatCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockChatStoreHasEnabledTriggerOfKindCall is one recorded call of MockChatStore.HasEnabledTriggerOfKind, one
+// field per parameter.
+type MockChatStoreHasEnabledTriggerOfKindCall struct {
+	Ctx    context.Context
+	UserID string
+	Kind   core.TriggerKind
+}
+
+// HasEnabledTriggerOfKindCalls returns every recorded HasEnabledTriggerOfKind call, oldest first, with
+// its arguments typed. It reads the same log as Calls("HasEnabledTriggerOfKind").
+func (m *MockChatStore) HasEnabledTriggerOfKindCalls() []MockChatStoreHasEnabledTriggerOfKindCall {
+	var out []MockChatStoreHasEnabledTriggerOfKindCall
+	for _, c := range m.Recorder.Calls("HasEnabledTriggerOfKind") {
+		var r MockChatStoreHasEnabledTriggerOfKindCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.Kind, _ = c.Args[2].(core.TriggerKind)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockChatStoreCreateRunEventCall is one recorded call of MockChatStore.CreateRunEvent, one
+// field per parameter.
+type MockChatStoreCreateRunEventCall struct {
+	Ctx context.Context
+	Ev  *core.RunEvent
+}
+
+// CreateRunEventCalls returns every recorded CreateRunEvent call, oldest first, with
+// its arguments typed. It reads the same log as Calls("CreateRunEvent").
+func (m *MockChatStore) CreateRunEventCalls() []MockChatStoreCreateRunEventCall {
+	var out []MockChatStoreCreateRunEventCall
+	for _, c := range m.Recorder.Calls("CreateRunEvent") {
+		var r MockChatStoreCreateRunEventCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Ev, _ = c.Args[1].(*core.RunEvent)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockChatStoreLockChatForRunEventCall is one recorded call of MockChatStore.LockChatForRunEvent, one
+// field per parameter.
+type MockChatStoreLockChatForRunEventCall struct {
+	Ctx    context.Context
+	ChatID string
+}
+
+// LockChatForRunEventCalls returns every recorded LockChatForRunEvent call, oldest first, with
+// its arguments typed. It reads the same log as Calls("LockChatForRunEvent").
+func (m *MockChatStore) LockChatForRunEventCalls() []MockChatStoreLockChatForRunEventCall {
+	var out []MockChatStoreLockChatForRunEventCall
+	for _, c := range m.Recorder.Calls("LockChatForRunEvent") {
+		var r MockChatStoreLockChatForRunEventCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ChatID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockChatStoreCountOtherPendingBlockersCall is one recorded call of MockChatStore.CountOtherPendingBlockers, one
+// field per parameter.
+type MockChatStoreCountOtherPendingBlockersCall struct {
+	Ctx       context.Context
+	ChatID    string
+	ExcludeID string
+}
+
+// CountOtherPendingBlockersCalls returns every recorded CountOtherPendingBlockers call, oldest first, with
+// its arguments typed. It reads the same log as Calls("CountOtherPendingBlockers").
+func (m *MockChatStore) CountOtherPendingBlockersCalls() []MockChatStoreCountOtherPendingBlockersCall {
+	var out []MockChatStoreCountOtherPendingBlockersCall
+	for _, c := range m.Recorder.Calls("CountOtherPendingBlockers") {
+		var r MockChatStoreCountOtherPendingBlockersCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ChatID, _ = c.Args[1].(string)
+		r.ExcludeID, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
 }
 
 // Compile-time check.
