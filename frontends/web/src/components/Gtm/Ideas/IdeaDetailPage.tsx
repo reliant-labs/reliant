@@ -28,7 +28,8 @@ import { chatPath, gtmPath } from "@/lib/paths";
 import { GtmShell, useGtmOrgId } from "../shared/GtmShell";
 import { ItemDialog } from "../shared/ItemDialog";
 import { PersonOnlyTag } from "../shared/PersonAction";
-import { Fields, formatDay, formatWhen, IDEA_KIND, IdeaStatusBadge, ItemStatusBadge, kindAndChannel, SourceTag } from "../shared/ui";
+import { useGtmChannels } from "../shared/ItemDialog";
+import { Fields, formatAndChannel, formatDay, formatWhen, IDEA_KIND, IdeaStatusBadge, ItemStatusBadge, SourceTag } from "../shared/ui";
 import { useGtmWriteError } from "../shared/writes";
 import { joinIdeaBody, splitIdeaBody } from "./ideaBody";
 
@@ -144,6 +145,7 @@ export function IdeaDetailView() {
 }
 
 function MadeItem({ item, onOpen }: { item: GtmItem; onOpen: () => void }) {
+  const channel = useGtmChannels().find((c) => c.id === item.channelId);
   return (
     <li>
       <button
@@ -154,7 +156,7 @@ function MadeItem({ item, onOpen }: { item: GtmItem; onOpen: () => void }) {
         <span className="text-sm font-medium text-ink">{item.title}</span>
         <span className="flex flex-wrap items-center gap-2 text-xs text-ink-muted">
           <ItemStatusBadge status={item.status} />
-          {kindAndChannel(item.kind, item.channel)} · {formatWhen(item.scheduledAt)}
+          {formatAndChannel(item.format, channel)} · {formatWhen(item.scheduledAt)}
         </span>
       </button>
     </li>

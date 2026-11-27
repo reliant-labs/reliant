@@ -53,6 +53,7 @@ const accepted = create(GtmIdeaSchema, { ...proposed, id: "idea-2", title: "Laun
 const lists = {
   "GtmService.ListCampaigns": { response: { campaigns: [] } },
   "GtmService.ListItems": { response: { items: [] } },
+  "GtmService.ListChannels": { response: { channels: [] } },
 };
 
 describe("ideaBody", () => {
