@@ -45,11 +45,12 @@ import { SIDEBAR_ORG_TRIGGER, SIDEBAR_PROJECT_TRIGGER, SidebarOrgLabel, SidebarO
  * nav's 48px bar so its edge lines up with the page's. With no org (no control
  * plane, or a person in none) it is the brand, and opens nothing.
  */
-export function OrgHeaderRow() {
+export function OrgHeaderRow({ onSwitched }: { onSwitched?: (orgId: string) => void } = {}) {
   return (
     <SidebarOrgRow>
       <OrgSwitcher
         variant="sidebar-header"
+        onSwitched={onSwitched}
         fallback={
           <div className={cn(SIDEBAR_ORG_TRIGGER, "h-9 px-1.5 hover:bg-transparent")} data-testid="org-header-brand">
             {isForgeShell() ? <ForgeBrand /> : <SidebarOrgLabel name="Reliant" />}
@@ -81,7 +82,16 @@ export function pickTarget(selection: ProjectSelection, pathname: string): { key
   return { key, href: consolePath(app ?? "", { kind: "overview" }) };
 }
 
-export function ProjectSwitcherRow({ shell, pathname }: { shell: ShellProject; pathname: string }) {
+export function ProjectSwitcherRow({
+  shell,
+  pathname,
+  onPicked = closeNavDrawer,
+}: {
+  shell: ShellProject;
+  pathname: string;
+  /** Closes the host's drawer after a pick (the phone's, Mobile/MobileNavDrawer); by default the narrow window's. */
+  onPicked?: () => void;
+}) {
   const setLastPick = useShellLastPick((state) => state.set);
   const rememberSeveral = useShellLastPick((state) => state.setSeveral);
   const filter = useChatProjectFilter();
@@ -96,9 +106,9 @@ export function ProjectSwitcherRow({ shell, pathname }: { shell: ShellProject; p
       setLastPick(key);
       // One project: the URL drops the several or All it carried (the page names its own).
       navigateWithShellScope(undefined, { to: href });
-      closeNavDrawer();
+      onPicked();
     },
-    [pathname, setLastPick],
+    [pathname, setLastPick, onPicked],
   );
 
   const pickAll = useCallback(() => {
@@ -106,8 +116,8 @@ export function ProjectSwitcherRow({ shell, pathname }: { shell: ShellProject; p
     setLastPick(ALL_PROJECTS_PICK);
     // `?projects=all`: a chat page shows every project's chats from the home; any other page stays.
     navigateWithShellScope({ mode: "all" }, chatShellRouteOf(pathname) ? { to: homePath() } : {});
-    closeNavDrawer();
-  }, [pathname, setLastPick]);
+    onPicked();
+  }, [pathname, setLastPick, onPicked]);
 
   const leadItems = useMemo<ProjectSelectorLeadItem[]>(
     () => [

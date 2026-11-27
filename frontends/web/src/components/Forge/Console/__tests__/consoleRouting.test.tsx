@@ -268,7 +268,7 @@ function renderAt(
     usage: probe("usage"),
     events: probe("events"),
     analytics: probe("analytics"),
-    speedInsights: probe("speed-insights"),
+    siteInsights: probe("site-insights"),
     experiments: probe("experiments"),
     experiment: probe("experiment"),
     orgLayout: OrgLayoutStub,
@@ -461,6 +461,14 @@ describe("the project Metrics catalog", () => {
 });
 
 describe("redirects from the retired URLs", () => {
+  it("redirects Speed insights in the main-app configuration without losing its search contract", async () => {
+    // renderAt supplies Site insights only, just like the main app.
+    const router = renderAt("/forge/p/alpha/speed-insights?env=e2e&device=mobile&pct=p95&metric=lcp&range=7d");
+    await landsOn(router, "/forge/p/alpha/site-insights", { env: "e2e", device: "mobile", pct: "p95", metric: "lcp", range: "7d" });
+    expect(await screen.findByTestId("page")).toHaveAttribute("data-page", "site-insights");
+    expect(router.state.matches.at(-1)?.search).toEqual(expect.objectContaining({ device: "mobile", pct: "p95", metric: "lcp", range: "7d" }));
+  });
+
   it("sends a control-plane link's env tab to the page it means, scoped to that env", async () => {
     state.currentProject = PROJECTS[0]!; // Alpha is open; the link is about Beta's "barkshop".
     const router = renderAt("/forge/env/e2e?forgeProject=barkshop&tab=releases");
@@ -566,6 +574,21 @@ describe("the environment scope", () => {
 
     const redirected = renderAt("/forge/p/alpha/users?env=e2e&user=u-1");
     await landsOn(redirected, "/forge/p/alpha/auth", { env: "e2e", user: "u-1" });
+  });
+
+  it("routes Site insights' views, and lands one that is not a view on Speed", async () => {
+    const router = renderAt("/forge/p/alpha/site-insights/seo?env=e2e&site=alpha-web");
+    expect(await screen.findByTestId("page")).toHaveAttribute("data-page", "site-insights");
+    await landsOn(router, "/forge/p/alpha/site-insights/seo", { env: "e2e", site: "alpha-web" });
+
+    const unknown = renderAt("/forge/p/alpha/site-insights/lighthouse?env=e2e");
+    await landsOn(unknown, "/forge/p/alpha/site-insights", { env: "e2e" });
+  });
+
+  it("sends the old Speed insights URL to Site insights, keeping its search", async () => {
+    const router = renderAt("/forge/p/alpha/speed-insights?env=e2e&device=mobile&pct=p90");
+    await landsOn(router, "/forge/p/alpha/site-insights", { env: "e2e", device: "mobile", pct: "p90" });
+    expect(await screen.findByTestId("page")).toHaveAttribute("data-page", "site-insights");
   });
 
   it("routes Security › Vulnerabilities with its filters in the URL", async () => {

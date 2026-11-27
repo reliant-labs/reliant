@@ -9,6 +9,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/mergequeue/gaterun"
+	"github.com/reliant-labs/reliant/internal/mergequeue/gaterun/gatehost"
 	"github.com/reliant-labs/reliant/internal/mergequeue/gaterun/runcgate"
 )
 
@@ -27,31 +28,34 @@ func init() {
 // arrives.
 var gateHost struct {
 	sync.Mutex
-	image, vulnDBDir string
+	image, vulnDBDir, trustedGoCache string
 }
 
 func configureGates(h Host) {
 	gateHost.Lock()
 	defer gateHost.Unlock()
-	gateHost.image, gateHost.vulnDBDir = h.GateImage, h.GateVulnDBDir
+	gateHost.image, gateHost.vulnDBDir, gateHost.trustedGoCache = h.GateImage, h.GateVulnDBDir, h.GateTrustedGoCache
 }
 
 // gateJobs is this daemon's gates. The isolated (sysbox) backend joins
 // Runner.Isolated once the credsandbox gate backend is back on main; until
 // then every gate that is not an allowed shadow gate is refused.
-var gateJobs = sync.OnceValue(func() *gaterun.Jobs {
+var gateJobs = sync.OnceValue(func() *gatehost.Jobs {
 	gateHost.Lock()
-	image, vulnDB := gateHost.image, gateHost.vulnDBDir
+	image, vulnDB, trustedGoCache := gateHost.image, gateHost.vulnDBDir, gateHost.trustedGoCache
 	gateHost.Unlock()
-	return &gaterun.Jobs{Runner: &gaterun.Runner{
+	return &gatehost.Jobs{Runner: &gatehost.Runner{
 		NotIsolated: runcgate.New(),
-		Fetcher: gaterun.GitFetcher{Env: func() []string {
+		Fetcher: gatehost.GitFetcher{Env: func() []string {
 			return gitCredentialEnv(os.Environ()) //nolint:forbidigo // the fetch child's inherited environment plus the per-invocation credential helper; not configuration
 		}},
 		WorkRoot:  filepath.Join(config.GetAppDataDir(), "gates"),
 		Image:     image,
 		VulnDBDir: vulnDB,
-		Limits:    gaterun.DefaultLimits(),
+		// Checked again before every gate, so a directory that appears
+		// after the daemon started is mounted with no restart.
+		TrustedGoCacheDir: gatehost.TrustedGoCacheDir(trustedGoCache),
+		Limits:            gatehost.DefaultLimits(),
 	}}
 })
 

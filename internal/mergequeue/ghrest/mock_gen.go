@@ -16,7 +16,7 @@ import (
 )
 
 // forge:section MockService
-// forge:hash=c538e2fab2afc2165cca6f66967a227496b433b82b3867b277dd5dfbced58de5
+// forge:hash=7fc5e39529d851513a3dd557ab0d3751ba051964a738b32b21537487753ba788
 
 // MockService is a test mock for the Service interface.
 //
@@ -36,7 +36,6 @@ type MockService struct {
 	CreateCheckRunFunc     func(context.Context, ghport.Repo, ghport.CreateCheckRun) (ghport.CheckRun, error)
 	UpdateCheckRunFunc     func(context.Context, ghport.Repo, int64, ghport.UpdateCheckRun) (ghport.CheckRun, error)
 	ListCheckRunsFunc      func(context.Context, ghport.Repo, string, ghport.ListCheckRuns) ([]ghport.CheckRun, error)
-	GetContentsFunc        func(context.Context, ghport.Repo, string, string) ([]byte, error)
 	GetCommitFunc          func(context.Context, ghport.Repo, string) (ghport.Commit, error)
 	CreateCommitFunc       func(context.Context, ghport.Repo, ghport.NewCommit) (ghport.Commit, error)
 	CreateIssueCommentFunc func(context.Context, ghport.Repo, int, string) (ghport.IssueComment, error)
@@ -122,15 +121,6 @@ func (m *MockService) ListCheckRuns(ctx context.Context, repo ghport.Repo, sha s
 		return m.ListCheckRunsFunc(ctx, repo, sha, opts)
 	}
 	return nil, contractkit.MockNotSet("MockService", "ListCheckRuns")
-}
-
-// GetContents records the call and delegates to GetContentsFunc when set.
-func (m *MockService) GetContents(ctx context.Context, repo ghport.Repo, path string, ref string) ([]byte, error) {
-	m.Recorder.Record("GetContents", ctx, repo, path, ref)
-	if m.GetContentsFunc != nil {
-		return m.GetContentsFunc(ctx, repo, path, ref)
-	}
-	return nil, contractkit.MockNotSet("MockService", "GetContents")
 }
 
 // GetCommit records the call and delegates to GetCommitFunc when set.
@@ -374,30 +364,6 @@ func (m *MockService) ListCheckRunsCalls() []MockServiceListCheckRunsCall {
 		r.Repo, _ = c.Args[1].(ghport.Repo)
 		r.Sha, _ = c.Args[2].(string)
 		r.Opts, _ = c.Args[3].(ghport.ListCheckRuns)
-		out = append(out, r)
-	}
-	return out
-}
-
-// MockServiceGetContentsCall is one recorded call of MockService.GetContents, one
-// field per parameter.
-type MockServiceGetContentsCall struct {
-	Ctx  context.Context
-	Repo ghport.Repo
-	Path string
-	Ref  string
-}
-
-// GetContentsCalls returns every recorded GetContents call, oldest first, with
-// its arguments typed. It reads the same log as Calls("GetContents").
-func (m *MockService) GetContentsCalls() []MockServiceGetContentsCall {
-	var out []MockServiceGetContentsCall
-	for _, c := range m.Recorder.Calls("GetContents") {
-		var r MockServiceGetContentsCall
-		r.Ctx, _ = c.Args[0].(context.Context)
-		r.Repo, _ = c.Args[1].(ghport.Repo)
-		r.Path, _ = c.Args[2].(string)
-		r.Ref, _ = c.Args[3].(string)
 		out = append(out, r)
 	}
 	return out

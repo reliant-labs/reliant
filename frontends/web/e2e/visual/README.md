@@ -7,7 +7,7 @@ touched nothing else.
 
 | Project | Viewport | Surfaces |
 |---|---|---|
-| `desktop-dark` | 1440×900, dark | home + sidebar, chat (simplified and detailed), app overview, app code card, observability errors, environment, the project selector, Projects, a project's page, billing, usage |
+| `desktop-dark` | 1440×900, dark | home + sidebar, chat (simplified and detailed), app overview, app code card, observability errors, environment, the project selector, Projects, a project's page, billing, usage, Organization GitHub |
 | `desktop-light` | 1440×900, light | the same |
 | `mobile-dark` | 390×844, dark, touch | chat list, chat, app overview, app code card, observability errors, environment, the project selector (the console's app switcher), Projects, a project's page |
 

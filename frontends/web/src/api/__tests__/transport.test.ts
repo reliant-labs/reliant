@@ -246,6 +246,16 @@ describe('per-procedure timeouts', () => {
     expect(timeoutForProcedure('reliant.v1.AttachmentService', 'GetAttachment')).toBeGreaterThan(10_000)
   })
 
+  // A caller sizes one call's budget (an upload's, by its bytes) over the
+  // per-method table; a call that sets none keeps the table's.
+  it('lets one call set its own budget through rpcBudgetKey', async () => {
+    const { timeoutForProcedure, withRpcBudget } = await import('../transport')
+    const values = withRpcBudget(undefined, 540_000)
+    expect(timeoutForProcedure('reliant.v1.AttachmentService', 'UploadAttachment', values)).toBe(540_000)
+    expect(timeoutForProcedure('reliant.v1.ChatService', 'GetChat', values)).toBe(540_000)
+    expect(timeoutForProcedure('reliant.v1.ChatService', 'GetChat', createContextValues())).toBe(10_000)
+  })
+
   // Every forge call runs a `forge` subprocess on the daemon with a 15–110s
   // budget. At the 10s default the transport aborted them, the api-server saw
   // a cancelled request, and the UI rendered "no forge.yaml" for control-plane.

@@ -157,7 +157,7 @@ func scanPRPipeline(ctx context.Context, q rawScanner) (*core.PRPipeline, error)
 }
 
 const prHeadVerdictColumns = `id, org_id, project_id, record_id, head_sha, round, verdict, rule, risk_tier,
-	findings_json, required_decisions, run_id, node_id, reviewer_principal, created_at`
+	findings_json, required_decisions, run_id, node_id, reviewer_principal, trigger_id, daemon_id, created_at`
 
 type prHeadVerdictRow struct {
 	core.PRHeadVerdictRecord
@@ -196,12 +196,12 @@ func InsertPRHeadVerdict(ctx context.Context, db orm.Context, v core.PRHeadVerdi
 	var rows []prHeadVerdictRow
 	err := db.Bun().NewRaw(`INSERT INTO pr_head_verdicts
 		(id, org_id, project_id, record_id, head_sha, round, verdict, rule, risk_tier, findings_json,
-		 required_decisions, run_id, node_id, reviewer_principal)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb, ?::text[], NULLIF(?, ''), NULLIF(?, ''), ?)
+		 required_decisions, run_id, node_id, reviewer_principal, trigger_id, daemon_id)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb, ?::text[], NULLIF(?, ''), NULLIF(?, ''), ?, NULLIF(?, ''), NULLIF(?, ''))
 		ON CONFLICT ON CONSTRAINT pr_head_verdicts_head_round_key DO NOTHING
 		RETURNING `+prHeadVerdictColumns,
 		v.ID, v.OrgID, v.ProjectID, v.RecordID, v.HeadSHA, v.Round, v.Verdict, v.Rule, v.RiskTier, findings,
-		orm.Arg(required), v.RunID, v.NodeID, v.ReviewerPrincipal).Scan(ctx, &rows)
+		orm.Arg(required), v.RunID, v.NodeID, v.ReviewerPrincipal, v.TriggerID, v.DaemonID).Scan(ctx, &rows)
 	if err != nil {
 		return nil, fmt.Errorf("insert pr head verdict: %w", err)
 	}

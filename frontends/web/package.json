@@ -147,6 +147,7 @@
     "react-virtuoso": "^4.18.1",
     "rehype-highlight": "^7.0.2",
     "remark-gfm": "^4.0.1",
+    "rrweb": "2.1.7",
     "sonner": "^2.0.7",
     "speedscope": "^1.25.0",
     "tailwind-merge": "^3.3.1",
