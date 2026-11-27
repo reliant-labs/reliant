@@ -51,6 +51,13 @@ message UploadAttachmentRequest {
   bytes content = 2;
   // MIME type of the file
   string mime_type = 3;
+  // The organization to stamp on the attachment: the web app sends its
+  // chat's org, or the org it is scoped to before a chat exists. The caller
+  // must be a live member of it (NotFound otherwise); the stamp records that
+  // membership at upload time, not which chat the file is for. An org-scoped
+  // read (GTM's attach-from-chat) takes only an attachment stamped with its
+  // org. Unset, or an org the server cannot verify right now, stamps none.
+  optional string org_id = 4;
 }
 
 message UploadAttachmentResponse {
@@ -96,6 +103,9 @@ message CreateFileReferenceRequest {
   string filename = 2;
   // File content as bytes — captured at attach time so the server doesn't need filesystem access
   bytes content = 3;
+  // The organization to stamp on the reference, as
+  // UploadAttachmentRequest.org_id.
+  optional string org_id = 4;
 }
 
 message CreateFileReferenceResponse {

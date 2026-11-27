@@ -33,4 +33,15 @@ message GtmConfig {
     optional: true
     description: "Control-plane access token (obs:read, org-bound) for GTM's product-analytics read (unset: unavailable)"
   }];
+
+  // Whether GTM's agent may copy a chat attachment into the asset library
+  // (attach_gtm_asset from an attachment id). Off by default. When on, it
+  // takes only an attachment the caller owns that is stamped with the GTM org
+  // (attachments.org_id: the owner was a member of it when it was stored); an
+  // attachment stamped with none, every one uploaded before attachments
+  // recorded an org included, is never taken.
+  bool attach_from_chat_enabled = 3 [(forge.v1.config) = {
+    env_var: "GTM_ATTACH_FROM_CHAT_ENABLED"
+    description: "Let GTM's agent copy an attachment stamped with the GTM org into the asset library (default false)"
+  }];
 }

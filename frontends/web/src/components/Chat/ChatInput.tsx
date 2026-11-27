@@ -22,6 +22,7 @@ import { detectPlatform } from "../../lib/keyboard/platform";
 import { useComposerUploads } from "./useComposerUploads";
 import { legacyPasteDraftKeys, migrateLegacyPasteDrafts, pastedTextFilename, useLongPaste } from "./useLongPaste";
 import { isDraftAttachmentPersisted, useAttachmentStore } from "../../store/attachmentStore";
+import { getOrgScope } from "../../lib/orgScope";
 import { useAuthUserId } from "@/lib/auth/use-auth";
 import { useChatParamsStore } from "../../store/chatParamsStore";
 import { useActiveChatId } from "../../store/chatStoreHooks";
@@ -1098,8 +1099,16 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
       handleSyncThreadParams,
     ]);
 
-    // Attachment management
-    const attachFile = useAttachmentStore((state) => state.attachFile);
+    // Attachment management. An upload is stamped with the chat's org (none
+    // for a chat in no org); only before a chat exists does it take the org
+    // the app is scoped to.
+    const storeAttachFile = useAttachmentStore((state) => state.attachFile);
+    const chatOrgId = chatForProjects?.orgId;
+    const uploadOrgId = useCallback(() => (chatId ? (chatOrgId ?? null) : getOrgScope().orgId), [chatId, chatOrgId]);
+    const attachFile = useCallback(
+      (sessionId: string, file: File) => storeAttachFile(sessionId, file, uploadOrgId()),
+      [storeAttachFile, uploadOrgId],
+    );
     const removeAttachment = useAttachmentStore(
       (state) => state.removeAttachment
     );
@@ -1729,7 +1738,7 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
     const handleSaveTextAttachment = async (attachmentId: string, filename: string, text: string) => {
       if (sendingRef.current || queueingRef.current) throw new Error("A message is being sent");
       const type = attachments.find((attachment) => attachment.id === attachmentId)?.mime_type || "text/plain";
-      await replaceAttachment(attachmentSessionId, attachmentId, new File([text], filename, { type }));
+      await replaceAttachment(attachmentSessionId, attachmentId, new File([text], filename, { type }), uploadOrgId());
     };
 
     const handleInsertTextAttachment = (attachmentId: string, text: string) => {

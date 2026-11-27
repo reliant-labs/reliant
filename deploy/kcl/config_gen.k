@@ -1630,13 +1630,15 @@ schema ServerProcessConfigReconciler:
         stall_watchdog != "", "stall_watchdog = \"\" cannot reach the process: an empty RELIANT_RECONCILER_STALL_WATCHDOG counts as unset, so it would load the default \"off\" — set a value, or change its default in the proto"
 
 # forge:section schema ServerProcessConfigGtm
-# forge:hash=4585d795f25eced4fd9eb5d27b53a4dd2ced17b0f051787666615f9940e1ea21
+# forge:hash=c4d06545b26596c0eccdff0696114272e85a4a91a399e1c57f4f63fdcaadf17b
 # ServerProcessConfigGtm is the gtm block (GtmConfig) — author its values in config.k as `gtm.<field> = ...`.
 schema ServerProcessConfigGtm:
     # Comma-separated organization ids GTM is enabled for (none: GTM is off everywhere)
     allowed_org_ids: str = ""
     # Control-plane access token (obs:read, org-bound) for GTM's product-analytics read (unset: unavailable)
     analytics_token: ConfigSecretRef = ConfigSecretRef { name = "reliant-secrets", key = "gtm_analytics_token" }
+    # Let GTM's agent copy an attachment stamped with the GTM org into the asset library (default false)
+    attach_from_chat_enabled: bool = False
 
 # forge:section schema ServerProcessConfig
 # forge:hash=be49f651828024aefa4be09677c15efee1cbdf818823c9871b1db4ac95f1f8aa
@@ -1916,8 +1918,9 @@ serverProcessConfigEnvMap = lambda c: ServerProcessConfig, config_secrets: [str]
         "RELIANT_RECONCILER_STALL_WATCHDOG" = c.reconciler.stall_watchdog
 
         # forge:section serverProcessConfigEnvMap values gtm
-        # forge:hash=adc348f52f0ec0451dec20dc908607e4f4acb2cc4deb7a60f177d70f1b130c80
+        # forge:hash=20abc1abc19ae85359e4f6af1b62a5c931233114149868f56567d3ce209be6b7
         "GTM_ALLOWED_ORG_IDS" = c.gtm.allowed_org_ids
+        "GTM_ATTACH_FROM_CHAT_ENABLED" = "true" if c.gtm.attach_from_chat_enabled else "false"
 
         # forge:section serverProcessConfigEnvMap values (end)
         # forge:hash=6e40ebe66a4bd1160f079d94eae59be0c27a98446b351e00c478d59941a3fc6d

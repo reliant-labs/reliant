@@ -24,7 +24,8 @@ interface AttachmentStore {
    */
   localFiles: Map<string, Blob>;
 
-  attachFile: (sessionId: string, file: File) => Promise<Attachment>;
+  /** `orgId` is the org stamped on the upload (uploadAttachment). */
+  attachFile: (sessionId: string, file: File, orgId?: string | null) => Promise<Attachment>;
   /**
    * Upload `file` in place of `attachmentId`, keeping its position in the
    * draft, then delete the old one. Attachments are immutable on the server,
@@ -32,7 +33,7 @@ interface AttachmentStore {
    * old attachment left the draft (removed or sent) while the upload ran; the
    * new upload is then deleted rather than resurrected.
    */
-  replaceAttachment: (sessionId: string, attachmentId: string, file: File) => Promise<Attachment | undefined>;
+  replaceAttachment: (sessionId: string, attachmentId: string, file: File, orgId?: string | null) => Promise<Attachment | undefined>;
   removeAttachment: (sessionId: string, attachmentId: string) => void;
   getAttachments: (sessionId: string) => Attachment[];
   clearAttachments: (sessionId: string) => void;
@@ -115,7 +116,7 @@ export const useAttachmentStore = create<AttachmentStore>()(
           blobUrls: new Map(),
           localFiles: new Map(),
 
-          attachFile: async (sessionId: string, file: File) => {
+          attachFile: async (sessionId: string, file: File, orgId?: string | null) => {
             // Check if file type is supported
             if (!isFileTypeSupported(file.name)) {
               const message = getUnsupportedFileMessage(file.name);
@@ -127,7 +128,7 @@ export const useAttachmentStore = create<AttachmentStore>()(
 
             try {
               // The backend stores every upload's bytes and reads them at send time.
-              const attachment = await uploadAttachment(file);
+              const attachment = await uploadAttachment(file, orgId);
 
               const newBlobUrls = new Map(get().blobUrls);
               const blobUrl = localBlobUrl(file);
@@ -163,11 +164,11 @@ export const useAttachmentStore = create<AttachmentStore>()(
             }
           },
 
-          replaceAttachment: async (sessionId: string, attachmentId: string, file: File) => {
+          replaceAttachment: async (sessionId: string, attachmentId: string, file: File, orgId?: string | null) => {
             beginUpload();
             let attachment: Attachment;
             try {
-              attachment = await uploadAttachment(file);
+              attachment = await uploadAttachment(file, orgId);
             } catch (error) {
               endUpload();
               const errorMessage = error instanceof Error ? error.message : 'Upload failed';

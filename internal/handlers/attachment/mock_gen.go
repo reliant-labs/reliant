@@ -108,3 +108,52 @@ func (m *MockContentReader) GetAttachmentCalls() []MockContentReaderGetAttachmen
 
 // Compile-time check.
 var _ ContentReader = (*MockContentReader)(nil)
+
+// forge:section MockOrgResolver
+// forge:hash=eb53f53de940bb96feecb9cfd338fc2c7bb22090299774719b35d87f38b9e5a4
+
+// MockOrgResolver is a test mock for the OrgResolver interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockOrgResolver.<Method>Func not set" error.
+type MockOrgResolver struct {
+	contractkit.Recorder
+	NamedFunc func(context.Context, string, string) (string, error)
+}
+
+// Named records the call and delegates to NamedFunc when set.
+func (m *MockOrgResolver) Named(ctx context.Context, userID string, requested string) (string, error) {
+	m.Recorder.Record("Named", ctx, userID, requested)
+	if m.NamedFunc != nil {
+		return m.NamedFunc(ctx, userID, requested)
+	}
+	return "", contractkit.MockNotSet("MockOrgResolver", "Named")
+}
+
+// MockOrgResolverNamedCall is one recorded call of MockOrgResolver.Named, one
+// field per parameter.
+type MockOrgResolverNamedCall struct {
+	Ctx       context.Context
+	UserID    string
+	Requested string
+}
+
+// NamedCalls returns every recorded Named call, oldest first, with
+// its arguments typed. It reads the same log as Calls("Named").
+func (m *MockOrgResolver) NamedCalls() []MockOrgResolverNamedCall {
+	var out []MockOrgResolverNamedCall
+	for _, c := range m.Recorder.Calls("Named") {
+		var r MockOrgResolverNamedCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.Requested, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// Compile-time check.
+var _ OrgResolver = (*MockOrgResolver)(nil)

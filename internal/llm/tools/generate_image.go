@@ -226,7 +226,7 @@ func (t *generateImageTool) Execute(tc *rctx.ToolContext, params GenerateImagePa
 	}
 
 	filename := generatedImageFilename(image.MIMEType)
-	attachmentID, err := t.storeAttachment(tc.Context, userID, filename, image)
+	attachmentID, err := t.storeAttachment(tc.Context, userID, chatOrgID(tc.Context, t.repo, tc.ChatID), filename, image)
 	if err != nil {
 		return NewTextErrorResponse(fmt.Sprintf("Generated the image but could not store it: %v", err)), nil
 	}
@@ -326,7 +326,7 @@ func (t *generateImageTool) userID(tc *rctx.ToolContext) string {
 // substrate, not the filesystem: in distributed mode neither the api server nor
 // the worker can see the user's disk, so a file path would be unreadable by the
 // process that has to serve /api/attachments/{id}.
-func (t *generateImageTool) storeAttachment(ctx context.Context, userID, filename string, image imagegen.Image) (string, error) {
+func (t *generateImageTool) storeAttachment(ctx context.Context, userID string, orgID *string, filename string, image imagegen.Image) (string, error) {
 	attachmentID := uuid.New().String()
 	hash := sha256.Sum256(image.Bytes)
 	fileHash := hex.EncodeToString(hash[:])
@@ -342,6 +342,7 @@ func (t *generateImageTool) storeAttachment(ctx context.Context, userID, filenam
 		FilePath:       filepath.Join(userID, filename),
 		AttachmentType: string(attachment.TypeImage),
 		Content:        image.Bytes,
+		OrgID:          orgID,
 		CreatedAt:      now,
 		UpdatedAt:      now,
 	}

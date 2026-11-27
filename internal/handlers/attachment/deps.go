@@ -21,3 +21,8 @@ type AttachmentStore interface {
 type ContentReader interface {
 	GetAttachment(ctx context.Context, id string) (*core.Attachment, error)
 }
+
+// OrgResolver verifies the org an upload names. *orgs.Resolver is one.
+type OrgResolver interface {
+	Named(ctx context.Context, userID, requested string) (string, error)
+}

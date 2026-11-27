@@ -32,7 +32,14 @@ type UploadAttachmentRequest struct {
 	// File content as bytes (base64 encoded in JSON transport)
 	Content []byte `protobuf:"bytes,2,opt,name=content,proto3" json:"content,omitempty"`
 	// MIME type of the file
-	MimeType      string `protobuf:"bytes,3,opt,name=mime_type,json=mimeType,proto3" json:"mime_type,omitempty"`
+	MimeType string `protobuf:"bytes,3,opt,name=mime_type,json=mimeType,proto3" json:"mime_type,omitempty"`
+	// The organization to stamp on the attachment: the web app sends its
+	// chat's org, or the org it is scoped to before a chat exists. The caller
+	// must be a live member of it (NotFound otherwise); the stamp records that
+	// membership at upload time, not which chat the file is for. An org-scoped
+	// read (GTM's attach-from-chat) takes only an attachment stamped with its
+	// org. Unset, or an org the server cannot verify right now, stamps none.
+	OrgId         *string `protobuf:"bytes,4,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -84,6 +91,13 @@ func (x *UploadAttachmentRequest) GetContent() []byte {
 func (x *UploadAttachmentRequest) GetMimeType() string {
 	if x != nil {
 		return x.MimeType
+	}
+	return ""
+}
+
+func (x *UploadAttachmentRequest) GetOrgId() string {
+	if x != nil && x.OrgId != nil {
+		return *x.OrgId
 	}
 	return ""
 }
@@ -326,7 +340,10 @@ type CreateFileReferenceRequest struct {
 	// Original filename (basename of the path)
 	Filename string `protobuf:"bytes,2,opt,name=filename,proto3" json:"filename,omitempty"`
 	// File content as bytes — captured at attach time so the server doesn't need filesystem access
-	Content       []byte `protobuf:"bytes,3,opt,name=content,proto3" json:"content,omitempty"`
+	Content []byte `protobuf:"bytes,3,opt,name=content,proto3" json:"content,omitempty"`
+	// The organization to stamp on the reference, as
+	// UploadAttachmentRequest.org_id.
+	OrgId         *string `protobuf:"bytes,4,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -382,6 +399,13 @@ func (x *CreateFileReferenceRequest) GetContent() []byte {
 	return nil
 }
 
+func (x *CreateFileReferenceRequest) GetOrgId() string {
+	if x != nil && x.OrgId != nil {
+		return *x.OrgId
+	}
+	return ""
+}
+
 type CreateFileReferenceResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The created file reference with metadata
@@ -432,11 +456,13 @@ var File_reliant_v1_attachment_proto protoreflect.FileDescriptor
 const file_reliant_v1_attachment_proto_rawDesc = "" +
 	"\n" +
 	"\x1breliant/v1/attachment.proto\x12\n" +
-	"reliant.v1\x1a\x14forge/v1/forge.proto\x1a\x15reliant/v1/chat.proto\"l\n" +
+	"reliant.v1\x1a\x14forge/v1/forge.proto\x1a\x15reliant/v1/chat.proto\"\x93\x01\n" +
 	"\x17UploadAttachmentRequest\x12\x1a\n" +
 	"\bfilename\x18\x01 \x01(\tR\bfilename\x12\x18\n" +
 	"\acontent\x18\x02 \x01(\fR\acontent\x12\x1b\n" +
-	"\tmime_type\x18\x03 \x01(\tR\bmimeType\"R\n" +
+	"\tmime_type\x18\x03 \x01(\tR\bmimeType\x12\x1a\n" +
+	"\x06org_id\x18\x04 \x01(\tH\x00R\x05orgId\x88\x01\x01B\t\n" +
+	"\a_org_id\"R\n" +
 	"\x18UploadAttachmentResponse\x126\n" +
 	"\n" +
 	"attachment\x18\x01 \x01(\v2\x16.reliant.v1.AttachmentR\n" +
@@ -451,11 +477,13 @@ const file_reliant_v1_attachment_proto_rawDesc = "" +
 	"\x17DeleteAttachmentRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\"4\n" +
 	"\x18DeleteAttachmentResponse\x12\x18\n" +
-	"\amessage\x18\x01 \x01(\tR\amessage\"o\n" +
+	"\amessage\x18\x01 \x01(\tR\amessage\"\x96\x01\n" +
 	"\x1aCreateFileReferenceRequest\x12\x1b\n" +
 	"\tfile_path\x18\x01 \x01(\tR\bfilePath\x12\x1a\n" +
 	"\bfilename\x18\x02 \x01(\tR\bfilename\x12\x18\n" +
-	"\acontent\x18\x03 \x01(\fR\acontent\"U\n" +
+	"\acontent\x18\x03 \x01(\fR\acontent\x12\x1a\n" +
+	"\x06org_id\x18\x04 \x01(\tH\x00R\x05orgId\x88\x01\x01B\t\n" +
+	"\a_org_id\"U\n" +
 	"\x1bCreateFileReferenceResponse\x126\n" +
 	"\n" +
 	"attachment\x18\x01 \x01(\v2\x16.reliant.v1.AttachmentR\n" +
@@ -514,6 +542,8 @@ func file_reliant_v1_attachment_proto_init() {
 	if File_reliant_v1_attachment_proto != nil {
 		return
 	}
+	file_reliant_v1_attachment_proto_msgTypes[0].OneofWrappers = []any{}
+	file_reliant_v1_attachment_proto_msgTypes[6].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{

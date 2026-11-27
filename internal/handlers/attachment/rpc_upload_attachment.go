@@ -53,6 +53,12 @@ func (s *Service) UploadAttachment(
 		return nil, svcerr.ResourceExhausted(fmt.Sprintf("file too large: maximum size is %d bytes", s.maxFileSize))
 	}
 
+	// The org stamped on it, verified before anything is stored.
+	orgID, err := s.uploadOrg(ctx, userID, req.Msg.OrgId)
+	if err != nil {
+		return nil, err
+	}
+
 	// Default MIME type
 	if mimeType == "" {
 		mimeType = attachment.GetMimeType(filepath.Ext(filename))
@@ -80,6 +86,7 @@ func (s *Service) UploadAttachment(
 		FilePath:       relativePath,
 		AttachmentType: string(attachmentType),
 		Content:        content,
+		OrgID:          orgID,
 	}
 
 	if err := s.deps.Attachments.InsertAttachment(ctx, dbAttachment); err != nil {

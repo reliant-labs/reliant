@@ -58,6 +58,7 @@ func InsertAttachment(ctx context.Context, db orm.Context, a *core.Attachment) e
 		FilePath:       a.FilePath,
 		AttachmentType: a.AttachmentType,
 		Content:        a.Content,
+		OrgID:          a.OrgID,
 	}
 	if err := CreateAttachment(ctx, db, row); err != nil {
 		return err
@@ -76,6 +77,32 @@ func GetAttachment(ctx context.Context, db orm.Context, id string) (*core.Attach
 		return nil, err
 	}
 	return attachmentToCore(row), nil
+}
+
+// GetAttachmentForUserInOrg returns the attachment id when userID owns it and
+// it is stamped with orgID (attachments.org_id: the owner was a live member of
+// orgID when it was stored), or (nil, nil) when there is none such: another
+// user's, another org's, one stamped with none (org_id NULL, every row written
+// before attachments recorded an org), or none at all. A blank userID or
+// orgID matches nothing. It is the read for a caller acting in one org that
+// must not reach the user's attachments from any other (GTM's
+// attach-from-chat).
+func GetAttachmentForUserInOrg(ctx context.Context, db orm.Context, userID, orgID, id string) (*core.Attachment, error) {
+	if userID == "" || orgID == "" || id == "" {
+		return nil, nil
+	}
+	rows, err := ListAttachment(ctx, db,
+		orm.WhereEq(AttachmentFieldID, id),
+		orm.WhereEq(AttachmentFieldUserID, userID),
+		orm.WhereEq(AttachmentFieldOrgID, orgID),
+		orm.WithLimit(1))
+	if err != nil {
+		return nil, err
+	}
+	if len(rows) == 0 {
+		return nil, nil
+	}
+	return attachmentToCore(rows[0]), nil
 }
 
 // GetAttachmentsByIDs returns the attachments among ids that exist, in no
@@ -114,6 +141,7 @@ func attachmentToCore(row *Attachment) *core.Attachment {
 		FilePath:       row.FilePath,
 		AttachmentType: row.AttachmentType,
 		Content:        row.Content,
+		OrgID:          row.OrgID,
 		CreatedAt:      row.CreatedAt,
 		UpdatedAt:      row.UpdatedAt,
 	}

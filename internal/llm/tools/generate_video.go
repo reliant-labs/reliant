@@ -402,7 +402,7 @@ func (t *generateVideoTool) await(tc *rctx.ToolContext, generator VideoGenerator
 	}
 
 	filename := generatedVideoFilename(response.MIMEType)
-	attachmentID, err := t.storeAttachment(tc.Context, job.UserID, filename, response)
+	attachmentID, err := t.storeAttachment(tc.Context, job.UserID, chatOrgID(tc.Context, t.repo, job.ChatID), filename, response)
 	if err != nil {
 		return NewTextErrorResponse(fmt.Sprintf("Generated the video but could not store it: %v (provider job %s is still available at the provider for about 2 days)", err, providerJob.ID)), nil
 	}
@@ -629,7 +629,7 @@ func (t *generateVideoTool) userID(tc *rctx.ToolContext) string {
 
 // storeAttachment persists the clip in the database, the one substrate every
 // process can read in distributed mode.
-func (t *generateVideoTool) storeAttachment(ctx context.Context, userID, filename string, response *videogen.Response) (string, error) {
+func (t *generateVideoTool) storeAttachment(ctx context.Context, userID string, orgID *string, filename string, response *videogen.Response) (string, error) {
 	attachmentID := uuid.New().String()
 	hash := sha256.Sum256(response.Bytes)
 	fileHash := hex.EncodeToString(hash[:])
@@ -637,7 +637,7 @@ func (t *generateVideoTool) storeAttachment(ctx context.Context, userID, filenam
 	att := &db.Attachment{
 		ID: attachmentID, UserID: userID, Filename: filename, Size: int64(len(response.Bytes)),
 		MimeType: response.MIMEType, FileHash: &fileHash, FilePath: filepath.Join(userID, filename),
-		AttachmentType: string(attachment.TypeVideo), Content: response.Bytes, CreatedAt: now, UpdatedAt: now,
+		AttachmentType: string(attachment.TypeVideo), Content: response.Bytes, OrgID: orgID, CreatedAt: now, UpdatedAt: now,
 	}
 	if err := t.repo.CreateAttachment(ctx, att); err != nil {
 		return "", err

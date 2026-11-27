@@ -59,6 +59,12 @@ func (s *Service) CreateFileReference(
 		return nil, svcerr.ResourceExhausted(fmt.Sprintf("file too large: %d bytes exceeds maximum of %d bytes", len(content), s.maxFileSize))
 	}
 
+	// The org stamped on it, verified before anything is stored.
+	orgID, err := s.uploadOrg(ctx, userID, req.Msg.OrgId)
+	if err != nil {
+		return nil, err
+	}
+
 	// Get MIME type
 	ext := filepath.Ext(filename)
 	mimeType := attachment.GetMimeType(ext)
@@ -81,6 +87,7 @@ func (s *Service) CreateFileReference(
 		FilePath:       filePath, // Keep original path as metadata for display
 		AttachmentType: string(attachment.TypeFileReference),
 		Content:        content,
+		OrgID:          orgID,
 	}
 
 	if err := s.deps.Attachments.InsertAttachment(ctx, dbAttachment); err != nil {

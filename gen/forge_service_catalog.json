@@ -1658,6 +1658,11 @@
               "Name": "content",
               "ProtoType": "bytes",
               "IsOptional": false
+            },
+            {
+              "Name": "org_id",
+              "ProtoType": "string",
+              "IsOptional": true
             }
           ],
           "CreateFileReferenceResponse": [
@@ -1717,6 +1722,11 @@
               "Name": "mime_type",
               "ProtoType": "string",
               "IsOptional": false
+            },
+            {
+              "Name": "org_id",
+              "ProtoType": "string",
+              "IsOptional": true
             }
           ],
           "UploadAttachmentResponse": [
@@ -1791,6 +1801,11 @@
             {
               "name": "content",
               "kind": "bytes"
+            },
+            {
+              "name": "org_id",
+              "kind": "string",
+              "optional": true
             }
           ],
           "reliant.v1.CreateFileReferenceResponse": [
@@ -1841,6 +1856,11 @@
             {
               "name": "mime_type",
               "kind": "string"
+            },
+            {
+              "name": "org_id",
+              "kind": "string",
+              "optional": true
             }
           ],
           "reliant.v1.UploadAttachmentResponse": [
@@ -59432,6 +59452,19 @@
       ],
       "providers": [
         "ORM"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Attachment",
+      "field": "Orgs",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/attachment.OrgResolver",
+      "methods": [],
+      "candidates": [
+        "OrgResolver"
+      ],
+      "providers": [
+        "OrgResolver"
       ],
       "resolution": "composition_expression"
     },
