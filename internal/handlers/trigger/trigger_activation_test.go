@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/workflowdraftstest"
 
 	"connectrpc.com/connect"
@@ -94,7 +95,7 @@ func TestActivateDeclaredSchedule(t *testing.T) {
 	assert.Equal(t, []string{"0 9 * * *"}, sched.GetCron())
 	assert.Equal(t, "America/New_York", sched.GetTimezone())
 
-	stored, err := env.repo.GetTrigger(context.Background(), got.GetId())
+	stored, err := store.GetTrigger(context.Background(), env.repo.ORM(), got.GetId())
 	require.NoError(t, err)
 	assert.Equal(t, core.TriggerKindSchedule, stored.Kind)
 	require.NotNil(t, stored.WorkflowTrigger)

@@ -18,24 +18,28 @@
  *
  * Every read but the first is audited server-side, and an audited
  * environment's carries confirm_env_id and a reason (`access`).
+ *
+ * This file builds the requests and reads the answers; the calls themselves
+ * are made in components/Forge/Storage/useStorageBrowser.ts (the two writes
+ * through the generated hooks file, the three reads on the scope's client).
  */
 
 import { timestampMs, type Timestamp } from "@bufbuild/protobuf/wkt";
-import type { Client, Transport } from "@connectrpc/connect";
 
 import {
   BucketRuntimeKind,
   ObjectPreviewKind,
   StorageAccessPolicy,
-  StorageBrowserService,
+  type GetObjectMetadataResponse,
+  type ListBrowsableBucketsResponse,
+  type ListObjectsResponse,
+  type PresignObjectDownloadResponse,
+  type PreviewObjectResponse,
 } from "@/gen/controlplane/services/storage_browser/v1/storage_browser_pb";
 import type { AccessConfirmation, AccessPolicyName } from "@/components/Forge/AuditedAccess/accessSession-model";
 
-import { getControlPlaneClient } from "../client";
-
-function client(transport?: Transport) {
-  return getControlPlaneClient(StorageBrowserService, transport);
-}
+/** What every request but the bucket list carries: the target, and the audited environment's confirmation when given. */
+type StorageRequest = { environmentId: string; bucket: string; confirmEnvId?: string; reason?: string };
 
 export type BucketRuntimeName = "minio" | "s3" | "gcs" | "hosted" | "unknown";
 
@@ -155,11 +159,7 @@ function accessFields(access: AccessConfirmation | undefined) {
   return access ? { confirmEnvId: access.confirmEnvId, reason: access.reason } : {};
 }
 
-const callOptions = (signal: AbortSignal | undefined) => (signal ? { signal } : undefined);
-
-export function createStorageBrowserApi(browserClient: Client<typeof StorageBrowserService>) {
-async function listBrowsableBuckets(environmentId: string, options: { signal?: AbortSignal } = {}): Promise<StorageBucketList> {
-  const res = await browserClient.listBrowsableBuckets({ environmentId }, callOptions(options.signal));
+export function toBucketList(res: ListBrowsableBucketsResponse): StorageBucketList {
   return {
     policy: POLICY_NAMES[res.policy] ?? "unknown",
     buckets: res.buckets.map((bucket) => ({
@@ -172,19 +172,20 @@ async function listBrowsableBuckets(environmentId: string, options: { signal?: A
   };
 }
 
-async function listObjects(req: ListObjectsInput, options: { signal?: AbortSignal } = {}): Promise<StorageListing> {
-  const res = await browserClient.listObjects(
-    {
-      environmentId: req.environmentId,
-      bucket: req.bucket,
-      ...(req.prefix ? { prefix: req.prefix } : {}),
-      pageToken: req.pageToken,
-      pageSize: req.pageSize,
-      ...(req.openBucket ? { openBucket: true } : {}),
-      ...accessFields(req.access),
-    },
-    callOptions(options.signal)
-  );
+/** ListObjects' request: `prefix` and `open_bucket` only when set, the confirmation only when given. */
+export function listObjectsRequest(req: ListObjectsInput): StorageRequest & { prefix?: string; pageToken: string; pageSize: number; openBucket?: boolean } {
+  return {
+    environmentId: req.environmentId,
+    bucket: req.bucket,
+    ...(req.prefix ? { prefix: req.prefix } : {}),
+    pageToken: req.pageToken,
+    pageSize: req.pageSize,
+    ...(req.openBucket ? { openBucket: true } : {}),
+    ...accessFields(req.access),
+  };
+}
+
+export function toListing(res: ListObjectsResponse): StorageListing {
   return {
     prefixes: [...res.prefixes],
     objects: res.objects.map((object) => ({ key: object.key, size: Number(object.size), updatedMs: msOf(object.updated), etag: object.etag })),
@@ -192,11 +193,12 @@ async function listObjects(req: ListObjectsInput, options: { signal?: AbortSigna
   };
 }
 
-async function getObjectMetadata(req: ObjectInput, options: { signal?: AbortSignal } = {}): Promise<StorageObjectMeta> {
-  const res = await browserClient.getObjectMetadata(
-    { environmentId: req.environmentId, bucket: req.bucket, key: req.key, ...accessFields(req.access) },
-    callOptions(options.signal)
-  );
+/** GetObjectMetadata's, PresignObjectDownload's and PreviewObject's request: one object, and the confirmation when given. */
+export function objectRequest(req: ObjectInput): StorageRequest & { key: string } {
+  return { environmentId: req.environmentId, bucket: req.bucket, key: req.key, ...accessFields(req.access) };
+}
+
+export function toObjectMeta(res: GetObjectMetadataResponse): StorageObjectMeta {
   const object = res.object;
   if (!object) throw new Error("The server returned no object metadata.");
   return {
@@ -210,50 +212,17 @@ async function getObjectMetadata(req: ObjectInput, options: { signal?: AbortSign
   };
 }
 
-/** Mints a new URL on every call: never cache it, never call it but on a click. */
-async function presignObjectDownload(req: ObjectInput, options: { signal?: AbortSignal } = {}): Promise<PresignedDownload> {
-  const res = await browserClient.presignObjectDownload(
-    { environmentId: req.environmentId, bucket: req.bucket, key: req.key, ...accessFields(req.access) },
-    callOptions(options.signal)
-  );
+/** A new URL every call: never cache it, never ask for one but on a click. */
+export function toPresignedDownload(res: PresignObjectDownloadResponse): PresignedDownload {
   return { url: res.url, filename: res.filename, size: Number(res.size), expiresAtMs: msOf(res.expiresAt) };
 }
 
-async function previewObject(req: ObjectInput, options: { signal?: AbortSignal } = {}): Promise<StoragePreview> {
-  const res = await browserClient.previewObject(
-    { environmentId: req.environmentId, bucket: req.bucket, key: req.key, ...accessFields(req.access) },
-    callOptions(options.signal)
-  );
+export function toPreview(res: PreviewObjectResponse): StoragePreview {
   return {
     kind: PREVIEW_NAMES[res.kind] ?? "none",
     contentType: res.contentType,
     size: Number(res.size),
     image: res.body.case === "image" ? { url: res.body.value.url, expiresAtMs: msOf(res.body.value.expiresAt) } : null,
     content: res.body.case === "content" ? res.body.value : null,
-  };
-}
-return { listBrowsableBuckets, listObjects, getObjectMetadata, presignObjectDownload, previewObject };
-}
-
-export const listBrowsableBuckets = (...args: Parameters<ReturnType<typeof createStorageBrowserApi>["listBrowsableBuckets"]>) => createStorageBrowserApi(client()).listBrowsableBuckets(...args);
-export const listObjects = (...args: Parameters<ReturnType<typeof createStorageBrowserApi>["listObjects"]>) => createStorageBrowserApi(client()).listObjects(...args);
-export const getObjectMetadata = (...args: Parameters<ReturnType<typeof createStorageBrowserApi>["getObjectMetadata"]>) => createStorageBrowserApi(client()).getObjectMetadata(...args);
-export const presignObjectDownload = (...args: Parameters<ReturnType<typeof createStorageBrowserApi>["presignObjectDownload"]>) => createStorageBrowserApi(client()).presignObjectDownload(...args);
-export const previewObject = (...args: Parameters<ReturnType<typeof createStorageBrowserApi>["previewObject"]>) => createStorageBrowserApi(client()).previewObject(...args);
-
-type StorageBrowserCalls = ReturnType<typeof createStorageBrowserApi>;
-
-/**
- * The same five calls on `transport`: a TransportScope's (the storage
- * browser's context default, StorageBrowserApiContext), or none for the
- * app's. The client is still resolved per call.
- */
-export function storageBrowserCallsOn(transport?: Transport): StorageBrowserCalls {
-  return {
-    listBrowsableBuckets: (...args) => createStorageBrowserApi(client(transport)).listBrowsableBuckets(...args),
-    listObjects: (...args) => createStorageBrowserApi(client(transport)).listObjects(...args),
-    getObjectMetadata: (...args) => createStorageBrowserApi(client(transport)).getObjectMetadata(...args),
-    presignObjectDownload: (...args) => createStorageBrowserApi(client(transport)).presignObjectDownload(...args),
-    previewObject: (...args) => createStorageBrowserApi(client(transport)).previewObject(...args),
   };
 }

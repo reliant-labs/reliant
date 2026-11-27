@@ -352,7 +352,7 @@ func TestStartRunThroughTheRealLauncherRecordsLineageAndIsIdempotent(t *testing.
 	assert.False(t, unattended, "an agent-started run must not be marked unattended")
 
 	// The launch left an agent.start_run event naming the parent.
-	event, err := repo.GetTriggerEventByChat(ctx, core.TriggerEventKindAgentStartRun, first.ChatID)
+	event, err := store.GetTriggerEventByChat(ctx, repo.ORM(), core.TriggerEventKindAgentStartRun, first.ChatID)
 	require.NoError(t, err)
 	assert.Equal(t, parentID, event.Payload["parent_chat_id"])
 	assert.Equal(t, parentID+":toolu_abc", event.DedupeKey)

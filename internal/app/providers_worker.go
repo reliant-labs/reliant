@@ -395,6 +395,7 @@ func NewWorkerChat(d WorkerChatDeps) (*WorkerChat, error) {
 		Logger:           d.Logger,
 		Config:           d.Config,
 		Repo:             d.DB,
+		TriggerReads:     store.NewTriggerEventExtStore(d.DB.ORM()),
 		Chats:            chataccess.NewFromORM(d.DB.ORM()),
 		ChatRows:         store.NewChatExtStore(d.DB.ORM()),
 		ChatViews:        store.NewChatsWithActivityExtStore(d.DB.ORM()),
@@ -545,7 +546,7 @@ func NewWorkerTrigger(d WorkerTriggerDeps) (*WorkerTrigger, error) {
 		Intake: triggers.NewIntake(triggers.NewStores(repo), temporalClient, v2workflow.SharedTaskQueue).
 			WithWorkflows(triggers.LaunchWorkflows{Repo: repo}).
 			WithPoolCatalogs(machinepool.Catalogs{R: store.NewMachinePoolExtStore(repo.ORM())}).
-			WithEnrichers(triggers.NewOriginEnricher(newWriteLedger(repo), repo, d.Integrations.GitHubAppSlug)),
+			WithEnrichers(triggers.NewOriginEnricher(newWriteLedger(repo), store.NewTriggerEventExtStore(repo.ORM()), d.Integrations.GitHubAppSlug)),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("trigger service: %w", err)
@@ -1083,7 +1084,7 @@ type WorkflowEventRelayDeps struct {
 //forge:root-only worker
 func NewWorkflowEventRelay(d WorkflowEventRelayDeps) (*workflowevent.Relay, error) {
 	return workflowevent.NewRelay(store.NewRunEventExtStore(d.DB.ORM()), d.Temporal.Client, v2workflow.SharedTaskQueue).
-		WithRoutes(d.DB), nil
+		WithRoutes(store.NewTriggerExtStore(d.DB.ORM())), nil
 }
 
 type TriggerDeliveryRelayDeps struct {
@@ -1117,7 +1118,7 @@ func NewTriggerDeliveryRelay(d TriggerDeliveryRelayDeps) (*TriggerDeliveryRelay,
 	intake := triggers.NewIntake(triggers.NewStores(repo), d.Temporal.Client, v2workflow.SharedTaskQueue).
 		WithWorkflows(triggers.LaunchWorkflows{Repo: repo}).
 		WithPoolCatalogs(machinepool.Catalogs{R: store.NewMachinePoolExtStore(repo.ORM())}).
-		WithEnrichers(triggers.NewOriginEnricher(newWriteLedger(repo), repo, d.Integrations.GitHubAppSlug))
+		WithEnrichers(triggers.NewOriginEnricher(newWriteLedger(repo), store.NewTriggerEventExtStore(repo.ORM()), d.Integrations.GitHubAppSlug))
 	var membership authz.Membership
 	if d.Membership != nil {
 		membership = d.Membership
