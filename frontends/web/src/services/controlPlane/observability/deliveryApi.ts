@@ -172,6 +172,26 @@ const FINDING_CODE_OF: Record<WireFindingCode, ReleaseFindingCode | null> = {
   [WireFindingCode.BROWSER_PAGE_LOAD]: null,
 };
 
+/**
+ * The site-audit codes by wire number: control-plane's release-health enum
+ * gains RELEASE_FINDING_CODE_SEO_REGRESSED = 10 and
+ * RELEASE_FINDING_CODE_A11Y_REGRESSED = 11 (control-plane#3877), which the
+ * vendored proto predates. TODO: switch to WireFindingCode.SEO_REGRESSED /
+ * .A11Y_REGRESSED (and fold these into FINDING_CODE_OF) after the next
+ * control-plane proto re-vendor.
+ */
+export const WIRE_FINDING_SEO_REGRESSED = 10;
+export const WIRE_FINDING_A11Y_REGRESSED = 11;
+const SITE_AUDIT_FINDING_CODE_OF: Record<number, ReleaseFindingCode> = {
+  [WIRE_FINDING_SEO_REGRESSED]: "seo_regressed",
+  [WIRE_FINDING_A11Y_REGRESSED]: "a11y_regressed",
+};
+
+/** A wire finding code as this console names it; null for one it does not know (a newer server). */
+export function findingCodeOf(code: number): ReleaseFindingCode | null {
+  return (FINDING_CODE_OF as Record<number, ReleaseFindingCode | null>)[code] ?? SITE_AUDIT_FINDING_CODE_OF[code] ?? null;
+}
+
 function windowOf(r: WireTimeRange | undefined): TimeWindow | null {
   return r?.start && r.end ? { startMs: msOf(r.start), endMs: msOf(r.end) } : null;
 }
@@ -202,7 +222,7 @@ export function mapReleaseHealth(res: GetReleaseHealthResponse): ReleaseHealth {
     workloadFindings: res.workloadFindings.map((w) => ({ workload: w.workload, restarts: countOf(w.restarts), lastTerminatedReason: w.lastTerminatedReason })),
     verdict: VERDICT_OF[res.verdict] ?? "unknown",
     findings: res.findings.map((f) => ({
-      code: FINDING_CODE_OF[f.code] ?? null,
+      code: findingCodeOf(f.code),
       service: f.service,
       value: f.value,
       threshold: f.threshold,
