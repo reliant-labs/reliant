@@ -229,7 +229,7 @@ export type ScenarioRpcHandlers =
   }
 
   // forge:section reliant.v1.GtmService
-  // forge:hash=bdd001250bd44cdadf4b1f1b59780a9305b0959844ac18051c02e5a51b269a07
+  // forge:hash=4cc77248dc9939e16c515ba167f201ddf47cbbedea7195349bec7b04f32714f5
   & {
     "reliant.v1.GtmService/GetGtmAccess"?: (req: import("@/gen/reliant/v1/gtm_pb").GetGtmAccessRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/gtm_pb").GetGtmAccessResponseSchema>>;
     "reliant.v1.GtmService/ListStrategies"?: (req: import("@/gen/reliant/v1/gtm_pb").ListStrategiesRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/gtm_pb").ListStrategiesResponseSchema>>;
@@ -248,11 +248,6 @@ export type ScenarioRpcHandlers =
     "reliant.v1.GtmService/GetAssetDownload"?: (req: import("@/gen/reliant/v1/gtm_pb").GetAssetDownloadRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/gtm_pb").GetAssetDownloadResponseSchema>>;
     "reliant.v1.GtmService/ListStrategyLibrary"?: (req: import("@/gen/reliant/v1/gtm_pb").ListStrategyLibraryRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/gtm_pb").ListStrategyLibraryResponseSchema>>;
     "reliant.v1.GtmService/GetStrategyLibraryEntry"?: (req: import("@/gen/reliant/v1/gtm_pb").GetStrategyLibraryEntryRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/gtm_pb").GetStrategyLibraryEntryResponseSchema>>;
-    "reliant.v1.GtmService/ImportStrategyLibrary"?: (req: import("@/gen/reliant/v1/gtm_pb").ImportStrategyLibraryRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/gtm_pb").ImportStrategyLibraryResponseSchema>>;
-    "reliant.v1.GtmService/ListLibraryImports"?: (req: import("@/gen/reliant/v1/gtm_pb").ListLibraryImportsRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/gtm_pb").ListLibraryImportsResponseSchema>>;
-    "reliant.v1.GtmService/ListLibraryPruneRequests"?: (req: import("@/gen/reliant/v1/gtm_pb").ListLibraryPruneRequestsRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/gtm_pb").ListLibraryPruneRequestsResponseSchema>>;
-    "reliant.v1.GtmService/ConfirmLibraryPrune"?: (req: import("@/gen/reliant/v1/gtm_pb").ConfirmLibraryPruneRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/gtm_pb").ConfirmLibraryPruneResponseSchema>>;
-    "reliant.v1.GtmService/CancelLibraryPrune"?: (req: import("@/gen/reliant/v1/gtm_pb").CancelLibraryPruneRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/gtm_pb").CancelLibraryPruneResponseSchema>>;
     "reliant.v1.GtmService/UseLibraryStrategy"?: (req: import("@/gen/reliant/v1/gtm_pb").UseLibraryStrategyRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/gtm_pb").UseLibraryStrategyResponseSchema>>;
     "reliant.v1.GtmService/ListIdeas"?: (req: import("@/gen/reliant/v1/gtm_pb").ListIdeasRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/gtm_pb").ListIdeasResponseSchema>>;
     "reliant.v1.GtmService/GetIdea"?: (req: import("@/gen/reliant/v1/gtm_pb").GetIdeaRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/gtm_pb").GetIdeaResponseSchema>>;

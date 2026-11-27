@@ -18302,16 +18302,6 @@
       "proto_file": "reliant/v1/gtm.proto",
       "methods": [
         {
-          "id": "reliant.v1.GtmService/CancelLibraryPrune",
-          "name": "CancelLibraryPrune",
-          "input": "reliant.v1.CancelLibraryPruneRequest",
-          "output": "reliant.v1.CancelLibraryPruneResponse",
-          "client_streaming": false,
-          "server_streaming": false,
-          "idempotency": "UNKNOWN",
-          "auth_required": true
-        },
-        {
           "id": "reliant.v1.GtmService/CheckClaims",
           "name": "CheckClaims",
           "input": "reliant.v1.CheckClaimsRequest",
@@ -18326,16 +18316,6 @@
           "name": "ConfirmAssetUpload",
           "input": "reliant.v1.ConfirmAssetUploadRequest",
           "output": "reliant.v1.ConfirmAssetUploadResponse",
-          "client_streaming": false,
-          "server_streaming": false,
-          "idempotency": "UNKNOWN",
-          "auth_required": true
-        },
-        {
-          "id": "reliant.v1.GtmService/ConfirmLibraryPrune",
-          "name": "ConfirmLibraryPrune",
-          "input": "reliant.v1.ConfirmLibraryPruneRequest",
-          "output": "reliant.v1.ConfirmLibraryPruneResponse",
           "client_streaming": false,
           "server_streaming": false,
           "idempotency": "UNKNOWN",
@@ -18512,16 +18492,6 @@
           "auth_required": true
         },
         {
-          "id": "reliant.v1.GtmService/ImportStrategyLibrary",
-          "name": "ImportStrategyLibrary",
-          "input": "reliant.v1.ImportStrategyLibraryRequest",
-          "output": "reliant.v1.ImportStrategyLibraryResponse",
-          "client_streaming": false,
-          "server_streaming": false,
-          "idempotency": "UNKNOWN",
-          "auth_required": true
-        },
-        {
           "id": "reliant.v1.GtmService/ListAssets",
           "name": "ListAssets",
           "input": "reliant.v1.ListAssetsRequest",
@@ -18576,26 +18546,6 @@
           "name": "ListItems",
           "input": "reliant.v1.ListItemsRequest",
           "output": "reliant.v1.ListItemsResponse",
-          "client_streaming": false,
-          "server_streaming": false,
-          "idempotency": "NO_SIDE_EFFECTS",
-          "auth_required": true
-        },
-        {
-          "id": "reliant.v1.GtmService/ListLibraryImports",
-          "name": "ListLibraryImports",
-          "input": "reliant.v1.ListLibraryImportsRequest",
-          "output": "reliant.v1.ListLibraryImportsResponse",
-          "client_streaming": false,
-          "server_streaming": false,
-          "idempotency": "NO_SIDE_EFFECTS",
-          "auth_required": true
-        },
-        {
-          "id": "reliant.v1.GtmService/ListLibraryPruneRequests",
-          "name": "ListLibraryPruneRequests",
-          "input": "reliant.v1.ListLibraryPruneRequestsRequest",
-          "output": "reliant.v1.ListLibraryPruneRequestsResponse",
           "client_streaming": false,
           "server_streaming": false,
           "idempotency": "NO_SIDE_EFFECTS",
@@ -19076,109 +19026,6 @@
             }
           },
           {
-            "Name": "ImportStrategyLibrary",
-            "InputType": "ImportStrategyLibraryRequest",
-            "OutputType": "ImportStrategyLibraryResponse",
-            "ClientStreaming": false,
-            "ServerStreaming": false,
-            "AuthRequired": true,
-            "Errors": null,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
-            "InputTypeFQ": "reliant.v1.ImportStrategyLibraryRequest",
-            "OutputTypeFQ": "reliant.v1.ImportStrategyLibraryResponse",
-            "InputProtoFile": "reliant/v1/gtm.proto",
-            "OutputProtoFile": "reliant/v1/gtm.proto",
-            "Activity": {
-              "Mutating": true,
-              "Declared": true,
-              "Verb": "import",
-              "TargetKind": "gtm_strategy_library",
-              "Writer": "INTERCEPTOR"
-            }
-          },
-          {
-            "Name": "ListLibraryImports",
-            "InputType": "ListLibraryImportsRequest",
-            "OutputType": "ListLibraryImportsResponse",
-            "ClientStreaming": false,
-            "ServerStreaming": false,
-            "AuthRequired": true,
-            "Errors": null,
-            "NoSideEffects": true,
-            "Idempotency": "NO_SIDE_EFFECTS",
-            "InputTypeFQ": "reliant.v1.ListLibraryImportsRequest",
-            "OutputTypeFQ": "reliant.v1.ListLibraryImportsResponse",
-            "InputProtoFile": "reliant/v1/gtm.proto",
-            "OutputProtoFile": "reliant/v1/gtm.proto",
-            "Activity": {
-              "Mutating": false,
-              "Declared": true,
-              "None": "read-only"
-            }
-          },
-          {
-            "Name": "ListLibraryPruneRequests",
-            "InputType": "ListLibraryPruneRequestsRequest",
-            "OutputType": "ListLibraryPruneRequestsResponse",
-            "ClientStreaming": false,
-            "ServerStreaming": false,
-            "AuthRequired": true,
-            "Errors": null,
-            "NoSideEffects": true,
-            "Idempotency": "NO_SIDE_EFFECTS",
-            "InputTypeFQ": "reliant.v1.ListLibraryPruneRequestsRequest",
-            "OutputTypeFQ": "reliant.v1.ListLibraryPruneRequestsResponse",
-            "InputProtoFile": "reliant/v1/gtm.proto",
-            "OutputProtoFile": "reliant/v1/gtm.proto",
-            "Activity": {
-              "Mutating": false,
-              "Declared": true,
-              "None": "read-only"
-            }
-          },
-          {
-            "Name": "ConfirmLibraryPrune",
-            "InputType": "ConfirmLibraryPruneRequest",
-            "OutputType": "ConfirmLibraryPruneResponse",
-            "ClientStreaming": false,
-            "ServerStreaming": false,
-            "AuthRequired": true,
-            "Errors": null,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
-            "InputTypeFQ": "reliant.v1.ConfirmLibraryPruneRequest",
-            "OutputTypeFQ": "reliant.v1.ConfirmLibraryPruneResponse",
-            "InputProtoFile": "reliant/v1/gtm.proto",
-            "OutputProtoFile": "reliant/v1/gtm.proto",
-            "Activity": {
-              "Mutating": true,
-              "Declared": true,
-              "Verb": "confirm_prune",
-              "TargetKind": "gtm_library_prune_request",
-              "Writer": "INTERCEPTOR"
-            }
-          },
-          {
-            "Name": "CancelLibraryPrune",
-            "InputType": "CancelLibraryPruneRequest",
-            "OutputType": "CancelLibraryPruneResponse",
-            "ClientStreaming": false,
-            "ServerStreaming": false,
-            "AuthRequired": true,
-            "Errors": null,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
-            "InputTypeFQ": "reliant.v1.CancelLibraryPruneRequest",
-            "OutputTypeFQ": "reliant.v1.CancelLibraryPruneResponse",
-            "InputProtoFile": "reliant/v1/gtm.proto",
-            "OutputProtoFile": "reliant/v1/gtm.proto",
-            "Activity": {
-              "Mutating": true,
-              "Declared": true,
-              "Verb": "cancel_prune",
-              "TargetKind": "gtm_library_prune_request",
-              "Writer": "INTERCEPTOR"
-            }
-          },
-          {
             "Name": "UseLibraryStrategy",
             "InputType": "UseLibraryStrategyRequest",
             "OutputType": "UseLibraryStrategyResponse",
@@ -19593,26 +19440,6 @@
         "ProtoFile": "reliant/v1/gtm.proto",
         "ModulePath": "github.com/reliant-labs/reliant",
         "Messages": {
-          "CancelLibraryPruneRequest": [
-            {
-              "Name": "org_id",
-              "ProtoType": "string",
-              "IsOptional": false
-            },
-            {
-              "Name": "request_id",
-              "ProtoType": "string",
-              "IsOptional": false
-            }
-          ],
-          "CancelLibraryPruneResponse": [
-            {
-              "Name": "request",
-              "ProtoType": "message",
-              "IsOptional": false,
-              "MessageType": "reliant.v1.GtmLibraryPruneRequest"
-            }
-          ],
           "CheckClaimsRequest": [
             {
               "Name": "org_id",
@@ -19656,31 +19483,6 @@
               "ProtoType": "message",
               "IsOptional": false,
               "MessageType": "reliant.v1.GtmAsset"
-            }
-          ],
-          "ConfirmLibraryPruneRequest": [
-            {
-              "Name": "org_id",
-              "ProtoType": "string",
-              "IsOptional": false
-            },
-            {
-              "Name": "request_id",
-              "ProtoType": "string",
-              "IsOptional": false
-            }
-          ],
-          "ConfirmLibraryPruneResponse": [
-            {
-              "Name": "removed",
-              "ProtoType": "int32",
-              "IsOptional": false
-            },
-            {
-              "Name": "request",
-              "ProtoType": "message",
-              "IsOptional": false,
-              "MessageType": "reliant.v1.GtmLibraryPruneRequest"
             }
           ],
           "CreateAssetUploadRequest": [
@@ -19885,6 +19687,22 @@
             },
             {
               "Name": "campaign_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "library_key",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "tailor_answers",
+              "ProtoType": "[]message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.GtmTailorAnswer"
+            },
+            {
+              "Name": "suggested_workflow_md",
               "ProtoType": "string",
               "IsOptional": false
             }
@@ -20254,66 +20072,6 @@
               "IsOptional": false
             }
           ],
-          "ImportStrategyLibraryRequest": [
-            {
-              "Name": "org_id",
-              "ProtoType": "string",
-              "IsOptional": false
-            },
-            {
-              "Name": "entries",
-              "ProtoType": "[]message",
-              "IsOptional": false,
-              "MessageType": "reliant.v1.GtmStrategyLibraryEntry"
-            },
-            {
-              "Name": "source_revision",
-              "ProtoType": "string",
-              "IsOptional": false
-            },
-            {
-              "Name": "prune",
-              "ProtoType": "bool",
-              "IsOptional": false
-            },
-            {
-              "Name": "all_keys",
-              "ProtoType": "[]string",
-              "IsOptional": false
-            }
-          ],
-          "ImportStrategyLibraryResponse": [
-            {
-              "Name": "created",
-              "ProtoType": "int32",
-              "IsOptional": false
-            },
-            {
-              "Name": "updated",
-              "ProtoType": "int32",
-              "IsOptional": false
-            },
-            {
-              "Name": "unchanged",
-              "ProtoType": "int32",
-              "IsOptional": false
-            },
-            {
-              "Name": "pruned",
-              "ProtoType": "int32",
-              "IsOptional": false
-            },
-            {
-              "Name": "prune_request_id",
-              "ProtoType": "string",
-              "IsOptional": false
-            },
-            {
-              "Name": "would_remove",
-              "ProtoType": "[]string",
-              "IsOptional": false
-            }
-          ],
           "ListAssetsRequest": [
             {
               "Name": "org_id",
@@ -20571,71 +20329,6 @@
               "IsOptional": false
             }
           ],
-          "ListLibraryImportsRequest": [
-            {
-              "Name": "org_id",
-              "ProtoType": "string",
-              "IsOptional": false
-            },
-            {
-              "Name": "page_size",
-              "ProtoType": "int32",
-              "IsOptional": false
-            },
-            {
-              "Name": "page_token",
-              "ProtoType": "string",
-              "IsOptional": false
-            }
-          ],
-          "ListLibraryImportsResponse": [
-            {
-              "Name": "imports",
-              "ProtoType": "[]message",
-              "IsOptional": false,
-              "MessageType": "reliant.v1.GtmLibraryImport"
-            },
-            {
-              "Name": "next_page_token",
-              "ProtoType": "string",
-              "IsOptional": false
-            }
-          ],
-          "ListLibraryPruneRequestsRequest": [
-            {
-              "Name": "org_id",
-              "ProtoType": "string",
-              "IsOptional": false
-            },
-            {
-              "Name": "status",
-              "ProtoType": "enum",
-              "IsOptional": true
-            },
-            {
-              "Name": "page_size",
-              "ProtoType": "int32",
-              "IsOptional": false
-            },
-            {
-              "Name": "page_token",
-              "ProtoType": "string",
-              "IsOptional": false
-            }
-          ],
-          "ListLibraryPruneRequestsResponse": [
-            {
-              "Name": "requests",
-              "ProtoType": "[]message",
-              "IsOptional": false,
-              "MessageType": "reliant.v1.GtmLibraryPruneRequest"
-            },
-            {
-              "Name": "next_page_token",
-              "ProtoType": "string",
-              "IsOptional": false
-            }
-          ],
           "ListStrategiesRequest": [
             {
               "Name": "org_id",
@@ -20679,16 +20372,31 @@
             },
             {
               "Name": "category",
-              "ProtoType": "enum",
-              "IsOptional": true
+              "ProtoType": "[]enum",
+              "IsOptional": false
             },
             {
-              "Name": "depth",
-              "ProtoType": "enum",
-              "IsOptional": true
+              "Name": "business_types",
+              "ProtoType": "[]enum",
+              "IsOptional": false
+            },
+            {
+              "Name": "business_models",
+              "ProtoType": "[]enum",
+              "IsOptional": false
             },
             {
               "Name": "stage",
+              "ProtoType": "string",
+              "IsOptional": true
+            },
+            {
+              "Name": "objective",
+              "ProtoType": "string",
+              "IsOptional": true
+            },
+            {
+              "Name": "effort",
               "ProtoType": "string",
               "IsOptional": true
             },
@@ -20698,18 +20406,18 @@
               "IsOptional": true
             },
             {
-              "Name": "difficulty",
-              "ProtoType": "string",
-              "IsOptional": true
-            },
-            {
-              "Name": "fit",
-              "ProtoType": "string",
-              "IsOptional": true
-            },
-            {
               "Name": "query",
               "ProtoType": "string",
+              "IsOptional": true
+            },
+            {
+              "Name": "fits_my_business",
+              "ProtoType": "bool",
+              "IsOptional": true
+            },
+            {
+              "Name": "diverse",
+              "ProtoType": "bool",
               "IsOptional": true
             },
             {
@@ -20982,6 +20690,22 @@
               "Name": "campaign_id",
               "ProtoType": "string",
               "IsOptional": true
+            },
+            {
+              "Name": "library_key",
+              "ProtoType": "string",
+              "IsOptional": true
+            },
+            {
+              "Name": "tailor_answers",
+              "ProtoType": "message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.GtmTailorAnswerList"
+            },
+            {
+              "Name": "suggested_workflow_md",
+              "ProtoType": "string",
+              "IsOptional": true
             }
           ],
           "UpdateIdeaResponse": [
@@ -21098,6 +20822,16 @@
             {
               "Name": "audiences",
               "ProtoType": "[]string",
+              "IsOptional": false
+            },
+            {
+              "Name": "business_type",
+              "ProtoType": "enum",
+              "IsOptional": false
+            },
+            {
+              "Name": "business_models",
+              "ProtoType": "[]enum",
               "IsOptional": false
             }
           ],
@@ -21279,29 +21013,6 @@
         },
         "Audience": "user",
         "Schemas": {
-          "reliant.v1.CancelLibraryPruneRequest": [
-            {
-              "name": "org_id",
-              "kind": "string",
-              "validate": {
-                "required": true
-              }
-            },
-            {
-              "name": "request_id",
-              "kind": "string",
-              "validate": {
-                "required": true
-              }
-            }
-          ],
-          "reliant.v1.CancelLibraryPruneResponse": [
-            {
-              "name": "request",
-              "kind": "message",
-              "type_name": "reliant.v1.GtmLibraryPruneRequest"
-            }
-          ],
           "reliant.v1.CheckClaimsRequest": [
             {
               "name": "org_id",
@@ -21351,33 +21062,6 @@
               "name": "asset",
               "kind": "message",
               "type_name": "reliant.v1.GtmAsset"
-            }
-          ],
-          "reliant.v1.ConfirmLibraryPruneRequest": [
-            {
-              "name": "org_id",
-              "kind": "string",
-              "validate": {
-                "required": true
-              }
-            },
-            {
-              "name": "request_id",
-              "kind": "string",
-              "validate": {
-                "required": true
-              }
-            }
-          ],
-          "reliant.v1.ConfirmLibraryPruneResponse": [
-            {
-              "name": "removed",
-              "kind": "int32"
-            },
-            {
-              "name": "request",
-              "kind": "message",
-              "type_name": "reliant.v1.GtmLibraryPruneRequest"
             }
           ],
           "reliant.v1.CreateAssetUploadRequest": [
@@ -21610,6 +21294,26 @@
             {
               "name": "campaign_id",
               "kind": "string"
+            },
+            {
+              "name": "library_key",
+              "kind": "string",
+              "validate": {
+                "pattern": "^([a-z0-9][a-z0-9_-]{0,127})?$"
+              }
+            },
+            {
+              "name": "tailor_answers",
+              "kind": "message",
+              "type_name": "reliant.v1.GtmTailorAnswer",
+              "repeated": true
+            },
+            {
+              "name": "suggested_workflow_md",
+              "kind": "string",
+              "validate": {
+                "max_len": 20000
+              }
             }
           ],
           "reliant.v1.CreateIdeaResponse": [
@@ -22445,6 +22149,20 @@
               "name": "updated_at",
               "kind": "message",
               "type_name": "google.protobuf.Timestamp"
+            },
+            {
+              "name": "library_key",
+              "kind": "string"
+            },
+            {
+              "name": "tailor_answers",
+              "kind": "message",
+              "type_name": "reliant.v1.GtmTailorAnswer",
+              "repeated": true
+            },
+            {
+              "name": "suggested_workflow_md",
+              "kind": "string"
             }
           ],
           "reliant.v1.GtmItem": [
@@ -22555,116 +22273,6 @@
               "kind": "int32"
             }
           ],
-          "reliant.v1.GtmLibraryImport": [
-            {
-              "name": "id",
-              "kind": "string"
-            },
-            {
-              "name": "org_id",
-              "kind": "string"
-            },
-            {
-              "name": "actor_user_id",
-              "kind": "string"
-            },
-            {
-              "name": "credential_kind",
-              "kind": "enum",
-              "type_name": "reliant.v1.GtmCredentialKind"
-            },
-            {
-              "name": "source_revision",
-              "kind": "string"
-            },
-            {
-              "name": "created",
-              "kind": "int32"
-            },
-            {
-              "name": "updated",
-              "kind": "int32"
-            },
-            {
-              "name": "unchanged",
-              "kind": "int32"
-            },
-            {
-              "name": "pruned",
-              "kind": "int32"
-            },
-            {
-              "name": "prune_request_id",
-              "kind": "string"
-            },
-            {
-              "name": "created_at",
-              "kind": "message",
-              "type_name": "google.protobuf.Timestamp"
-            }
-          ],
-          "reliant.v1.GtmLibraryPruneRequest": [
-            {
-              "name": "id",
-              "kind": "string"
-            },
-            {
-              "name": "org_id",
-              "kind": "string"
-            },
-            {
-              "name": "requested_by",
-              "kind": "string"
-            },
-            {
-              "name": "credential_kind",
-              "kind": "enum",
-              "type_name": "reliant.v1.GtmCredentialKind"
-            },
-            {
-              "name": "source_revision",
-              "kind": "string"
-            },
-            {
-              "name": "remove_keys",
-              "kind": "string",
-              "repeated": true
-            },
-            {
-              "name": "status",
-              "kind": "enum",
-              "type_name": "reliant.v1.GtmPruneRequestStatus"
-            },
-            {
-              "name": "decided_by",
-              "kind": "string"
-            },
-            {
-              "name": "decided_at",
-              "kind": "message",
-              "type_name": "google.protobuf.Timestamp"
-            },
-            {
-              "name": "created_at",
-              "kind": "message",
-              "type_name": "google.protobuf.Timestamp"
-            },
-            {
-              "name": "expires_at",
-              "kind": "message",
-              "type_name": "google.protobuf.Timestamp"
-            }
-          ],
-          "reliant.v1.GtmLibraryStep": [
-            {
-              "name": "who",
-              "kind": "string"
-            },
-            {
-              "name": "title",
-              "kind": "string"
-            }
-          ],
           "reliant.v1.GtmPositioning": [
             {
               "name": "org_id",
@@ -22691,6 +22299,17 @@
               "name": "updated_at",
               "kind": "message",
               "type_name": "google.protobuf.Timestamp"
+            },
+            {
+              "name": "business_type",
+              "kind": "enum",
+              "type_name": "reliant.v1.GtmBusinessType"
+            },
+            {
+              "name": "business_models",
+              "kind": "enum",
+              "type_name": "reliant.v1.GtmBusinessModel",
+              "repeated": true
             }
           ],
           "reliant.v1.GtmStrategy": [
@@ -22770,11 +22389,6 @@
               "type_name": "reliant.v1.GtmStrategyCategory"
             },
             {
-              "name": "depth",
-              "kind": "enum",
-              "type_name": "reliant.v1.GtmLibraryDepth"
-            },
-            {
               "name": "name",
               "kind": "string"
             },
@@ -22783,11 +22397,32 @@
               "kind": "string"
             },
             {
-              "name": "icon",
+              "name": "why_it_works_md",
               "kind": "string"
             },
             {
-              "name": "stage",
+              "name": "business_types",
+              "kind": "enum",
+              "type_name": "reliant.v1.GtmBusinessType",
+              "repeated": true
+            },
+            {
+              "name": "business_models",
+              "kind": "enum",
+              "type_name": "reliant.v1.GtmBusinessModel",
+              "repeated": true
+            },
+            {
+              "name": "stages",
+              "kind": "string",
+              "repeated": true
+            },
+            {
+              "name": "objective",
+              "kind": "string"
+            },
+            {
+              "name": "effort",
               "kind": "string"
             },
             {
@@ -22795,53 +22430,17 @@
               "kind": "string"
             },
             {
-              "name": "cost_note",
-              "kind": "string"
-            },
-            {
-              "name": "difficulty",
-              "kind": "string"
-            },
-            {
-              "name": "level",
-              "kind": "string"
-            },
-            {
-              "name": "objective",
-              "kind": "string"
-            },
-            {
-              "name": "north_star",
-              "kind": "string"
-            },
-            {
-              "name": "hypothesis_md",
-              "kind": "string"
-            },
-            {
-              "name": "hours",
-              "kind": "int32"
-            },
-            {
               "name": "signal_days",
               "kind": "int32"
             },
             {
-              "name": "window_days",
-              "kind": "int32"
-            },
-            {
-              "name": "launch_days",
-              "kind": "int32"
-            },
-            {
-              "name": "expected_delta",
-              "kind": "double"
-            },
-            {
-              "name": "lifecycle",
+              "name": "tailor_questions",
               "kind": "string",
               "repeated": true
+            },
+            {
+              "name": "suggested_workflow_md",
+              "kind": "string"
             },
             {
               "name": "channel_types",
@@ -22849,126 +22448,33 @@
               "repeated": true
             },
             {
-              "name": "integrations",
-              "kind": "string",
-              "repeated": true
-            },
-            {
-              "name": "fits",
-              "kind": "string",
-              "repeated": true
-            },
-            {
-              "name": "prerequisites",
-              "kind": "string",
-              "repeated": true
-            },
-            {
               "name": "kpis",
               "kind": "string",
               "repeated": true
-            },
-            {
-              "name": "tactics",
-              "kind": "string",
-              "repeated": true
-            },
-            {
-              "name": "automates",
-              "kind": "string",
-              "repeated": true
-            },
-            {
-              "name": "experiments",
-              "kind": "string",
-              "repeated": true
-            },
-            {
-              "name": "stop_when",
-              "kind": "string",
-              "repeated": true
-            },
-            {
-              "name": "steps",
-              "kind": "message",
-              "type_name": "reliant.v1.GtmLibraryStep",
-              "repeated": true
-            },
-            {
-              "name": "extra",
-              "kind": "message",
-              "type_name": "google.protobuf.Struct"
-            },
-            {
-              "name": "source_revision",
-              "kind": "string"
-            },
-            {
-              "name": "imported_at",
-              "kind": "message",
-              "type_name": "google.protobuf.Timestamp"
-            },
-            {
-              "name": "imported_by",
-              "kind": "string"
             }
           ],
-          "reliant.v1.ImportStrategyLibraryRequest": [
+          "reliant.v1.GtmTailorAnswer": [
             {
-              "name": "org_id",
-              "kind": "string",
-              "validate": {
-                "required": true
-              }
-            },
-            {
-              "name": "entries",
-              "kind": "message",
-              "type_name": "reliant.v1.GtmStrategyLibraryEntry",
-              "repeated": true
-            },
-            {
-              "name": "source_revision",
+              "name": "question",
               "kind": "string",
               "validate": {
                 "min_len": 1,
-                "max_len": 200
+                "max_len": 2000
               }
             },
             {
-              "name": "prune",
-              "kind": "bool"
-            },
-            {
-              "name": "all_keys",
+              "name": "answer",
               "kind": "string",
-              "repeated": true
+              "validate": {
+                "max_len": 2000
+              }
             }
           ],
-          "reliant.v1.ImportStrategyLibraryResponse": [
+          "reliant.v1.GtmTailorAnswerList": [
             {
-              "name": "created",
-              "kind": "int32"
-            },
-            {
-              "name": "updated",
-              "kind": "int32"
-            },
-            {
-              "name": "unchanged",
-              "kind": "int32"
-            },
-            {
-              "name": "pruned",
-              "kind": "int32"
-            },
-            {
-              "name": "prune_request_id",
-              "kind": "string"
-            },
-            {
-              "name": "would_remove",
-              "kind": "string",
+              "name": "answers",
+              "kind": "message",
+              "type_name": "reliant.v1.GtmTailorAnswer",
               "repeated": true
             }
           ],
@@ -23259,78 +22765,6 @@
               "kind": "string"
             }
           ],
-          "reliant.v1.ListLibraryImportsRequest": [
-            {
-              "name": "org_id",
-              "kind": "string",
-              "validate": {
-                "required": true
-              }
-            },
-            {
-              "name": "page_size",
-              "kind": "int32",
-              "validate": {
-                "gte": "0",
-                "lte": "200"
-              }
-            },
-            {
-              "name": "page_token",
-              "kind": "string"
-            }
-          ],
-          "reliant.v1.ListLibraryImportsResponse": [
-            {
-              "name": "imports",
-              "kind": "message",
-              "type_name": "reliant.v1.GtmLibraryImport",
-              "repeated": true
-            },
-            {
-              "name": "next_page_token",
-              "kind": "string"
-            }
-          ],
-          "reliant.v1.ListLibraryPruneRequestsRequest": [
-            {
-              "name": "org_id",
-              "kind": "string",
-              "validate": {
-                "required": true
-              }
-            },
-            {
-              "name": "status",
-              "kind": "enum",
-              "type_name": "reliant.v1.GtmPruneRequestStatus",
-              "optional": true
-            },
-            {
-              "name": "page_size",
-              "kind": "int32",
-              "validate": {
-                "gte": "0",
-                "lte": "200"
-              }
-            },
-            {
-              "name": "page_token",
-              "kind": "string"
-            }
-          ],
-          "reliant.v1.ListLibraryPruneRequestsResponse": [
-            {
-              "name": "requests",
-              "kind": "message",
-              "type_name": "reliant.v1.GtmLibraryPruneRequest",
-              "repeated": true
-            },
-            {
-              "name": "next_page_token",
-              "kind": "string"
-            }
-          ],
           "reliant.v1.ListStrategiesRequest": [
             {
               "name": "org_id",
@@ -23382,13 +22816,19 @@
               "name": "category",
               "kind": "enum",
               "type_name": "reliant.v1.GtmStrategyCategory",
-              "optional": true
+              "repeated": true
             },
             {
-              "name": "depth",
+              "name": "business_types",
               "kind": "enum",
-              "type_name": "reliant.v1.GtmLibraryDepth",
-              "optional": true
+              "type_name": "reliant.v1.GtmBusinessType",
+              "repeated": true
+            },
+            {
+              "name": "business_models",
+              "kind": "enum",
+              "type_name": "reliant.v1.GtmBusinessModel",
+              "repeated": true
             },
             {
               "name": "stage",
@@ -23396,17 +22836,17 @@
               "optional": true
             },
             {
+              "name": "objective",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "effort",
+              "kind": "string",
+              "optional": true
+            },
+            {
               "name": "cost",
-              "kind": "string",
-              "optional": true
-            },
-            {
-              "name": "difficulty",
-              "kind": "string",
-              "optional": true
-            },
-            {
-              "name": "fit",
               "kind": "string",
               "optional": true
             },
@@ -23417,6 +22857,16 @@
               "validate": {
                 "max_len": 200
               }
+            },
+            {
+              "name": "fits_my_business",
+              "kind": "bool",
+              "optional": true
+            },
+            {
+              "name": "diverse",
+              "kind": "bool",
+              "optional": true
             },
             {
               "name": "page_size",
@@ -23732,6 +23182,27 @@
               "name": "campaign_id",
               "kind": "string",
               "optional": true
+            },
+            {
+              "name": "library_key",
+              "kind": "string",
+              "optional": true,
+              "validate": {
+                "pattern": "^([a-z0-9][a-z0-9_-]{0,127})?$"
+              }
+            },
+            {
+              "name": "tailor_answers",
+              "kind": "message",
+              "type_name": "reliant.v1.GtmTailorAnswerList"
+            },
+            {
+              "name": "suggested_workflow_md",
+              "kind": "string",
+              "optional": true,
+              "validate": {
+                "max_len": 20000
+              }
             }
           ],
           "reliant.v1.UpdateIdeaResponse": [
@@ -23862,6 +23333,17 @@
             {
               "name": "audiences",
               "kind": "string",
+              "repeated": true
+            },
+            {
+              "name": "business_type",
+              "kind": "enum",
+              "type_name": "reliant.v1.GtmBusinessType"
+            },
+            {
+              "name": "business_models",
+              "kind": "enum",
+              "type_name": "reliant.v1.GtmBusinessModel",
               "repeated": true
             }
           ],
@@ -24072,14 +23554,10 @@
           ]
         },
         "SchemaFiles": {
-          "reliant.v1.CancelLibraryPruneRequest": "reliant/v1/gtm.proto",
-          "reliant.v1.CancelLibraryPruneResponse": "reliant/v1/gtm.proto",
           "reliant.v1.CheckClaimsRequest": "reliant/v1/gtm.proto",
           "reliant.v1.CheckClaimsResponse": "reliant/v1/gtm.proto",
           "reliant.v1.ConfirmAssetUploadRequest": "reliant/v1/gtm.proto",
           "reliant.v1.ConfirmAssetUploadResponse": "reliant/v1/gtm.proto",
-          "reliant.v1.ConfirmLibraryPruneRequest": "reliant/v1/gtm.proto",
-          "reliant.v1.ConfirmLibraryPruneResponse": "reliant/v1/gtm.proto",
           "reliant.v1.CreateAssetUploadRequest": "reliant/v1/gtm.proto",
           "reliant.v1.CreateAssetUploadResponse": "reliant/v1/gtm.proto",
           "reliant.v1.CreateCampaignRequest": "reliant/v1/gtm.proto",
@@ -24129,14 +23607,11 @@
           "reliant.v1.GtmItem": "reliant/v1/gtm.proto",
           "reliant.v1.GtmItemFormatList": "reliant/v1/gtm.proto",
           "reliant.v1.GtmItemStatusCount": "reliant/v1/gtm.proto",
-          "reliant.v1.GtmLibraryImport": "reliant/v1/gtm.proto",
-          "reliant.v1.GtmLibraryPruneRequest": "reliant/v1/gtm.proto",
-          "reliant.v1.GtmLibraryStep": "reliant/v1/gtm.proto",
           "reliant.v1.GtmPositioning": "reliant/v1/gtm.proto",
           "reliant.v1.GtmStrategy": "reliant/v1/gtm.proto",
           "reliant.v1.GtmStrategyLibraryEntry": "reliant/v1/gtm.proto",
-          "reliant.v1.ImportStrategyLibraryRequest": "reliant/v1/gtm.proto",
-          "reliant.v1.ImportStrategyLibraryResponse": "reliant/v1/gtm.proto",
+          "reliant.v1.GtmTailorAnswer": "reliant/v1/gtm.proto",
+          "reliant.v1.GtmTailorAnswerList": "reliant/v1/gtm.proto",
           "reliant.v1.ListAssetsRequest": "reliant/v1/gtm.proto",
           "reliant.v1.ListAssetsResponse": "reliant/v1/gtm.proto",
           "reliant.v1.ListCampaignsRequest": "reliant/v1/gtm.proto",
@@ -24149,10 +23624,6 @@
           "reliant.v1.ListIdeasResponse": "reliant/v1/gtm.proto",
           "reliant.v1.ListItemsRequest": "reliant/v1/gtm.proto",
           "reliant.v1.ListItemsResponse": "reliant/v1/gtm.proto",
-          "reliant.v1.ListLibraryImportsRequest": "reliant/v1/gtm.proto",
-          "reliant.v1.ListLibraryImportsResponse": "reliant/v1/gtm.proto",
-          "reliant.v1.ListLibraryPruneRequestsRequest": "reliant/v1/gtm.proto",
-          "reliant.v1.ListLibraryPruneRequestsResponse": "reliant/v1/gtm.proto",
           "reliant.v1.ListStrategiesRequest": "reliant/v1/gtm.proto",
           "reliant.v1.ListStrategiesResponse": "reliant/v1/gtm.proto",
           "reliant.v1.ListStrategyLibraryRequest": "reliant/v1/gtm.proto",
@@ -24189,6 +23660,30 @@
             "GTM_ASSET_STATUS_UNSPECIFIED",
             "GTM_ASSET_STATUS_PENDING",
             "GTM_ASSET_STATUS_READY"
+          ],
+          "reliant.v1.GtmBusinessModel": [
+            "GTM_BUSINESS_MODEL_UNSPECIFIED",
+            "GTM_BUSINESS_MODEL_SUBSCRIPTION",
+            "GTM_BUSINESS_MODEL_USAGE_BASED",
+            "GTM_BUSINESS_MODEL_ONE_TIME",
+            "GTM_BUSINESS_MODEL_FREEMIUM",
+            "GTM_BUSINESS_MODEL_FREE_OSS",
+            "GTM_BUSINESS_MODEL_MARKETPLACE",
+            "GTM_BUSINESS_MODEL_SERVICES",
+            "GTM_BUSINESS_MODEL_AD_SUPPORTED"
+          ],
+          "reliant.v1.GtmBusinessType": [
+            "GTM_BUSINESS_TYPE_UNSPECIFIED",
+            "GTM_BUSINESS_TYPE_B2B_SAAS",
+            "GTM_BUSINESS_TYPE_B2C_APP",
+            "GTM_BUSINESS_TYPE_DEVELOPER_TOOLS",
+            "GTM_BUSINESS_TYPE_ECOMMERCE",
+            "GTM_BUSINESS_TYPE_MARKETPLACE",
+            "GTM_BUSINESS_TYPE_AGENCY_SERVICES",
+            "GTM_BUSINESS_TYPE_CREATOR_MEDIA",
+            "GTM_BUSINESS_TYPE_LOCAL_BUSINESS",
+            "GTM_BUSINESS_TYPE_OPEN_SOURCE",
+            "GTM_BUSINESS_TYPE_HARDWARE"
           ],
           "reliant.v1.GtmCampaignStatus": [
             "GTM_CAMPAIGN_STATUS_UNSPECIFIED",
@@ -24248,11 +23743,6 @@
             "GTM_CONNECTION_STATE_NOT_CONNECTED",
             "GTM_CONNECTION_STATE_UNKNOWN"
           ],
-          "reliant.v1.GtmCredentialKind": [
-            "GTM_CREDENTIAL_KIND_UNSPECIFIED",
-            "GTM_CREDENTIAL_KIND_PERSON",
-            "GTM_CREDENTIAL_KIND_TOKEN"
-          ],
           "reliant.v1.GtmIdeaKind": [
             "GTM_IDEA_KIND_UNSPECIFIED",
             "GTM_IDEA_KIND_PRODUCT",
@@ -24292,18 +23782,6 @@
             "GTM_ITEM_STATUS_PUBLISHED",
             "GTM_ITEM_STATUS_PAUSED"
           ],
-          "reliant.v1.GtmLibraryDepth": [
-            "GTM_LIBRARY_DEPTH_UNSPECIFIED",
-            "GTM_LIBRARY_DEPTH_PLAY",
-            "GTM_LIBRARY_DEPTH_TACTIC"
-          ],
-          "reliant.v1.GtmPruneRequestStatus": [
-            "GTM_PRUNE_REQUEST_STATUS_UNSPECIFIED",
-            "GTM_PRUNE_REQUEST_STATUS_PENDING",
-            "GTM_PRUNE_REQUEST_STATUS_CONFIRMED",
-            "GTM_PRUNE_REQUEST_STATUS_CANCELLED",
-            "GTM_PRUNE_REQUEST_STATUS_EXPIRED"
-          ],
           "reliant.v1.GtmStrategyCategory": [
             "GTM_STRATEGY_CATEGORY_UNSPECIFIED",
             "GTM_STRATEGY_CATEGORY_PRICING_OFFERS_INCENTIVES",
@@ -24339,6 +23817,30 @@
             0,
             1,
             2
+          ],
+          "reliant.v1.GtmBusinessModel": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8
+          ],
+          "reliant.v1.GtmBusinessType": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10
           ],
           "reliant.v1.GtmCampaignStatus": [
             0,
@@ -24398,11 +23900,6 @@
             2,
             3
           ],
-          "reliant.v1.GtmCredentialKind": [
-            0,
-            1,
-            2
-          ],
           "reliant.v1.GtmIdeaKind": [
             0,
             1,
@@ -24442,18 +23939,6 @@
             6,
             7
           ],
-          "reliant.v1.GtmLibraryDepth": [
-            0,
-            1,
-            2
-          ],
-          "reliant.v1.GtmPruneRequestStatus": [
-            0,
-            1,
-            2,
-            3,
-            4
-          ],
           "reliant.v1.GtmStrategyCategory": [
             0,
             1,
@@ -24486,6 +23971,14 @@
           "reliant.v1.GtmAssetStatus": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
             "GoName": "GtmAssetStatus"
+          },
+          "reliant.v1.GtmBusinessModel": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "GtmBusinessModel"
+          },
+          "reliant.v1.GtmBusinessType": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "GtmBusinessType"
           },
           "reliant.v1.GtmCampaignStatus": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
@@ -24523,10 +24016,6 @@
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
             "GoName": "GtmConnectionState"
           },
-          "reliant.v1.GtmCredentialKind": {
-            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
-            "GoName": "GtmCredentialKind"
-          },
           "reliant.v1.GtmIdeaKind": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
             "GoName": "GtmIdeaKind"
@@ -24546,14 +24035,6 @@
           "reliant.v1.GtmItemStatus": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
             "GoName": "GtmItemStatus"
-          },
-          "reliant.v1.GtmLibraryDepth": {
-            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
-            "GoName": "GtmLibraryDepth"
-          },
-          "reliant.v1.GtmPruneRequestStatus": {
-            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
-            "GoName": "GtmPruneRequestStatus"
           },
           "reliant.v1.GtmStrategyCategory": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",

@@ -4,11 +4,13 @@
 -- Created: 2026-11-27T16:00:00Z
 --
 -- GTM inside Reliant (proto/reliant/v1/gtm.proto, GtmService): strategies
--- and their campaigns, the org's strategy library (the plays and tactics it
--- imports; Reliant ships none), channels, ideas, items (posts, emails,
--- videos: the calendar), assets (file metadata; the bytes are in the org's
--- bucket), the org's positioning, and its claims registry. Inert: nothing reads or writes these tables until GtmService is
--- served, and then only for allowlisted orgs (GtmConfig).
+-- and their campaigns, channels, ideas, items (posts, emails, videos: the
+-- calendar), assets (file metadata; the bytes are in the org's bucket), the
+-- org's positioning, and its claims registry. The strategy library is not a
+-- table: it is the generic idea bank embedded in the binary
+-- (internal/gtm/library); rows only name its keys (library_key). Inert:
+-- nothing reads or writes these tables until GtmService is served, and then
+-- only for allowlisted orgs (GtmConfig).
 --
 -- Tenancy: every row carries org_id. Orgs live in control-plane, so org_id
 -- has no foreign key (as on every other org-scoped table). A link between
@@ -30,10 +32,10 @@
 -- transaction that creates them, rather than CONCURRENTLY in files of their
 -- own.
 --
--- Post-deploy verification (prod): the eleven tables exist and are empty:
+-- Post-deploy verification (prod): the eight tables exist and are empty:
 --   reliant forge db query prod --database reliant --confirm-env prod \
 --     --reason "verify gtm tables" \
---     "SELECT (SELECT count(*) FROM gtm_ideas), (SELECT count(*) FROM gtm_campaigns), (SELECT count(*) FROM gtm_items), (SELECT count(*) FROM gtm_positioning), (SELECT count(*) FROM gtm_claims), (SELECT count(*) FROM gtm_strategies), (SELECT count(*) FROM gtm_channels), (SELECT count(*) FROM gtm_assets), (SELECT count(*) FROM gtm_strategy_library), (SELECT count(*) FROM gtm_library_imports), (SELECT count(*) FROM gtm_library_prune_requests)"
+--     "SELECT (SELECT count(*) FROM gtm_ideas), (SELECT count(*) FROM gtm_campaigns), (SELECT count(*) FROM gtm_items), (SELECT count(*) FROM gtm_positioning), (SELECT count(*) FROM gtm_claims), (SELECT count(*) FROM gtm_strategies), (SELECT count(*) FROM gtm_channels), (SELECT count(*) FROM gtm_assets)"
 --
 -- Rollback: none needed. The previous release never names these tables; they
 -- stay in place, unread.
@@ -59,119 +61,16 @@ CREATE TABLE gtm_strategies (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     -- One of the 13 strategy catalog categories; NULL for none.
     category TEXT CONSTRAINT gtm_strategies_category_known CHECK (category IN ('GTM_STRATEGY_CATEGORY_PRICING_OFFERS_INCENTIVES', 'GTM_STRATEGY_CATEGORY_REFERRAL_VIRAL_GROWTH', 'GTM_STRATEGY_CATEGORY_PAID_ACQUISITION', 'GTM_STRATEGY_CATEGORY_ORGANIC_CONTENT_SEO', 'GTM_STRATEGY_CATEGORY_OUTBOUND_SALES_PROSPECTING', 'GTM_STRATEGY_CATEGORY_PARTNERSHIPS_DISTRIBUTION', 'GTM_STRATEGY_CATEGORY_LAUNCHES_PR', 'GTM_STRATEGY_CATEGORY_COMMUNITY_EVENTS', 'GTM_STRATEGY_CATEGORY_PRODUCT_LED_GROWTH', 'GTM_STRATEGY_CATEGORY_CONVERSION_OPTIMIZATION', 'GTM_STRATEGY_CATEGORY_RETENTION_EXPANSION', 'GTM_STRATEGY_CATEGORY_TRUST_REPUTATION', 'GTM_STRATEGY_CATEGORY_MARKET_RESEARCH_POSITIONING')),
-    -- The gtm_strategy_library key it was made from: a reference, not a
-    -- foreign key, so a re-import may drop the entry.
-    library_key TEXT,
+    -- The idea bank key it was made from (UseLibraryStrategy): a reference,
+    -- not a foreign key (the bank is embedded, and a later release may drop
+    -- an entry).
+    library_key TEXT CONSTRAINT gtm_strategies_library_key_slug CHECK (library_key ~ '^[a-z0-9][a-z0-9_-]{0,127}$'),
     CONSTRAINT gtm_strategies_period_order CHECK (period_start IS NULL OR period_end IS NULL OR period_end >= period_start),
     -- The target of gtm_campaigns' same-org strategy link.
     CONSTRAINT gtm_strategies_org_id_id_key UNIQUE (org_id, id)
 );
 CREATE INDEX gtm_strategies_org_id_status_idx ON gtm_strategies (org_id, status);
 CREATE INDEX gtm_strategies_org_id_created_at_idx ON gtm_strategies (org_id, created_at DESC);
-
--- The org's strategy library: the plays (full) and tactics (light) it
--- imported (ImportStrategyLibrary, upserted by key). Org-scoped: nothing is
--- global, and Reliant ships no entries. The play's scalar fields are typed
--- columns, its flat lists TEXT[], its steps and anything else JSONB.
-CREATE TABLE gtm_strategy_library (
-    id TEXT PRIMARY KEY CHECK (id <> ''),
-    org_id TEXT NOT NULL CHECK (org_id <> ''),
-    key TEXT NOT NULL CONSTRAINT gtm_strategy_library_key_slug CHECK (key ~ '^[a-z0-9][a-z0-9_-]{0,127}$'),
-    category TEXT NOT NULL CHECK (category IN ('GTM_STRATEGY_CATEGORY_PRICING_OFFERS_INCENTIVES', 'GTM_STRATEGY_CATEGORY_REFERRAL_VIRAL_GROWTH', 'GTM_STRATEGY_CATEGORY_PAID_ACQUISITION', 'GTM_STRATEGY_CATEGORY_ORGANIC_CONTENT_SEO', 'GTM_STRATEGY_CATEGORY_OUTBOUND_SALES_PROSPECTING', 'GTM_STRATEGY_CATEGORY_PARTNERSHIPS_DISTRIBUTION', 'GTM_STRATEGY_CATEGORY_LAUNCHES_PR', 'GTM_STRATEGY_CATEGORY_COMMUNITY_EVENTS', 'GTM_STRATEGY_CATEGORY_PRODUCT_LED_GROWTH', 'GTM_STRATEGY_CATEGORY_CONVERSION_OPTIMIZATION', 'GTM_STRATEGY_CATEGORY_RETENTION_EXPANSION', 'GTM_STRATEGY_CATEGORY_TRUST_REPUTATION', 'GTM_STRATEGY_CATEGORY_MARKET_RESEARCH_POSITIONING')),
-    depth TEXT NOT NULL CHECK (depth IN ('GTM_LIBRARY_DEPTH_PLAY', 'GTM_LIBRARY_DEPTH_TACTIC')),
-    name TEXT NOT NULL CHECK (btrim(name) <> ''),
-    summary_md TEXT NOT NULL DEFAULT '',
-    icon TEXT NOT NULL DEFAULT '',
-    -- Free vocabularies, stored as the catalog gives them.
-    stage TEXT NOT NULL DEFAULT '',
-    cost TEXT NOT NULL DEFAULT '',
-    cost_note TEXT NOT NULL DEFAULT '',
-    difficulty TEXT NOT NULL DEFAULT '',
-    level TEXT NOT NULL DEFAULT '',
-    objective TEXT NOT NULL DEFAULT '',
-    north_star TEXT NOT NULL DEFAULT '',
-    hypothesis_md TEXT NOT NULL DEFAULT '',
-    hours INTEGER CHECK (hours >= 0),
-    signal_days INTEGER CHECK (signal_days >= 0),
-    window_days INTEGER CHECK (window_days >= 0),
-    launch_days INTEGER CHECK (launch_days >= 0),
-    expected_delta DOUBLE PRECISION,
-    lifecycle TEXT[] NOT NULL DEFAULT '{}',
-    channel_types TEXT[] NOT NULL DEFAULT '{}',
-    integrations TEXT[] NOT NULL DEFAULT '{}',
-    fits TEXT[] NOT NULL DEFAULT '{}',
-    prerequisites TEXT[] NOT NULL DEFAULT '{}',
-    kpis TEXT[] NOT NULL DEFAULT '{}',
-    tactics TEXT[] NOT NULL DEFAULT '{}',
-    automates TEXT[] NOT NULL DEFAULT '{}',
-    experiments TEXT[] NOT NULL DEFAULT '{}',
-    stop_when TEXT[] NOT NULL DEFAULT '{}',
-    -- [{"who": ..., "title": ...}], in order.
-    steps JSONB NOT NULL DEFAULT '[]' CHECK (jsonb_typeof(steps) = 'array'),
-    -- Any field of the entry with no column, kept whole.
-    extra JSONB NOT NULL DEFAULT '{}' CHECK (jsonb_typeof(extra) = 'object'),
-    -- What the import was exported from (e.g. the source commit SHA), when and
-    -- by whom.
-    source_revision TEXT NOT NULL CHECK (source_revision <> ''),
-    imported_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    imported_by TEXT NOT NULL CHECK (imported_by <> ''),
-    -- The import's upsert target: an org holds each key once.
-    CONSTRAINT gtm_strategy_library_org_id_key_key UNIQUE (org_id, key)
-);
-CREATE INDEX gtm_strategy_library_org_id_category_idx ON gtm_strategy_library (org_id, category);
-CREATE INDEX gtm_strategy_library_org_id_depth_idx ON gtm_strategy_library (org_id, depth);
-
--- A prune an import over an access token staged: a token never deletes, so
--- the keys it would remove wait here for a person to confirm (only keys still
--- present and not imported again since are removed) or cancel. A PENDING
--- request older than 7 days is EXPIRED and can no longer be confirmed.
-CREATE TABLE gtm_library_prune_requests (
-    id TEXT PRIMARY KEY CHECK (id <> ''),
-    org_id TEXT NOT NULL CHECK (org_id <> ''),
-    requested_by TEXT NOT NULL CHECK (requested_by <> ''),
-    credential_kind TEXT NOT NULL CHECK (credential_kind IN ('GTM_CREDENTIAL_KIND_PERSON', 'GTM_CREDENTIAL_KIND_TOKEN')),
-    source_revision TEXT NOT NULL CHECK (source_revision <> ''),
-    -- Nothing to remove stages no request.
-    remove_keys TEXT[] NOT NULL CHECK (cardinality(remove_keys) > 0),
-    status TEXT NOT NULL DEFAULT 'GTM_PRUNE_REQUEST_STATUS_PENDING'
-        CHECK (status IN ('GTM_PRUNE_REQUEST_STATUS_PENDING', 'GTM_PRUNE_REQUEST_STATUS_CONFIRMED', 'GTM_PRUNE_REQUEST_STATUS_CANCELLED', 'GTM_PRUNE_REQUEST_STATUS_EXPIRED')),
-    decided_by TEXT CHECK (decided_by IS NULL OR decided_by <> ''),
-    decided_at TIMESTAMPTZ,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    -- A person decides a CONFIRMED or CANCELLED request; PENDING and EXPIRED
-    -- ones carry no decision.
-    CONSTRAINT gtm_library_prune_requests_decision CHECK (
-        (status IN ('GTM_PRUNE_REQUEST_STATUS_CONFIRMED', 'GTM_PRUNE_REQUEST_STATUS_CANCELLED'))
-        = (decided_by IS NOT NULL AND decided_at IS NOT NULL)),
-    CONSTRAINT gtm_library_prune_requests_decided_together CHECK ((decided_by IS NULL) = (decided_at IS NULL)),
-    -- The target of gtm_library_imports' same-org request link.
-    CONSTRAINT gtm_library_prune_requests_org_id_id_key UNIQUE (org_id, id)
-);
-CREATE INDEX gtm_library_prune_requests_org_id_status_idx ON gtm_library_prune_requests (org_id, status, created_at DESC);
-CREATE INDEX gtm_library_prune_requests_org_id_created_at_idx ON gtm_library_prune_requests (org_id, created_at DESC);
-
--- The audit of the library: one row per ImportStrategyLibrary call, who made
--- it through which class of credential, and what it changed. Written once.
-CREATE TABLE gtm_library_imports (
-    id TEXT PRIMARY KEY CHECK (id <> ''),
-    org_id TEXT NOT NULL CHECK (org_id <> ''),
-    actor_user_id TEXT NOT NULL CHECK (actor_user_id <> ''),
-    credential_kind TEXT NOT NULL CHECK (credential_kind IN ('GTM_CREDENTIAL_KIND_PERSON', 'GTM_CREDENTIAL_KIND_TOKEN')),
-    source_revision TEXT NOT NULL CHECK (source_revision <> ''),
-    created INTEGER NOT NULL DEFAULT 0 CHECK (created >= 0),
-    updated INTEGER NOT NULL DEFAULT 0 CHECK (updated >= 0),
-    unchanged INTEGER NOT NULL DEFAULT 0 CHECK (unchanged >= 0),
-    pruned INTEGER NOT NULL DEFAULT 0 CHECK (pruned >= 0),
-    prune_request_id TEXT,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    -- A token only upserts: it never removes, and only a token's prune is
-    -- staged as a request.
-    CONSTRAINT gtm_library_imports_token_never_prunes CHECK (credential_kind <> 'GTM_CREDENTIAL_KIND_TOKEN' OR pruned = 0),
-    CONSTRAINT gtm_library_imports_request_is_token CHECK (prune_request_id IS NULL OR credential_kind = 'GTM_CREDENTIAL_KIND_TOKEN'),
-    CONSTRAINT gtm_library_imports_prune_request_same_org_fkey FOREIGN KEY (org_id, prune_request_id)
-        REFERENCES gtm_library_prune_requests (org_id, id) ON DELETE SET NULL (prune_request_id)
-);
-CREATE INDEX gtm_library_imports_org_id_created_at_idx ON gtm_library_imports (org_id, created_at DESC);
 
 -- A channel: where items go out. INTEGRATED through a Reliant integration
 -- (integration_kind, e.g. gmail; connection_id empty means the acting user's
@@ -275,6 +174,15 @@ CREATE TABLE gtm_ideas (
     revision INTEGER NOT NULL DEFAULT 1 CHECK (revision > 0),
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    -- The idea bank entry it came from: a reference, not a foreign key (the
+    -- service checks the key against the bank on every write).
+    library_key TEXT CONSTRAINT gtm_ideas_library_key_slug CHECK (library_key ~ '^[a-z0-9][a-z0-9_-]{0,127}$'),
+    -- A JSON array of GtmTailorAnswer ({"question", "answer"}): the entry's
+    -- tailor_questions answered for this business, at most 20.
+    tailor_answers JSONB NOT NULL DEFAULT '[]'
+        CONSTRAINT gtm_ideas_tailor_answers_array CHECK (jsonb_typeof(tailor_answers) = 'array' AND jsonb_array_length(tailor_answers) <= 20),
+    -- A tool-agnostic automation that carries it out (markdown); '' for none.
+    suggested_workflow_md TEXT NOT NULL DEFAULT '',
     CONSTRAINT gtm_ideas_campaign_same_org_fkey FOREIGN KEY (org_id, campaign_id)
         REFERENCES gtm_campaigns (org_id, id) ON DELETE SET NULL (campaign_id),
     -- The target of gtm_items' same-org idea link.
@@ -283,6 +191,7 @@ CREATE TABLE gtm_ideas (
 CREATE INDEX gtm_ideas_org_id_created_at_idx ON gtm_ideas (org_id, created_at DESC);
 CREATE INDEX gtm_ideas_org_id_status_idx ON gtm_ideas (org_id, status);
 CREATE INDEX gtm_ideas_org_id_campaign_id_idx ON gtm_ideas (org_id, campaign_id) WHERE campaign_id IS NOT NULL;
+CREATE INDEX gtm_ideas_org_id_library_key_idx ON gtm_ideas (org_id, library_key) WHERE library_key IS NOT NULL;
 
 -- An item: a blog or social post, an email, a launch. With scheduled_at it is
 -- on the calendar. Only the approved email path writes SENT and the email_*
@@ -387,14 +296,20 @@ COMMENT ON COLUMN gtm_assets.sha256 IS 'forge:readable hex SHA-256 of the file b
 CREATE INDEX gtm_assets_org_id_item_id_idx ON gtm_assets (org_id, item_id);
 CREATE INDEX gtm_assets_org_id_campaign_id_idx ON gtm_assets (org_id, campaign_id);
 
--- The org's positioning: one row per org, replaced whole.
+-- The org's positioning: one row per org, replaced whole. business_type and
+-- business_models are what "fits my business" reads in the idea bank; '' and
+-- '{}' mean not said.
 CREATE TABLE gtm_positioning (
     org_id TEXT PRIMARY KEY CHECK (org_id <> ''),
     positioning_md TEXT NOT NULL DEFAULT '',
     audiences TEXT[] NOT NULL DEFAULT '{}',
     updated_by TEXT NOT NULL CHECK (updated_by <> ''),
     revision INTEGER NOT NULL DEFAULT 1 CHECK (revision > 0),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    business_type TEXT NOT NULL DEFAULT ''
+        CONSTRAINT gtm_positioning_business_type_known CHECK (business_type = '' OR business_type IN ('GTM_BUSINESS_TYPE_B2B_SAAS', 'GTM_BUSINESS_TYPE_B2C_APP', 'GTM_BUSINESS_TYPE_DEVELOPER_TOOLS', 'GTM_BUSINESS_TYPE_ECOMMERCE', 'GTM_BUSINESS_TYPE_MARKETPLACE', 'GTM_BUSINESS_TYPE_AGENCY_SERVICES', 'GTM_BUSINESS_TYPE_CREATOR_MEDIA', 'GTM_BUSINESS_TYPE_LOCAL_BUSINESS', 'GTM_BUSINESS_TYPE_OPEN_SOURCE', 'GTM_BUSINESS_TYPE_HARDWARE')),
+    business_models TEXT[] NOT NULL DEFAULT '{}'
+        CONSTRAINT gtm_positioning_business_models_known CHECK (business_models <@ ARRAY['GTM_BUSINESS_MODEL_SUBSCRIPTION', 'GTM_BUSINESS_MODEL_USAGE_BASED', 'GTM_BUSINESS_MODEL_ONE_TIME', 'GTM_BUSINESS_MODEL_FREEMIUM', 'GTM_BUSINESS_MODEL_FREE_OSS', 'GTM_BUSINESS_MODEL_MARKETPLACE', 'GTM_BUSINESS_MODEL_SERVICES', 'GTM_BUSINESS_MODEL_AD_SUPPORTED']::TEXT[])
 );
 
 -- The claims registry (growth's claims, tenant_id -> org_id): every number,
