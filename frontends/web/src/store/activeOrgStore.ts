@@ -246,6 +246,9 @@ export const ORG_SCOPED_QUERY_ROOTS: readonly string[] = [
   // profiles, signals, filter values, metrics, workloads, release health and
   // each frontend's replay switch, every one scoped by its request's org.
   "controlplane.v1.ObservabilityService",
+  // IssuesService's reads on generated keys: the inbox (scoped by its
+  // request's org), an issue, its events and its timeline.
+  "controlplane.v1.IssuesService",
   "orgs-members",
   // The org's policy document, the caller's usage against it, its denials.
   "controlplane.v1.OrgPolicyService",
@@ -253,4 +256,7 @@ export const ORG_SCOPED_QUERY_ROOTS: readonly string[] = [
   // hooks/changes-queries.ts: the page's org, then ChangesService's reads.
   "changes",
   "controlplane.v1.ChangesService",
+  // The managed secret store's reads (hooks/forge-queries.ts): an
+  // environment's secrets and their version histories.
+  "controlplane.v1.SecretStoreService",
 ];

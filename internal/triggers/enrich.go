@@ -39,12 +39,27 @@ func (in *Intake) WithEnrichers(enrichers ...Enricher) *Intake {
 	return in
 }
 
+// batchEnricher is an Enricher that shares what it reads about an event
+// across the triggers of one arrival (Batch).
+type batchEnricher interface {
+	enrichIn(ctx context.Context, batch *Batch, trigger *core.Trigger, ev InboundEvent) (Enrichment, error)
+}
+
 // enrich runs every enricher over ev and applies the result: the enriched
-// sender replaces ev's, and the origin is returned for the row.
-func (in *Intake) enrich(ctx context.Context, trigger *core.Trigger, ev *InboundEvent) *core.TriggerOrigin {
+// sender replaces ev's, and the origin is returned for the row. batch, when
+// set, is the arrival's (AcceptOptions.Batch).
+func (in *Intake) enrich(ctx context.Context, batch *Batch, trigger *core.Trigger, ev *InboundEvent) *core.TriggerOrigin {
 	var origin *core.TriggerOrigin
 	for _, e := range in.enrichers {
-		out, err := e.Enrich(ctx, trigger, *ev)
+		var (
+			out Enrichment
+			err error
+		)
+		if be, ok := e.(batchEnricher); ok && batch != nil {
+			out, err = be.enrichIn(ctx, batch, trigger, *ev)
+		} else {
+			out, err = e.Enrich(ctx, trigger, *ev)
+		}
 		if err != nil {
 			slog.WarnContext(ctx, "trigger event enrichment failed; recording the event unenriched",
 				"trigger_id", trigger.ID, "kind", ev.Kind, "error", err)

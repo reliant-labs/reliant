@@ -28,6 +28,8 @@ type Call struct {
 	Invocation Invocation
 	// Run is what the runtime recorded about the run, for the Resolver.
 	Run RunFacts
+	// From is the node the call's `with: {from:}` names (Request.From).
+	From *NodeRecord
 }
 
 // RunFacts is what the runtime hands an activity about its run, which the
@@ -146,7 +148,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, call Call) Outcome {
 	}
 	req := &Request{
 		Name: spec.Name, Spec: spec, Invocation: call.Invocation, Node: call.Node,
-		Principal: principal, Provenance: provenance, Params: call.Params,
+		Principal: principal, Provenance: provenance, Params: call.Params, From: call.From,
 	}
 	result, err := invoke(ctx, handler, req)
 	if err != nil {

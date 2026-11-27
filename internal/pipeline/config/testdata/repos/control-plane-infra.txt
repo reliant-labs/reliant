@@ -1,0 +1,34 @@
+# The Reliant merge queue's infra patterns for control-plane's gate
+# (.reliant/pipeline.yaml, gate.infra_patterns_file). One Go RE2 regular
+# expression per line, matched against a failing gate stage's log: a match
+# makes the failure infra (unproven: retried on another gate machine, never
+# landed and never blamed on a PR), not red. Blank lines and # lines are
+# skipped.
+#
+# Only what says nothing about the code under test belongs here: the classes
+# the gate itself reports as "not PR blame" (docs/local-gate.md, rule 9) and
+# the host failures scripts/rc/mains.sh's INFRA_RE already classifies. A
+# pattern a real test failure could print would let a red change land unproven
+# forever, so each is the exact text the failing tool prints.
+
+# The docker daemon is down or wedged (internal/testsrv, scripts/lib/gate-containers.sh).
+Cannot connect to the Docker daemon
+dockerd unresponsive
+
+# The gate's own health verdict, never a PR's (scripts/ci-gate.sh health_failure, exit 3).
+GATE HEALTH FAILURE
+
+# A heavy slot never came (scripts/heavy-lock.sh, HEAVY_LOCK_TIMEOUT).
+heavy-lock: \S+ gave up waiting after [0-9]+s
+
+# The disk, memory and file-descriptor budgets.
+no space left on device
+ENOSPC
+cannot allocate memory
+too many open files
+
+# A registry's rate limit or outage (internal/testdocker's registryRateLimited).
+toomanyrequests
+429 Too Many Requests
+You have reached your pull rate limit
+received unexpected HTTP status: 5[0-9][0-9]

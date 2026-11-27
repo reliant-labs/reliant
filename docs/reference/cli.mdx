@@ -570,6 +570,11 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant models endpoint list`](#reliant-models-endpoint-list) | List each machine's local model servers, and your custom endpoints |
 | [`reliant models endpoint remove`](#reliant-models-endpoint-remove) | Stop a machine looking for a local model server you added |
 | [`reliant models list`](#reliant-models-list) | List the models you can use |
+| [`reliant pipeline`](#reliant-pipeline) | Enrol a repository in Reliant's PR pipeline and merge queue, and see where it stands |
+| [`reliant pipeline enrol`](#reliant-pipeline-enrol) | Enrol a repository, with mode off |
+| [`reliant pipeline mode`](#reliant-pipeline-mode) | Set how far the pipeline acts on an enrolled repository |
+| [`reliant pipeline queue`](#reliant-pipeline-queue) | List an enrolled repository's merge queue and its current batch |
+| [`reliant pipeline status`](#reliant-pipeline-status) | Show an enrolled repository's mode, its PRs by pipeline state, its newest batches and main's health |
 | [`reliant preview`](#reliant-preview) | Control who may open your cloud machines' preview URLs |
 | [`reliant preview access`](#reliant-preview-access) | List and change who may open a machine's preview URLs |
 | [`reliant preview access default`](#reliant-preview-access-default) | Set who may open the ports that have no rule of their own |
@@ -24670,6 +24675,120 @@ reliant models list [flags]
 | `--json` | `bool` | - | Print JSON |
 | `--local` | `bool` | - | Only the local models your machines serve, with the machine serving each |
 | `--org` | `string` | - | List what a chat of this organization may run on (its accounts and policy) |
+
+---
+
+## reliant pipeline
+
+Enrol a repository in Reliant's PR pipeline and merge queue, and see where it stands
+
+Enrol a GitHub repository in Reliant's PR pipeline and merge queue, set how far
+the pipeline acts on it, and read its state and queue.
+
+A repository is enrolled with mode off: nothing acts on it. shadow computes
+and records every decision without writing to GitHub; on acts.
+
+Enrolling and changing a mode need an owner or admin of the project's
+organization, signed in to the app or with a personal access token (the CLI
+login is one). Reading needs membership of the organization.
+
+```
+reliant pipeline
+```
+
+**Subcommands:**
+
+| Command | Description |
+|---------|-------------|
+| [`enrol`](#reliant-pipeline-enrol) | Enrol a repository, with mode off |
+| [`mode`](#reliant-pipeline-mode) | Set how far the pipeline acts on an enrolled repository |
+| [`queue`](#reliant-pipeline-queue) | List an enrolled repository's merge queue and its current batch |
+| [`status`](#reliant-pipeline-status) | Show an enrolled repository's mode, its PRs by pipeline state, its newest batches and main's health |
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--gateway` | `string` | `https://gateway.reliantapi.com` | Daemon gateway URL (a non-default server derives its own gateway unless this is set) [env: RELIANT_GATEWAY_URL] |
+| `--server` | `string` | `https://api.reliantapi.com` | Reliant API server URL [env: RELIANT_SERVER_URL] |
+
+---
+
+### reliant pipeline enrol
+
+Enrol a repository, with mode off
+
+Enrol a GitHub repository under a project of an organization, with mode off.
+Your own GitHub access must reach the repository (Reliant's GitHub App
+installed on it, and GitHub connected in Reliant). Enrolling again under the
+same project is harmless.
+
+--project names the project by id, name or path ('reliant project list');
+without it, the project whose folder holds the current directory.
+
+```
+reliant pipeline enrol <owner/repo> [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--json` | `bool` | - | print the enrolled repository as JSON |
+| `--project` | `string` | - | the project, by id, name or path (default: the one holding the current directory) |
+
+---
+
+### reliant pipeline mode
+
+Set how far the pipeline acts on an enrolled repository
+
+Set an enrolled repository's mode: off (nothing acts; this is unenrolling),
+shadow (decisions are computed and recorded, nothing is written to GitHub) or
+on (the pipeline acts). The mode is changed only if nobody changed the
+repository since it was read.
+
+```
+reliant pipeline mode <owner/repo> off|shadow|on [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--json` | `bool` | - | print the repository as JSON |
+
+---
+
+### reliant pipeline queue
+
+List an enrolled repository's merge queue and its current batch
+
+```
+reliant pipeline queue <owner/repo> [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--json` | `bool` | - | print the queue as JSON |
+
+---
+
+### reliant pipeline status
+
+Show an enrolled repository's mode, its PRs by pipeline state, its newest batches and main's health
+
+```
+reliant pipeline status <owner/repo> [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--json` | `bool` | - | print the state as JSON |
 
 ---
 
