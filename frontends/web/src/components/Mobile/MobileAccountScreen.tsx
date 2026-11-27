@@ -81,14 +81,14 @@ function ThemeToggle() {
 
   return (
     <div className="flex min-h-16 items-center justify-between gap-4 px-4 py-3">
-      <span className="text-sm text-foreground">Theme</span>
+      <span className="text-ui text-foreground">Theme</span>
       <div className="flex items-center gap-1 rounded-lg border border-border p-1">
         <button
           type="button"
           onClick={() => apply(false)}
           aria-pressed={!dark}
           className={cn(
-            "flex min-h-[44px] min-w-[44px] items-center justify-center gap-1.5 rounded-md px-3 text-sm",
+            "flex min-h-[44px] min-w-[44px] items-center justify-center gap-1.5 rounded-md px-3 text-ui",
             // `bg-primary/10`, not `bg-muted` — this row now lives inside a
             // `MobileCardGroup`, and in dark mode `--surface-raised` (the
             // card's own background) resolves to `--muted`, so a `bg-muted`
@@ -106,7 +106,7 @@ function ThemeToggle() {
           onClick={() => apply(true)}
           aria-pressed={dark}
           className={cn(
-            "flex min-h-[44px] min-w-[44px] items-center justify-center gap-1.5 rounded-md px-3 text-sm",
+            "flex min-h-[44px] min-w-[44px] items-center justify-center gap-1.5 rounded-md px-3 text-ui",
             dark
               ? "bg-primary/10 font-medium text-foreground"
               : "text-muted-foreground",
@@ -211,10 +211,10 @@ export function MobileAccountScreen({ onBack }: MobileAccountScreenProps = {}) {
           <div className="flex min-h-16 items-center gap-3 px-4 py-3">
             <MobileRowIcon icon={User} />
             <div className="min-w-0">
-              <p className="truncate text-sm font-medium text-foreground">
+              <p className="truncate text-ui font-medium text-foreground">
                 {name || email || "Signed in"}
               </p>
-              <p className="truncate text-xs text-muted-foreground">
+              <p className="truncate text-meta text-muted-foreground">
                 {/* Falling back to the provider list keeps this honest for an
                     OAuth identity that exposes no email, and for the anonymous
                     sessions the app hands out before an upgrade. */}
@@ -240,7 +240,7 @@ export function MobileAccountScreen({ onBack }: MobileAccountScreenProps = {}) {
               // on mobile Safari and, on a phone, it lands under the thumb that
               // just tapped Sign out.
               <div className="flex flex-col gap-2">
-                <p className="text-sm text-muted-foreground">
+                <p className="text-ui text-muted-foreground">
                   Sign out of this account?
                 </p>
                 <div className="flex gap-2">
@@ -248,7 +248,7 @@ export function MobileAccountScreen({ onBack }: MobileAccountScreenProps = {}) {
                     type="button"
                     onClick={() => setConfirming(false)}
                     disabled={isSigningOut}
-                    className="flex min-h-[44px] flex-1 items-center justify-center rounded-lg border border-border text-sm font-medium text-foreground active:bg-foreground/5 disabled:opacity-60"
+                    className="flex min-h-[44px] flex-1 items-center justify-center rounded-lg border border-border text-ui font-medium text-foreground active:bg-foreground/5 disabled:opacity-60"
                   >
                     Cancel
                   </button>
@@ -256,7 +256,7 @@ export function MobileAccountScreen({ onBack }: MobileAccountScreenProps = {}) {
                     type="button"
                     onClick={() => void handleSignOut()}
                     disabled={isSigningOut}
-                    className="flex min-h-[44px] flex-1 items-center justify-center rounded-lg bg-destructive text-sm font-medium text-destructive-foreground active:opacity-80 disabled:opacity-60"
+                    className="flex min-h-[44px] flex-1 items-center justify-center rounded-lg bg-destructive text-ui font-medium text-destructive-foreground active:opacity-80 disabled:opacity-60"
                   >
                     {isSigningOut ? "Signing out…" : "Sign out"}
                   </button>
@@ -266,7 +266,7 @@ export function MobileAccountScreen({ onBack }: MobileAccountScreenProps = {}) {
               <button
                 type="button"
                 onClick={() => setConfirming(true)}
-                className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-lg border border-border text-sm font-medium text-destructive-ink active:bg-foreground/5"
+                className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-lg border border-border text-ui font-medium text-destructive-ink active:bg-foreground/5"
               >
                 <LogOut className="h-4 w-4" />
                 Sign out
@@ -274,7 +274,7 @@ export function MobileAccountScreen({ onBack }: MobileAccountScreenProps = {}) {
             )}
 
             {error && (
-              <p className="mt-2 text-center text-xs text-destructive-ink">{error}</p>
+              <p className="mt-2 text-center text-meta text-destructive-ink">{error}</p>
             )}
           </div>
         </MobileCardGroup>

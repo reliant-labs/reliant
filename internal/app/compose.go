@@ -35,6 +35,7 @@ import (
 	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/reliant-labs/forge/pkg/serverkit"
 
+	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
 	"github.com/reliant-labs/reliant/internal/accountpurge"
 	"github.com/reliant-labs/reliant/internal/agentmailbox"
 	"github.com/reliant-labs/reliant/internal/agentruns"
@@ -70,6 +71,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/handlers/org_provider_account"
 	"github.com/reliant-labs/reliant/internal/handlers/org_usage"
 	"github.com/reliant-labs/reliant/internal/handlers/package_commands"
+	"github.com/reliant-labs/reliant/internal/handlers/pipeline"
 	"github.com/reliant-labs/reliant/internal/handlers/plan"
 	"github.com/reliant-labs/reliant/internal/handlers/preset"
 	"github.com/reliant-labs/reliant/internal/handlers/project"
@@ -126,6 +128,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/internal/triggerowner"
 	"github.com/reliant-labs/reliant/internal/triggers"
+	"github.com/reliant-labs/reliant/internal/triggers/recorddue"
 	"github.com/reliant-labs/reliant/internal/triggers/workflowevent"
 	"github.com/reliant-labs/reliant/internal/vault"
 	"github.com/reliant-labs/reliant/internal/workersetup"
@@ -713,6 +716,25 @@ func (g *Graph) newTriggerDeliveryRelay() (*TriggerDeliveryRelay, error) {
 	})
 }
 
+func (g *Graph) newRecordDueScanner() (recorddue.Service, error) {
+	return NewRecordDueScanner(RecordDueScannerDeps{
+		DB: g.Database(), Temporal: g.TemporalClient(), Pipeline: g.ServerProcessConfig.GetPipeline(),
+		Membership: g.OrgResolver(), Policies: g.OrgPolicyResolver(),
+	})
+}
+
+func (g *Graph) newMergeQueue() (*MergeQueue, error) {
+	return NewMergeQueue(MergeQueueDeps{
+		DB:     g.Database(),
+		Router: g.WorkerDaemonRouter(),
+		// Read here, not in the provider, so the worker root's config reach
+		// names them (pkg/config Roots).
+		Pipeline:     g.ServerProcessConfig.GetPipeline(),
+		ControlPlane: g.ServerProcessConfig.GetControlPlane(),
+		DataDir:      g.ServerProcessConfig.GetDataDir(),
+	})
+}
+
 func (g *Graph) newAccountUsagePoller() (*accountlimits.Poller, error) {
 	return NewAccountUsagePoller(AccountUsagePollerDeps{
 		DB:       g.Database(),
@@ -1090,6 +1112,7 @@ func (g *Graph) newUserRoutes() (*UserRoutes, error) {
 		CoverageSource:     g.CoverageSource(),
 		PullRequestRecord:  g.PullRequestRecord(),
 		ChatTrace:          g.ChatTrace(),
+		Pipeline:           g.Pipeline(),
 	})
 }
 
@@ -2107,5 +2130,21 @@ func (g *Graph) newCallerControlPlane() (*CallerControlPlane, error) {
 func (g *Graph) newInternalControlPlane() (*InternalControlPlane, error) {
 	return NewInternalControlPlane(InternalControlPlaneDeps{
 		ControlPlane: g.ServerProcessConfig.GetControlPlane(),
+	})
+}
+
+// newPipeline constructs the pipeline handler (internal/handlers/pipeline).
+// pipeline.enabled reaches the API server here (G4): off, every rpc refuses.
+func (g *Graph) newPipeline() (*pipeline.Service, error) {
+	return pipeline.New(pipeline.Deps{
+		Logger: g.Log,
+		Config: g.Cfg,
+		// Only the switch, never the whole pipeline block: the block also
+		// holds the worker's merge-queue caller secret
+		// (pipeline.github_queue_app_caller_secret), and the API root's
+		// config reach must not include it.
+		Pipeline: &configv1.PipelineConfig{Enabled: g.ServerProcessConfig.GetPipeline().GetEnabled()},
+		Store:    g.Database(),
+		Now:      nil, // optional — no provider
 	})
 }

@@ -10,13 +10,15 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 )
 
 // GitFetcher is the gate's fetch step: a fresh repository in the gate's
-// directory, one fetch of the candidate ref from GitHub, a check that it is
-// the candidate sha, and a detached checkout of it.
+// directory, one fetch of the candidate ref from GitHub (after one of the
+// batch's base commit, when the request names it), a check that it is the
+// candidate sha, and a detached checkout of it.
 //
 // The credential is the machine's, given to git for the one fetch through
 // Env (the daemon's per-invocation credential helper config). Nothing of it
@@ -58,9 +60,23 @@ func (f GitFetcher) Fetch(ctx context.Context, spec FetchSpec) error {
 	if _, err := git("init", "-q"); err != nil {
 		return err
 	}
-	depth := max(f.Depth, 1)
-	if _, err := git("fetch", "--quiet", "--no-tags", "--depth="+strconv.Itoa(depth), url,
-		"+refs/heads/"+spec.Ref+":refs/gate/candidate"); err != nil {
+	depth := "--depth=" + strconv.Itoa(max(f.Depth, 1))
+	candidate := []string{"fetch", "--quiet", "--no-tags", depth, url, "+refs/heads/" + spec.Ref + ":refs/gate/candidate"}
+	if spec.BaseSHA != "" {
+		if !shaPattern.MatchString(spec.BaseSHA) {
+			return fmt.Errorf("%w: base sha %q is not a full commit sha", ErrInvalidRequest, spec.BaseSHA)
+		}
+		// The base first, shallow, then the candidate with no depth: the
+		// base is a common commit, so the second fetch brings only the
+		// commits the candidate adds over it (a batch is one squash commit
+		// per entry on its base), and the base stays reachable from the
+		// candidate for merge-base and diff.
+		if _, err := git("fetch", "--quiet", "--no-tags", depth, url, spec.BaseSHA+":"+BaseRef); err != nil {
+			return fmt.Errorf("fetch the base %s: %w", spec.BaseSHA, err)
+		}
+		candidate = slices.DeleteFunc(candidate, func(a string) bool { return a == depth })
+	}
+	if _, err := git(candidate...); err != nil {
 		return err
 	}
 	got, err := git("rev-parse", "--verify", "refs/gate/candidate^{commit}")
@@ -75,6 +91,10 @@ func (f GitFetcher) Fetch(ctx context.Context, spec FetchSpec) error {
 	}
 	return checkNoCredential(spec.Dir)
 }
+
+// BaseRef is where the gate's checkout holds the batch's base commit, when
+// the request names one.
+const BaseRef = "refs/gate/base"
 
 // credentialConfig matches what would carry a credential in a repository's
 // config: a helper, an extra header, or a URL with user info.

@@ -14,7 +14,7 @@ import (
 )
 
 // forge:section MockService
-// forge:hash=bcfe52a0b5086453719f99590e8a585f4480648232cedff8f03d2da94de59fd3
+// forge:hash=40a92c2ecd2d8e11dc00ddc6bcb02fb23dacc0801c254ff9ccfb81f07cd8e991
 
 // MockService is a test mock for the Service interface.
 //
@@ -26,6 +26,7 @@ type MockService struct {
 	contractkit.Recorder
 	UserAccessTokenFunc            func(context.Context, string, string) (Token, error)
 	MintInstallationTokenFunc      func(context.Context, InstallationRequest) (InstallationToken, error)
+	MintQueueInstallationTokenFunc func(context.Context, QueueInstallationRequest) (InstallationToken, error)
 	ListOrgGitHubInstallationsFunc func(context.Context, string) ([]OrgInstallation, error)
 }
 
@@ -45,6 +46,15 @@ func (m *MockService) MintInstallationToken(ctx context.Context, req Installatio
 		return m.MintInstallationTokenFunc(ctx, req)
 	}
 	return InstallationToken{}, contractkit.MockNotSet("MockService", "MintInstallationToken")
+}
+
+// MintQueueInstallationToken records the call and delegates to MintQueueInstallationTokenFunc when set.
+func (m *MockService) MintQueueInstallationToken(ctx context.Context, req QueueInstallationRequest) (InstallationToken, error) {
+	m.Recorder.Record("MintQueueInstallationToken", ctx, req)
+	if m.MintQueueInstallationTokenFunc != nil {
+		return m.MintQueueInstallationTokenFunc(ctx, req)
+	}
+	return InstallationToken{}, contractkit.MockNotSet("MockService", "MintQueueInstallationToken")
 }
 
 // ListOrgGitHubInstallations records the call and delegates to ListOrgGitHubInstallationsFunc when set.

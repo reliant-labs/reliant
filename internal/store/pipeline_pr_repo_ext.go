@@ -118,15 +118,28 @@ func casPRPipeline(ctx context.Context, db orm.Context, recordID string, version
 // waiting for them, and the two claim disjoint sets. Outside a transaction
 // the locks end with the statement. It reads pr_pipeline_due_idx.
 func ListDuePRPipelines(ctx context.Context, db orm.Context, now time.Time, limit int) ([]*core.PRPipeline, error) {
+	return ListDuePRPipelinesAfter(ctx, db, now, limit, nil)
+}
+
+// ListDuePRPipelinesAfter continues the due scan strictly after the cursor's
+// (next_action_at, record_id), retaining the same ordering and row locks.
+func ListDuePRPipelinesAfter(ctx context.Context, db orm.Context, now time.Time, limit int, after *core.PRPipeline) ([]*core.PRPipeline, error) {
 	if limit <= 0 {
 		return nil, nil
 	}
 	var out []*core.PRPipeline
+	cursor := ""
+	args := []any{now.UTC(), core.PipelineRepoModeOff}
+	if after != nil {
+		cursor = " AND (p.next_action_at, p.record_id) > (?, ?)"
+		args = append(args, after.NextActionAt, after.RecordID)
+	}
+	args = append(args, limit)
 	if err := db.Bun().NewRaw(`SELECT `+prPipelineColumns+` FROM pr_pipeline AS p
 		WHERE p.next_action_at IS NOT NULL AND p.next_action_at <= ?
-		  AND EXISTS (SELECT 1 FROM pipeline_repos r WHERE r.id = p.repo_id AND r.mode <> ?)
+		  AND EXISTS (SELECT 1 FROM pipeline_repos r WHERE r.id = p.repo_id AND r.mode <> ?)`+cursor+`
 		ORDER BY p.next_action_at, p.record_id LIMIT ?
-		FOR UPDATE OF p SKIP LOCKED`, now.UTC(), core.PipelineRepoModeOff, limit).Scan(ctx, &out); err != nil {
+		FOR UPDATE OF p SKIP LOCKED`, args...).Scan(ctx, &out); err != nil {
 		return nil, fmt.Errorf("list due pr pipelines: %w", err)
 	}
 	return out, nil

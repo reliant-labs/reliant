@@ -26,6 +26,21 @@
 // tried and dropped: it isolates nothing while egress is open, and a shared
 // engine runs out of address pools for it.
 //
+// The warm cache (Spec.CacheVolume) weakens it further, on purpose. A gate
+// whose repository set gate.allow_unisolated gets that repository's named
+// cache volume (gaterun.CacheVolumeName: reliant-gate-cache-<owner>-<name>-<hash>),
+// read-write at gaterun.CacheMount. The gate image points GOCACHE, GOMODCACHE, the pnpm
+// store and XDG_CACHE_HOME there. The volume is labelled LabelCache (no run
+// id), so Teardown leaves it, and the janitor finds caches by that label. A
+// same-name volume without those labels is refused (ErrCacheForeign), never
+// mounted. A
+// cache shared across gates is a cross-gate poisoning vector: one candidate's
+// code can plant a build artifact that a later candidate's gate trusts. It
+// is acceptable only because the repository opted in to unisolated gates and
+// a runc gate is never landable. The follow-up that closes this gap and the
+// missing docker engine together is a dedicated gate machine with sysbox,
+// where each gate gets isolation and a nested engine of its own.
+//
 //forge:exclude-contract: a per-machine gate backend implementing gaterun.Backend (the consumer's interface), driven through the docker CLI; its tests fake the CLI, so a generated mock buys nothing
 package runcgate
 
@@ -50,11 +65,19 @@ import (
 const (
 	LabelRunID   = "reliant.run-id"
 	LabelBackend = "reliant.gate.backend"
+	// LabelCache marks a repository's warm cache volume; its value is the
+	// volume name. It carries no run id, so no gate's Teardown removes it.
+	LabelCache = "reliant.gate.cache"
 )
 
 // ErrEnvInjected: the created container's environment held a variable
 // neither the gate nor its image declared. The gate is not started.
 var ErrEnvInjected = errors.New("gate environment holds an undeclared variable")
+
+// ErrCacheForeign: a volume with the warm cache's name exists but lacks the
+// labels this backend gives a cache, so something else made it. It is not
+// mounted, and the gate is not started.
+var ErrCacheForeign = errors.New("the warm cache volume was not created by the gate backend")
 
 // ErrInvalidSpec: the Spec cannot be run as given.
 var ErrInvalidSpec = errors.New("invalid gate spec")
@@ -137,7 +160,10 @@ func (b *Backend) Preflight(ctx context.Context) error {
 	return nil
 }
 
-var runIDPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9_.-]{0,62}$`)
+var (
+	runIDPattern       = regexp.MustCompile(`^[a-z0-9][a-z0-9_.-]{0,62}$`)
+	cacheVolumePattern = regexp.MustCompile(`^reliant-gate-cache-[a-z0-9_.-]{1,201}$`)
+)
 
 func validate(s gaterun.Spec) error {
 	bad := func(format string, a ...any) error {
@@ -154,6 +180,8 @@ func validate(s gaterun.Spec) error {
 		return bad("no source")
 	case s.Limits.CPUs <= 0, s.Limits.MemoryBytes <= 0, s.Limits.Pids <= 0, s.Limits.Wall <= 0:
 		return bad("cpu, memory, pids and wall limits are required (got %+v)", s.Limits)
+	case s.CacheVolume != "" && !cacheVolumePattern.MatchString(s.CacheVolume):
+		return bad("cache volume %q is not reliant-gate-cache-<repo>", s.CacheVolume)
 	}
 	for _, kv := range s.Env {
 		if !strings.Contains(kv, "=") {
@@ -188,6 +216,9 @@ func createArgs(s gaterun.Spec) []string {
 		"--workdir", gaterun.SrcDir,
 		"--entrypoint", s.Command[0],
 	}
+	if s.CacheVolume != "" {
+		args = append(args, "--mount", "type=volume,source="+s.CacheVolume+",target="+gaterun.CacheMount)
+	}
 	if s.VulnDBDir != "" {
 		args = append(args, "--mount", "type=bind,source="+s.VulnDBDir+",target="+gaterun.VulnDBMount+",readonly")
 	}
@@ -208,17 +239,29 @@ func (b *Backend) Run(ctx context.Context, s gaterun.Spec) (gaterun.Result, erro
 	if _, err := b.docker(ctx, append(append([]string{"volume", "create"}, labels...), vol)...); err != nil {
 		return gaterun.Result{}, err
 	}
+	stdout, stderr := orDiscard(s.Stdout), orDiscard(s.Stderr)
+	if s.CacheVolume != "" {
+		if err := b.ensureCache(ctx, s.CacheVolume); err != nil {
+			return gaterun.Result{}, err
+		}
+		_, _ = fmt.Fprintf(stdout, "reliant-gate: %s: warm cache volume %s (%s) at %s\n", s.RunID, s.CacheVolume, b.volumeSize(ctx, s.CacheVolume), gaterun.CacheMount)
+		defer func() {
+			_, _ = fmt.Fprintf(stdout, "reliant-gate: %s: warm cache volume %s is %s after the gate\n", s.RunID, s.CacheVolume, b.volumeSize(context.WithoutCancel(ctx), s.CacheVolume))
+		}()
+	}
 	if _, err := b.docker(ctx, createArgs(s)...); err != nil {
 		return gaterun.Result{}, err
 	}
 	if err := b.checkEnv(ctx, ctr, s); err != nil {
 		return gaterun.Result{}, err
 	}
-	if _, err := b.docker(ctx, "cp", strings.TrimRight(s.SourceDir, "/")+"/.", ctr+":"+gaterun.SrcDir); err != nil {
+	// -a: the tree is owned by the image's user (the gate image runs as a
+	// non-root user), not by the host uid that fetched it, so the gate can
+	// write in its own checkout.
+	if _, err := b.docker(ctx, "cp", "-a", strings.TrimRight(s.SourceDir, "/")+"/.", ctr+":"+gaterun.SrcDir); err != nil {
 		return gaterun.Result{}, err
 	}
 
-	stdout, stderr := orDiscard(s.Stdout), orDiscard(s.Stderr)
 	wctx, cancel := context.WithTimeout(ctx, s.Limits.Wall)
 	defer cancel()
 	start := time.Now()
@@ -267,6 +310,50 @@ func (b *Backend) state(ctx context.Context, ctr string) (containerState, error)
 		return containerState{}, fmt.Errorf("decode the gate's state: %w", err)
 	}
 	return st, nil
+}
+
+// ensureCache creates the warm cache volume name, or finds it, and refuses
+// one this backend did not make. `docker volume create` is idempotent and
+// returns an existing volume of that name unchanged, so the labels are read
+// back afterwards: a same-name volume that someone else created (and could
+// have filled) is never mounted into a gate.
+func (b *Backend) ensureCache(ctx context.Context, name string) error {
+	if _, err := b.docker(ctx, "volume", "create", "--label", LabelCache+"="+name, "--label", LabelBackend+"=runc", name); err != nil {
+		return err
+	}
+	out, err := b.docker(ctx, "volume", "inspect", "--format", "{{json .Labels}}", name)
+	if err != nil {
+		return err
+	}
+	var labels map[string]string
+	if err := json.Unmarshal([]byte(out), &labels); err != nil {
+		return fmt.Errorf("decode the cache volume's labels: %w", err)
+	}
+	if labels[LabelCache] != name || labels[LabelBackend] != "runc" {
+		return fmt.Errorf("%w: %s has labels %v", ErrCacheForeign, name, labels)
+	}
+	return nil
+}
+
+// volumeSize is the engine's size of the volume name, as `docker system df
+// -v` reports it ("1.2GB"), or why it is unknown. It is for the log only.
+func (b *Backend) volumeSize(ctx context.Context, name string) string {
+	dctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	out, err := b.docker(dctx, "system", "df", "-v", "--format", "{{json .Volumes}}")
+	if err != nil {
+		return "size unknown: " + err.Error()
+	}
+	var vols []struct{ Name, Size string }
+	if err := json.Unmarshal([]byte(out), &vols); err != nil {
+		return "size unknown: " + err.Error()
+	}
+	for _, v := range vols {
+		if v.Name == name {
+			return v.Size
+		}
+	}
+	return "size unknown: not listed"
 }
 
 // checkEnv refuses a created container whose environment holds anything the

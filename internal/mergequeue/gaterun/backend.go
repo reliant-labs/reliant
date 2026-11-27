@@ -53,6 +53,11 @@ const (
 	// VulnDBMount is where the machine's grype database is mounted,
 	// read-only, for the sbom_scan stage.
 	VulnDBMount = "/vulndb"
+	// CacheMount is where a gate's toolchain caches live (the gate image
+	// points GOCACHE, GOMODCACHE, the pnpm store and XDG_CACHE_HOME under
+	// it). With Spec.CacheVolume it is the repository's warm cache volume;
+	// without, a directory on the per-gate work volume.
+	CacheMount = WorkMount + "/cache"
 )
 
 // Spec is one gate as a backend runs it.
@@ -74,7 +79,15 @@ type Spec struct {
 	// read-only at VulnDBMount; "" mounts nothing (sbom_scan is then
 	// unscanned).
 	VulnDBDir string
-	Limits    Limits
+	// CacheVolume is the repository's warm cache volume
+	// ([CacheVolumeName]), mounted read-write at CacheMount and kept across
+	// gates; "" mounts none. The Runner sets it only for a not-isolated gate
+	// whose repository opted in (StartRequest.WarmCache): a cache shared
+	// between gates is a path for one gate's code to poison the next one's
+	// build, acceptable only under that opt-in. An isolated backend never
+	// gets one.
+	CacheVolume string
+	Limits      Limits
 	// Stdout and Stderr receive the gate's own output; nil discards it.
 	Stdout, Stderr io.Writer
 }

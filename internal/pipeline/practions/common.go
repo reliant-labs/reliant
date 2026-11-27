@@ -67,19 +67,11 @@ func (p *prCall) shadow() bool { return p.repo.Mode == core.PipelineRepoModeShad
 // project's, in the run's org. The repository's mode is read here, on
 // every call, so a mode change takes effect at the next action.
 func (s *Service) load(ctx context.Context, req *serveraction.Request) (*prCall, error) {
-	id, _ := req.Params["record_id"].(string)
-	id = strings.TrimSpace(id)
-	if id == "" {
-		return nil, serveraction.Errorf(serveraction.CodeInvalidArgument, "%s needs record_id", req.Name)
-	}
-	rec, err := s.deps.Store.GetPRRecordByID(ctx, id)
+	rec, err := s.record(ctx, req)
 	if err != nil {
 		return nil, err
 	}
-	if rec == nil {
-		return nil, serveraction.Errorf(serveraction.CodeNotFound, "no PR record %s", id)
-	}
-	row, err := s.deps.Store.GetPRPipeline(ctx, id)
+	row, err := s.deps.Store.GetPRPipeline(ctx, rec.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -108,6 +100,56 @@ func (s *Service) load(ctx context.Context, req *serveraction.Request) (*prCall,
 		req: req, rec: rec, row: row, repo: repo, cfg: cfg, now: s.now(),
 		as: Caller{RunID: inv.RunID, NodeID: inv.NodeID, ToolCallID: inv.ExecutionKey, Automation: pr.Automation},
 	}, nil
+}
+
+// record finds the PR the call names: by `record_id`, or by `repository`
+// (owner/name) and `number` among the repositories the run's project has
+// enrolled. The second form is what a GitHub firing of the `pr` workflow
+// knows: its trigger.record carries the repository and number but no id.
+func (s *Service) record(ctx context.Context, req *serveraction.Request) (*core.PRRecord, error) {
+	id, _ := req.Params["record_id"].(string)
+	if id = strings.TrimSpace(id); id != "" {
+		rec, err := s.deps.Store.GetPRRecordByID(ctx, id)
+		if err != nil {
+			return nil, err
+		}
+		if rec == nil {
+			return nil, serveraction.Errorf(serveraction.CodeNotFound, "no PR record %s", id)
+		}
+		return rec, nil
+	}
+	repository, _ := req.Params["repository"].(string)
+	repository = strings.TrimSpace(repository)
+	number := 0
+	switch n := req.Params["number"].(type) {
+	case float64:
+		number = int(n)
+	case int:
+		number = n
+	case int64:
+		number = int(n)
+	}
+	if repository == "" || number <= 0 {
+		return nil, serveraction.Errorf(serveraction.CodeInvalidArgument, "%s needs record_id, or repository and number", req.Name)
+	}
+	repos, err := s.deps.Store.ListEnrolledPipelineRepos(ctx)
+	if err != nil {
+		return nil, err
+	}
+	pr := req.Principal
+	for _, r := range repos {
+		if r.ProjectID != pr.ProjectID || r.OrgID != pr.OrgID || !strings.EqualFold(r.Repository, repository) {
+			continue
+		}
+		rec, err := s.deps.Store.GetPRRecord(ctx, r.Provider, r.Repository, number, []string{r.RepositoryID})
+		if err != nil {
+			return nil, err
+		}
+		if rec != nil {
+			return rec, nil
+		}
+	}
+	return nil, serveraction.Errorf(serveraction.CodeNotFound, "%s#%d is not a PR of a repository this run's project has enrolled", repository, number)
 }
 
 // loadActive is load for an action that changes the PR: mode off refuses it.

@@ -81,7 +81,64 @@ func (s *Service) Next(ctx context.Context, req *serveraction.Request) (*servera
 	if err != nil {
 		return nil, err
 	}
-	return d.result(), nil
+	r := d.result()
+	// What the rest of the `pr` workflow needs to act on the answer: the
+	// record every later action names, the branches the fixer checks out
+	// and pushes to, the mode (shadow pushes nothing), and the fixer's
+	// scoped check, built from the base branch's config only, never from
+	// anything the PR head carries.
+	r.Data["record_id"] = p.rec.ID
+	r.Data["repository"] = p.rec.Repository
+	r.Data["number"] = p.rec.Number
+	r.Data["head_ref"] = pr.HeadRef
+	r.Data["base_ref"] = pr.BaseRef
+	r.Data["shadow"] = p.shadow()
+	r.Data["check_script"] = CheckScript(p.cfg, pr.BaseRef)
+	target, subdir, err := s.checkout(ctx, p)
+	if err != nil {
+		return nil, err
+	}
+	r.Data["repo_target"], r.Data["repo_subdir"] = target, subdir
+	return r, nil
+}
+
+// checkout is where the enrolled repository sits in its project, as
+// create_worktree names it (target_repo: the registered relative path, or
+// the name of a standalone project's only repo) and as a directory inside
+// the worktree ("" when the repository is the worktree's root). It matches
+// the project's repos by remote, then by name.
+func (s *Service) checkout(ctx context.Context, p *prCall) (target, subdir string, err error) {
+	repos, err := s.deps.Store.ListReposByProject(ctx, p.repo.ProjectID)
+	if err != nil {
+		return "", "", err
+	}
+	_, name, _ := strings.Cut(p.repo.Repository, "/")
+	var byName *core.Repo
+	for _, r := range repos {
+		if r.RemoteURL != nil && remoteNames(*r.RemoteURL, p.repo.Repository) {
+			byName = r
+			break
+		}
+		if strings.EqualFold(r.Name, name) && byName == nil {
+			byName = r
+		}
+	}
+	switch {
+	case byName == nil:
+		return name, "", nil
+	case byName.RelativePath == "":
+		return byName.Name, "", nil
+	default:
+		return byName.RelativePath, byName.RelativePath, nil
+	}
+}
+
+// remoteNames reports whether a git remote URL names the GitHub repository
+// owner/name (https or ssh, with or without .git).
+func remoteNames(remote, repository string) bool {
+	r := strings.ToLower(strings.TrimSuffix(strings.TrimSpace(remote), ".git"))
+	want := strings.ToLower(repository)
+	return strings.HasSuffix(r, "github.com/"+want) || strings.HasSuffix(r, "github.com:"+want)
 }
 
 func (s *Service) decide(ctx context.Context, p *prCall, pr PullRequest, comment any) (decision, error) {
@@ -400,9 +457,14 @@ func (s *Service) superseded(ctx context.Context, p *prCall, pr PullRequest) (de
 	for _, e := range evidence {
 		cited = append(cited, e.Detail)
 	}
-	return decision{Next: NextClose, Head: p.row.StateHeadSHA,
-		Evidence: map[string]any{"kind": string(got.Kind), "by": got.By, "facts": cited},
-		Reason:   fmt.Sprintf("%s by #%d: %s", got.Kind, got.By, strings.Join(cited, "; "))}, true, nil
+	ev := map[string]any{"kind": string(got.Kind), "by": got.By, "facts": cited}
+	// A person reopened it after the pipeline closed it for this
+	// evidence: never close it again for the same reason.
+	if reopened, err := s.closedBefore(ctx, p, closeSignature(ev)); err != nil || reopened {
+		return decision{}, false, err
+	}
+	return decision{Next: NextClose, Head: p.row.StateHeadSHA, Evidence: ev,
+		Reason: fmt.Sprintf("%s by #%d: %s", got.Kind, got.By, strings.Join(cited, "; "))}, true, nil
 }
 
 // idle answers none, and leaves the row waiting for nothing: in state, with

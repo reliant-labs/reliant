@@ -4,10 +4,10 @@ sidebarTitle: "Feature flags and experiments"
 description: "Forge Changes runs remote config, gradual rollouts and A/B tests for a hosted forge app as one object: declare a change in changes.yaml, evaluate it in Go or the browser, and decide who gets it from the console or an agent."
 ---
 
-{/* verified: 2026-11-25 · sources: forge docs/changes.md, pkg/changes/doc.go, pkg/changes/store.go, web-runtime/src/changes-store.ts, skill observability/changes (forge v1.10.0), forge docs/proposals/changes.md §9; control-plane proto/services/changes/v1/changes.proto (cp v1.31.0); reliant docs/reference/tools.mdx (list_changes, get_change, manage_change, change_results; reliant v1.27.0); live reliantlabs.io/_forge/changes.json */}
+{/* verified: 2026-11-27 · sources: forge docs/changes.md, pkg/changes, skill observability/changes (forge v1.12.0: changes.yaml from a pinned source, changes:read fetch, plan warning); control-plane proto/services/changes/v1/changes.proto and internal/operators (cp v1.31.0: delivery to sites and workloads, GetChangesDeliveryStatus); reliant web Experiments delivery status (reliant v1.33.0); control-plane#3712 and #3713 are open and documented as coming; live reliantlabs.io/_forge/changes.json */}
 
 <Info>
-**Beta.** Forge Changes is in beta. Static sites on Reliant hosting receive changes today. Delivery to hosted backend workloads is rolling out; until it reaches your environment, a backend evaluates every change to the default written in your code.
+**Beta.** Forge Changes is in beta. On Reliant hosting, the platform delivers each environment's snapshot to its static sites and to its hosted backend workloads (control plane v1.31.0 and later). Until a snapshot reaches an app, the app evaluates every change to the default written in your code. [Delivery status](#check-that-a-change-reached-your-apps) shows where a change stands.
 </Info>
 
 A **change** is one piece of app behavior that can differ between people without a deploy. The same object covers three jobs:
@@ -47,6 +47,12 @@ Each change has a `type` (`bool`, `string`, `number` or `json`), one to 32 named
 Run `reliant forge generate`. It writes typed accessors: `internal/changes/changes_gen.go` for a Go backend, and `src/lib/changes_gen.ts` for each frontend that depends on `@reliantlabs/forge-web-runtime`. An invalid file fails `forge generate` and every release build, with each problem and its line number.
 
 Every release carries the declaration. The control plane uses it to refuse launching, ramping or rolling out a variant that the environment's current release does not declare. You can still draft, preview and stop a change before the release that declares it ships.
+
+### Frontends built from another repository
+
+A frontend declared with `source = forge.GitSource {...}` runs another repository's code, and its accessors come from that repository's own `changes.yaml`. From forge v1.12.0 the release carries that file too: forge reads `changes.yaml` at the root of the source repository (not at `subdir`), at the commit the release pins for that frontend, and merges it with your project's declarations. Each file is validated on its own, and an error names where it came from, such as `github.com/acme/web@3f9c2a1b7d0e:changes.yaml:5`. The merged set still counts toward the 200-change limit, and `forge env shape <env>` names the source of each change a source contributed.
+
+The same key declared twice is kept once when both declarations are identical in type, default and variants. Two different declarations are the `changes-source-conflict` lint rule: it warns first, shipping your project's declaration (else the first source's, by frontend name) and printing both origins, and from forge v1.13.0 it refuses the shape and the build. Rename one key, or make the two equal. To keep a source's changes out of the environment, set `changes_from_source = False` on that frontend. Your project generates no accessors for a source's changes, because they belong to the source's own code.
 
 ## Evaluate it in your code
 
@@ -96,6 +102,27 @@ On Reliant hosting the platform writes each environment's snapshot for you whene
 
 Stop takes effect as fast as that refresh.
 
+### Check that a change reached your apps
+
+Saving a change and delivering it are two steps. The change's page in the Experiments view says whether its saved revision has reached the environment's apps, and it works from the control plane's `GetChangesDeliveryStatus` call (control plane v1.31.0 and later; the page itself is in Reliant v1.33.0). It compares against the environment's latest snapshot revision rather than the change's own, because a snapshot also moves when another change in the environment moves, so "waiting" can outlast this change's own delivery.
+
+| State | Meaning |
+|---|---|
+| Delivered | every delivery target has written the environment's latest revision. The page shows when. |
+| Waiting for delivery | some targets are behind. The page reads "N of M delivery targets have the environment's latest changes so far". |
+| Saved, no targets | no hosted app in this environment receives changes |
+| Saved | the status is still loading, or this control plane cannot report delivery yet |
+
+"Delivered" means written to the static site's origin or to the workload's ConfigMap, not seen by every page or pod. A page applies it on its next load, and a running workload picks it up about a minute after the write plus the SDK's 10 second re-read. Each target is listed with its kind (hosted site or hosted workloads), name and the time it was last written.
+
+### Apps that are not on Reliant hosting
+
+<Warning>
+**Coming in a later release.** forge v1.12.0 includes the app side described here, but the control plane has not shipped the token scope it needs (control-plane#3713 is open). Until it does, an app outside Reliant hosting cannot fetch a snapshot, and you should not put a broader token such as `changes:write` or `obs:read` in an app to work around it.
+</Warning>
+
+An app that runs on your own cluster, a VM or another host will fetch the same snapshot from the control plane with an access token carrying the `changes:read` scope, which reads one environment's snapshot and nothing else. You create the token in [Settings → API tokens](https://forge.reliantlabs.io/settings/tokens), bound to one environment, and give the backend three environment variables: `FORGE_CHANGES_URL`, `FORGE_CHANGES_ENVIRONMENT_ID` and `FORGE_CHANGES_TOKEN`. Then open the store with `changes.OpenFromEnv(ctx, os.Getenv, changes.Options{})`, which reads `FORGE_CHANGES_FILE` when it is set and otherwise fetches every 15 seconds, keeping the last good snapshot when a fetch fails. The browser never holds the token: serve `/_forge/changes.json` from your own server with `fetchChangesSnapshot` from `@reliantlabs/forge-web-runtime/changes-server`. The full walk-through is in forge's `docs/changes.md`, under "Apps not on Reliant hosting".
+
 ## Run a change
 
 Run changes from the **Experiments** page of the [Forge console](https://forge.reliantlabs.io), one per app, under **Analytics** in the project sidebar. If your sidebar does not list it yet, open `/forge/p/<app>/experiments`. It lists each change with its environment, mode and share, and lets you draft, preview, launch, ramp, roll out and stop one.
@@ -115,6 +142,10 @@ Each experiment run has a readout, on the change's page or from the agent tool [
 - **A verdict.** No data, sample-ratio check failed, inconclusive (with the reason), treatment better or treatment worse. A result stays inconclusive until every variant has a minimum sample, 100 units unless you set another.
 
 Decide once, at the sample size you planned, not at the first significant look. Once the run ends, or the change leaves experiment mode, the readout is final and its numbers stop moving.
+
+## When a deploy drops a variant
+
+A release that no longer declares a variant a running change delivers, or the change's whole key, still deploys, and the platform serves that change as off, so everyone gets the default. forge v1.12.0 can print a warning for this in the deploy plan under `running changes this deploy stops`, and carry it in `deploy_plan.change_warnings` of `--json`. The control plane half, which stops the change and records why in its audit trail, is not released yet (control-plane#3712 is open), so today the plan prints no such warning. To keep a change running, keep its variant declared in `changes.yaml` until the change ends.
 
 ## What it does not do
 

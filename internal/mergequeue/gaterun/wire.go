@@ -2,10 +2,13 @@
 package gaterun
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"regexp"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/pipeline/config"
@@ -115,16 +118,33 @@ const (
 type StartRequest struct {
 	GateID string `json:"gate_id"`
 	// Repo is "owner/name"; the daemon fetches Ref from GitHub.
-	Repo   string            `json:"repo"`
-	Ref    string            `json:"ref"`
-	SHA    string            `json:"sha"`
-	Stages []PlanStage       `json:"stages"`
-	Env    map[string]string `json:"env,omitempty"`
+	Repo string `json:"repo"`
+	Ref  string `json:"ref"`
+	SHA  string `json:"sha"`
+	// BaseSHA is the batch's base: the main commit the candidate is built
+	// on. The daemon fetches it beside the candidate, so `git merge-base`
+	// and a diff against it work in the gate's checkout, and the gate's
+	// environment names it (EnvGateBase, EnvCIBase). "" (a server that does
+	// not send it, or a gate of main's own tip) fetches the candidate alone.
+	// A daemon that predates the field ignores it.
+	BaseSHA string            `json:"base_sha,omitempty"`
+	Stages  []PlanStage       `json:"stages"`
+	Env     map[string]string `json:"env,omitempty"`
 	// TimeoutMs bounds the gate inside the boundary.
 	TimeoutMs int64 `json:"timeout_ms"`
 	// AllowNotIsolated lets the member fall back to runc. The Dispatcher
 	// sets it only for a shadow gate of a repository in shadow mode.
 	AllowNotIsolated bool `json:"allow_not_isolated,omitempty"`
+	// WarmCache gives the gate the repository's warm cache volume
+	// (Spec.CacheVolume). Off by default. It takes effect only together with
+	// AllowNotIsolated, and only when the gate runs on the not-isolated runc
+	// backend. The Dispatcher sets it only for a repository that set
+	// gate.allow_unisolated in its pipeline.yaml. A shared cache lets one
+	// gate's code poison a later gate's build, and the opt-in is the
+	// repository accepting that until sysbox gate machines exist. A dedicated
+	// sysbox gate machine, with a nested engine and isolation per gate, closes
+	// this gap and the no-docker gap together.
+	WarmCache bool `json:"warm_cache,omitempty"`
 	// MaxConcurrent is how many gates the member runs at once (the pool's
 	// max_runs_per_member); 0 is 1.
 	MaxConcurrent int `json:"max_concurrent,omitempty"`
@@ -154,14 +174,32 @@ func (r StartRequest) Validate() error {
 		return bad("ref %q is not reliant-queue/<batch>", r.Ref)
 	case !shaPattern.MatchString(r.SHA):
 		return bad("sha %q is not a full commit sha", r.SHA)
+	case r.BaseSHA != "" && !shaPattern.MatchString(r.BaseSHA):
+		return bad("base sha %q is not a full commit sha", r.BaseSHA)
 	case r.TimeoutMs <= 0:
 		return bad("no timeout")
 	}
 	if err := validatePlan(r.Stages); err != nil {
 		return err
 	}
-	_, err := GateEnv(r.GateID, r.Env)
+	_, err := GateEnv(r.GateID, r.gateEnv())
 	return err
+}
+
+// gateEnv is the request's gate.env with the base commit's variables over
+// it: when the request names a base, the batch's real base wins over any
+// value pipeline.yaml's gate.env sets for them.
+func (r StartRequest) gateEnv() map[string]string {
+	if r.BaseSHA == "" {
+		return r.Env
+	}
+	env := make(map[string]string, len(r.Env)+2)
+	for k, v := range r.Env {
+		env[k] = v
+	}
+	env[EnvGateBase] = r.BaseSHA
+	env[EnvCIBase] = r.BaseSHA
+	return env
 }
 
 // StartReply is CommandStart's answer.
@@ -222,11 +260,52 @@ const (
 	EnvVulnDB   = "RELIANT_GATE_VULNDB"
 )
 
+// EnvDockerSkips is the skip log of the stage that is running. The stage
+// script sets it to a file named for the stage and the run. A test that
+// cannot get the docker engine it needs appends one line to the file and
+// skips with [DockerSkipMessage]. The count of those lines becomes
+// StageResult.SkippedDockerTests, so a skipped container test is counted in
+// the verdict and never passes silently. The path holds the run id, so Go's
+// test cache never replays a skip that it did not record (the cache keys on
+// the values of the variables a test reads).
+//
+// Gates have no docker engine: runc gates run with no nested engine, and
+// the GitHub merge queue on cicd has none either (its runner users are not
+// in the docker group). A dedicated sysbox gate machine, with a nested engine
+// per gate, closes this gap.
+const EnvDockerSkips = "RELIANT_GATE_DOCKER_SKIPS"
+
+// EnvGateBase and EnvCIBase name the batch's base commit (StartRequest
+// BaseSHA) in a gate that has one. The gate's checkout has no origin/main:
+// a repository's affected-only lanes diff against this commit instead. Both
+// names are set because repositories read either: reliant's scripts/gate.sh
+// reads GATE_BASE; forge's ci commands and control-plane's gate read CI_BASE.
+const (
+	EnvGateBase = "GATE_BASE"
+	EnvCIBase   = "CI_BASE"
+)
+
+// DockerSkipMessage is how a container test reports a skip in a gate.
+const DockerSkipMessage = "skip: docker unavailable (gate)"
+
 // reservedEnv are the names gate.env may not set.
 var reservedEnv = map[string]bool{
 	"HOME": true, "TMPDIR": true, "DOCKER_HOST": true,
 	"RELIANT_GATE": true, "RELIANT_RUN_ID": true, EnvGateRoot: true, EnvVulnDB: true,
-	"RELIANT_GATE_STAGE": true, "RELIANT_GATE_ARTIFACTS": true,
+	"RELIANT_GATE_STAGE": true, "RELIANT_GATE_ARTIFACTS": true, EnvDockerSkips: true,
+}
+
+// CacheVolumeName is repo's warm cache volume: "reliant-gate-cache-", repo
+// ("owner/name") lowercased with '/' as '-' for a person to read, then "-"
+// and the first 12 hex digits of the SHA-256 of the lowercased repo. The
+// readable part alone is not one-to-one ("a/b-c" and "a-b/c" read alike),
+// so the hash is what keeps two repositories from sharing one cache. Case
+// is folded first because GitHub names are case-insensitive. repo must be a
+// valid StartRequest repo.
+func CacheVolumeName(repo string) string {
+	lower := strings.ToLower(repo)
+	sum := sha256.Sum256([]byte(lower))
+	return "reliant-gate-cache-" + strings.ReplaceAll(lower, "/", "-") + "-" + hex.EncodeToString(sum[:6])
 }
 
 var envNamePattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]{0,127}$`)

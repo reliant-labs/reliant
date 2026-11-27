@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"encoding/json"
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -72,6 +73,11 @@ func (r *Repo) SetQueueBatchState(ctx context.Context, id string, from, to core.
 // MarkQueueBatchLanded records a passed batch as landed at landedSHA.
 func (r *Repo) MarkQueueBatchLanded(ctx context.Context, id, landedSHA string) (*core.QueueBatch, error) {
 	return store.MarkQueueBatchLanded(ctx, r.ORM(), id, landedSHA)
+}
+
+// PatchQueueBatchVerdict merges a JSON object into the batch's verdict_json.
+func (r *Repo) PatchQueueBatchVerdict(ctx context.Context, id string, patch json.RawMessage) (*core.QueueBatch, error) {
+	return store.PatchQueueBatchVerdict(ctx, r.ORM(), id, patch)
 }
 
 // InsertMainHealth records a verdict on a sha of main.

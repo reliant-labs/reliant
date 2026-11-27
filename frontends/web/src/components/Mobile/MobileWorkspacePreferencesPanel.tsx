@@ -53,10 +53,10 @@ export function MobileWorkspacePreferencesPanel() {
   return (
     <div className="divide-y divide-border">
       <div className="bg-muted/30 px-4 py-2">
-        <p className="text-xs font-semibold text-muted-foreground">
+        <p className="text-meta font-semibold text-muted-foreground">
           Archive behavior
         </p>
-        <p className="mt-0.5 text-xs text-muted-foreground">
+        <p className="mt-0.5 text-meta text-muted-foreground">
           Decide what happens after you archive a workspace.
         </p>
       </div>
@@ -82,8 +82,8 @@ export function MobileWorkspacePreferencesPanel() {
                 )}
               />
               <div className="min-w-0">
-                <p className="text-sm font-medium text-foreground">{mode.label}</p>
-                <p className="mt-0.5 text-xs text-muted-foreground">{mode.description}</p>
+                <p className="text-ui font-medium text-foreground">{mode.label}</p>
+                <p className="mt-0.5 text-meta text-muted-foreground">{mode.description}</p>
               </div>
             </button>
           );
@@ -145,7 +145,7 @@ export function MobileWorkspacePreferencesPanel() {
 
       <div className="flex items-start gap-3 bg-muted/30 p-4">
         <Info className="mt-0.5 h-4 w-4 shrink-0 text-primary-ink" />
-        <p className="text-xs text-muted-foreground">
+        <p className="text-meta text-muted-foreground">
           Archiving always keeps the workspace record so you can restore it later.
           Cleanup only controls whether local files or git branches are removed.
         </p>
