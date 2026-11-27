@@ -10,7 +10,6 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
-	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -212,17 +211,11 @@ func (s *Service) refreshTriggerAccess(ctx context.Context, trigger *core.Trigge
 	if access == nil {
 		return nil
 	}
-	// The refresh records what the owner's provider credential can see now:
-	// a monotonic snapshot of the provider, not part of the caller's change,
-	// so it commits on its own, outside any transaction ctx carries.
-	// ManageActivation runs the whole activation SERIALIZABLE; joined to it,
-	// this write to the owner's integration_event_access rows made every
-	// concurrent activation of one owner conflict on those rows (prod,
-	// 2026-11-26: an agent creating seven activations at once had all seven
-	// fail with 40001 after 7 attempts and ~98s each). Nothing in the caller's
-	// transaction reads the snapshot back, and a rolled-back activation
-	// leaves a snapshot that is still true.
-	refresh := func() error { return access.Refresh(orm.Detached(ctx), trigger.UserID) }
+	// Credential reads and renewal must retain the caller's transaction:
+	// ManageActivation holds SHARE locks on connections, so renewing through
+	// a detached connection would wait for the caller's own locks. The access
+	// refresher detaches only its independent snapshot persistence.
+	refresh := func() error { return access.Refresh(ctx, trigger.UserID) }
 	if memo := accessRefreshMemoFrom(ctx); memo != nil {
 		err = memo.refresh(accessRefreshKey{integration: cfg.Integration, userID: trigger.UserID}, refresh)
 	} else {

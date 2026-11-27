@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/reliant-labs/forge/pkg/observe"
+	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/netguard"
 )
@@ -96,6 +97,11 @@ func New(grants Grants, refreshes Refreshes, tokens TokenSource, opts Options) *
 func (r *Refresher) Refresh(ctx context.Context, userID string) error {
 	at := r.now().UTC()
 	grants, subject, err := r.read(ctx, userID)
+	// Only the provider snapshot commits independently of activation. Token
+	// renewal above must join its caller, which may already lock connections.
+	// Snapshot rows are not read by activation and remain valid on rollback;
+	// joining their writes would make concurrent activations conflict.
+	ctx = orm.Detached(ctx)
 	if err != nil {
 		if IsPermanent(err) {
 			if clearErr := r.grants.ReplaceIntegrationAccess(ctx, userID, IntegrationID, "", at, nil); clearErr != nil {

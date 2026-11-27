@@ -5,8 +5,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"sync"
 	"testing"
+	"time"
 
 	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
 
@@ -20,6 +22,8 @@ import (
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/integrations/ghaccess"
+	"github.com/reliant-labs/reliant/internal/netguard/netguardtest"
 	"github.com/reliant-labs/reliant/internal/store"
 )
 
@@ -167,11 +171,9 @@ func (p *txProbeAccess) Refresh(ctx context.Context, _ string) error {
 
 func (p *txProbeAccess) IsPermanent(error) bool { return false }
 
-// The access refresh commits on its own, never as part of the caller's
-// transaction: joined to ManageActivation's SERIALIZABLE one, its write to
-// the owner's access rows made concurrent activations of one owner abort
-// each other.
-func TestRefreshTriggerAccessRunsOutsideTheCallersTransaction(t *testing.T) {
+// Credential access must join ManageActivation's transaction, which already
+// holds connection locks. Only snapshot persistence may run detached.
+func TestRefreshTriggerAccessRetainsTheCallersTransaction(t *testing.T) {
 	t.Parallel()
 
 	env, _ := setupAccessTriggerTest(t)
@@ -182,8 +184,77 @@ func TestRefreshTriggerAccessRunsOutsideTheCallersTransaction(t *testing.T) {
 		return s.refreshTriggerAccess(txCtx, memoTestTrigger(t, env.userID))
 	})
 	require.NoError(t, err)
-	assert.Equal(t, []bool{false}, probe.inTx, "the refresh ran detached from the caller's transaction")
+	assert.Equal(t, []bool{true}, probe.inTx, "credential renewal must use the caller's connection locks")
 }
+
+// renewingAccessToken exercises the same connection lock as self-hosted
+// OAuth renewal, without making a real OAuth request.
+type renewingAccessToken struct {
+	env *triggerTestEnv
+	id  string
+}
+
+func (r renewingAccessToken) Token(ctx context.Context, userID string) (string, error) {
+	err := store.WithConnectionSecretsLock(ctx, r.env.repo.ORM(), userID, r.id,
+		func(txCtx context.Context, _ *core.Connection, _ map[string]core.ConnectionSecret) error {
+			expires := time.Now().Add(time.Hour)
+			return store.ReplaceConnectionSecrets(txCtx, r.env.repo.ORM(), r.id, nil, &expires)
+		})
+	return "renewed", err
+}
+
+type snapshotTxProbe struct{ inTx []bool }
+
+func (p *snapshotTxProbe) ReplaceIntegrationAccess(ctx context.Context, _, _, _ string, _ time.Time, _ []core.IntegrationAccessGrant) error {
+	p.inTx = append(p.inTx, orm.InTx(ctx))
+	return nil
+}
+
+func (*snapshotTxProbe) PruneIntegrationAccess(context.Context, time.Time) (int64, error) {
+	return 0, nil
+}
+
+// Reproduce ManageActivation's dependency lock before refreshing access. A
+// detached credential renewal waits on this transaction's own SHARE lock.
+func TestAccessRefreshRenewsUnderActivationConnectionLock(t *testing.T) {
+	testkit.Slow(t, "DB-backed connection locking and access refresh")
+	t.Parallel()
+	env, _ := setupAccessTriggerTest(t)
+	conn := env.createConnection(t, env.userID, "github", "11", core.ConnectionStatusActive)
+	expired := time.Now().Add(-time.Hour)
+	require.NoError(t, store.ReplaceConnectionSecrets(env.ctx, env.repo.ORM(), conn.ID, nil, &expired))
+	server := netguardtest.NewServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/user" {
+			_, _ = w.Write([]byte(`{"id":11}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"installations":[]}`))
+	}))
+	grants := &snapshotTxProbe{}
+	refresher := ghaccess.New(grants, nil, renewingAccessToken{env: env, id: conn.ID}, ghaccess.Options{
+		APIBaseURL: server.URL, HTTPClient: server.Client(),
+	})
+	s := &Service{deps: Deps{Access: map[string]IntegrationAccess{"gh": refresherAccess{refresher}}}}
+	ctx, cancel := context.WithTimeout(env.ctx, 5*time.Second)
+	defer cancel()
+	err := env.repo.ORM().RunTx(ctx, orm.Serializable, func(txCtx context.Context) error {
+		var id string
+		if err := env.repo.ORM().Bun().NewRaw("SELECT id FROM connections WHERE id = ? FOR SHARE", conn.ID).Scan(txCtx, &id); err != nil {
+			return err
+		}
+		return s.refreshTriggerAccess(txCtx, memoTestTrigger(t, env.userID))
+	})
+	require.NoError(t, err)
+	fresh, err := env.repo.GetConnection(env.ctx, env.userID, conn.ID)
+	require.NoError(t, err)
+	require.NotNil(t, fresh.AccessExpiresAt)
+	assert.True(t, fresh.AccessExpiresAt.After(time.Now()), "renewal committed without waiting on its own activation lock")
+	assert.Equal(t, []bool{false}, grants.inTx, "only snapshot persistence is detached")
+}
+
+type refresherAccess struct{ *ghaccess.Refresher }
+
+func (refresherAccess) IsPermanent(err error) bool { return ghaccess.IsPermanent(err) }
 
 // Integrations that are not access-gated keep requiring a connection.
 func TestNonAccessGatedIntegrationStillRequiresAConnection(t *testing.T) {
