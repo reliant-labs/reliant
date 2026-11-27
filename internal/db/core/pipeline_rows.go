@@ -150,7 +150,11 @@ type PRHeadVerdictRecord struct {
 	RequiredDecisions []PipelineDecisionKind
 	RunID, NodeID     string
 	ReviewerPrincipal string
-	CreatedAt         time.Time
+	// TriggerID and DaemonID are the activation whose run wrote a model
+	// verdict and the machine it ran on; "" for a structural verdict and
+	// for every row written before they were recorded.
+	TriggerID, DaemonID string
+	CreatedAt           time.Time
 }
 
 // PipelineAttempt is one review, fix, gate or respond attempt

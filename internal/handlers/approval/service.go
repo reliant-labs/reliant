@@ -31,6 +31,12 @@ type Deps struct {
 	// connection proposal (propose_connection). Optional: without it such a
 	// proposal cannot be approved, only denied.
 	Connections ProposalConnections
+	// Grants writes the pipeline capability grants an approved
+	// capability-grant card asks for (internal/pipeline/grants). Optional:
+	// without it such a card cannot be approved, only denied.
+	//
+	// forge:optional-dep
+	Grants CapabilityGrants
 }
 
 // validateDeps returns an error if any required Deps field is nil. The
