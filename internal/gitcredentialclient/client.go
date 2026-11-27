@@ -33,6 +33,13 @@ const (
 	reasonAppNotLinked     = "github_app_not_linked"
 	reasonNotOrgMember     = "not_org_member"
 	reasonRateLimited      = "github_rate_limited"
+
+	// The Queue App's reasons, pinned by control-plane's
+	// TestWireJSON_QueueAppMatchesReliantClient.
+	reasonQueueAppNotConfigured = "github_queue_app_not_configured"
+	reasonQueueAppNotInstalled  = "github_queue_app_not_installed"
+	reasonQueueAppPermissions   = "github_queue_app_permissions"
+	reasonQueueCallerNotWorker  = "github_queue_caller_not_worker"
 )
 
 // Client calls control-plane's GitCredentialInternalService.
@@ -130,7 +137,7 @@ func (c *Client) UserAccessToken(ctx context.Context, externalUserID, provider s
 		AccessToken string     `json:"accessToken"`
 		ExpiresAt   *time.Time `json:"expiresAt"`
 	}
-	if err := c.call(ctx, "GetUserAccessToken", map[string]string{"userId": externalUserID, "provider": provider}, &out); err != nil {
+	if err := c.call(ctx, "GetUserAccessToken", map[string]string{"userId": externalUserID, "provider": provider}, &out, nil); err != nil {
 		return Token{}, err
 	}
 	if out.AccessToken == "" {
@@ -155,19 +162,26 @@ func (c *Client) MintInstallationToken(ctx context.Context, req InstallationRequ
 	if org := strings.TrimSpace(req.OrgID); org != "" {
 		body["orgId"] = org
 	}
-	var out struct {
-		Token          string    `json:"token"`
-		ExpiresAt      time.Time `json:"expiresAt"`
-		BotLogin       string    `json:"botLogin"`
-		ActingForLogin string    `json:"actingForLogin"`
-		Repository     string    `json:"repository"`
-		// int64 crosses Connect JSON as a string; absent from a control
-		// plane that predates it.
-		InstallationID json.Number `json:"installationId"`
-	}
-	if err := c.call(ctx, "MintInstallationToken", body, &out); err != nil {
+	var out mintResponse
+	if err := c.call(ctx, "MintInstallationToken", body, &out, nil); err != nil {
 		return InstallationToken{}, err
 	}
+	return out.token()
+}
+
+// mintResponse is MintInstallationToken's response, for either App.
+type mintResponse struct {
+	Token          string    `json:"token"`
+	ExpiresAt      time.Time `json:"expiresAt"`
+	BotLogin       string    `json:"botLogin"`
+	ActingForLogin string    `json:"actingForLogin"`
+	Repository     string    `json:"repository"`
+	// int64 crosses Connect JSON as a string; absent from a control
+	// plane that predates it.
+	InstallationID json.Number `json:"installationId"`
+}
+
+func (out mintResponse) token() (InstallationToken, error) {
 	if out.Token == "" {
 		return InstallationToken{}, errors.New("gitcredentialclient: control-plane returned an empty installation token")
 	}
@@ -189,6 +203,28 @@ func (c *Client) MintInstallationToken(ctx context.Context, req InstallationRequ
 	}, nil
 }
 
+// MintQueueInstallationToken asks control-plane for a Reliant Queue App token
+// scoped to one repository, proving with req.CallerAssertion that the caller
+// is the reliant worker. No user id or org travels: the queue acts for no
+// user.
+func (c *Client) MintQueueInstallationToken(ctx context.Context, req QueueInstallationRequest) (InstallationToken, error) {
+	if strings.TrimSpace(req.Owner) == "" || strings.TrimSpace(req.Repo) == "" {
+		return InstallationToken{}, errors.New("gitcredentialclient: owner and repo are required")
+	}
+	if strings.TrimSpace(req.CallerAssertion) == "" {
+		return InstallationToken{}, errors.New("gitcredentialclient: a queue mint needs the worker's caller assertion")
+	}
+	body := map[string]any{"owner": req.Owner, "repo": req.Repo, "app": queueAppEnum}
+	if len(req.Permissions) > 0 {
+		body["permissions"] = req.Permissions
+	}
+	var out mintResponse
+	if err := c.call(ctx, "MintInstallationToken", body, &out, map[string]string{QueueCallerHeader: req.CallerAssertion}); err != nil {
+		return InstallationToken{}, err
+	}
+	return out.token()
+}
+
 // ListOrgGitHubInstallations asks control-plane for the installations orgID
 // has linked.
 func (c *Client) ListOrgGitHubInstallations(ctx context.Context, orgID string) ([]OrgInstallation, error) {
@@ -204,7 +240,7 @@ func (c *Client) ListOrgGitHubInstallations(ctx context.Context, orgID string) (
 			Suspended      bool        `json:"suspended"`
 		} `json:"installations"`
 	}
-	if err := c.call(ctx, "ListOrgGitHubInstallations", map[string]string{"orgId": orgID}, &out); err != nil {
+	if err := c.call(ctx, "ListOrgGitHubInstallations", map[string]string{"orgId": orgID}, &out, nil); err != nil {
 		return nil, err
 	}
 	list := make([]OrgInstallation, 0, len(out.Installations))
@@ -222,7 +258,8 @@ func (c *Client) ListOrgGitHubInstallations(ctx context.Context, orgID string) (
 // a 200 body into out. A non-200 becomes a typed error when control-plane's
 // X-Forge-Error-Reason names one, else an *RPCError. Neither the request nor
 // the response body is ever echoed into an error: a response carries a token.
-func (c *Client) call(ctx context.Context, method string, payload, out any) error {
+// headers are sent beside the bearer (a queue mint's caller assertion).
+func (c *Client) call(ctx context.Context, method string, payload, out any, headers map[string]string) error {
 	if c.baseURL == "" {
 		return errors.New("gitcredentialclient: control-plane URL is not configured")
 	}
@@ -244,6 +281,9 @@ func (c *Client) call(ctx context.Context, method string, payload, out any) erro
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Connect-Protocol-Version", "1")
 	req.Header.Set("Authorization", "Bearer "+bearer)
+	for k, v := range headers {
+		req.Header.Set(k, v)
+	}
 	if replayable[method] {
 		// A nil value marks the request idempotent without sending the
 		// header (net/http's Transport documents this).
@@ -297,6 +337,11 @@ var reasonErrors = map[string]error{
 	reasonOwnerCannotPush:  ErrOwnerCannotPush,
 	reasonAppNotLinked:     ErrAppNotLinked,
 	reasonNotOrgMember:     ErrNotOrgMember,
+
+	reasonQueueAppNotConfigured: ErrQueueAppNotConfigured,
+	reasonQueueAppNotInstalled:  ErrQueueAppNotInstalled,
+	reasonQueueAppPermissions:   ErrQueueAppPermissions,
+	reasonQueueCallerNotWorker:  ErrQueueCallerNotWorker,
 }
 
 // A Token holds plaintext by design, so it must not print it.

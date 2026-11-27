@@ -13,6 +13,7 @@ import (
 
 func retirementFixture(t *testing.T) string {
 	t.Helper()
+	requireOpenat2(t)
 	root := t.TempDir()
 	write(t, filepath.Join(root, ".git"), "gitdir: fixture")
 	write(t, filepath.Join(root, "src", "main.go"), "source")

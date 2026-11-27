@@ -95,6 +95,8 @@ func (b *broker) Credential(ctx context.Context, ownerUserID string) (httpaction
 	case errors.Is(err, gitcredentialclient.ErrNeedsReconnect):
 		return nil, &httpaction.CredentialError{Code: httpaction.CodeNeedsReauth,
 			Message: "GitHub needs to be reconnected: reconnect GitHub in Settings", Err: err}
+	case errors.Is(err, gitcredentialclient.ErrRateLimited):
+		return nil, rateLimitedCredential(err)
 	case err != nil:
 		// Transient (control-plane or GitHub unreachable). The error text
 		// cannot carry the token — it was never received — but it is logged

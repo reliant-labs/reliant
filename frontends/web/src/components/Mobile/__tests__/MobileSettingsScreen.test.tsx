@@ -42,9 +42,10 @@ vi.mock("../MobileAISettingsScreen", () => ({
   ),
 }));
 vi.mock("../MobileBillingScreen", () => ({
-  MobileBillingScreen: ({ onBack, backLabel }: { onBack: () => void; backLabel?: string }) => (
-    <div>
+  MobileBillingScreen: ({ onBack, backLabel, focusHosting, hostingOrgId, onDismissHostingOrg }: { onBack: () => void; backLabel?: string; focusHosting?: boolean; hostingOrgId?: string; onDismissHostingOrg?: () => void }) => (
+    <div data-testid="billing-screen" data-focus-hosting={String(!!focusHosting)} data-hosting-org={hostingOrgId ?? ""}>
       <button onClick={onBack}>{backLabel ?? "back-from-billing"}</button>
+      <button onClick={onDismissHostingOrg}>dismiss-hosting-org</button>
       billing-section
     </div>
   ),
@@ -217,6 +218,25 @@ describe("MobileSettingsScreen opened with a way back (the claim page's Subscrib
     expect(screen.getByText("billing-section")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Back to your claim" }));
     expect(navigate).toHaveBeenCalledWith({ href: "/claim" });
+  });
+
+  it("opens billing on the hosting card for ?tab=hosting, and drops ?org= when the person stays", async () => {
+    routeSearch = { section: "billing", tab: "hosting", org: "org-b" };
+    renderMobile();
+    const billing = screen.getByTestId("billing-screen");
+    expect(billing).toHaveAttribute("data-focus-hosting", "true");
+    expect(billing).toHaveAttribute("data-hosting-org", "org-b");
+    navigate.mockReset();
+    await userEvent.click(screen.getByRole("button", { name: "dismiss-hosting-org" }));
+    const call = navigate.mock.calls.at(-1)?.[0] as { to: string; replace: boolean; search: (p: Record<string, unknown>) => Record<string, unknown> };
+    expect(call).toMatchObject({ to: ".", replace: true });
+    expect(call.search({ section: "billing", tab: "hosting", org: "org-b" })).toEqual({ section: "billing", tab: "hosting", org: undefined });
+  });
+
+  it("opens billing without hosting focus by default", () => {
+    routeSearch = { section: "billing" };
+    renderMobile();
+    expect(screen.getByTestId("billing-screen")).toHaveAttribute("data-focus-hosting", "false");
   });
 
   it("ignores a way back that leaves the app, and falls back to the list", async () => {
