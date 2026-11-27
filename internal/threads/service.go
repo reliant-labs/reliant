@@ -27,11 +27,16 @@ type Service struct {
 	toolCanceler     ToolCanceler
 }
 
-// New builds a Service from deps. Deps.Repo is required; the signaler and the
-// tool canceler are only needed by InterruptThread and the pause path.
+// New builds a Service from deps. Construction permits a nil Repo, but operations
+// that access the repository (including CreateWorkflowWithThread) require it.
+// The signaler and tool canceler are only needed by InterruptThread and the pause path.
 func New(deps Deps) *Service {
 	if deps.AmbientMemory == nil {
-		deps.AmbientMemory = repoAmbientMemory{deps.Repo}
+		if memory, ok := deps.Repo.(AmbientMemory); ok {
+			deps.AmbientMemory = memory
+		} else if o, ok := deps.Repo.(interface{ ORM() *orm.Client }); ok && o.ORM() != nil {
+			deps.AmbientMemory = repoAmbientMemory{deps.Repo}
+		}
 	}
 	return &Service{repo: deps.Repo, chats: deps.Chats, messages: deps.Messages, senders: deps.Senders, ambientMemory: deps.AmbientMemory, temporalSignaler: deps.Signaler, toolCanceler: deps.ToolCanceler}
 }
@@ -274,6 +279,9 @@ func (s *Service) CreateWorkflowWithThread(ctx context.Context, opts CreateWorkf
 
 		// Commit the runtime policy atomically with thread creation: a crash
 		// between creation and the child's first turn must not lose its cap.
+		if s.ambientMemory == nil {
+			return fmt.Errorf("persist thread memory exclusion: %w", chatviews.ErrNoChatReads)
+		}
 		excluded, err := s.ambientMemory.ResolveThreadAmbientMemoryExclusion(txCtx, opts.ChatID, resultThread.ID, opts.ExcludeAmbientMemory)
 		if err != nil {
 			return fmt.Errorf("persist thread memory exclusion: %w", err)
