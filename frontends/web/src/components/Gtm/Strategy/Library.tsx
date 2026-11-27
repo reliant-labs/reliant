@@ -9,8 +9,10 @@
  * It opens on what fits the org's business (fits_my_business: the business
  * type and models on Positioning), with "Show all" beside it, and filters by
  * business model, business type, category, stage, effort, cost and a search;
- * the service filters, in pages of 50. When the org has no business type or
- * models yet, a hint links to Positioning.
+ * the service filters, in pages of 50. The filters live on the URL
+ * (nav.ts), so a filtered library can be shared and survives a reload; the
+ * last answer stays on screen while the next is read. When the org has no
+ * business type or models yet, a hint links to Positioning.
  *
  * An entry opens in a dialog (`?entry=<key>`, gtmLibraryPath). "Use this
  * strategy" (UseLibraryStrategy) makes a DRAFT strategy from it, and
@@ -30,8 +32,9 @@ import Modal from "@/components/forge-ui/modal";
 import SkeletonLoader from "@/components/forge-ui/skeleton_loader";
 import Tag from "@/components/forge-ui/tag";
 import ToggleSwitch from "@/components/forge-ui/toggle_switch";
-import { GtmBusinessType, type GtmBusinessModel, type GtmStrategyCategory, type GtmStrategyLibraryEntry } from "@/gen/reliant/v1/gtm_pb";
+import { GtmBusinessType, type GtmStrategyLibraryEntry } from "@/gen/reliant/v1/gtm_pb";
 import { useGetPositioning, useGetStrategyLibraryEntry, useListStrategyLibraryInfinite, useUseLibraryStrategy } from "@/hooks/gtm-service-hooks_gen";
+import { keepPreviousInOrg } from "@/lib/orgScope";
 import { gtmPath } from "@/lib/paths";
 
 import { useGtmOrgId } from "../shared/GtmShell";
@@ -51,6 +54,7 @@ import {
   vocabLabel,
 } from "../shared/ui";
 import { useGtmWriteError } from "../shared/writes";
+import { useLibraryFilters, useStrategyNav, type LibraryFilterChange, type LibraryFilters } from "./nav";
 
 const LIBRARY_PAGE = 50;
 
@@ -104,17 +108,52 @@ export function entryFits(entry: Pick<GtmStrategyLibraryEntry, "businessTypes" |
   return [types.length ? types.join(", ") : "Any type", models.length ? models.join(", ") : "any model"].join(" · ");
 }
 
-interface Filters {
-  categories: GtmStrategyCategory[];
-  businessModels: GtmBusinessModel[];
-  businessType: string;
-  stage: string;
-  effort: string;
-  cost: string;
-  query: string;
-}
+const NO_FILTERS: Omit<LibraryFilters, "fits"> = { categories: [], businessModels: [], businessType: GtmBusinessType.UNSPECIFIED, stage: "", effort: "", cost: "", query: "" };
 
-const NO_FILTERS: Filters = { categories: [], businessModels: [], businessType: "", stage: "", effort: "", cost: "", query: "" };
+/**
+ * Fits my business or Show all: one choice, a radio group drawn as a
+ * segmented control (arrow keys move between the two).
+ */
+function FitsToggle({ fits, onChange }: { fits: boolean; onChange: (fits: boolean) => void }) {
+  const options = [
+    { value: true, label: "Fits my business" },
+    { value: false, label: "Show all" },
+  ];
+  return (
+    <div
+      role="radiogroup"
+      aria-label="Which entries"
+      className="inline-flex rounded-md border border-border-strong bg-surface p-0.5"
+      onKeyDown={(e) => {
+        if (e.key !== "ArrowLeft" && e.key !== "ArrowRight" && e.key !== "ArrowUp" && e.key !== "ArrowDown") return;
+        e.preventDefault();
+        onChange(!fits);
+        const next = e.currentTarget.querySelector<HTMLButtonElement>(`[data-fits="${String(!fits)}"]`);
+        next?.focus();
+      }}
+    >
+      {options.map((o) => {
+        const on = o.value === fits;
+        return (
+          <button
+            key={o.label}
+            type="button"
+            role="radio"
+            aria-checked={on}
+            tabIndex={on ? 0 : -1}
+            data-fits={String(o.value)}
+            onClick={() => onChange(o.value)}
+            className={`h-7 rounded px-3 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+              on ? "bg-ink font-medium text-surface" : "text-ink-muted hover:text-ink"
+            }`}
+          >
+            {o.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
 
 const toggle = <T,>(list: T[], v: T) => (list.includes(v) ? list.filter((x) => x !== v) : [...list, v]);
 
@@ -140,10 +179,24 @@ export function LibraryView({
   onCloseEntry: () => void;
 }) {
   const orgId = useGtmOrgId();
-  const [fits, setFits] = useState(true);
-  const [filters, setFilters] = useState<Filters>(NO_FILTERS);
-  const set = (patch: Partial<Filters>) => setFilters((f) => ({ ...f, ...patch }));
-  const query = useDebounced(filters.query.trim(), 300);
+  const nav = useStrategyNav();
+  const filters = useLibraryFilters();
+  const { fits } = filters;
+  const set = (change: LibraryFilterChange) => nav.filter(change, entryKey || undefined);
+  // The search box types locally and reaches the URL (and the service) after a pause.
+  const [typed, setTyped] = useState(filters.query);
+  const settled = useDebounced(typed, 300);
+  const urlQuery = filters.query;
+  useEffect(() => {
+    if (settled.trim() !== urlQuery.trim()) set({ query: settled });
+    // Only a settled edit writes the URL; set is a new function each render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settled]);
+  // The URL moved on its own (Clear filters, Back): the box follows it.
+  useEffect(() => {
+    setTyped((t) => (t.trim() === urlQuery.trim() ? t : urlQuery));
+  }, [urlQuery]);
+  const query = urlQuery.trim();
   const [using, setUsing] = useState<GtmStrategyLibraryEntry | null>(null);
 
   const positioningQ = useGetPositioning({ orgId }, { enabled: !!orgId });
@@ -156,7 +209,7 @@ export function LibraryView({
     {
       orgId,
       categories: filters.categories,
-      businessTypes: filters.businessType ? [Number(filters.businessType) as GtmBusinessType] : [],
+      businessTypes: filters.businessType ? [filters.businessType] : [],
       businessModels: filters.businessModels,
       ...(filters.stage ? { stage: filters.stage } : {}),
       ...(filters.effort ? { effort: filters.effort } : {}),
@@ -165,7 +218,8 @@ export function LibraryView({
       fitsMyBusiness: fits,
       pageSize: LIBRARY_PAGE,
     },
-    { enabled: !!orgId },
+    // A filter change keeps the last answer (and its count) on screen until the next arrives.
+    { enabled: !!orgId, placeholderData: keepPreviousInOrg(orgId) },
   );
   const entries = useMemo(() => libraryQ.data?.pages.flatMap((p) => p.entries) ?? [], [libraryQ.data]);
   const active =
@@ -174,14 +228,7 @@ export function LibraryView({
   return (
     <div className="space-y-4" data-testid="gtm-library">
       <p className="text-sm text-ink-muted">Plays to start a strategy from. Each is a starting point to tailor to your business, not a script.</p>
-      <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Which entries">
-        <Chip on={fits} onClick={() => setFits(true)}>
-          Fits my business
-        </Chip>
-        <Chip on={!fits} onClick={() => setFits(false)}>
-          Show all
-        </Chip>
-      </div>
+      <FitsToggle fits={fits} onChange={(v) => set({ fits: v })} />
       {noProfile && (
         <p className="flex items-start gap-2 rounded-lg border border-border bg-surface-muted px-3 py-2 text-sm text-ink-muted" data-testid="gtm-library-profile-hint">
           <Info className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
@@ -197,37 +244,44 @@ export function LibraryView({
       {/* One scrolling row on a phone: thirteen wrapped chips would push the entries off the first screen. */}
       <div className="flex gap-2 overflow-x-auto pb-1 sm:flex-wrap sm:overflow-visible sm:pb-0" role="group" aria-label="Category">
         {STRATEGY_CATEGORIES.map((c) => (
-          <Chip key={c.id} on={filters.categories.includes(c.id)} onClick={() => set({ categories: toggle(filters.categories, c.id) })}>
+          <Chip key={c.id} on={filters.categories.includes(c.id)} onClick={() => set((f) => ({ categories: toggle(f.categories, c.id) }))}>
             {c.label}
           </Chip>
         ))}
       </div>
       <div className="flex gap-2 overflow-x-auto pb-1 sm:flex-wrap sm:overflow-visible sm:pb-0" role="group" aria-label="Business model">
         {BUSINESS_MODELS.map((m) => (
-          <Chip key={m.id} on={filters.businessModels.includes(m.id)} onClick={() => set({ businessModels: toggle(filters.businessModels, m.id) })}>
+          <Chip key={m.id} on={filters.businessModels.includes(m.id)} onClick={() => set((f) => ({ businessModels: toggle(f.businessModels, m.id) }))}>
             {m.label}
           </Chip>
         ))}
       </div>
       <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Filter the library">
-        <FilterSearch value={filters.query} onChange={(q) => set({ query: q })} placeholder="Search the library" className="w-full sm:w-64" />
+        <FilterSearch value={typed} onChange={setTyped} placeholder="Search the library" className="w-full sm:w-64" />
         <FilterSelect
           label="Business type"
           any="Any business type"
-          value={filters.businessType}
+          value={filters.businessType ? String(filters.businessType) : ""}
           options={BUSINESS_TYPES.map((t) => ({ id: String(t.id), label: t.label }))}
-          onChange={(v) => set({ businessType: v })}
+          onChange={(v) => set({ businessType: (Number(v) || 0) as GtmBusinessType })}
         />
         <FilterSelect label="Stage" any="Any stage" value={filters.stage} options={LIBRARY_STAGES} onChange={(v) => set({ stage: v })} />
         <FilterSelect label="Effort" any="Any effort" value={filters.effort} options={LIBRARY_EFFORTS} onChange={(v) => set({ effort: v })} />
         <FilterSelect label="Cost" any="Any cost" value={filters.cost} options={LIBRARY_COSTS} onChange={(v) => set({ cost: v })} />
         {active > 0 && (
-          <Button variant="ghost" size="sm" onClick={() => setFilters(NO_FILTERS)}>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              setTyped("");
+              set(NO_FILTERS);
+            }}
+          >
             Clear filters ({active})
           </Button>
         )}
       </div>
-      {libraryQ.isPending ? (
+      {libraryQ.isPending && !libraryQ.data ? (
         <SkeletonLoader variant="card" count={2} />
       ) : libraryQ.isError && entries.length === 0 ? (
         <EmptyState title="Couldn't load the library" description="Something went wrong reading it." actionLabel="Try again" onAction={() => void libraryQ.refetch()} />
