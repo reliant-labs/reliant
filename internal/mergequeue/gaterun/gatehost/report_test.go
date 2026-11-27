@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package gaterun
+package gatehost
 
 import (
 	"archive/tar"
@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/mergequeue/gaterun"
 	"github.com/reliant-labs/reliant/internal/pipeline/config"
 )
 
@@ -42,7 +43,7 @@ func tarOf(t *testing.T, entries ...entry) *bytes.Buffer {
 	return &buf
 }
 
-var reportPlan = []PlanStage{
+var reportPlan = []gaterun.PlanStage{
 	offStage(config.StageLint), cmdStage(config.StageTest, "go test ./..."), offStage(config.StageBuild), offStage(config.StageSBOMScan),
 }
 
@@ -52,16 +53,16 @@ const passDoc = `{"version":1,"exit_code":0,"stages":[` +
 	`{"name":"build","state":"off","exit_code":-1,"seconds":0,"note":""},` +
 	`{"name":"sbom_scan","state":"off","exit_code":-1,"seconds":0,"note":""}]}`
 
-func assembleTar(t *testing.T, res Result, entries ...entry) GateResult {
+func assembleTar(t *testing.T, res Result, entries ...entry) gaterun.GateResult {
 	t.Helper()
 	o, err := readOutput(tarOf(t, entries...))
 	if err != nil {
-		return ResultFromError("g", err)
+		return gaterun.ResultFromError("g", err)
 	}
-	return assemble("g", IsolationSysbox, reportPlan, res, o)
+	return assemble("g", gaterun.IsolationSysbox, reportPlan, res, o)
 }
 
-var exited0 = Result{Class: ClassPass, ExitCode: 0}
+var exited0 = Result{Class: gaterun.ClassPass, ExitCode: 0}
 
 func TestReportReadsAWellFormedOutput(t *testing.T) {
 	g := assembleTar(t, exited0,
@@ -70,7 +71,7 @@ func TestReportReadsAWellFormedOutput(t *testing.T) {
 		entry{name: "out/logs/test.log", body: "ok  pkg 0.1s"},
 		entry{name: "out/" + repoResultFile, body: `{"failing_tests":[]}`},
 	)
-	if g.Class != ClassPass || g.Stages[config.StageTest].LogTail != "ok  pkg 0.1s" || string(g.RepoResult) != `{"failing_tests":[]}` {
+	if g.Class != gaterun.ClassPass || g.Stages[config.StageTest].LogTail != "ok  pkg 0.1s" || string(g.RepoResult) != `{"failing_tests":[]}` {
 		t.Fatalf("%+v", g)
 	}
 }
@@ -81,7 +82,7 @@ func TestReportRefusesLinksAndNeverFollowsThem(t *testing.T) {
 			entry{name: "out/" + resultFile, typ: typ, link: "/etc/passwd"},
 			entry{name: "out/logs/test.log", typ: tar.TypeSymlink, link: "../../../../root/.ssh/id_rsa"},
 		)
-		if g.Class != ClassUnproven || g.ReasonCode != ReasonResultInvalid || !strings.Contains(g.Reason, "not a regular file") {
+		if g.Class != gaterun.ClassUnproven || g.ReasonCode != gaterun.ReasonResultInvalid || !strings.Contains(g.Reason, "not a regular file") {
 			t.Fatalf("link type %c: %s %s %q", typ, g.Class, g.ReasonCode, g.Reason)
 		}
 	}
@@ -90,7 +91,7 @@ func TestReportRefusesLinksAndNeverFollowsThem(t *testing.T) {
 		entry{name: "out/" + resultFile, body: passDoc},
 		entry{name: "out/logs/test.log", typ: tar.TypeSymlink, link: "/etc/shadow"},
 	)
-	if g.Class != ClassPass || g.Stages[config.StageTest].LogTail != "" {
+	if g.Class != gaterun.ClassPass || g.Stages[config.StageTest].LogTail != "" {
 		t.Fatalf("linked log: %+v", g)
 	}
 }
@@ -101,7 +102,7 @@ func TestReportRefusesPathsOutsideTheOutputDirectory(t *testing.T) {
 		entry{name: "/out/" + resultFile, body: passDoc},
 		entry{name: "elsewhere/" + resultFile, body: passDoc},
 	)
-	if g.Class != ClassUnproven || !strings.Contains(g.Reason, "wrote no") {
+	if g.Class != gaterun.ClassUnproven || !strings.Contains(g.Reason, "wrote no") {
 		t.Fatalf("%s %q", g.Class, g.Reason)
 	}
 }
@@ -110,7 +111,7 @@ func TestReportSizeCaps(t *testing.T) {
 	// A result file over its cap is refused, not read.
 	big := passDoc + strings.Repeat(" ", resultMaxBytes)
 	g := assembleTar(t, exited0, entry{name: "out/" + resultFile, body: big})
-	if g.Class != ClassUnproven || !strings.Contains(g.Reason, "over the") {
+	if g.Class != gaterun.ClassUnproven || !strings.Contains(g.Reason, "over the") {
 		t.Fatalf("oversize result: %s %q", g.Class, g.Reason)
 	}
 	// A stream over the whole cap fails the read.
@@ -129,20 +130,20 @@ func TestReportRejectsAResultThatDoesNotMatchThePlan(t *testing.T) {
 		"not json":                     "{",
 	} {
 		g := assembleTar(t, exited0, entry{name: "out/" + resultFile, body: doc})
-		if g.Class != ClassUnproven || g.ReasonCode != ReasonResultInvalid {
+		if g.Class != gaterun.ClassUnproven || g.ReasonCode != gaterun.ReasonResultInvalid {
 			t.Errorf("%s: %s %s %q", name, g.Class, g.ReasonCode, g.Reason)
 		}
 	}
 	// A stage that ran after a failure.
 	fail := strings.Replace(passDoc, `"state":"pass","exit_code":0`, `"state":"fail","exit_code":1`, 1)
 	fail = strings.Replace(fail, `"exit_code":0,"stages"`, `"exit_code":1,"stages"`, 1)
-	plan := []PlanStage{offStage(config.StageLint), cmdStage(config.StageTest, "t"), cmdStage(config.StageBuild, "b"), offStage(config.StageSBOMScan)}
+	plan := []gaterun.PlanStage{offStage(config.StageLint), cmdStage(config.StageTest, "t"), cmdStage(config.StageBuild, "b"), offStage(config.StageSBOMScan)}
 	ran := strings.Replace(fail, `{"name":"build","state":"off","exit_code":-1`, `{"name":"build","state":"pass","exit_code":0`, 1)
 	o, err := readOutput(tarOf(t, entry{name: "out/" + resultFile, body: ran}))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if g := assemble("g", IsolationSysbox, plan, Result{Class: ClassFail, ExitCode: 1}, o); g.Class != ClassUnproven {
+	if g := assemble("g", gaterun.IsolationSysbox, plan, Result{Class: gaterun.ClassFail, ExitCode: 1}, o); g.Class != gaterun.ClassUnproven {
 		t.Fatalf("a stage after a failure ran: %s %q", g.Class, g.Reason)
 	}
 }

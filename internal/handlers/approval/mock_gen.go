@@ -505,3 +505,52 @@ func (m *MockProposalConnections) GetOrgCalls() []MockProposalConnectionsGetOrgC
 
 // Compile-time check.
 var _ ProposalConnections = (*MockProposalConnections)(nil)
+
+// forge:section MockCapabilityGrants
+// forge:hash=5f11d729e3ddfdd604dd68726fe6a7db377792c926a0befd79b7f9689211382f
+
+// MockCapabilityGrants is a test mock for the CapabilityGrants interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockCapabilityGrants.<Method>Func not set" error.
+type MockCapabilityGrants struct {
+	contractkit.Recorder
+	GrantApprovedFunc func(context.Context, string, *core.Approval) ([]*core.PipelineCapabilityGrant, error)
+}
+
+// GrantApproved records the call and delegates to GrantApprovedFunc when set.
+func (m *MockCapabilityGrants) GrantApproved(ctx context.Context, approverID string, card *core.Approval) ([]*core.PipelineCapabilityGrant, error) {
+	m.Recorder.Record("GrantApproved", ctx, approverID, card)
+	if m.GrantApprovedFunc != nil {
+		return m.GrantApprovedFunc(ctx, approverID, card)
+	}
+	return nil, contractkit.MockNotSet("MockCapabilityGrants", "GrantApproved")
+}
+
+// MockCapabilityGrantsGrantApprovedCall is one recorded call of MockCapabilityGrants.GrantApproved, one
+// field per parameter.
+type MockCapabilityGrantsGrantApprovedCall struct {
+	Ctx        context.Context
+	ApproverID string
+	Card       *core.Approval
+}
+
+// GrantApprovedCalls returns every recorded GrantApproved call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GrantApproved").
+func (m *MockCapabilityGrants) GrantApprovedCalls() []MockCapabilityGrantsGrantApprovedCall {
+	var out []MockCapabilityGrantsGrantApprovedCall
+	for _, c := range m.Recorder.Calls("GrantApproved") {
+		var r MockCapabilityGrantsGrantApprovedCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ApproverID, _ = c.Args[1].(string)
+		r.Card, _ = c.Args[2].(*core.Approval)
+		out = append(out, r)
+	}
+	return out
+}
+
+// Compile-time check.
+var _ CapabilityGrants = (*MockCapabilityGrants)(nil)

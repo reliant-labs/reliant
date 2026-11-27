@@ -94,6 +94,7 @@ func (d *dispatcher) Dispatch(ctx context.Context, req GateRequest) (GateResult,
 	if err != nil {
 		return GateResult{}, err
 	}
+	members = PreferMember(members, req.PreferMachine)
 	start.MaxConcurrent = maxPer
 	payload, err := json.Marshal(start)
 	if err != nil {
@@ -204,18 +205,27 @@ func infraMatches(g config.ResolvedGate, res GateResult) []string {
 // members are the pool's connected, eligible members, by name, and the
 // pool's per-member gate bound.
 func (d *dispatcher) members(ctx context.Context, repo GateRepo, req GateRequest) ([]machinepool.Member, int, error) {
-	name := req.Gate.Pool
+	return PoolMembers(ctx, d.deps.Pools, repo, req.Gate.Pool)
+}
+
+// PoolMembers are the connected, eligible members of repo's owner's machine
+// pool named pool ("" is config.DefaultGatePool) that have repo's project,
+// sorted by name then daemon id, and the pool's per-member run bound
+// (max_runs_per_member, at least 1). No member is an error wrapping
+// [ErrNoGateMember] that says why.
+func PoolMembers(ctx context.Context, pools PoolReader, repo GateRepo, pool string) ([]machinepool.Member, int, error) {
+	name := pool
 	if name == "" {
 		name = config.DefaultGatePool
 	}
-	row, err := d.deps.Pools.GetMachinePoolByName(ctx, repo.OwnerUserID, name)
+	row, err := pools.GetMachinePoolByName(ctx, repo.OwnerUserID, name)
 	if err != nil {
 		if errors.Is(err, core.ErrMachinePoolNotFound) {
 			return nil, 0, fmt.Errorf("%w: no machine pool %q (label gate machines pool=%s and create the pool)", ErrNoGateMember, name, name)
 		}
 		return nil, 0, fmt.Errorf("read machine pool %s: %w", name, err)
 	}
-	all, err := machinepool.MembersOf(ctx, d.deps.Pools, row, repo.ProjectID)
+	all, err := machinepool.MembersOf(ctx, pools, row, repo.ProjectID)
 	if err != nil {
 		return nil, 0, fmt.Errorf("read machine pool %s's members: %w", name, err)
 	}
@@ -284,6 +294,23 @@ func (d *dispatcher) cancel(ctx context.Context, userID, daemonID, gateID string
 	defer done()
 	payload, _ := json.Marshal(StatusRequest{GateID: gateID})
 	_, _ = d.deps.Daemons.SendDaemonCommandToDaemon(cctx, userID, daemonID, CommandCancel, payload, int32(statusTimeout.Milliseconds()))
+}
+
+// PreferMember is members with the one whose daemon id is daemonID moved to
+// the front, the others in their order. "" or an id not among them returns
+// members unchanged.
+func PreferMember(members []machinepool.Member, daemonID string) []machinepool.Member {
+	if daemonID == "" {
+		return members
+	}
+	i := slices.IndexFunc(members, func(m machinepool.Member) bool { return m.DaemonID == daemonID })
+	if i <= 0 {
+		return members
+	}
+	out := make([]machinepool.Member, 0, len(members))
+	out = append(out, members[i])
+	out = append(out, members[:i]...)
+	return append(out, members[i+1:]...)
 }
 
 func memberName(m machinepool.Member) string {

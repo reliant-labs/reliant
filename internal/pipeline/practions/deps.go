@@ -11,6 +11,7 @@ import (
 	"github.com/reliant-labs/forge/pkg/orm"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/pipeline/grants"
 	"github.com/reliant-labs/reliant/internal/pipeline/prpolicy"
 	"github.com/reliant-labs/reliant/internal/serveraction"
 )
@@ -116,6 +117,12 @@ type Deps struct {
 	GitHub GitHub
 	// forge:optional-dep
 	Inbox Inbox
+	// Grants decides whether a run holds a pipeline capability. pr.verdict
+	// records a pass only from a run whose activation holds approve (in mode
+	// on; shadow logs what it would refuse). Nil refuses every pass in mode
+	// on.
+	// forge:optional-dep
+	Grants grants.Authorizer
 	// Now is the clock; nil is time.Now.
 	// forge:optional-dep
 	Now func() time.Time

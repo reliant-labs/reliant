@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package gaterun
+package gatehost
 
 import (
 	"bytes"
@@ -13,6 +13,8 @@ import (
 	"runtime"
 	"sync"
 	"time"
+
+	"github.com/reliant-labs/reliant/internal/mergequeue/gaterun"
 )
 
 // Fetcher fetches a candidate into a fresh directory, outside the boundary
@@ -67,7 +69,7 @@ type Runner struct {
 // runs outside a boundary it did not ask for.
 func (r *Runner) Select(ctx context.Context, allowNotIsolated bool) (Backend, error) {
 	if r.Image == "" {
-		return nil, fmt.Errorf("%w: this machine has no gate image (DaemonConfig gate_image, RELIANT_DAEMON_GATE_IMAGE)", ErrNoIsolatedGateMachine)
+		return nil, fmt.Errorf("%w: this machine has no gate image (DaemonConfig gate_image, RELIANT_DAEMON_GATE_IMAGE)", gaterun.ErrNoIsolatedGateMachine)
 	}
 	var why []string
 	for _, b := range r.Isolated {
@@ -90,7 +92,7 @@ func (r *Runner) Select(ctx context.Context, allowNotIsolated bool) (Backend, er
 	if len(why) == 0 {
 		why = append(why, "this machine has no isolated gate backend")
 	}
-	return nil, fmt.Errorf("%w: %v", ErrNoIsolatedGateMachine, why)
+	return nil, fmt.Errorf("%w: %v", gaterun.ErrNoIsolatedGateMachine, why)
 }
 
 func ready(ctx context.Context, b Backend) error {
@@ -105,43 +107,43 @@ func ready(ctx context.Context, b Backend) error {
 
 // Run runs one gate in b to a GateResult. It never returns without tearing
 // the gate down.
-func (r *Runner) Run(ctx context.Context, b Backend, req StartRequest) GateResult {
+func (r *Runner) Run(ctx context.Context, b Backend, req gaterun.StartRequest) gaterun.GateResult {
 	start := time.Now()
-	out := func(g GateResult) GateResult {
+	out := func(g gaterun.GateResult) gaterun.GateResult {
 		g.GateID, g.Isolation = req.GateID, b.Isolation()
 		if g.Duration == 0 {
 			g.Duration = time.Since(start)
 		}
 		return g
 	}
-	unproven := func(code string, err error) GateResult {
+	unproven := func(code string, err error) gaterun.GateResult {
 		if ctx.Err() != nil {
-			code = ReasonCanceled
+			code = gaterun.ReasonCanceled
 		}
-		return out(GateResult{Class: ClassUnproven, ReasonCode: code, Reason: err.Error()})
+		return out(gaterun.GateResult{Class: gaterun.ClassUnproven, ReasonCode: code, Reason: err.Error()})
 	}
 	plan := req.Stages
 	if err := req.Validate(); err != nil {
-		return unproven(ReasonBackendFailed, err)
+		return unproven(gaterun.ReasonBackendFailed, err)
 	}
-	env, err := GateEnv(req.GateID, req.gateEnv())
+	env, err := gaterun.GateEnv(req.GateID, req.EffectiveEnv())
 	if err != nil {
-		return unproven(ReasonBackendFailed, err)
+		return unproven(gaterun.ReasonBackendFailed, err)
 	}
 
 	dir := filepath.Join(r.WorkRoot, req.GateID)
 	if err := os.RemoveAll(dir); err != nil {
-		return unproven(ReasonFetchFailed, fmt.Errorf("clear the gate directory: %w", err))
+		return unproven(gaterun.ReasonFetchFailed, fmt.Errorf("clear the gate directory: %w", err))
 	}
 	src := filepath.Join(dir, "src")
 	if err := os.MkdirAll(src, 0o700); err != nil {
-		return unproven(ReasonFetchFailed, fmt.Errorf("make the gate directory: %w", err))
+		return unproven(gaterun.ReasonFetchFailed, fmt.Errorf("make the gate directory: %w", err))
 	}
 	defer func() { _ = os.RemoveAll(dir) }()
 	if err := r.Fetcher.Fetch(ctx, FetchSpec{Repo: req.Repo, Ref: req.Ref, SHA: req.SHA, BaseSHA: req.BaseSHA, Dir: src}); err != nil {
-		code := ReasonFetchFailed
+		code := gaterun.ReasonFetchFailed
 		if errors.Is(err, ErrCandidateMoved) {
-			code = ReasonCandidateMoved
+			code = gaterun.ReasonCandidateMoved
 		}
 		return unproven(code, err)
 	}
@@ -160,18 +162,18 @@ func (r *Runner) Run(ctx context.Context, b Backend, req StartRequest) GateResul
 		Stdout: r.Log, Stderr: r.Log,
 	})
 	if err != nil {
-		return unproven(ReasonBackendFailed, err)
+		return unproven(gaterun.ReasonBackendFailed, err)
 	}
 	var buf bytes.Buffer
-	if err := b.CopyOut(ctx, req.GateID, OutDir, &buf, reportMaxBytes); err != nil {
-		if res.Class == ClassUnproven {
+	if err := b.CopyOut(ctx, req.GateID, gaterun.OutDir, &buf, reportMaxBytes); err != nil {
+		if res.Class == gaterun.ClassUnproven {
 			return out(assemble(req.GateID, b.Isolation(), plan, res, output{}))
 		}
-		return unproven(ReasonResultInvalid, fmt.Errorf("copy the gate's output: %w", err))
+		return unproven(gaterun.ReasonResultInvalid, fmt.Errorf("copy the gate's output: %w", err))
 	}
 	o, err := readOutput(&buf)
 	if err != nil {
-		return unproven(ReasonResultInvalid, err)
+		return unproven(gaterun.ReasonResultInvalid, err)
 	}
 	return out(assemble(req.GateID, b.Isolation(), plan, res, o))
 }
@@ -180,11 +182,11 @@ func (r *Runner) Run(ctx context.Context, b Backend, req StartRequest) GateResul
 // repository's, only when the request asks for it and allows a not-isolated
 // gate, and only when b is not isolated. Otherwise it is "" (see
 // StartRequest.WarmCache).
-func cacheVolume(b Backend, req StartRequest) string {
+func cacheVolume(b Backend, req gaterun.StartRequest) string {
 	if !req.WarmCache || !req.AllowNotIsolated || b.Isolation().Isolated() {
 		return ""
 	}
-	return CacheVolumeName(req.Repo)
+	return gaterun.CacheVolumeName(req.Repo)
 }
 
 // Jobs is a daemon's gates by id: CommandStart starts one in the background
@@ -205,15 +207,15 @@ type job struct {
 	cancel   context.CancelFunc // nil while its backend is being selected
 	canceled bool
 	done     bool
-	result   GateResult
+	result   gaterun.GateResult
 	finished time.Time
 }
 
-func (jb *job) state() JobState {
+func (jb *job) state() gaterun.JobState {
 	if jb.done {
-		return JobDone
+		return gaterun.JobDone
 	}
-	return JobRunning
+	return gaterun.JobRunning
 }
 
 func (j *Jobs) clock() time.Time {
@@ -226,15 +228,15 @@ func (j *Jobs) clock() time.Time {
 // Start starts req's gate unless one with its id exists, whose state it
 // answers instead. A slot is held from the count to the start, so concurrent
 // starts never run more than MaxConcurrent gates.
-func (j *Jobs) Start(ctx context.Context, req StartRequest) StartReply {
+func (j *Jobs) Start(ctx context.Context, req gaterun.StartRequest) gaterun.StartReply {
 	if err := req.Validate(); err != nil {
-		return StartReply{State: JobRefused, Reason: err.Error()}
+		return gaterun.StartReply{State: gaterun.JobRefused, Reason: err.Error()}
 	}
 	j.mu.Lock()
 	j.pruneLocked()
 	if jb, ok := j.jobs[req.GateID]; ok {
 		j.mu.Unlock()
-		return StartReply{State: jb.state()}
+		return gaterun.StartReply{State: jb.state()}
 	}
 	running := 0
 	for _, jb := range j.jobs {
@@ -244,7 +246,7 @@ func (j *Jobs) Start(ctx context.Context, req StartRequest) StartReply {
 	}
 	if running >= max(req.MaxConcurrent, 1) {
 		j.mu.Unlock()
-		return StartReply{State: JobBusy, Reason: fmt.Sprintf("%d gates running", running)}
+		return gaterun.StartReply{State: gaterun.JobBusy, Reason: fmt.Sprintf("%d gates running", running)}
 	}
 	if j.jobs == nil {
 		j.jobs = map[string]*job{}
@@ -258,12 +260,12 @@ func (j *Jobs) Start(ctx context.Context, req StartRequest) StartReply {
 	defer j.mu.Unlock()
 	if err != nil {
 		delete(j.jobs, req.GateID)
-		return StartReply{State: JobRefused, Reason: err.Error()}
+		return gaterun.StartReply{State: gaterun.JobRefused, Reason: err.Error()}
 	}
 	if jb.canceled {
 		jb.done, jb.finished = true, j.clock()
-		jb.result = GateResult{GateID: req.GateID, Isolation: b.Isolation(), Class: ClassUnproven, ReasonCode: ReasonCanceled, Reason: "canceled before it started"}
-		return StartReply{State: JobDone, Isolation: b.Isolation()}
+		jb.result = gaterun.GateResult{GateID: req.GateID, Isolation: b.Isolation(), Class: gaterun.ClassUnproven, ReasonCode: gaterun.ReasonCanceled, Reason: "canceled before it started"}
+		return gaterun.StartReply{State: gaterun.JobDone, Isolation: b.Isolation()}
 	}
 	runCtx, cancel := context.WithCancel(context.Background())
 	jb.cancel = cancel
@@ -274,23 +276,23 @@ func (j *Jobs) Start(ctx context.Context, req StartRequest) StartReply {
 		jb.done, jb.result, jb.finished = true, res, j.clock()
 		j.mu.Unlock()
 	}()
-	return StartReply{State: JobRunning, Isolation: b.Isolation()}
+	return gaterun.StartReply{State: gaterun.JobRunning, Isolation: b.Isolation()}
 }
 
 // Status answers for gateID.
-func (j *Jobs) Status(gateID string) StatusReply {
+func (j *Jobs) Status(gateID string) gaterun.StatusReply {
 	j.mu.Lock()
 	defer j.mu.Unlock()
 	j.pruneLocked()
 	jb, ok := j.jobs[gateID]
 	switch {
 	case !ok:
-		return StatusReply{State: JobUnknown}
+		return gaterun.StatusReply{State: gaterun.JobUnknown}
 	case !jb.done:
-		return StatusReply{State: JobRunning}
+		return gaterun.StatusReply{State: gaterun.JobRunning}
 	}
 	res := jb.result
-	return StatusReply{State: JobDone, Result: &res}
+	return gaterun.StatusReply{State: gaterun.JobDone, Result: &res}
 }
 
 // Cancel stops gateID's gate; its result (canceled, unproven) stays readable.
@@ -330,18 +332,18 @@ func DefaultLimits() Limits {
 // CommandCancel): the daemon's command handler is this, over its Jobs.
 func (j *Jobs) Handle(ctx context.Context, command string, payload []byte) ([]byte, error) {
 	switch command {
-	case CommandStart:
-		var req StartRequest
+	case gaterun.CommandStart:
+		var req gaterun.StartRequest
 		if err := json.Unmarshal(payload, &req); err != nil {
 			return nil, fmt.Errorf("invalid payload: %w", err)
 		}
 		return json.Marshal(j.Start(ctx, req))
-	case CommandStatus, CommandCancel:
-		var req StatusRequest
+	case gaterun.CommandStatus, gaterun.CommandCancel:
+		var req gaterun.StatusRequest
 		if err := json.Unmarshal(payload, &req); err != nil {
 			return nil, fmt.Errorf("invalid payload: %w", err)
 		}
-		if command == CommandCancel {
+		if command == gaterun.CommandCancel {
 			j.Cancel(req.GateID)
 			return []byte("{}"), nil
 		}

@@ -10,6 +10,8 @@
 //
 // This package is plain data, so both sides import it: the worker's
 // scheduler, and the daemon-side builder (internal/mergequeue/candidate).
+//
+//forge:exclude-contract: plain wire data shared by the worker and the daemon; its methods validate and describe a request, and no one depends on it through an interface
 package buildjob
 
 // Entry is one queued PR at the head that was reviewed. In a result's
@@ -104,6 +106,12 @@ type BuildResult struct {
 	Ejections   []Ejection    `json:"ejections,omitempty"`
 	Regenerated []Regenerated `json:"regenerated,omitempty"`
 	WouldPush   []Push        `json:"would_push,omitempty"`
+	// Machine is the gate pool member (daemon id) that built the candidate.
+	// The server sets it from the member it dispatched the job to; a
+	// daemon's own value is never read. The gate of the batch prefers the
+	// same member (gaterun GateRequest.PreferMachine), whose git cache
+	// already holds the candidate.
+	Machine string `json:"machine,omitempty"`
 }
 
 // PathsRequest asks for the paths Head changes against Base: the diff from

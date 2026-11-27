@@ -47,6 +47,12 @@ const (
 	// PipelineServiceListQueueProcedure is the fully-qualified name of the PipelineService's ListQueue
 	// RPC.
 	PipelineServiceListQueueProcedure = "/reliant.v1.PipelineService/ListQueue"
+	// PipelineServiceListCapabilityGrantsProcedure is the fully-qualified name of the PipelineService's
+	// ListCapabilityGrants RPC.
+	PipelineServiceListCapabilityGrantsProcedure = "/reliant.v1.PipelineService/ListCapabilityGrants"
+	// PipelineServiceRevokeCapabilityGrantProcedure is the fully-qualified name of the
+	// PipelineService's RevokeCapabilityGrant RPC.
+	PipelineServiceRevokeCapabilityGrantProcedure = "/reliant.v1.PipelineService/RevokeCapabilityGrant"
 )
 
 // PipelineServiceClient is a client for the reliant.v1.PipelineService service.
@@ -68,6 +74,17 @@ type PipelineServiceClient interface {
 	// ListQueue lists an enrolled repository's merge queue: the entries
 	// waiting and batched, in pick order, and the batch being built or gated.
 	ListQueue(context.Context, *connect.Request[v1.ListQueueRequest]) (*connect.Response[v1.ListQueueResponse], error)
+	// ListCapabilityGrants lists the pipeline capability grants the caller
+	// made to their activations (internal/pipeline/grants), newest first: the
+	// live ones, or every one with include_revoked. A grant is made only by
+	// approving the card an activation's run raises
+	// (reliant/pipeline.request_grant@1), never by an rpc.
+	ListCapabilityGrants(context.Context, *connect.Request[v1.ListCapabilityGrantsRequest]) (*connect.Response[v1.ListCapabilityGrantsResponse], error)
+	// RevokeCapabilityGrant revokes one of the caller's grants at once: the
+	// next run of the activation no longer holds it. It needs no approval,
+	// since it only takes power away. Revoking a revoked grant returns it
+	// unchanged; another user's grant is NotFound.
+	RevokeCapabilityGrant(context.Context, *connect.Request[v1.RevokeCapabilityGrantRequest]) (*connect.Response[v1.RevokeCapabilityGrantResponse], error)
 }
 
 // NewPipelineServiceClient constructs a client for the reliant.v1.PipelineService service. By
@@ -108,15 +125,31 @@ func NewPipelineServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
+		listCapabilityGrants: connect.NewClient[v1.ListCapabilityGrantsRequest, v1.ListCapabilityGrantsResponse](
+			httpClient,
+			baseURL+PipelineServiceListCapabilityGrantsProcedure,
+			connect.WithSchema(pipelineServiceMethods.ByName("ListCapabilityGrants")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+			connect.WithClientOptions(opts...),
+		),
+		revokeCapabilityGrant: connect.NewClient[v1.RevokeCapabilityGrantRequest, v1.RevokeCapabilityGrantResponse](
+			httpClient,
+			baseURL+PipelineServiceRevokeCapabilityGrantProcedure,
+			connect.WithSchema(pipelineServiceMethods.ByName("RevokeCapabilityGrant")),
+			connect.WithIdempotency(connect.IdempotencyIdempotent),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // pipelineServiceClient implements PipelineServiceClient.
 type pipelineServiceClient struct {
-	enrolRepository  *connect.Client[v1.EnrolRepositoryRequest, v1.EnrolRepositoryResponse]
-	setPipelineMode  *connect.Client[v1.SetPipelineModeRequest, v1.SetPipelineModeResponse]
-	getPipelineState *connect.Client[v1.GetPipelineStateRequest, v1.GetPipelineStateResponse]
-	listQueue        *connect.Client[v1.ListQueueRequest, v1.ListQueueResponse]
+	enrolRepository       *connect.Client[v1.EnrolRepositoryRequest, v1.EnrolRepositoryResponse]
+	setPipelineMode       *connect.Client[v1.SetPipelineModeRequest, v1.SetPipelineModeResponse]
+	getPipelineState      *connect.Client[v1.GetPipelineStateRequest, v1.GetPipelineStateResponse]
+	listQueue             *connect.Client[v1.ListQueueRequest, v1.ListQueueResponse]
+	listCapabilityGrants  *connect.Client[v1.ListCapabilityGrantsRequest, v1.ListCapabilityGrantsResponse]
+	revokeCapabilityGrant *connect.Client[v1.RevokeCapabilityGrantRequest, v1.RevokeCapabilityGrantResponse]
 }
 
 // EnrolRepository calls reliant.v1.PipelineService.EnrolRepository.
@@ -139,6 +172,16 @@ func (c *pipelineServiceClient) ListQueue(ctx context.Context, req *connect.Requ
 	return c.listQueue.CallUnary(ctx, req)
 }
 
+// ListCapabilityGrants calls reliant.v1.PipelineService.ListCapabilityGrants.
+func (c *pipelineServiceClient) ListCapabilityGrants(ctx context.Context, req *connect.Request[v1.ListCapabilityGrantsRequest]) (*connect.Response[v1.ListCapabilityGrantsResponse], error) {
+	return c.listCapabilityGrants.CallUnary(ctx, req)
+}
+
+// RevokeCapabilityGrant calls reliant.v1.PipelineService.RevokeCapabilityGrant.
+func (c *pipelineServiceClient) RevokeCapabilityGrant(ctx context.Context, req *connect.Request[v1.RevokeCapabilityGrantRequest]) (*connect.Response[v1.RevokeCapabilityGrantResponse], error) {
+	return c.revokeCapabilityGrant.CallUnary(ctx, req)
+}
+
 // PipelineServiceHandler is an implementation of the reliant.v1.PipelineService service.
 type PipelineServiceHandler interface {
 	// EnrolRepository enrols a repository of the project's organization, with
@@ -158,6 +201,17 @@ type PipelineServiceHandler interface {
 	// ListQueue lists an enrolled repository's merge queue: the entries
 	// waiting and batched, in pick order, and the batch being built or gated.
 	ListQueue(context.Context, *connect.Request[v1.ListQueueRequest]) (*connect.Response[v1.ListQueueResponse], error)
+	// ListCapabilityGrants lists the pipeline capability grants the caller
+	// made to their activations (internal/pipeline/grants), newest first: the
+	// live ones, or every one with include_revoked. A grant is made only by
+	// approving the card an activation's run raises
+	// (reliant/pipeline.request_grant@1), never by an rpc.
+	ListCapabilityGrants(context.Context, *connect.Request[v1.ListCapabilityGrantsRequest]) (*connect.Response[v1.ListCapabilityGrantsResponse], error)
+	// RevokeCapabilityGrant revokes one of the caller's grants at once: the
+	// next run of the activation no longer holds it. It needs no approval,
+	// since it only takes power away. Revoking a revoked grant returns it
+	// unchanged; another user's grant is NotFound.
+	RevokeCapabilityGrant(context.Context, *connect.Request[v1.RevokeCapabilityGrantRequest]) (*connect.Response[v1.RevokeCapabilityGrantResponse], error)
 }
 
 // NewPipelineServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -194,6 +248,20 @@ func NewPipelineServiceHandler(svc PipelineServiceHandler, opts ...connect.Handl
 		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
+	pipelineServiceListCapabilityGrantsHandler := connect.NewUnaryHandler(
+		PipelineServiceListCapabilityGrantsProcedure,
+		svc.ListCapabilityGrants,
+		connect.WithSchema(pipelineServiceMethods.ByName("ListCapabilityGrants")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+		connect.WithHandlerOptions(opts...),
+	)
+	pipelineServiceRevokeCapabilityGrantHandler := connect.NewUnaryHandler(
+		PipelineServiceRevokeCapabilityGrantProcedure,
+		svc.RevokeCapabilityGrant,
+		connect.WithSchema(pipelineServiceMethods.ByName("RevokeCapabilityGrant")),
+		connect.WithIdempotency(connect.IdempotencyIdempotent),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/reliant.v1.PipelineService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case PipelineServiceEnrolRepositoryProcedure:
@@ -204,6 +272,10 @@ func NewPipelineServiceHandler(svc PipelineServiceHandler, opts ...connect.Handl
 			pipelineServiceGetPipelineStateHandler.ServeHTTP(w, r)
 		case PipelineServiceListQueueProcedure:
 			pipelineServiceListQueueHandler.ServeHTTP(w, r)
+		case PipelineServiceListCapabilityGrantsProcedure:
+			pipelineServiceListCapabilityGrantsHandler.ServeHTTP(w, r)
+		case PipelineServiceRevokeCapabilityGrantProcedure:
+			pipelineServiceRevokeCapabilityGrantHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -227,4 +299,12 @@ func (UnimplementedPipelineServiceHandler) GetPipelineState(context.Context, *co
 
 func (UnimplementedPipelineServiceHandler) ListQueue(context.Context, *connect.Request[v1.ListQueueRequest]) (*connect.Response[v1.ListQueueResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.PipelineService.ListQueue is not implemented"))
+}
+
+func (UnimplementedPipelineServiceHandler) ListCapabilityGrants(context.Context, *connect.Request[v1.ListCapabilityGrantsRequest]) (*connect.Response[v1.ListCapabilityGrantsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.PipelineService.ListCapabilityGrants is not implemented"))
+}
+
+func (UnimplementedPipelineServiceHandler) RevokeCapabilityGrant(context.Context, *connect.Request[v1.RevokeCapabilityGrantRequest]) (*connect.Response[v1.RevokeCapabilityGrantResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.PipelineService.RevokeCapabilityGrant is not implemented"))
 }
