@@ -151,6 +151,7 @@ Invoke an agent or sub-workflow
 | `args` | map | No | - | Values for the sub-workflow's inputs, keyed by input name |
 | `presets` | map | No | - | A preset to apply per input group, as group: preset. Use default for ungrouped inputs |
 | `passthrough` | string | No | - | Inputs of this workflow to hand to the sub-workflow under the same name |
+| `propagate_outcome` | boolean | No | - | Fail this node when the sub-workflow declares outcome: failure. Unset, the node completes and the run's outcome is failure_handled |
 
 ### Outputs
 

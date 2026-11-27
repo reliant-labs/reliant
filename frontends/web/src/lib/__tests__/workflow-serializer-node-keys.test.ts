@@ -155,6 +155,14 @@ describe("workflow serializer: node base keys", () => {
     expect(written).not.toHaveProperty("observe");
   });
 
+  it("keeps a workflow node's propagate_outcome, and writes it only when set", () => {
+    const written = roundTrip(
+      "name: wrap\nnodes:\n  - id: release\n    type: workflow\n    ref: project://release\n    propagate_outcome: true\n  - id: other\n    type: workflow\n    ref: project://other\n",
+    );
+    expect(written.nodes[0].propagate_outcome).toBe(true);
+    expect(written.nodes[1]).not.toHaveProperty("propagate_outcome");
+  });
+
   it("writes nothing for a node that sets none of them", () => {
     const written = roundTrip("name: bare\nnodes:\n  - id: a\n    type: run\n    command: 'true'\n");
     for (const key of ["daemon", "outcome", "tolerate_failure", "observe", "preflight"]) {

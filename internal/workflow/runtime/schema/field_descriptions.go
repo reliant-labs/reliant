@@ -59,5 +59,6 @@ func init() {
 	FieldDescriptions["workflow.args"] = "Values for the sub-workflow's inputs, keyed by input name"
 	FieldDescriptions["workflow.passthrough"] = "Inputs of this workflow to hand to the sub-workflow under the same name"
 	FieldDescriptions["workflow.presets"] = "A preset to apply per input group, as group: preset. Use default for ungrouped inputs"
+	FieldDescriptions["workflow.propagate_outcome"] = "Fail this node when the sub-workflow declares outcome: failure. Unset, the node completes and the run's outcome is failure_handled"
 	FieldDescriptions["workflow.ref"] = "The workflow to run: builtin://<name> for a built-in, project://<name> for one in this project"
 }

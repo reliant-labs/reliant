@@ -145,6 +145,11 @@ type Runner struct {
 	// seam for how a run reported its ending.
 	onWorkflowStatus func(in map[string]interface{})
 
+	// onRecordedFailure, when set, sees every node failure the run put on
+	// record (RecordToleratedFailure) — a test seam for what the run's
+	// outcome will read as a handled failure.
+	onRecordedFailure func(in map[string]interface{})
+
 	// launchedBy, when set, makes the run the launch run this trigger event
 	// fired (WorkflowInput.Trigger and the launch-run input): a test seam for
 	// what only such a run does, such as reporting to its `check:`.
@@ -2267,6 +2272,9 @@ func (r *Runner) registerActivities(
 	// The scenario's verdict comes from the node's {failed, error} outputs.
 	env.RegisterActivityWithOptions(
 		func(_ context.Context, in map[string]interface{}) (map[string]interface{}, error) {
+			if r.onRecordedFailure != nil {
+				r.onRecordedFailure(in)
+			}
 			msg, _ := in["error"].(string)
 			return nil, temporal.NewNonRetryableApplicationError(msg, "ToleratedFailure", nil)
 		},

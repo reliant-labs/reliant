@@ -82,6 +82,7 @@ Sub-workflow invocation configuration
 | `project` | message | No | Working directory override for sub-workflow |
 | `thread` | message | No | Thread mode: inherit (default), new, or fork |
 | `passthrough` | string | No | Inputs of this workflow to hand to the sub-workflow under the same name |
+| `propagate_outcome` | bool | No | Fail this node when the sub-workflow declares outcome: failure. Unset, the node completes and the run's outcome is failure_handled |
 
 ---
 

@@ -4280,9 +4280,18 @@ type SubWorkflowArgs struct {
 	// Passthrough forwards specified input names from the parent workflow to the child.
 	// For each name, if inputs.X exists in the parent, it is passed as an arg to the child.
 	// Explicit args override passthrough values.
-	Passthrough   []string `protobuf:"bytes,7,rep,name=passthrough,proto3" json:"passthrough,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Passthrough []string `protobuf:"bytes,7,rep,name=passthrough,proto3" json:"passthrough,omitempty"`
+	// PropagateOutcome makes a sub-workflow's declared verdict this node's:
+	// when the sub-workflow's graph ends after reaching a node that declares
+	// `outcome: failure`, this node FAILS, as it would on an error nothing in
+	// the sub-workflow handled (so tolerate_failure, the edges after it and the
+	// parent's on_failure treat it as one). Unset (the default), the node
+	// completes and the run goes on; the child's declaring node is recorded as
+	// a failed attempt, so the run's outcome is failure_handled rather than
+	// succeeded.
+	PropagateOutcome bool `protobuf:"varint,8,opt,name=propagate_outcome,json=propagateOutcome,proto3" json:"propagate_outcome,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *SubWorkflowArgs) Reset() {
@@ -4362,6 +4371,13 @@ func (x *SubWorkflowArgs) GetPassthrough() []string {
 		return x.Passthrough
 	}
 	return nil
+}
+
+func (x *SubWorkflowArgs) GetPropagateOutcome() bool {
+	if x != nil {
+		return x.PropagateOutcome
+	}
+	return false
 }
 
 // ReviewArgs configures a review node: a reviewer agent that reads, and only
@@ -10337,7 +10353,8 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"\bEnvEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01:D\x8a\xb5\x18@\n" +
-	"\x03run\x12\vRun Command\x1a\x17Execute a shell command \x01*\autility2\bTerminalJ\x04\b\a\x10\bR\vllm_gateway\"\x9f\t\n" +
+	"\x03run\x12\vRun Command\x1a\x17Execute a shell command \x01*\autility2\bTerminalJ\x04\b\a\x10\bR\vllm_gateway\"\xda\n" +
+	"\n" +
 	"\x0fSubWorkflowArgs\x12\x9f\x01\n" +
 	"\x03ref\x18\x01 \x01(\v2\x15.reliant.v1.CelStringBv\x82\xb5\x18r\n" +
 	"^The workflow to run: builtin://<name> for a built-in, project://<name> for one in this project\x82\x01\x0fbuiltin://agentR\x03ref\x12,\n" +
@@ -10351,7 +10368,9 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"\x06thread\x18\x06 \x01(\v2\x18.reliant.v1.ThreadConfigB2\x82\xb5\x18.\n" +
 	",Thread mode: inherit (default), new, or forkR\x06thread\x12\x97\x01\n" +
 	"\vpassthrough\x18\a \x03(\tBu\x82\xb5\x18q\n" +
-	"GInputs of this workflow to hand to the sub-workflow under the same name\x82\x01\x0f[prompt, model]\x8a\x01\x13list of input namesR\vpassthrough\x1aO\n" +
+	"GInputs of this workflow to hand to the sub-workflow under the same name\x82\x01\x0f[prompt, model]\x8a\x01\x13list of input namesR\vpassthrough\x12\xb8\x01\n" +
+	"\x11propagate_outcome\x18\b \x01(\bB\x8a\x01\x82\xb5\x18\x85\x01\n" +
+	"\x82\x01Fail this node when the sub-workflow declares outcome: failure. Unset, the node completes and the run's outcome is failure_handledR\x10propagateOutcome\x1aO\n" +
 	"\tArgsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12,\n" +
 	"\x05value\x18\x02 \x01(\v2\x16.google.protobuf.ValueR\x05value:\x028\x01\x1a:\n" +
