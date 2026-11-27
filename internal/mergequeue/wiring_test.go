@@ -27,10 +27,10 @@ func TestDispatchGateMapsTheGateRunner(t *testing.T) {
 		}, nil
 	}}
 	res, err := mergequeue.DispatchGate{Dispatcher: d}.Run(ctx, mergequeue.GateRequest{
-		RepoID: "r", BatchID: "b", Attempt: 2, CandidateRef: "reliant-queue/b", CandidateSHA: "abc", Shadow: true,
+		RepoID: "r", BatchID: "b", Attempt: 2, CandidateRef: "reliant-queue/b", CandidateSHA: "abc", BaseSHA: "def", Shadow: true,
 		Gate: config.ResolvedGate{AllowUnisolated: true},
 	})
-	if err != nil || got.RepoID != "r" || got.Attempt != 2 || got.CandidateRef != "reliant-queue/b" || !got.Shadow || !got.AllowUnisolated {
+	if err != nil || got.RepoID != "r" || got.Attempt != 2 || got.CandidateRef != "reliant-queue/b" || got.BaseSHA != "def" || !got.Shadow || !got.AllowUnisolated {
 		t.Fatalf("request %+v, err %v", got, err)
 	}
 	var stages map[string]any

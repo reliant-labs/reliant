@@ -37,7 +37,8 @@ func TestShadowCleanBatchRecordsWouldLand(t *testing.T) {
 	if v.WouldLand[0].Head != a.head || v.WouldLand[1].Head != b.head || v.WouldLand[1].Tree != f.r.Tree(batch.CandidateSHA) {
 		t.Fatalf("would-land entries: %+v", v.WouldLand)
 	}
-	if got := f.gate.requests(); len(got) != 1 || !got[0].Shadow || got[0].CandidateRef != "reliant-queue/"+batch.ID || got[0].Attempt != 1 {
+	if got := f.gate.requests(); len(got) != 1 || !got[0].Shadow || got[0].CandidateRef != "reliant-queue/"+batch.ID || got[0].Attempt != 1 ||
+		got[0].BaseSHA != main || got[0].CandidateSHA != batch.CandidateSHA {
 		t.Fatalf("gate requests: %+v", got)
 	}
 	// Shadow lands nothing: main and the PRs are untouched, the entries

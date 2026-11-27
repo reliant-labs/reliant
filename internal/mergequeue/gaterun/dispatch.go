@@ -167,11 +167,16 @@ func startRequest(repo GateRepo, req GateRequest) (StartRequest, error) {
 	}
 	s := StartRequest{
 		GateID: GateID(req.BatchID, req.Attempt), Repo: repo.Repository, Ref: req.CandidateRef, SHA: req.CandidateSHA,
-		Stages: plan, Env: env, TimeoutMs: timeout.Milliseconds(),
+		BaseSHA: req.BaseSHA, Stages: plan, Env: env, TimeoutMs: timeout.Milliseconds(),
 		// Not isolated is allowed when both say shadow (the caller's
 		// request, and the repository's mode as stored), or when the
 		// repository opted in to unisolated gates.
 		AllowNotIsolated: (req.Shadow && repo.Mode == core.PipelineRepoModeShadow) || req.AllowUnisolated,
+		// The warm cache is the same opt-in: only a repository that set
+		// gate.allow_unisolated accepts a cache its gates share (owner,
+		// 2026-11-26). A shadow gate of a shadow repository runs on runc
+		// cold.
+		WarmCache: req.AllowUnisolated,
 	}
 	if err := s.Validate(); err != nil {
 		return StartRequest{}, err

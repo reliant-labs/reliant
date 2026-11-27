@@ -44,6 +44,8 @@ func (v GateVerifier) Verify(ctx context.Context, req lander.VerifyRequest) (lan
 	if err != nil {
 		return lander.VerifyResult{}, err
 	}
+	// Main's own tip has no batch over a base: no BaseSHA, so the gate
+	// fetches the tip alone.
 	res, err := v.Gate.Run(ctx, GateRequest{
 		RepoID: req.Repo.ID, BatchID: req.Batch.ID, Attempt: req.Batch.Attempt,
 		CandidateRef: req.Repo.BaseBranch, CandidateSHA: req.SHA, Gate: cfg.Gate,
