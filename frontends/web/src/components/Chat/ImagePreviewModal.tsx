@@ -16,19 +16,23 @@ interface ImagePreviewModalProps {
 
 const controlClass = "inline-flex size-11 shrink-0 items-center justify-center rounded-md hover:bg-foreground/5 active:bg-foreground/10 disabled:opacity-40";
 
-async function convertToPng(imageUrl: string): Promise<Blob> {
-  const image = new Image();
-  image.src = imageUrl;
-  await image.decode();
-  const canvas = document.createElement("canvas");
-  canvas.width = image.naturalWidth;
-  canvas.height = image.naturalHeight;
-  const context = canvas.getContext("2d");
-  if (!context) throw new Error("Image conversion unavailable");
-  context.drawImage(image, 0, 0);
-  return new Promise((resolve, reject) => {
-    canvas.toBlob((png) => png ? resolve(png) : reject(new Error("Could not encode PNG")), "image/png");
-  });
+async function convertToPng(blob: Blob): Promise<Blob> {
+  // Decode the bytes directly: loading a blob: URL in an Image can be blocked
+  // by img-src even though the attachment is already available in memory.
+  const image = await createImageBitmap(blob);
+  try {
+    const canvas = document.createElement("canvas");
+    canvas.width = image.width;
+    canvas.height = image.height;
+    const context = canvas.getContext("2d");
+    if (!context) throw new Error("Image conversion unavailable");
+    context.drawImage(image, 0, 0);
+    return await new Promise<Blob>((resolve, reject) => {
+      canvas.toBlob((png) => png ? resolve(png) : reject(new Error("Could not encode PNG")), "image/png");
+    });
+  } finally {
+    image.close();
+  }
 }
 
 function ImageFileActions({ blob, imageUrl, filename }: { blob: Blob; imageUrl: string; filename: string }) {
@@ -43,7 +47,7 @@ function ImageFileActions({ blob, imageUrl, filename }: { blob: Blob; imageUrl: 
     try {
       // Clipboard writes must start within the click on Safari. Pass the
       // conversion promise into ClipboardItem instead of awaiting it first.
-      const png = blob.type === "image/png" ? blob : convertToPng(imageUrl);
+      const png = blob.type === "image/png" ? blob : convertToPng(blob);
       await navigator.clipboard.write([new ClipboardItem({ "image/png": png })]);
       setStatus("Image copied");
     } catch {
