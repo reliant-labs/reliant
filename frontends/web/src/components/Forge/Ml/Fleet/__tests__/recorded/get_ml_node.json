@@ -6,7 +6,7 @@
     "poolId": "ml-fleet-e2e/a100",
     "providerId": "k3s://k3d-ml-fleet-e2e-agent-1",
     "instanceType": "k3s",
-    "health": "ML_HEALTH_HEALTHY",
+    "healthState": "ML_HEALTH_HEALTHY",
     "gpus": 8,
     "gpusAllocatable": 8,
     "gpusAllocated": 1,

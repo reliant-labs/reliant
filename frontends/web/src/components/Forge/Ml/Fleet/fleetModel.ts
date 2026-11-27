@@ -15,6 +15,7 @@ import {
   MlFieldGroup,
   MlSubjectKind,
   type MlCluster,
+  type MlDevice,
   type MlEvent,
   type MlFieldValue,
   type MlNodeWorkload,
@@ -117,6 +118,88 @@ export const fieldOf = (fields: readonly MlFieldValue[], key: string) => {
   const keys = [key, ...(FIELD_ALIASES[key] ?? [])];
   return keys.map((k) => fields.find((f) => f.key === k)).find(Boolean);
 };
+
+// ── Device readings ───────────────────────────────────────────────────────────
+
+/**
+ * A device metric as the field that backs it reports it. A headline scalar
+ * (MlDevice.powerW, memoryUsedGb, …) is never read past its field: control-
+ * plane fills the scalars independently, so a recorded device can say
+ * powerW = 300 while gpu.power is NOT_COLLECTED. Only a device that sends no
+ * field metadata at all falls back to the scalar (still NaN-guarded).
+ */
+export type DeviceReading = { state: "collected"; value: number } | { state: "not_collected" | "not_applicable" | "not_reported"; why: string };
+
+export const collected = (r: DeviceReading): r is { state: "collected"; value: number } => r.state === "collected";
+
+/** Reads `key` from the device's fields, in the field's unit or through `convert` (null: a unit it cannot read). */
+export function deviceReading(d: Pick<MlDevice, "fields">, key: string, scalar: number, convert?: (value: number, unit: string) => number | null): DeviceReading {
+  const f = fieldOf(d.fields, key);
+  if (!f) {
+    if (d.fields.length === 0 && has(scalar)) return { state: "collected", value: scalar };
+    return { state: "not_reported", why: `this GPU reports no ${key} field` };
+  }
+  const source = f.sourceField || key;
+  if (f.collection === MlCollection.NOT_APPLICABLE) return { state: "not_applicable", why: `${source} does not apply to this GPU` };
+  if (f.collection === MlCollection.NOT_COLLECTED || !has(f.value)) return { state: "not_collected", why: f.missingSource || `${source} is not reported` };
+  const value = convert ? convert(f.value, f.unit) : f.value;
+  return has(value) ? { state: "collected", value } : { state: "not_collected", why: `${source} is in a unit this page cannot read (${f.unit})` };
+}
+
+const GB_PER_UNIT: Record<string, number> = { B: 1 / 1024 ** 3, bytes: 1 / 1024 ** 3, KiB: 1 / 1024 ** 2, MiB: 1 / 1024, MB: 1 / 1024, GiB: 1, GB: 1, TiB: 1024, TB: 1024 };
+
+/** A framebuffer value in GB (DCGM reports MiB; binary, as the contract's memory_*_gb are). */
+export function toGb(value: number, unit: string): number | null {
+  const per = GB_PER_UNIT[unit];
+  return per === undefined ? null : value * per;
+}
+
+export interface DeviceMemory {
+  used: DeviceReading;
+  free: DeviceReading;
+  /** DCGM_FI_DEV_FB_TOTAL when collected, else used + free when both are; null when neither answers. */
+  totalGb: number | null;
+}
+
+/** Framebuffer used, free and total from DCGM_FI_DEV_FB_USED / _FREE / _TOTAL; a missing used and a missing free stay distinct. */
+export function deviceMemory(d: Pick<MlDevice, "fields" | "memoryUsedGb" | "memoryTotalGb">): DeviceMemory {
+  const used = deviceReading(d, "gpu.fb_used", d.memoryUsedGb, toGb);
+  const free = deviceReading(d, "gpu.fb_free", d.memoryTotalGb - d.memoryUsedGb, toGb);
+  const total = deviceReading(d, "gpu.fb_total", d.fields.length === 0 ? d.memoryTotalGb : NaN, toGb);
+  const totalGb = collected(total) ? total.value : collected(used) && collected(free) ? used.value + free.value : null;
+  return { used, free, totalGb };
+}
+
+/** Power draw and its enforced limit from DCGM_FI_DEV_POWER_USAGE / _ENFORCED_POWER_LIMIT. */
+export function devicePower(d: Pick<MlDevice, "fields" | "powerW" | "powerLimitW">): { power: DeviceReading; limit: DeviceReading } {
+  return { power: deviceReading(d, "gpu.power", d.powerW), limit: deviceReading(d, "gpu.power_limit", d.powerLimitW) };
+}
+
+/** A node's headline power: the sum over the GPUs whose power is collected, with how many report it. */
+export function nodePower(devices: readonly MlDevice[]): { watts: number; reporting: number; why: string } {
+  const readings = devices.map((d) => devicePower(d).power);
+  const ok = readings.filter(collected);
+  const missing = readings.find((r) => !collected(r));
+  return { watts: ok.reduce((a, r) => a + r.value, 0), reporting: ok.length, why: missing && !collected(missing) ? missing.why : "" };
+}
+
+/**
+ * A node's headline memory: used summed over the GPUs reporting framebuffer
+ * used; total only over those that also answer free (or total), so the pair
+ * never mixes populations. `freeMissing` counts GPUs with used but no free.
+ */
+export function nodeMemory(devices: readonly MlDevice[]): { usedGb: number; totalGb: number | null; usedReporting: number; freeMissing: number; why: string } {
+  const mems = devices.map(deviceMemory);
+  const withUsed = mems.filter((m) => collected(m.used));
+  const usedGb = withUsed.reduce((a, m) => a + (collected(m.used) ? m.used.value : 0), 0);
+  const freeMissing = withUsed.filter((m) => m.totalGb === null).length;
+  const totalGb = withUsed.length && !freeMissing ? withUsed.reduce((a, m) => a + (m.totalGb ?? 0), 0) : null;
+  const missing = mems.find((m) => !collected(m.used))?.used;
+  return { usedGb, totalGb, usedReporting: withUsed.length, freeMissing, why: missing && !collected(missing) ? missing.why : "" };
+}
+
+/** "80.0" / "640": GB to one decimal under 100, whole above. */
+export const fmtGb = (gb: number): string => (gb < 100 ? gb.toFixed(1) : Math.round(gb).toLocaleString("en-US"));
 
 // ── Utilisation ───────────────────────────────────────────────────────────────
 

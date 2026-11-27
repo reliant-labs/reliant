@@ -47,13 +47,33 @@ const BAD = "k3d-ml-fleet-e2e-agent-0";
 const NODE = (nodeJson as { node: { name: string } }).node.name;
 const BURN_GPU = (deviceJson as { device: { uuid: string } }).device.uuid;
 
-type Answer = "recorded" | "empty" | "not-entitled" | "stale";
+type Answer = "recorded" | "empty" | "not-entitled" | "stale" | "scalars-disagree";
 
 /** Synthetic variant of the real recording: the recorded fleet plus a second cluster that stopped reporting an hour before, with no GPU nodes. */
 function staleFleet(): JsonValue {
   const f = structuredClone(fleetJson) as { clusters: Record<string, unknown>[] };
   f.clusters.push({ id: "edge-cpu", name: "edge-cpu", lastSeenAt: "2026-11-26T11:00:00Z", nodeCount: 3, gpuCount: 0, health: "ML_HEALTH_UNKNOWN" });
   return f as unknown as JsonValue;
+}
+
+/**
+ * Synthetic variant of the real node: every GPU's headline scalars claim
+ * 300 W of a 400 W limit and 80 of 80 GB, while its fields still say power
+ * is NOT_COLLECTED and now framebuffer free is NOT_COLLECTED too. The page
+ * must follow the fields.
+ */
+function scalarsDisagreeNode(): JsonValue {
+  const n = structuredClone(nodeJson) as { node: { devices: Record<string, unknown>[] } };
+  for (const d of n.node.devices) {
+    Object.assign(d, { powerW: 300, powerLimitW: 400, memoryUsedGb: 80, memoryTotalGb: 80 });
+    for (const f of d.fields as Record<string, unknown>[]) {
+      if (f.key === "gpu.memory.free") {
+        delete f.value;
+        f.collection = "ML_COLLECTION_NOT_COLLECTED";
+      }
+    }
+  }
+  return n as unknown as JsonValue;
 }
 
 function transportFor(answer: Answer): Transport {
@@ -68,7 +88,7 @@ function transportFor(answer: Answer): Transport {
     });
     service(MlEarlyAccessService, {
       getMlFleet: or(() => fromJson(GetMlFleetResponseSchema, answer === "stale" ? staleFleet() : (fleetJson as unknown as JsonValue)), () => ({})),
-      getMlNode: or(() => fromJson(GetMlNodeResponseSchema, nodeJson as unknown as JsonValue), () => ({})),
+      getMlNode: or(() => fromJson(GetMlNodeResponseSchema, answer === "scalars-disagree" ? scalarsDisagreeNode() : (nodeJson as unknown as JsonValue)), () => ({})),
       getMlDevice: or(() => fromJson(GetMlDeviceResponseSchema, deviceJson as unknown as JsonValue), () => ({})),
       getMlStack: or(() => fromJson(GetMlStackResponseSchema, stackJson as unknown as JsonValue), () => ({})),
     });
@@ -121,6 +141,39 @@ describe("ML Fleet and Setup on real cluster data", () => {
     expect(within(table).getByText("gpu-train")).toBeInTheDocument();
     expect(screen.getByTestId("ml-node-kpis")).toHaveTextContent("not collected");
     noNumbersInvented(screen.getByTestId("ml-node-kpis"));
+  });
+
+  it("node headlines follow the fields: power not collected, memory from framebuffer used + free", async () => {
+    // The recording: GPU 0 has 81920 MiB used and 0 free; GPUs 1-7 the reverse. powerW is NaN and gpu.power NOT_COLLECTED.
+    mount("fleet", [CLUSTER, NODE]);
+    noNumbersInvented(await screen.findByTestId("ml-node-kpis"));
+    const power = screen.getByTestId("ml-node-kpi-power");
+    expect(power).toHaveTextContent("not collected");
+    expect(power).not.toHaveTextContent(/\d+ W/);
+    const memory = screen.getByTestId("ml-node-kpi-memory");
+    expect(memory).toHaveTextContent("80.0 / 640 GB");
+    const rows = within(screen.getByTestId("ml-node-devices-table")).getAllByRole("row");
+    expect(rows[1]).toHaveTextContent("80.0 / 80.0 GB");
+    expect(rows[2]).toHaveTextContent("0.0 / 80.0 GB");
+  });
+
+  it("node: scalars that claim power and memory never stand in for uncollected fields", async () => {
+    mount("fleet", [CLUSTER, NODE], "scalars-disagree");
+    const kpis = await screen.findByTestId("ml-node-kpis");
+    const power = screen.getByTestId("ml-node-kpi-power");
+    expect(power).toHaveTextContent("not collected");
+    expect(power).not.toHaveTextContent("2,400 W");
+    // Used is collected, free is not: used alone, and which half is missing.
+    const memory = screen.getByTestId("ml-node-kpi-memory");
+    expect(memory).toHaveTextContent("80.0 GB used");
+    expect(memory).toHaveTextContent("framebuffer free not collected on 8 of 8 GPUs");
+    expect(memory).not.toHaveTextContent("640");
+    const table = screen.getByTestId("ml-node-devices-table");
+    const rows = within(table).getAllByRole("row");
+    expect(rows[1]).toHaveTextContent("80.0 GB used · free not collected");
+    expect(table).not.toHaveTextContent("300 / 400 W");
+    expect(table).not.toHaveTextContent("80.0 / 80");
+    noNumbersInvented(kpis);
   });
 
   it("GPU: utilisation and memory collected; power, temperature and Xid not collected", async () => {

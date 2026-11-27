@@ -55,7 +55,24 @@ import {
   useMlSeries,
   type MlColumn,
 } from "../kit";
-import { byGroup, fieldOf, fmtField, groupFields, groupNotApplicable, groupUncollected, nvlinkMatrix, nvlinkTone } from "./fleetModel";
+import {
+  byGroup,
+  collected,
+  deviceMemory,
+  devicePower,
+  fieldOf,
+  fmtField,
+  fmtGb,
+  groupFields,
+  groupNotApplicable,
+  groupUncollected,
+  nodeMemory,
+  nodePower,
+  nvlinkMatrix,
+  nvlinkTone,
+  type DeviceMemory,
+  type DeviceReading,
+} from "./fleetModel";
 import { dataOf, DemoActions, FieldTable, Uncollected, WorkloadGantt } from "./parts";
 
 const SYNC = "ml-node";
@@ -88,9 +105,9 @@ function NodeBody({ data, name }: { data: GetMlNodeResponse; name: string }) {
   const events = dataOf(useMlEvents(subject))?.events ?? [];
   const nowMs = Date.now();
   const product = n.devices[0]?.product.replace("NVIDIA ", "") ?? "";
-  // Headline numbers from what was collected; a field nothing reports reads "not collected", never 0.
-  const powered = n.devices.filter((d) => has(d.powerW));
-  const power = powered.reduce((a, d) => a + d.powerW, 0);
+  // Headline numbers from the fields that back them, never the scalars alone: a field nothing reports reads "not collected", never 0.
+  const power = nodePower(n.devices);
+  const memory = nodeMemory(n.devices);
   const deviceFields = n.devices.flatMap((d) => d.fields);
   const xidUncollected = groupUncollected(deviceFields, MlFieldGroup.XID);
   const xids = n.devices.filter((d) => d.xidLast > 0).length;
@@ -147,8 +164,27 @@ function NodeBody({ data, name }: { data: GetMlNodeResponse; name: string }) {
             { label: "Health score", value: Math.round(n.healthScore), tone: h.tone === "success" ? undefined : h.tone, sub: "0–100, higher is worse" },
             {
               label: "Power",
-              value: powered.length ? `${fmtInt(power)} W` : <Uncollected why="no GPU on this node reports DCGM_FI_DEV_POWER_USAGE" />,
-              sub: powered.length && powered.length < n.devices.length ? `${powered.length} of ${n.devices.length} GPUs report it` : `${n.devices.length} GPUs`,
+              testId: "ml-node-kpi-power",
+              value: power.reporting ? `${fmtInt(power.watts)} W` : <Uncollected why={power.why || "no GPU on this node reports DCGM_FI_DEV_POWER_USAGE"} />,
+              sub: power.reporting && power.reporting < n.devices.length ? `${power.reporting} of ${n.devices.length} GPUs report it` : power.reporting ? `${n.devices.length} GPUs` : "DCGM_FI_DEV_POWER_USAGE",
+            },
+            {
+              label: "Memory",
+              testId: "ml-node-kpi-memory",
+              value: !memory.usedReporting ? (
+                <Uncollected why={memory.why || "no GPU on this node reports DCGM_FI_DEV_FB_USED"} />
+              ) : memory.totalGb !== null ? (
+                `${fmtGb(memory.usedGb)} / ${fmtGb(memory.totalGb)} GB`
+              ) : (
+                `${fmtGb(memory.usedGb)} GB used`
+              ),
+              sub: !memory.usedReporting
+                ? "framebuffer used"
+                : memory.freeMissing
+                  ? `framebuffer free not collected on ${memory.freeMissing} of ${memory.usedReporting} GPUs`
+                  : memory.usedReporting < n.devices.length
+                    ? `${memory.usedReporting} of ${n.devices.length} GPUs report it`
+                    : "framebuffer used / total",
             },
             {
               label: "GPUs with an Xid",
@@ -309,6 +345,47 @@ function cell(f: MlFieldValue | undefined, finding?: string) {
   return <span className={cn(f.alarm && "font-medium text-danger-ink")}>{v}</span>;
 }
 
+/** A collected reading formatted, or a muted note saying why it is missing (hover: the source). */
+function readingCell(r: DeviceReading, fmt: (v: number) => string, label = "not collected") {
+  if (collected(r)) return fmt(r.value);
+  return <Uncollected label={r.state === "not_applicable" ? "n/a" : r.state === "not_reported" ? "not reported" : label} why={r.why} />;
+}
+
+/** used / total GB; a missing used and a missing free each say which. */
+function MemoryCell({ memory }: { memory: DeviceMemory }) {
+  const { used, free, totalGb } = memory;
+  if (collected(used) && totalGb !== null) return <span>{`${fmtGb(used.value)} / ${fmtGb(totalGb)} GB`}</span>;
+  if (collected(used))
+    return (
+      <span>
+        {`${fmtGb(used.value)} GB used`}
+        <span className="text-ink-muted"> · </span>
+        {readingCell(free, fmtGb, "free not collected")}
+      </span>
+    );
+  if (collected(free))
+    return (
+      <span>
+        {readingCell(used, fmtGb, "used not collected")}
+        <span className="text-ink-muted"> · </span>
+        {`${fmtGb(free.value)} GB free`}
+      </span>
+    );
+  return readingCell(used, fmtGb);
+}
+
+function PowerCell({ power, limit }: { power: DeviceReading; limit: DeviceReading }) {
+  if (!collected(power)) return readingCell(power, String);
+  if (collected(limit)) return <span>{`${Math.round(power.value)} / ${Math.round(limit.value)} W`}</span>;
+  return (
+    <span>
+      {`${Math.round(power.value)} W`}
+      <span className="text-ink-muted"> · </span>
+      {readingCell(limit, String, "limit not collected")}
+    </span>
+  );
+}
+
 function DevicesTable({ devices, util, findings }: { devices: readonly MlDevice[]; util: Map<string, { y: number[] }>; findings: Map<string, string> }) {
   const F = (d: MlDevice, key: string) => fieldOf(d.fields, key);
   const columns: MlColumn<MlDevice>[] = [
@@ -328,8 +405,8 @@ function DevicesTable({ devices, util, findings }: { devices: readonly MlDevice[
     },
     { key: "sm", header: "SM", numeric: true, render: (d) => cell(F(d, "gpu.sm_active")) },
     { key: "tensor", header: "Tensor", numeric: true, render: (d) => cell(F(d, "gpu.tensor_active")) },
-    { key: "mem", header: "Memory", numeric: true, render: (d) => (Number.isFinite(d.memoryUsedGb) ? `${d.memoryUsedGb.toFixed(1)} / ${d.memoryTotalGb} GB` : cell(F(d, "gpu.fb_used"))) },
-    { key: "power", header: "Power / limit", numeric: true, render: (d) => (Number.isFinite(d.powerW) ? `${Math.round(d.powerW)} / ${Math.round(d.powerLimitW)} W` : cell(F(d, "gpu.power"))) },
+    { key: "mem", header: "Memory", numeric: true, render: (d) => <MemoryCell memory={deviceMemory(d)} /> },
+    { key: "power", header: "Power / limit", numeric: true, render: (d) => <PowerCell {...devicePower(d)} /> },
     {
       key: "temp",
       header: "Temp / HBM",
