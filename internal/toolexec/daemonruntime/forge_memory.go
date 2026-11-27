@@ -11,6 +11,7 @@ import (
 	"time"
 
 	forgecli "github.com/reliant-labs/forge/cli"
+	fpin "github.com/reliant-labs/forge/pkg/forgepin"
 	"github.com/reliant-labs/reliant/internal/forgepin"
 	"github.com/reliant-labs/reliant/internal/logging"
 )
@@ -105,7 +106,7 @@ func forgeFrameworkMemoryFrom(projectPath string) ([]byte, string, bool) {
 // is — forge.yaml, its deploy envs, its own test commands, its unmanaged
 // services, its migration tool — so those join the cache key
 // (memoryFingerprint).
-func pinnedProjectMemory(pf forgecli.PinnedForge, root string) ([]byte, error) {
+func pinnedProjectMemory(pf fpin.Forge, root string) ([]byte, error) {
 	raw, err := pinnedForge.Output(pf, root, "memory-"+memoryFingerprint(root)+".json",
 		[]string{"project", "memory", "--json"})
 	if err != nil {

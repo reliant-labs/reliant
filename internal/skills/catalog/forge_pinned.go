@@ -10,6 +10,7 @@ import (
 	"sync"
 
 	forgecli "github.com/reliant-labs/forge/cli"
+	fpin "github.com/reliant-labs/forge/pkg/forgepin"
 	"github.com/reliant-labs/reliant/internal/forgepin"
 	skillscore "github.com/reliant-labs/reliant/internal/skills/core"
 )
@@ -52,7 +53,7 @@ type pinnedForgeEntry struct {
 
 // pinnedForgeFor reports the forge the project at baseDir pins when it is not
 // the embedded one (ok), or why it could not be obtained (err).
-func pinnedForgeFor(baseDir string) (forgecli.PinnedForge, bool, error) {
+func pinnedForgeFor(baseDir string) (fpin.Forge, bool, error) {
 	return pinnedForge.Pinned(baseDir, "skill load")
 }
 
@@ -62,7 +63,7 @@ func pinnedEntry(key string) *pinnedForgeEntry {
 }
 
 // pinnedShippedSkills is the pinned forge's own (scope "forge") skills.
-func pinnedShippedSkills(pf forgecli.PinnedForge, baseDir string) ([]forgecli.Skill, error) {
+func pinnedShippedSkills(pf fpin.Forge, baseDir string) ([]forgecli.Skill, error) {
 	e := pinnedEntry(pf.Key)
 	e.mu.Lock()
 	defer e.mu.Unlock()
@@ -78,7 +79,7 @@ func pinnedShippedSkills(pf forgecli.PinnedForge, baseDir string) ([]forgecli.Sk
 const pinnedCatalogCacheName = "skills-list.v2.json"
 
 // loadList reads the pinned forge's catalog once. e.mu is held.
-func (e *pinnedForgeEntry) loadList(pf forgecli.PinnedForge, baseDir string) ([]forgecli.Skill, error) {
+func (e *pinnedForgeEntry) loadList(pf fpin.Forge, baseDir string) ([]forgecli.Skill, error) {
 	if e.list != nil {
 		return e.list, nil
 	}
@@ -115,7 +116,7 @@ func (e *pinnedForgeEntry) loadList(pf forgecli.PinnedForge, baseDir string) ([]
 }
 
 // pinnedSkillBody is the body the pinned forge's catalog lists for path.
-func pinnedSkillBody(pf forgecli.PinnedForge, baseDir, path string) (string, error) {
+func pinnedSkillBody(pf fpin.Forge, baseDir, path string) (string, error) {
 	e := pinnedEntry(pf.Key)
 	e.mu.Lock()
 	defer e.mu.Unlock()
