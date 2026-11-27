@@ -53,8 +53,16 @@ import (
 
 const reliantModule = "github.com/reliant-labs/reliant"
 
-// serverRoots are the server roles' composition roots.
-var serverRoots = []string{"internal/app"}
+// serverRoots are the server roles' composition roots, and the server-side
+// merge queue packages the worker is to be wired with (the scheduler, its
+// gate dispatcher and its daemon job dispatcher), held to the rule before
+// internal/app reaches them.
+var serverRoots = []string{
+	"internal/app",
+	"internal/mergequeue",
+	"internal/mergequeue/gaterun",
+	"internal/mergequeue/jobrun",
+}
 
 // codeFinding kinds.
 const (

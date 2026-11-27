@@ -1,10 +1,11 @@
 // Copyright (c) 2025 Reliant Labs
-package gaterun
+package gatehost
 
 import (
 	"strconv"
 	"strings"
 
+	"github.com/reliant-labs/reliant/internal/mergequeue/gaterun"
 	"github.com/reliant-labs/reliant/internal/pipeline/config"
 )
 
@@ -93,7 +94,7 @@ exit "$overall"
 // Only what report reads is under the output directory: each stage's log
 // tail, the scan's verdict documents and gate-result.json. Full logs and the
 // SBOMs stay in the boundary and go with its teardown.
-func Script(stages []PlanStage) string {
+func Script(stages []gaterun.PlanStage) string {
 	var b strings.Builder
 	b.WriteString(strings.NewReplacer("LOGTAIL", strconv.Itoa(logTailBytes), "SCANCAP", strconv.Itoa(scanDocMaxBytes)).Replace(scriptPrelude))
 	for _, s := range stages {

@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package gaterun
+package gatehost
 
 import (
 	"bytes"
@@ -13,6 +13,8 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+
+	"github.com/reliant-labs/reliant/internal/mergequeue/gaterun"
 )
 
 // GitFetcher is the gate's fetch step: a fresh repository in the gate's
@@ -64,7 +66,7 @@ func (f GitFetcher) Fetch(ctx context.Context, spec FetchSpec) error {
 	candidate := []string{"fetch", "--quiet", "--no-tags", depth, url, "+refs/heads/" + spec.Ref + ":refs/gate/candidate"}
 	if spec.BaseSHA != "" {
 		if !shaPattern.MatchString(spec.BaseSHA) {
-			return fmt.Errorf("%w: base sha %q is not a full commit sha", ErrInvalidRequest, spec.BaseSHA)
+			return fmt.Errorf("%w: base sha %q is not a full commit sha", gaterun.ErrInvalidRequest, spec.BaseSHA)
 		}
 		// The base first, shallow, then the candidate with no depth: the
 		// base is a common commit, so the second fetch brings only the
@@ -91,6 +93,8 @@ func (f GitFetcher) Fetch(ctx context.Context, spec FetchSpec) error {
 	}
 	return checkNoCredential(spec.Dir)
 }
+
+var shaPattern = regexp.MustCompile(`^[0-9a-f]{40}$`)
 
 // BaseRef is where the gate's checkout holds the batch's base commit, when
 // the request names one.

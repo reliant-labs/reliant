@@ -63,4 +63,9 @@ type GateRequest struct {
 	// such a batch's verdict unisolated_accepted, which is the only way a
 	// runc batch may land.
 	AllowUnisolated bool
+	// PreferMachine is a pool member (daemon id) to try first: the one that
+	// built the candidate (buildjob BuildResult.Machine), whose git cache
+	// already holds it. "" or a member not connected changes nothing; the
+	// rest of the pool is tried after it, in the usual order.
+	PreferMachine string
 }
