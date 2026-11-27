@@ -3,11 +3,14 @@
 package app
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"io"
 	"log/slog"
 	"time"
 
+	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
@@ -25,7 +28,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/netguard"
 	"github.com/reliant-labs/reliant/internal/orgs"
-	"github.com/reliant-labs/reliant/pkg/config"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // GTM's providers: the feature gate every GTM surface asks, and the GTM
@@ -48,15 +51,19 @@ import (
 // configured, assets are off and those answer unavailable. Only the api runs
 // the stale-PENDING sweep (GtmAssetSweep), on one replica at a time.
 //
-// Neither has chat attachments (gtm.Deps.Attachments): an attachment row
-// names its owner but no org or chat, and the domain must not copy one user's
-// file from another org's chat into this org's workspace. attach_gtm_asset
-// answers unavailable until that is decided.
+// Only the worker reads chat attachments (gtm.Deps.Attachments, for
+// attach_gtm_asset), and only with GTM_ATTACH_FROM_CHAT_ENABLED: then an
+// attachment is taken only when it is the actor's own AND stamped with the
+// actor's org (gtmAttachments). Off, the tool answers unavailable.
+//
+// The settings are on ServerProcessConfig (GtmConfig, GtmAssetsConfig), read
+// here as compose.go hands them over, so only the api and the worker, whose
+// graphs read them, are given the GTM_* variables; the gateway never is.
 
 // FeatureGateDeps is the allowlist the gate reads and the membership it asks.
 type FeatureGateDeps struct {
-	// Config holds GtmConfig (GTM_ALLOWED_ORG_IDS).
-	Config *config.Config
+	// Gtm is ServerProcessConfig.gtm (GTM_ALLOWED_ORG_IDS); nil is GTM off.
+	Gtm *configv1.GtmConfig
 	// Logger receives whether GTM is on; nil is slog.Default().
 	Logger *slog.Logger
 	// Membership is the org resolver authz decides org resources with; nil
@@ -69,7 +76,7 @@ type FeatureGateDeps struct {
 // It fails closed: no list, an empty one, or no orgs is a Gate that allows
 // nothing, and the list is read once (a change takes a restart).
 func NewFeatureGate(d FeatureGateDeps) (featuregate.Gate, error) {
-	cfg := d.Config.GetGtm()
+	cfg := d.Gtm
 	log := orDefaultLogger(d.Logger)
 	// A nil *orgs.Resolver must stay a nil Membership: NewStatic denies all
 	// without one.
@@ -132,9 +139,11 @@ type WorkerGtmDomainDeps struct {
 	Credentials     *WorkerIntegrationCredentials
 	WriteLedger     writeledger.Service
 	ControlPlane    *configv1.ControlPlaneConfig
-	Config          *config.Config
-	Logger          *slog.Logger
-	Assets          *GtmAssets
+	// Gtm is ServerProcessConfig.gtm: the analytics token, and whether the
+	// agent may copy chat attachments (attach_from_chat_enabled).
+	Gtm    *configv1.GtmConfig
+	Logger *slog.Logger
+	Assets *GtmAssets
 }
 
 // NewWorkerGtmDomain builds the worker's domain. Analytics is off without a
@@ -148,10 +157,11 @@ func NewWorkerGtmDomain(d WorkerGtmDomainDeps) (*WorkerGtmDomain, error) {
 	svc := gtmsvc.NewInstrumented(gtmsvc.Deps{
 		Store:       gtmsvc.NewStore(d.DB.ORM()),
 		Gate:        d.Gate,
-		Analytics:   gtmAnalytics(d.ControlPlane, d.Config, log),
+		Analytics:   gtmAnalytics(d.ControlPlane, d.Gtm, log),
 		Email:       gtmEmail(d.Credentials, d.WriteLedger, log),
 		Connections: gtmConnections{store: d.ConnectionVault},
 		Assets:      d.Assets.store(),
+		Attachments: gtmChatAttachments(d.Gtm, d.DB, log),
 	})
 	return &WorkerGtmDomain{
 		Service: svc,
@@ -166,10 +176,11 @@ type GtmAssets struct {
 	Store gtmsvc.AssetStore
 }
 
-// GtmAssetsDeps is the config the bucket is read from
-// (ReliantConfig.gtm_assets, GTM_ASSETS_*).
+// GtmAssetsDeps is the config the bucket is read from.
 type GtmAssetsDeps struct {
-	Config *config.Config
+	// Assets is ServerProcessConfig.gtm_assets (GTM_ASSETS_*); nil is
+	// assets off.
+	Assets *configv1.GtmAssetsConfig
 	// Logger receives whether assets are on; nil is slog.Default().
 	Logger *slog.Logger
 }
@@ -178,7 +189,7 @@ type GtmAssetsDeps struct {
 // an error; a bucket without its endpoint or credentials fails boot (the
 // config's own validation refuses it at load too).
 func NewGtmAssets(d GtmAssetsDeps) (*GtmAssets, error) {
-	blobs, err := assetstore.StoreFromConfig(d.Config.GetGtmAssets())
+	blobs, err := assetstore.StoreFromConfig(d.Assets)
 	if err != nil {
 		return nil, err
 	}
@@ -276,7 +287,7 @@ func (s *GtmAssetSweep) pass(ctx context.Context) {
 // ObservabilityService, authenticated by GTM_ANALYTICS_TOKEN; nil (the read
 // is unavailable) without a control plane or with a URL it refuses. An unset
 // token is refused per query by the client.
-func gtmAnalytics(cp *configv1.ControlPlaneConfig, cfg *config.Config, log *slog.Logger) gtmsvc.Analytics {
+func gtmAnalytics(cp *configv1.ControlPlaneConfig, cfg *configv1.GtmConfig, log *slog.Logger) gtmsvc.Analytics {
 	endpoint := ControlPlaneEndpoint(cp)
 	if !endpoint.Hosted() {
 		log.Info("gtm: product analytics unavailable: no control plane")
@@ -289,7 +300,7 @@ func gtmAnalytics(cp *configv1.ControlPlaneConfig, cfg *config.Config, log *slog
 	}
 	return analytics.NewInstrumented(analytics.Deps{
 		CP:    client,
-		Token: func() string { return cfg.GetGtm().GetAnalyticsToken() },
+		Token: func() string { return cfg.GetAnalyticsToken() },
 		Log:   log,
 	})
 }
@@ -315,6 +326,36 @@ func gtmEmail(creds *WorkerIntegrationCredentials, ledger writeledger.Service, l
 		return nil
 	}
 	return sender
+}
+
+// gtmChatAttachments is gtm.Attachments over the attachments table, or nil
+// (attach_gtm_asset unavailable) unless GTM_ATTACH_FROM_CHAT_ENABLED is on.
+func gtmChatAttachments(cfg *configv1.GtmConfig, repo *db.Repo, log *slog.Logger) gtmsvc.Attachments {
+	if !cfg.GetAttachFromChatEnabled() || repo == nil {
+		log.Info("gtm: copying chat attachments into assets is off (GTM_ATTACH_FROM_CHAT_ENABLED)")
+		return nil
+	}
+	return gtmAttachments{db: repo.ORM()}
+}
+
+// gtmAttachments is gtm.Attachments over the attachments table: an
+// attachment opens only for its owner and only when it is stamped with the
+// actor's org (store.GetAttachmentForUserInOrg). Anything else (another
+// user's, another org's, one stamped with no org, one that does not exist,
+// or a file reference with no stored bytes) is the bare gtm.ErrNotFound, so
+// an agent in one org cannot pull a file its owner attached in another.
+type gtmAttachments struct{ db orm.Context }
+
+func (a gtmAttachments) Open(ctx context.Context, actor gtmsvc.Actor, attachmentID string) (gtmsvc.AttachmentFile, io.ReadCloser, error) {
+	att, err := store.GetAttachmentForUserInOrg(ctx, a.db, actor.UserID, actor.OrgID, attachmentID)
+	switch {
+	case err != nil:
+		return gtmsvc.AttachmentFile{}, nil, err
+	case att == nil || att.Content == nil:
+		return gtmsvc.AttachmentFile{}, nil, gtmsvc.ErrNotFound
+	}
+	return gtmsvc.AttachmentFile{Filename: att.Filename, ContentType: att.MimeType, Size: int64(len(att.Content))},
+		io.NopCloser(bytes.NewReader(att.Content)), nil
 }
 
 // gtmConnections is gtm.Connections over the saved connections: whether the

@@ -2131,7 +2131,7 @@ func (g *Graph) newGtm() (*gtm.Service, error) {
 // process, over the org resolver authz decides with.
 func (g *Graph) newFeatureGate() (featuregate.Gate, error) {
 	return NewFeatureGate(FeatureGateDeps{
-		Config:     g.Cfg,
+		Gtm:        g.ServerProcessConfig.GetGtm(),
 		Membership: g.OrgResolver(),
 		Logger:     g.Log,
 	})
@@ -2152,7 +2152,7 @@ func (g *Graph) newGtmDomain() (*GtmDomain, error) {
 // internal/app/providers_gtm.go): the GTM assets bucket, or none.
 func (g *Graph) newGtmAssets() (*GtmAssets, error) {
 	return NewGtmAssets(GtmAssetsDeps{
-		Config: g.Cfg,
+		Assets: g.ServerProcessConfig.GetGtmAssets(),
 		Logger: g.Log,
 	})
 }
@@ -2176,7 +2176,7 @@ func (g *Graph) newWorkerGtmDomain() (*WorkerGtmDomain, error) {
 		Credentials:     g.WorkerIntegrationCredentials(),
 		WriteLedger:     g.IntegrationsWriteledger(),
 		ControlPlane:    g.ServerProcessConfig.GetControlPlane(),
-		Config:          g.Cfg,
+		Gtm:             g.ServerProcessConfig.GetGtm(),
 		Logger:          g.Log,
 		Assets:          g.GtmAssets(),
 	})

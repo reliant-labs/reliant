@@ -7,6 +7,7 @@ import (
 	"io"
 	"log/slog"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -22,8 +23,8 @@ import (
 	"github.com/reliant-labs/reliant/internal/integrations/httpaction"
 	"github.com/reliant-labs/reliant/internal/integrations/writeledger"
 	"github.com/reliant-labs/reliant/internal/orgs"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/store/storetest"
-	"github.com/reliant-labs/reliant/pkg/config"
 )
 
 const (
@@ -40,8 +41,8 @@ func (gtmMembers) ResolveOrgMembership(_ context.Context, userID, orgID string) 
 	return accesstokenclient.OrgMembership{OrgID: orgID, Member: userID == gtmTestUser && orgID == gtmTestOrg}, nil
 }
 
-func gtmConfig(orgIDs ...string) *config.Config {
-	return &config.Config{Gtm: &configv1.GtmConfig{AllowedOrgIds: orgIDs}}
+func gtmConfig(orgIDs ...string) *configv1.GtmConfig {
+	return &configv1.GtmConfig{AllowedOrgIds: orgIDs}
 }
 
 // The gate is GTM_ALLOWED_ORG_IDS over the org resolver, and fails closed:
@@ -50,20 +51,20 @@ func TestNewFeatureGate(t *testing.T) {
 	ctx := context.Background()
 	resolver := orgs.New(gtmMembers{})
 	for name, tc := range map[string]struct {
-		cfg        *config.Config
+		cfg        *configv1.GtmConfig
 		membership *orgs.Resolver
 		want       bool
 	}{
 		"listed org, live member": {cfg: gtmConfig(gtmTestOrg), membership: resolver, want: true},
-		"no gtm config":           {cfg: &config.Config{}, membership: resolver},
-		"no config at all":        {membership: resolver},
+		"empty gtm config":        {cfg: &configv1.GtmConfig{}, membership: resolver},
+		"no gtm config":           {membership: resolver},
 		"empty list":              {cfg: gtmConfig(), membership: resolver},
 		"blank ids only":          {cfg: gtmConfig(" ", ""), membership: resolver},
 		"another org listed":      {cfg: gtmConfig("org-other"), membership: resolver},
 		"no orgs (self-hosted)":   {cfg: gtmConfig(gtmTestOrg), membership: nil},
 	} {
 		t.Run(name, func(t *testing.T) {
-			gate, err := NewFeatureGate(FeatureGateDeps{Config: tc.cfg, Membership: tc.membership})
+			gate, err := NewFeatureGate(FeatureGateDeps{Gtm: tc.cfg, Membership: tc.membership})
 			require.NoError(t, err)
 			require.NotNil(t, gate)
 			ok, err := gate.Allowed(ctx, featuregate.GTM, gtmTestUser, gtmTestOrg)
@@ -79,12 +80,12 @@ func TestNewFeatureGate(t *testing.T) {
 // Each root's domain is gated by the gate it was built with.
 func TestGtmDomainsAreGated(t *testing.T) {
 	env := storetest.New(t)
-	gate, err := NewFeatureGate(FeatureGateDeps{Config: gtmConfig(gtmTestOrg), Membership: orgs.New(gtmMembers{})})
+	gate, err := NewFeatureGate(FeatureGateDeps{Gtm: gtmConfig(gtmTestOrg), Membership: orgs.New(gtmMembers{})})
 	require.NoError(t, err)
 
 	api, err := NewGtmDomain(GtmDomainDeps{DB: env.Repo, Gate: gate, ConnectionVault: &connectionvault.MockService{}})
 	require.NoError(t, err)
-	worker, err := NewWorkerGtmDomain(WorkerGtmDomainDeps{DB: env.Repo, Gate: gate, ConnectionVault: &connectionvault.MockService{}, Config: gtmConfig(gtmTestOrg)})
+	worker, err := NewWorkerGtmDomain(WorkerGtmDomainDeps{DB: env.Repo, Gate: gate, ConnectionVault: &connectionvault.MockService{}, Gtm: gtmConfig(gtmTestOrg)})
 	require.NoError(t, err)
 	require.NotNil(t, worker.Email, "send_gtm_email always has its approver")
 
@@ -198,19 +199,19 @@ func TestGtmConnections_State(t *testing.T) {
 // credentials fails boot; a whole one gives both domains the store and the
 // api its sweep.
 func TestGtmAssets(t *testing.T) {
-	off, err := NewGtmAssets(GtmAssetsDeps{Config: &config.Config{}})
+	off, err := NewGtmAssets(GtmAssetsDeps{})
 	require.NoError(t, err)
 	assert.Nil(t, off.Store)
 	sweep, err := NewGtmAssetSweep(GtmAssetSweepDeps{Assets: off})
 	require.NoError(t, err)
 	assert.Nil(t, sweep, "no sweep without a bucket")
 
-	_, err = NewGtmAssets(GtmAssetsDeps{Config: &config.Config{GtmAssets: &configv1.GtmAssetsConfig{Bucket: "gtm-assets"}}})
+	_, err = NewGtmAssets(GtmAssetsDeps{Assets: &configv1.GtmAssetsConfig{Bucket: "gtm-assets"}})
 	require.Error(t, err)
 
-	on, err := NewGtmAssets(GtmAssetsDeps{Config: &config.Config{GtmAssets: &configv1.GtmAssetsConfig{
+	on, err := NewGtmAssets(GtmAssetsDeps{Assets: &configv1.GtmAssetsConfig{
 		Bucket: "gtm-assets", Endpoint: "https://s3.example.com", Region: "us-east-1", AccessKeyId: "id", SecretAccessKey: "secret",
-	}}})
+	}})
 	require.NoError(t, err)
 	require.NotNil(t, on.Store)
 
@@ -223,9 +224,9 @@ func TestGtmAssets(t *testing.T) {
 // A pass sweeps only on the replica that holds the sweep's lock.
 func TestGtmAssetSweep_OnlyTheLockHolderSweeps(t *testing.T) {
 	env := storetest.New(t)
-	on, err := NewGtmAssets(GtmAssetsDeps{Config: &config.Config{GtmAssets: &configv1.GtmAssetsConfig{
+	on, err := NewGtmAssets(GtmAssetsDeps{Assets: &configv1.GtmAssetsConfig{
 		Bucket: "gtm-assets", Endpoint: "https://s3.example.com", Region: "us-east-1", AccessKeyId: "id", SecretAccessKey: "secret",
-	}}})
+	}})
 	require.NoError(t, err)
 	sweep, err := NewGtmAssetSweep(GtmAssetSweepDeps{DB: env.Repo, Assets: on})
 	require.NoError(t, err)
@@ -244,4 +245,77 @@ func TestGtmAssetSweep_OnlyTheLockHolderSweeps(t *testing.T) {
 	}
 	assert.Equal(t, []dblock.Key{dblock.GtmAssetSweep, dblock.GtmAssetSweep}, asked)
 	assert.Equal(t, 1, released, "the holder sweeps (no stale rows here) and releases the lock")
+}
+
+// attach_gtm_asset reads chat attachments only with
+// GTM_ATTACH_FROM_CHAT_ENABLED, and then only the actor's own attachment
+// stamped with the actor's org: another org's, and one stamped with none,
+// are the bare ErrNotFound a missing one is.
+func TestGtmChatAttachments(t *testing.T) {
+	env := storetest.New(t)
+	ctx := context.Background()
+	discard := slog.New(slog.NewTextHandler(io.Discard, nil))
+	const otherOrg = "6b1f2b2e-0f43-4a7e-9a64-0c0f3d1d7c11"
+	put := func(id string, org *string) {
+		t.Helper()
+		now := time.Now().UTC()
+		require.NoError(t, store.InsertAttachment(ctx, env.ORM, &core.Attachment{
+			ID: id, UserID: gtmTestUser, Filename: id + ".png", Size: 3, MimeType: "image/png",
+			AttachmentType: "image", Content: []byte("png"), OrgID: org, CreatedAt: now, UpdatedAt: now,
+		}))
+	}
+	org, other := gtmTestOrg, otherOrg
+	put("att-same-org", &org)
+	put("att-other-org", &other)
+	put("att-no-org", nil)
+	actor := gtmsvc.Actor{Kind: gtmsvc.ActorAgent, UserID: gtmTestUser, OrgID: gtmTestOrg, ChatID: "chat-1"}
+
+	t.Run("flag off", func(t *testing.T) {
+		assert.Nil(t, gtmChatAttachments(&configv1.GtmConfig{AllowedOrgIds: []string{gtmTestOrg}}, env.Repo, discard))
+		assert.Nil(t, gtmChatAttachments(nil, env.Repo, discard))
+		// The worker's domain, flag off, past the gate: attach_gtm_asset
+		// reports chat attachments unavailable.
+		gate, err := NewFeatureGate(FeatureGateDeps{Gtm: gtmConfig(gtmTestOrg), Membership: orgs.New(gtmMembers{})})
+		require.NoError(t, err)
+		// A bucket is configured, so the asset store is not what refuses.
+		assets, err := NewGtmAssets(GtmAssetsDeps{Assets: &configv1.GtmAssetsConfig{
+			Bucket: "gtm-assets", Endpoint: "https://s3.example.com", Region: "us-east-1", AccessKeyId: "id", SecretAccessKey: "secret",
+		}})
+		require.NoError(t, err)
+		worker, err := NewWorkerGtmDomain(WorkerGtmDomainDeps{DB: env.Repo, Gate: gate, ConnectionVault: &connectionvault.MockService{}, Gtm: gtmConfig(gtmTestOrg), Assets: assets})
+		require.NoError(t, err)
+		_, err = worker.AttachFromAttachment(ctx, actor, gtmsvc.AttachFromAttachmentInput{AttachmentID: "att-same-org", ItemID: "item-1"})
+		assert.ErrorIs(t, err, gtmsvc.ErrAttachmentsUnavailable)
+	})
+
+	on := gtmChatAttachments(&configv1.GtmConfig{AttachFromChatEnabled: true}, env.Repo, discard)
+	require.NotNil(t, on)
+
+	t.Run("flag on, same org", func(t *testing.T) {
+		file, body, err := on.Open(ctx, actor, "att-same-org")
+		require.NoError(t, err)
+		defer body.Close()
+		got, err := io.ReadAll(body)
+		require.NoError(t, err)
+		assert.Equal(t, []byte("png"), got)
+		assert.Equal(t, gtmsvc.AttachmentFile{Filename: "att-same-org.png", ContentType: "image/png", Size: 3}, file)
+	})
+	t.Run("flag on, another org", func(t *testing.T) {
+		_, body, err := on.Open(ctx, actor, "att-other-org")
+		assert.ErrorIs(t, err, gtmsvc.ErrNotFound)
+		assert.Nil(t, body)
+		// ... and the same attachment from the other org's chat is no
+		// one else's to take either: another user, the right org.
+		_, _, err = on.Open(ctx, gtmsvc.Actor{Kind: gtmsvc.ActorAgent, UserID: gtmOtherUser, OrgID: gtmTestOrg}, "att-same-org")
+		assert.ErrorIs(t, err, gtmsvc.ErrNotFound)
+	})
+	t.Run("flag on, NULL org", func(t *testing.T) {
+		_, body, err := on.Open(ctx, actor, "att-no-org")
+		assert.ErrorIs(t, err, gtmsvc.ErrNotFound)
+		assert.Nil(t, body)
+	})
+	t.Run("flag on, missing", func(t *testing.T) {
+		_, _, err := on.Open(ctx, actor, "att-nope")
+		assert.ErrorIs(t, err, gtmsvc.ErrNotFound)
+	})
 }

@@ -2437,6 +2437,19 @@ ROOTS: {str: Root} = {
             "RELIANT_CLIENT_VERSION_ENFORCE_LEGACY_UNIDENTIFIED",
             "RELIANT_CLIENT_VERSION_REFUSE_UNIDENTIFIED",
 
+            # forge:section root api env gtm
+            # forge:hash=e73e25f525253ee9106ecc1d45b85a87c36f950631e1c93c1e7f9550dea129ca
+            "GTM_ALLOWED_ORG_IDS",
+            "GTM_ATTACH_FROM_CHAT_ENABLED",
+
+            # forge:section root api env gtm_assets
+            # forge:hash=6b1496425e12ca8e6f61500f352f08cccd51b0c9e9576febbec6b2d4ca0c293d
+            "GTM_ASSETS_ENDPOINT",
+            "GTM_ASSETS_PUBLIC_ENDPOINT",
+            "GTM_ASSETS_REGION",
+            "GTM_ASSETS_BUCKET",
+            "GTM_ASSETS_PATH_STYLE",
+
             # forge:section root api env (end)
             # forge:hash=7cce70f80c7f09e7d6d0f6dadef2f51be26ee5e885d6331fc33ef3bad4a54a1a
         ]
@@ -2466,6 +2479,15 @@ ROOTS: {str: Root} = {
             "RELIANT_SLACK_SIGNING_SECRET",
             "RELIANT_GITHUB_WEBHOOK_SECRET",
             "RELIANT_TEST_INTEGRATION_SECRET",
+
+            # forge:section root api secrets gtm
+            # forge:hash=28385b00489d9b52f48b32775bcee9609c20935ad7c2434fbdfa12bd77b4c48d
+            "GTM_ANALYTICS_TOKEN",
+
+            # forge:section root api secrets gtm_assets
+            # forge:hash=22fe72bbecf20bae01492c2ccdfb3a75139bb8a34bf0ca1d2bcc8781a87cbeed
+            "GTM_ASSETS_ACCESS_KEY_ID",
+            "GTM_ASSETS_SECRET_ACCESS_KEY",
 
             # forge:section root api secrets (end)
             # forge:hash=51508a9c3d2d78952b193ba57b93e4722f3b40806cc9fe70a9e5e1a9d74571e5
@@ -2761,6 +2783,19 @@ ROOTS: {str: Root} = {
             # forge:hash=27b08e9cee28d1479b57db4d6024cdfbb3be3797490236cbe08a4927cea191bb
             "RELIANT_PIPELINE_ENABLED",
 
+            # forge:section root worker env gtm
+            # forge:hash=76a9836847f07f4d43f10039c7fa6e61c996bdb3bcd6fc0c113314320971aba2
+            "GTM_ALLOWED_ORG_IDS",
+            "GTM_ATTACH_FROM_CHAT_ENABLED",
+
+            # forge:section root worker env gtm_assets
+            # forge:hash=d3c6fca485848e343e54c716d63812e5bb9df072cf921db1395585df3f36a559
+            "GTM_ASSETS_ENDPOINT",
+            "GTM_ASSETS_PUBLIC_ENDPOINT",
+            "GTM_ASSETS_REGION",
+            "GTM_ASSETS_BUCKET",
+            "GTM_ASSETS_PATH_STYLE",
+
             # forge:section root worker env (root) #3
             # forge:hash=70d220a87f5a1a77143da462766d214493a2c6a59bee71c9f8c96ba9896ae6b8
             "RELIANT_WORKER_HOSTED_ACTIONS_URL",
@@ -2808,6 +2843,15 @@ ROOTS: {str: Root} = {
             "RELIANT_SLACK_SIGNING_SECRET",
             "RELIANT_GITHUB_WEBHOOK_SECRET",
             "RELIANT_TEST_INTEGRATION_SECRET",
+
+            # forge:section root worker secrets gtm
+            # forge:hash=11dee0e938f40347af90fff57aae1c5bb93d7b3d27338a4df54839c5297f57e8
+            "GTM_ANALYTICS_TOKEN",
+
+            # forge:section root worker secrets gtm_assets
+            # forge:hash=694b2822ff06e31ec381dadd8d104c1de5dd3b3ff961cefe7e213fb78525bcb9
+            "GTM_ASSETS_ACCESS_KEY_ID",
+            "GTM_ASSETS_SECRET_ACCESS_KEY",
 
             # forge:section root worker secrets (end)
             # forge:hash=edcab42e181091b2db15b9c6ce9c0fc7d7517adfa83aff3ab74182a177bb91cf
