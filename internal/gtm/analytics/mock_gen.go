@@ -16,14 +16,15 @@ import (
 )
 
 // forge:section MockService
-// forge:hash=e181af2bc6e4f5b0cfdf754bc544b98887680549d3c05c2f93fe17dda365e5f5
+// forge:hash=c4c5376fe97b2369fb8a372552a727ff7f20a772ff027760babe05559780129b
 
 // MockService is a test mock for the Service interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockService.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockService.<Method>Func not set" error.
 type MockService struct {
 	contractkit.Recorder
 	QueryFunc func(context.Context, string, gtm.AnalyticsQuery) (gtm.AnalyticsResult, error)
@@ -36,6 +37,28 @@ func (m *MockService) Query(ctx context.Context, orgID string, q gtm.AnalyticsQu
 		return m.QueryFunc(ctx, orgID, q)
 	}
 	return *new(gtm.AnalyticsResult), contractkit.MockNotSet("MockService", "Query")
+}
+
+// MockServiceQueryCall is one recorded call of MockService.Query, one
+// field per parameter.
+type MockServiceQueryCall struct {
+	Ctx   context.Context
+	OrgID string
+	Q     gtm.AnalyticsQuery
+}
+
+// QueryCalls returns every recorded Query call, oldest first, with
+// its arguments typed. It reads the same log as Calls("Query").
+func (m *MockService) QueryCalls() []MockServiceQueryCall {
+	var out []MockServiceQueryCall
+	for _, c := range m.Recorder.Calls("Query") {
+		var r MockServiceQueryCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.OrgID, _ = c.Args[1].(string)
+		r.Q, _ = c.Args[2].(gtm.AnalyticsQuery)
+		out = append(out, r)
+	}
+	return out
 }
 
 // Compile-time check.
