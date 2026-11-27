@@ -35,11 +35,8 @@ service ProjectService {
 
   // GetProject retrieves a project by ID
   // forge:custom — checks the caller owns the project and reconciles its git flag with the daemon
-  // Declared NO_SIDE_EFFECTS though it refreshes the cached is_git_repo flag from the daemon (an idempotent cache repair): the repair is idempotent and
-  // no reliant client enables Connect's useHttpGet, so nothing caches or replays it.
-  rpc GetProject(GetProjectRequest) returns (GetProjectResponse) {
-    option idempotency_level = NO_SIDE_EFFECTS;
-  }
+  // forge:lint-disable-next-line forge-idempotency-read-undeclared: writes as it reads: it reconciles the stored is_git_repo flag from a live daemon check and records TrackProjectOpened on every call
+  rpc GetProject(GetProjectRequest) returns (GetProjectResponse) {}
 
   // UpdateProject updates an existing project
   // forge:custom — a partial update the caller's ownership check gates
