@@ -9,28 +9,32 @@ import (
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
-	"github.com/reliant-labs/reliant/internal/mergequeue/candidate"
-	"github.com/reliant-labs/reliant/internal/mergequeue/ghport"
 	"github.com/reliant-labs/reliant/internal/pipeline/config"
+	"github.com/reliant-labs/reliant/internal/pipeline/grants"
 	"github.com/reliant-labs/reliant/internal/pipeline/prpolicy"
 )
 
 // Deps is what a Scheduler is built from.
 type Deps struct {
-	Store    Store
-	Leader   LeaderLock
-	Workdirs Workdirs
-	Gate     Gate
+	Store  Store
+	Leader LeaderLock
+	// Refs reads main's tip through the GitHub API.
+	Refs Refs
+	// Builder runs the code operations (candidate builds, changed paths)
+	// on a gate pool daemon: the queue holds no repository bytes.
+	Builder Builder
+	Gate    Gate
+	// Authorizer decides the land capability (internal/pipeline/grants):
+	// in mode on an entry is admitted, and a passed batch handed to the
+	// lander, only while the run that approved each head holds land.
+	// grants.Service implements it.
+	Authorizer grants.Authorizer
 	// Configs is nil for StoredConfig.
 	// forge:optional-dep
 	Configs Configs
 	// Lander is nil for NoLander: a queue that only shadows.
 	// forge:optional-dep
 	Lander Lander
-	// Regen runs a repository's regen command; nil is the credentials-none
-	// sandbox (candidate.SandboxRunner).
-	// forge:optional-dep
-	Regen candidate.Runner
 	// Logger is nil for slog.Default.
 	// forge:optional-dep
 	Logger *slog.Logger
@@ -52,8 +56,8 @@ type Scheduler struct {
 
 // New builds a Scheduler.
 func New(d Deps) (*Scheduler, error) {
-	if d.Store == nil || d.Leader == nil || d.Workdirs == nil || d.Gate == nil {
-		return nil, errors.New("mergequeue: Deps needs Store, Leader, Workdirs and Gate")
+	if d.Store == nil || d.Leader == nil || d.Refs == nil || d.Builder == nil || d.Gate == nil || d.Authorizer == nil {
+		return nil, errors.New("mergequeue: Deps needs Store, Leader, Refs, Builder, Gate and Authorizer")
 	}
 	sch := &Scheduler{deps: d, configs: d.Configs, lander: d.Lander, logger: d.Logger, now: d.Now}
 	if sch.configs == nil {
@@ -68,7 +72,7 @@ func New(d Deps) (*Scheduler, error) {
 	if sch.now == nil {
 		sch.now = time.Now
 	}
-	sch.adm = admission{store: d.Store, now: sch.now}
+	sch.adm = admission{store: d.Store, auth: d.Authorizer, now: sch.now}
 	return sch, nil
 }
 
@@ -143,21 +147,10 @@ func (s *Scheduler) tick(ctx context.Context, repoID string) (Report, error) {
 	if err != nil {
 		return Report{}, fmt.Errorf("config of %s: %w", repo.Repository, err)
 	}
-	gh, err := ghport.ParseRepo(repo.Repository)
-	if err != nil {
-		return Report{}, err
-	}
-	wd, err := s.deps.Workdirs.Open(ctx, repo)
-	if err != nil {
-		return Report{}, fmt.Errorf("workdir of %s: %w", repo.Repository, err)
-	}
 	r := &round{
-		s: s, repo: repo, cfg: cfg, gh: gh, wd: wd,
+		s: s, repo: repo, cfg: cfg,
 		shadow:  repo.Mode == core.PipelineRepoModeShadow,
 		records: map[string]*core.PRRecord{},
-	}
-	if r.shadow {
-		r.wd.Git = &shadowGit{Port: wd.Git, round: r}
 	}
 	if err := r.recover(ctx); err != nil {
 		return r.report, err
@@ -192,8 +185,6 @@ type round struct {
 	s      *Scheduler
 	repo   *core.PipelineRepo
 	cfg    config.Resolved
-	gh     ghport.Repo
-	wd     Workdir
 	shadow bool
 	// mainSHA is the base branch's real tip, base the commit batches build
 	// on: mainSHA, or in shadow the would-be main.
@@ -206,9 +197,7 @@ type round struct {
 	// passed are the round's passed batches: all but the landing one are
 	// released at the end.
 	passed []*built
-	// wouldPush collects a shadow batch's suppressed pushes.
-	wouldPush []WouldPush
-	report    Report
+	report Report
 }
 
 func (r *round) now() time.Time { return r.s.now() }
@@ -322,12 +311,16 @@ func (r *round) pick(ctx context.Context) ([]*core.QueueEntry, error) {
 		}
 		head := e.HeadSHA
 		refusal, err := r.s.adm.admit(ctx, r.repo, r.cfg, rec, head, func(ctx context.Context) ([]string, error) {
-			return changedPaths(ctx, r.wd, r.gh, r.repo.BaseBranch, head)
+			return changedPaths(ctx, r.s.deps.Refs, r.s.deps.Builder, r.repo, head)
 		})
 		if err != nil {
 			return nil, err
 		}
 		if !refusal.Admissible() {
+			if refusal.Code == RefuseLandNotGranted {
+				r.s.logger.InfoContext(ctx, "merge queue entry waits: its approver does not hold land",
+					"repo_id", r.repo.ID, "entry_id", e.ID, "record_id", e.RecordID, "head", head, "reason", refusal.Reason)
+			}
 			continue
 		}
 		if prpolicy.IsUrgent(e.Priority) {
@@ -350,11 +343,11 @@ func (r *round) pick(ctx context.Context) ([]*core.QueueEntry, error) {
 // main moves (in shadow the old pipeline still lands), the simulated chain
 // starts again from it.
 func (r *round) pickBase(ctx context.Context) error {
-	tip, err := r.wd.GitHub.GetRef(ctx, r.gh, ghport.BranchRef(r.repo.BaseBranch))
+	tip, err := r.s.deps.Refs.BranchTip(ctx, r.repo, r.repo.BaseBranch)
 	if err != nil {
 		return fmt.Errorf("read %s: %w", r.repo.BaseBranch, err)
 	}
-	r.mainSHA, r.base = tip.SHA, tip.SHA
+	r.mainSHA, r.base = tip, tip
 	if !r.shadow {
 		return nil
 	}
@@ -367,7 +360,7 @@ func (r *round) pickBase(ctx context.Context) error {
 			continue
 		}
 		v := ParseVerdict(b.VerdictJSON)
-		if v.Shadow && v.MainSHA == tip.SHA && b.CandidateSHA != "" {
+		if v.Shadow && v.MainSHA == tip && b.CandidateSHA != "" {
 			r.base, r.simulated = b.CandidateSHA, true
 		}
 		break

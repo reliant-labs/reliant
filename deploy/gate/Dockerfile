@@ -11,6 +11,8 @@
 #     in /gate/src;
 #   - optionally, a per-repository warm cache volume at /gate/cache
 #     (gaterun.CacheMount);
+#   - optionally, the machine's trusted Go build cache, read-only, at
+#     /gate/trusted-go-build (gaterun.TrustedGoCacheMount; below);
 #   - every capability dropped and no docker engine;
 #   - an environment that is exactly gaterun.GateEnv, plus the ENV declared
 #     here. The post-create check accepts the image's own variables.
@@ -26,8 +28,39 @@
 # volume, /gate/cache is just a directory on the per-gate work volume: it is
 # disk-backed, unlike the 1g /tmp, and it goes with the gate's teardown.
 #
+# One Go build cache per machine. The machine's trusted tier
+# (/var/cache/workspace/go-build-trusted, written only by main's seeding) is
+# mounted read-only at /gate/trusted-go-build, and every go command here runs
+# with GOCACHEPROG="forge cache prog --trusted /gate/trusted-go-build": it
+# reads the trusted tier first, then the overlay, and writes only to the
+# overlay. The overlay is GOCACHE (/gate/cache/go-build: the warm cache volume
+# when the gate has one, else the per-gate work volume). When nothing is
+# mounted at /gate/trusted-go-build (a machine with no trusted tier, or
+# gate_trusted_go_cache=off) the prog runs on the overlay alone; a missing
+# trusted tier never fails a build.
+#
+# A trusted entry is reused only when the action ID matches the hosts', so
+# the final stage is built to match them (cicd and ovh-build-1, Ubuntu 24.04):
+#   - Ubuntu 24.04 with noble's stock `gcc`. cmd/go folds the C compiler's
+#     version line into the action ID of every cgo package (runtime/cgo, net,
+#     os/user) and so of everything that imports them; under bookworm's gcc
+#     12.2.0 no cgo-reaching package ever shared an entry with the hosts.
+#     After a rebuild, `gcc --version` here must print the hosts' line
+#     (13.3.0-6ubuntu2~24.04.1 on 2026-11-27), or the cgo half misses.
+#   - GOFLAGS=-trimpath, as the agents, the Taskfiles and the runners set it:
+#     -trimpath changes every action ID. A repository's gate.env that sets
+#     GOFLAGS replaces this one, so it must keep -trimpath.
+#   - The same go (1.27.4), GOAMD64=v1 (the default), CGO_ENABLED=1 and an
+#     empty GOEXPERIMENT. GOROOT's location does not matter.
+#
 # The tool versions are the ones the three repos pin. A bump here is a rebuild:
-#   go 1.27.4         go.mod `toolchain` (all three repos)
+#   go 1.27.4         go.mod `toolchain` (all three repos); go.dev's official
+#                     linux-amd64 tarball, checked against its sha256
+#   gcc               noble's stock gcc (see above), plus g++, libc6-dev and
+#                     pkg-config (cgo, which -race needs)
+#   git 2.43          noble's (reliant's gitport needs >= 2.40 for
+#                     merge-tree --write-tree --merge-base)
+#   forge             FORGE_VERSION (below): a forge with `forge cache prog`
 #   node 24           reliant .nvmrc; engines in all three are >=22 <27
 #   pnpm 12.15.0      packageManager (all three repos)
 #   task 3.54.0       control-plane scripts/tool-versions.env TASK_VERSION
@@ -38,8 +71,6 @@
 #                     go1.27 module.
 #   kcl 0.13.2        control-plane KCL_VERSION (ci:full's renders)
 #   yq v4.54.3        control-plane YQ_VERSION
-#   git 2.47.1        built from source (reliant's gitport needs >= 2.40 for
-#                     merge-tree --write-tree --merge-base; bookworm has 2.39)
 #   playwright 1.58.0 reliant frontends/web pnpm-lock.yaml (@playwright/test),
 #                     with chromium and webkit plus their system packages
 #                     (task test:web:e2e)
@@ -54,7 +85,8 @@
 #   docker volume create gate-smoke
 #   docker run --rm --read-only --tmpfs /tmp --cap-drop ALL \
 #     --security-opt no-new-privileges --mount source=gate-smoke,target=/gate \
-#     reliant-gate:current sh -c 'go version && task --version && pnpm --version'
+#     reliant-gate:current sh -c 'go version && task --version && pnpm --version \
+#       && forge --version && gcc --version && git --version'
 #   docker volume rm gate-smoke
 #
 # The runc backend copies the tree in with `docker cp -a`, so it is owned by
@@ -70,22 +102,19 @@ FROM golang:1.27.4-bookworm AS gotools
 # golangci-lint built with the gate's go (see the version table above).
 RUN GOBIN=/out GOFLAGS=-trimpath go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0
 
+FROM golang:1.27.4-bookworm AS forgebuild
+# FORGE_VERSION must be a forge with `forge cache prog` (forge#3076 and later).
+# Every go command in the gate runs through it (GOCACHEPROG, below), so a
+# forge without it fails every Go build.
+ARG FORGE_VERSION=v1.13.1-0.20261127154748-0b29fb6eba25
+RUN GOBIN=/out GOFLAGS=-trimpath go install "github.com/reliant-labs/forge/cmd/forge@${FORGE_VERSION}"
+
 FROM node:24-bookworm-slim AS node
 
-FROM golang:1.27.4-bookworm AS gitbuild
-ARG GIT_VERSION=2.47.1
-RUN set -eux; apt-get update; \
-  apt-get install -y --no-install-recommends libcurl4-openssl-dev libexpat1-dev libpcre2-dev libssl-dev xz-utils zlib1g-dev; \
-  cd /tmp; base=https://www.kernel.org/pub/software/scm/git; \
-  curl -fsSLO "$base/git-${GIT_VERSION}.tar.xz"; curl -fsSLO "$base/sha256sums.asc"; \
-  grep " git-${GIT_VERSION}.tar.xz\$" sha256sums.asc | sha256sum -c -; \
-  tar -xJf "git-${GIT_VERSION}.tar.xz"; cd "git-${GIT_VERSION}"; \
-  make -j"$(nproc)" prefix=/opt/git NO_TCLTK=1 NO_GETTEXT=1 USE_LIBPCRE2=1 all; \
-  make prefix=/opt/git NO_TCLTK=1 NO_GETTEXT=1 USE_LIBPCRE2=1 install; \
-  /opt/git/bin/git --version
+FROM ubuntu:24.04
 
-FROM golang:1.27.4-bookworm
-
+ARG GO_VERSION=1.27.4
+ARG GO_SHA256=7226736c2339719cda28fbf3a54d71aa63bcefe376e98cef00034268dab24840
 ARG TASK_VERSION=3.54.0
 ARG BUF_VERSION=1.57.0
 ARG KCL_VERSION=0.13.2
@@ -93,16 +122,35 @@ ARG YQ_VERSION=v4.54.3
 ARG PNPM_VERSION=12.15.0
 ARG PLAYWRIGHT_VERSION=1.58.0
 ARG GATE_UID=10001
+ARG DEBIAN_FRONTEND=noninteractive
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
-# The gate's base tools. The golang image already has git, curl, make, gcc
-# (cgo, which -race needs) and ca-certificates.
+# The gate's base tools, from noble. This names explicitly what the old
+# golang:bookworm base supplied implicitly: the cgo toolchain (gcc, g++,
+# libc6-dev, pkg-config, make), git with openssh-client, curl, wget, gnupg,
+# netbase, tzdata, procps and openssl. (It also had mercurial and subversion,
+# which only a direct, proxy-less fetch of an hg or svn module needs; the
+# gates fetch through GOPROXY.)
 RUN apt-get update \
   && apt-get install -y --no-install-recommends \
-       bash ca-certificates curl file git jq make procps python3 python3-venv \
-       python3-pip ripgrep rsync shellcheck unzip xauth xvfb xz-utils zip \
-  && rm -rf /var/lib/apt/lists/*
+       bash ca-certificates curl file g++ gcc git gnupg jq libc6-dev make \
+       netbase openssh-client openssl pkg-config procps python3 python3-pip \
+       python3-venv ripgrep rsync shellcheck tzdata unzip wget xauth xvfb \
+       xz-utils zip \
+  && rm -rf /var/lib/apt/lists/* \
+  && gcc --version | head -1 && git --version
+
+# go from go.dev's official tarball, checked against its published sha256.
+# GateEnv sets PATH to the system dirs only, so go and gofmt must be on it.
+RUN set -eux; tmp=$(mktemp -d); cd "$tmp"; \
+  curl -fsSL -o go.tar.gz "https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz"; \
+  echo "${GO_SHA256}  go.tar.gz" | sha256sum -c -; \
+  tar -C /usr/local -xzf go.tar.gz; \
+  cd /; rm -rf "$tmp"; \
+  ln -s /usr/local/go/bin/go /usr/local/bin/go; \
+  ln -s /usr/local/go/bin/gofmt /usr/local/bin/gofmt; \
+  go version
 
 # node and npm from the official image; pnpm at the repos' pin. pnpm is
 # installed with npm rather than corepack because corepack would download it
@@ -138,10 +186,8 @@ RUN set -eux; tmp=$(mktemp -d); cd "$tmp"; \
   task --version; buf --version; kcl --version; yq --version
 
 COPY --from=gotools /out/golangci-lint /usr/local/bin/golangci-lint
-
-# GateEnv sets PATH to the system dirs only, so go and gofmt must be on it.
-RUN ln -s /usr/local/go/bin/go /usr/local/bin/go \
-  && ln -s /usr/local/go/bin/gofmt /usr/local/bin/gofmt
+COPY --from=forgebuild /out/forge /usr/local/bin/forge
+RUN golangci-lint --version && forge --version
 
 # Playwright's browsers, installed read-only under /opt along with their system
 # packages. The gate runs `npx playwright install`, which writes a lock and
@@ -153,29 +199,28 @@ RUN PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright \
   && rm -rf /var/lib/apt/lists/* /root/.npm \
   && chmod -R a+rX /opt/ms-playwright
 
-# git 2.47, built from source in the gitbuild stage above: reliant's merge
-# queue (internal/mergequeue/gitport) needs git 2.40 or newer for
-# `merge-tree --write-tree --merge-base`, and bookworm (backports included)
-# ships 2.39. /usr/local/bin comes before /usr/bin on GateEnv's PATH.
-COPY --from=gitbuild /opt/git /opt/git
-RUN ln -s /opt/git/bin/git /usr/local/bin/git && git --version
-
 # The non-root gate user and the writable layout under /gate. The uid is not
-# 1000, so the gate never shares a uid with the machine's first login user.
+# 1000, so the gate never shares a uid with the machine's first login user
+# (ubuntu:24.04 ships an `ubuntu` user at 1000, which stays unused here).
+# /gate/trusted-go-build is an empty mount point; the runc backend mounts the
+# machine's trusted tier over it, read-only.
 RUN useradd --uid "${GATE_UID}" --user-group --home-dir /gate/home --no-create-home --shell /bin/bash gate \
   && mkdir -p /gate/src /gate/out /gate/artifacts /gate/home /gate/tmp \
        /gate/cache/go-build /gate/cache/go-mod /gate/cache/gopath \
        /gate/cache/pnpm-store /gate/cache/npm /gate/cache/corepack /gate/cache/xdg \
-       /gate/cache/ms-playwright \
+       /gate/cache/ms-playwright /gate/trusted-go-build \
   && for d in /opt/ms-playwright/*/; do ln -s "$d" "/gate/cache/ms-playwright/$(basename "$d")"; done \
   && chown -R gate:gate /gate
 
-# GOTOOLCHAIN=auto, where the golang image sets local: if a repo's go.mod
-# moves its toolchain past this image's go, the gate downloads the new one
-# (checked against the checksum database) into GOMODCACHE, and does not fail.
+# GOTOOLCHAIN=auto: if a repo's go.mod moves its toolchain past this image's
+# go, the gate downloads the new one (checked against the checksum database)
+# into GOMODCACHE, and does not fail. GOFLAGS and GOCACHEPROG: see "One Go
+# build cache per machine" above.
 ENV HOME=/gate/home \
     GOTOOLCHAIN=auto \
+    GOFLAGS=-trimpath \
     GOCACHE=/gate/cache/go-build \
+    GOCACHEPROG="/usr/local/bin/forge cache prog --trusted /gate/trusted-go-build" \
     GOMODCACHE=/gate/cache/go-mod \
     GOPATH=/gate/cache/gopath \
     XDG_CACHE_HOME=/gate/cache/xdg \

@@ -26,6 +26,318 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+type ListCapabilityGrantsRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// trigger_id narrows the list to one activation's grants.
+	TriggerId *string `protobuf:"bytes,1,opt,name=trigger_id,json=triggerId,proto3,oneof" json:"trigger_id,omitempty"`
+	// include_revoked lists revoked grants too.
+	IncludeRevoked *bool `protobuf:"varint,2,opt,name=include_revoked,json=includeRevoked,proto3,oneof" json:"include_revoked,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *ListCapabilityGrantsRequest) Reset() {
+	*x = ListCapabilityGrantsRequest{}
+	mi := &file_reliant_v1_pipeline_proto_msgTypes[0]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListCapabilityGrantsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListCapabilityGrantsRequest) ProtoMessage() {}
+
+func (x *ListCapabilityGrantsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_pipeline_proto_msgTypes[0]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListCapabilityGrantsRequest.ProtoReflect.Descriptor instead.
+func (*ListCapabilityGrantsRequest) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_pipeline_proto_rawDescGZIP(), []int{0}
+}
+
+func (x *ListCapabilityGrantsRequest) GetTriggerId() string {
+	if x != nil && x.TriggerId != nil {
+		return *x.TriggerId
+	}
+	return ""
+}
+
+func (x *ListCapabilityGrantsRequest) GetIncludeRevoked() bool {
+	if x != nil && x.IncludeRevoked != nil {
+		return *x.IncludeRevoked
+	}
+	return false
+}
+
+type ListCapabilityGrantsResponse struct {
+	state         protoimpl.MessageState     `protogen:"open.v1"`
+	Grants        []*PipelineCapabilityGrant `protobuf:"bytes,1,rep,name=grants,proto3" json:"grants,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListCapabilityGrantsResponse) Reset() {
+	*x = ListCapabilityGrantsResponse{}
+	mi := &file_reliant_v1_pipeline_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListCapabilityGrantsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListCapabilityGrantsResponse) ProtoMessage() {}
+
+func (x *ListCapabilityGrantsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_pipeline_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListCapabilityGrantsResponse.ProtoReflect.Descriptor instead.
+func (*ListCapabilityGrantsResponse) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_pipeline_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *ListCapabilityGrantsResponse) GetGrants() []*PipelineCapabilityGrant {
+	if x != nil {
+		return x.Grants
+	}
+	return nil
+}
+
+type RevokeCapabilityGrantRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	GrantId       string                 `protobuf:"bytes,1,opt,name=grant_id,json=grantId,proto3" json:"grant_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RevokeCapabilityGrantRequest) Reset() {
+	*x = RevokeCapabilityGrantRequest{}
+	mi := &file_reliant_v1_pipeline_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RevokeCapabilityGrantRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RevokeCapabilityGrantRequest) ProtoMessage() {}
+
+func (x *RevokeCapabilityGrantRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_pipeline_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RevokeCapabilityGrantRequest.ProtoReflect.Descriptor instead.
+func (*RevokeCapabilityGrantRequest) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_pipeline_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *RevokeCapabilityGrantRequest) GetGrantId() string {
+	if x != nil {
+		return x.GrantId
+	}
+	return ""
+}
+
+type RevokeCapabilityGrantResponse struct {
+	state         protoimpl.MessageState   `protogen:"open.v1"`
+	Grant         *PipelineCapabilityGrant `protobuf:"bytes,1,opt,name=grant,proto3" json:"grant,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RevokeCapabilityGrantResponse) Reset() {
+	*x = RevokeCapabilityGrantResponse{}
+	mi := &file_reliant_v1_pipeline_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RevokeCapabilityGrantResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RevokeCapabilityGrantResponse) ProtoMessage() {}
+
+func (x *RevokeCapabilityGrantResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_pipeline_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RevokeCapabilityGrantResponse.ProtoReflect.Descriptor instead.
+func (*RevokeCapabilityGrantResponse) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_pipeline_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *RevokeCapabilityGrantResponse) GetGrant() *PipelineCapabilityGrant {
+	if x != nil {
+		return x.Grant
+	}
+	return nil
+}
+
+// PipelineCapabilityGrant is the owner's grant of one pipeline capability
+// to one activation, on one machine pool.
+type PipelineCapabilityGrant struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Id    string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	// trigger_id is the activation (the trigger) the grant is made to.
+	TriggerId string `protobuf:"bytes,2,opt,name=trigger_id,json=triggerId,proto3" json:"trigger_id,omitempty"`
+	// machine_pool_id is the pool the activation's runs must run on.
+	MachinePoolId string `protobuf:"bytes,3,opt,name=machine_pool_id,json=machinePoolId,proto3" json:"machine_pool_id,omitempty"`
+	// repo_id is the enrolled repository the grant is limited to; empty for
+	// every one.
+	RepoId string `protobuf:"bytes,4,opt,name=repo_id,json=repoId,proto3" json:"repo_id,omitempty"`
+	// capability is approve or land.
+	Capability string `protobuf:"bytes,5,opt,name=capability,proto3" json:"capability,omitempty"`
+	// granted_by_user_id is the owner who approved the card that made it.
+	GrantedByUserId string `protobuf:"bytes,6,opt,name=granted_by_user_id,json=grantedByUserId,proto3" json:"granted_by_user_id,omitempty"`
+	// approval_id is that card.
+	ApprovalId string                 `protobuf:"bytes,7,opt,name=approval_id,json=approvalId,proto3" json:"approval_id,omitempty"`
+	GrantedAt  *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=granted_at,json=grantedAt,proto3" json:"granted_at,omitempty"`
+	// revoked_at is unset while the grant is live.
+	RevokedAt       *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=revoked_at,json=revokedAt,proto3" json:"revoked_at,omitempty"`
+	RevokedByUserId string                 `protobuf:"bytes,10,opt,name=revoked_by_user_id,json=revokedByUserId,proto3" json:"revoked_by_user_id,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *PipelineCapabilityGrant) Reset() {
+	*x = PipelineCapabilityGrant{}
+	mi := &file_reliant_v1_pipeline_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PipelineCapabilityGrant) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PipelineCapabilityGrant) ProtoMessage() {}
+
+func (x *PipelineCapabilityGrant) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_pipeline_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PipelineCapabilityGrant.ProtoReflect.Descriptor instead.
+func (*PipelineCapabilityGrant) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_pipeline_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *PipelineCapabilityGrant) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *PipelineCapabilityGrant) GetTriggerId() string {
+	if x != nil {
+		return x.TriggerId
+	}
+	return ""
+}
+
+func (x *PipelineCapabilityGrant) GetMachinePoolId() string {
+	if x != nil {
+		return x.MachinePoolId
+	}
+	return ""
+}
+
+func (x *PipelineCapabilityGrant) GetRepoId() string {
+	if x != nil {
+		return x.RepoId
+	}
+	return ""
+}
+
+func (x *PipelineCapabilityGrant) GetCapability() string {
+	if x != nil {
+		return x.Capability
+	}
+	return ""
+}
+
+func (x *PipelineCapabilityGrant) GetGrantedByUserId() string {
+	if x != nil {
+		return x.GrantedByUserId
+	}
+	return ""
+}
+
+func (x *PipelineCapabilityGrant) GetApprovalId() string {
+	if x != nil {
+		return x.ApprovalId
+	}
+	return ""
+}
+
+func (x *PipelineCapabilityGrant) GetGrantedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.GrantedAt
+	}
+	return nil
+}
+
+func (x *PipelineCapabilityGrant) GetRevokedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.RevokedAt
+	}
+	return nil
+}
+
+func (x *PipelineCapabilityGrant) GetRevokedByUserId() string {
+	if x != nil {
+		return x.RevokedByUserId
+	}
+	return ""
+}
+
 type EnrolRepositoryRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// project_id is the project the repository is enrolled under. It must
@@ -41,7 +353,7 @@ type EnrolRepositoryRequest struct {
 
 func (x *EnrolRepositoryRequest) Reset() {
 	*x = EnrolRepositoryRequest{}
-	mi := &file_reliant_v1_pipeline_proto_msgTypes[0]
+	mi := &file_reliant_v1_pipeline_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -53,7 +365,7 @@ func (x *EnrolRepositoryRequest) String() string {
 func (*EnrolRepositoryRequest) ProtoMessage() {}
 
 func (x *EnrolRepositoryRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_pipeline_proto_msgTypes[0]
+	mi := &file_reliant_v1_pipeline_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -66,7 +378,7 @@ func (x *EnrolRepositoryRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EnrolRepositoryRequest.ProtoReflect.Descriptor instead.
 func (*EnrolRepositoryRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_pipeline_proto_rawDescGZIP(), []int{0}
+	return file_reliant_v1_pipeline_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *EnrolRepositoryRequest) GetProjectId() string {
@@ -99,7 +411,7 @@ type EnrolRepositoryResponse struct {
 
 func (x *EnrolRepositoryResponse) Reset() {
 	*x = EnrolRepositoryResponse{}
-	mi := &file_reliant_v1_pipeline_proto_msgTypes[1]
+	mi := &file_reliant_v1_pipeline_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -111,7 +423,7 @@ func (x *EnrolRepositoryResponse) String() string {
 func (*EnrolRepositoryResponse) ProtoMessage() {}
 
 func (x *EnrolRepositoryResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_pipeline_proto_msgTypes[1]
+	mi := &file_reliant_v1_pipeline_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -124,7 +436,7 @@ func (x *EnrolRepositoryResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EnrolRepositoryResponse.ProtoReflect.Descriptor instead.
 func (*EnrolRepositoryResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_pipeline_proto_rawDescGZIP(), []int{1}
+	return file_reliant_v1_pipeline_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *EnrolRepositoryResponse) GetRepository() *PipelineRepository {
@@ -147,7 +459,7 @@ type SetPipelineModeRequest struct {
 
 func (x *SetPipelineModeRequest) Reset() {
 	*x = SetPipelineModeRequest{}
-	mi := &file_reliant_v1_pipeline_proto_msgTypes[2]
+	mi := &file_reliant_v1_pipeline_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -159,7 +471,7 @@ func (x *SetPipelineModeRequest) String() string {
 func (*SetPipelineModeRequest) ProtoMessage() {}
 
 func (x *SetPipelineModeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_pipeline_proto_msgTypes[2]
+	mi := &file_reliant_v1_pipeline_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -172,7 +484,7 @@ func (x *SetPipelineModeRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetPipelineModeRequest.ProtoReflect.Descriptor instead.
 func (*SetPipelineModeRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_pipeline_proto_rawDescGZIP(), []int{2}
+	return file_reliant_v1_pipeline_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *SetPipelineModeRequest) GetRepoId() string {
@@ -205,7 +517,7 @@ type SetPipelineModeResponse struct {
 
 func (x *SetPipelineModeResponse) Reset() {
 	*x = SetPipelineModeResponse{}
-	mi := &file_reliant_v1_pipeline_proto_msgTypes[3]
+	mi := &file_reliant_v1_pipeline_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -217,7 +529,7 @@ func (x *SetPipelineModeResponse) String() string {
 func (*SetPipelineModeResponse) ProtoMessage() {}
 
 func (x *SetPipelineModeResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_pipeline_proto_msgTypes[3]
+	mi := &file_reliant_v1_pipeline_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -230,7 +542,7 @@ func (x *SetPipelineModeResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetPipelineModeResponse.ProtoReflect.Descriptor instead.
 func (*SetPipelineModeResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_pipeline_proto_rawDescGZIP(), []int{3}
+	return file_reliant_v1_pipeline_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *SetPipelineModeResponse) GetRepository() *PipelineRepository {
@@ -253,7 +565,7 @@ type GetPipelineStateRequest struct {
 
 func (x *GetPipelineStateRequest) Reset() {
 	*x = GetPipelineStateRequest{}
-	mi := &file_reliant_v1_pipeline_proto_msgTypes[4]
+	mi := &file_reliant_v1_pipeline_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -265,7 +577,7 @@ func (x *GetPipelineStateRequest) String() string {
 func (*GetPipelineStateRequest) ProtoMessage() {}
 
 func (x *GetPipelineStateRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_pipeline_proto_msgTypes[4]
+	mi := &file_reliant_v1_pipeline_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -278,7 +590,7 @@ func (x *GetPipelineStateRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetPipelineStateRequest.ProtoReflect.Descriptor instead.
 func (*GetPipelineStateRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_pipeline_proto_rawDescGZIP(), []int{4}
+	return file_reliant_v1_pipeline_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *GetPipelineStateRequest) GetRepoId() string {
@@ -311,7 +623,7 @@ type GetPipelineStateResponse struct {
 
 func (x *GetPipelineStateResponse) Reset() {
 	*x = GetPipelineStateResponse{}
-	mi := &file_reliant_v1_pipeline_proto_msgTypes[5]
+	mi := &file_reliant_v1_pipeline_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -323,7 +635,7 @@ func (x *GetPipelineStateResponse) String() string {
 func (*GetPipelineStateResponse) ProtoMessage() {}
 
 func (x *GetPipelineStateResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_pipeline_proto_msgTypes[5]
+	mi := &file_reliant_v1_pipeline_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -336,7 +648,7 @@ func (x *GetPipelineStateResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetPipelineStateResponse.ProtoReflect.Descriptor instead.
 func (*GetPipelineStateResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_pipeline_proto_rawDescGZIP(), []int{5}
+	return file_reliant_v1_pipeline_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *GetPipelineStateResponse) GetRepository() *PipelineRepository {
@@ -376,7 +688,7 @@ type ListQueueRequest struct {
 
 func (x *ListQueueRequest) Reset() {
 	*x = ListQueueRequest{}
-	mi := &file_reliant_v1_pipeline_proto_msgTypes[6]
+	mi := &file_reliant_v1_pipeline_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -388,7 +700,7 @@ func (x *ListQueueRequest) String() string {
 func (*ListQueueRequest) ProtoMessage() {}
 
 func (x *ListQueueRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_pipeline_proto_msgTypes[6]
+	mi := &file_reliant_v1_pipeline_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -401,7 +713,7 @@ func (x *ListQueueRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListQueueRequest.ProtoReflect.Descriptor instead.
 func (*ListQueueRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_pipeline_proto_rawDescGZIP(), []int{6}
+	return file_reliant_v1_pipeline_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *ListQueueRequest) GetRepoId() string {
@@ -424,7 +736,7 @@ type ListQueueResponse struct {
 
 func (x *ListQueueResponse) Reset() {
 	*x = ListQueueResponse{}
-	mi := &file_reliant_v1_pipeline_proto_msgTypes[7]
+	mi := &file_reliant_v1_pipeline_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -436,7 +748,7 @@ func (x *ListQueueResponse) String() string {
 func (*ListQueueResponse) ProtoMessage() {}
 
 func (x *ListQueueResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_pipeline_proto_msgTypes[7]
+	mi := &file_reliant_v1_pipeline_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -449,7 +761,7 @@ func (x *ListQueueResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListQueueResponse.ProtoReflect.Descriptor instead.
 func (*ListQueueResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_pipeline_proto_rawDescGZIP(), []int{7}
+	return file_reliant_v1_pipeline_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *ListQueueResponse) GetEntries() []*PipelineQueueEntry {
@@ -499,7 +811,7 @@ type PipelineRepository struct {
 
 func (x *PipelineRepository) Reset() {
 	*x = PipelineRepository{}
-	mi := &file_reliant_v1_pipeline_proto_msgTypes[8]
+	mi := &file_reliant_v1_pipeline_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -511,7 +823,7 @@ func (x *PipelineRepository) String() string {
 func (*PipelineRepository) ProtoMessage() {}
 
 func (x *PipelineRepository) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_pipeline_proto_msgTypes[8]
+	mi := &file_reliant_v1_pipeline_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -524,7 +836,7 @@ func (x *PipelineRepository) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PipelineRepository.ProtoReflect.Descriptor instead.
 func (*PipelineRepository) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_pipeline_proto_rawDescGZIP(), []int{8}
+	return file_reliant_v1_pipeline_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *PipelineRepository) GetId() string {
@@ -642,7 +954,7 @@ type PipelineStateCount struct {
 
 func (x *PipelineStateCount) Reset() {
 	*x = PipelineStateCount{}
-	mi := &file_reliant_v1_pipeline_proto_msgTypes[9]
+	mi := &file_reliant_v1_pipeline_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -654,7 +966,7 @@ func (x *PipelineStateCount) String() string {
 func (*PipelineStateCount) ProtoMessage() {}
 
 func (x *PipelineStateCount) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_pipeline_proto_msgTypes[9]
+	mi := &file_reliant_v1_pipeline_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -667,7 +979,7 @@ func (x *PipelineStateCount) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PipelineStateCount.ProtoReflect.Descriptor instead.
 func (*PipelineStateCount) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_pipeline_proto_rawDescGZIP(), []int{9}
+	return file_reliant_v1_pipeline_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *PipelineStateCount) GetState() string {
@@ -704,7 +1016,7 @@ type PipelineQueueEntry struct {
 
 func (x *PipelineQueueEntry) Reset() {
 	*x = PipelineQueueEntry{}
-	mi := &file_reliant_v1_pipeline_proto_msgTypes[10]
+	mi := &file_reliant_v1_pipeline_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -716,7 +1028,7 @@ func (x *PipelineQueueEntry) String() string {
 func (*PipelineQueueEntry) ProtoMessage() {}
 
 func (x *PipelineQueueEntry) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_pipeline_proto_msgTypes[10]
+	mi := &file_reliant_v1_pipeline_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -729,7 +1041,7 @@ func (x *PipelineQueueEntry) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PipelineQueueEntry.ProtoReflect.Descriptor instead.
 func (*PipelineQueueEntry) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_pipeline_proto_rawDescGZIP(), []int{10}
+	return file_reliant_v1_pipeline_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *PipelineQueueEntry) GetId() string {
@@ -811,7 +1123,7 @@ type PipelineQueueBatch struct {
 
 func (x *PipelineQueueBatch) Reset() {
 	*x = PipelineQueueBatch{}
-	mi := &file_reliant_v1_pipeline_proto_msgTypes[11]
+	mi := &file_reliant_v1_pipeline_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -823,7 +1135,7 @@ func (x *PipelineQueueBatch) String() string {
 func (*PipelineQueueBatch) ProtoMessage() {}
 
 func (x *PipelineQueueBatch) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_pipeline_proto_msgTypes[11]
+	mi := &file_reliant_v1_pipeline_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -836,7 +1148,7 @@ func (x *PipelineQueueBatch) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PipelineQueueBatch.ProtoReflect.Descriptor instead.
 func (*PipelineQueueBatch) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_pipeline_proto_rawDescGZIP(), []int{11}
+	return file_reliant_v1_pipeline_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *PipelineQueueBatch) GetId() string {
@@ -931,7 +1243,7 @@ type PipelineMainHealth struct {
 
 func (x *PipelineMainHealth) Reset() {
 	*x = PipelineMainHealth{}
-	mi := &file_reliant_v1_pipeline_proto_msgTypes[12]
+	mi := &file_reliant_v1_pipeline_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -943,7 +1255,7 @@ func (x *PipelineMainHealth) String() string {
 func (*PipelineMainHealth) ProtoMessage() {}
 
 func (x *PipelineMainHealth) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_pipeline_proto_msgTypes[12]
+	mi := &file_reliant_v1_pipeline_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -956,7 +1268,7 @@ func (x *PipelineMainHealth) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PipelineMainHealth.ProtoReflect.Descriptor instead.
 func (*PipelineMainHealth) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_pipeline_proto_rawDescGZIP(), []int{12}
+	return file_reliant_v1_pipeline_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *PipelineMainHealth) GetSha() string {
@@ -1006,7 +1318,37 @@ var File_reliant_v1_pipeline_proto protoreflect.FileDescriptor
 const file_reliant_v1_pipeline_proto_rawDesc = "" +
 	"\n" +
 	"\x19reliant/v1/pipeline.proto\x12\n" +
-	"reliant.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\x83\x01\n" +
+	"reliant.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\x92\x01\n" +
+	"\x1bListCapabilityGrantsRequest\x12\"\n" +
+	"\n" +
+	"trigger_id\x18\x01 \x01(\tH\x00R\ttriggerId\x88\x01\x01\x12,\n" +
+	"\x0finclude_revoked\x18\x02 \x01(\bH\x01R\x0eincludeRevoked\x88\x01\x01B\r\n" +
+	"\v_trigger_idB\x12\n" +
+	"\x10_include_revoked\"[\n" +
+	"\x1cListCapabilityGrantsResponse\x12;\n" +
+	"\x06grants\x18\x01 \x03(\v2#.reliant.v1.PipelineCapabilityGrantR\x06grants\"A\n" +
+	"\x1cRevokeCapabilityGrantRequest\x12!\n" +
+	"\bgrant_id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\agrantId\"Z\n" +
+	"\x1dRevokeCapabilityGrantResponse\x129\n" +
+	"\x05grant\x18\x01 \x01(\v2#.reliant.v1.PipelineCapabilityGrantR\x05grant\"\x9a\x03\n" +
+	"\x17PipelineCapabilityGrant\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1d\n" +
+	"\n" +
+	"trigger_id\x18\x02 \x01(\tR\ttriggerId\x12&\n" +
+	"\x0fmachine_pool_id\x18\x03 \x01(\tR\rmachinePoolId\x12\x17\n" +
+	"\arepo_id\x18\x04 \x01(\tR\x06repoId\x12\x1e\n" +
+	"\n" +
+	"capability\x18\x05 \x01(\tR\n" +
+	"capability\x12+\n" +
+	"\x12granted_by_user_id\x18\x06 \x01(\tR\x0fgrantedByUserId\x12\x1f\n" +
+	"\vapproval_id\x18\a \x01(\tR\n" +
+	"approvalId\x129\n" +
+	"\n" +
+	"granted_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\tgrantedAt\x129\n" +
+	"\n" +
+	"revoked_at\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\trevokedAt\x12+\n" +
+	"\x12revoked_by_user_id\x18\n" +
+	" \x01(\tR\x0frevokedByUserId\"\x83\x01\n" +
 	"\x16EnrolRepositoryRequest\x12%\n" +
 	"\n" +
 	"project_id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\tprojectId\x12\x1a\n" +
@@ -1107,7 +1449,7 @@ const file_reliant_v1_pipeline_proto_rawDesc = "" +
 	"\tsignature\x18\x04 \x01(\tR\tsignature\x12\x19\n" +
 	"\bbatch_id\x18\x05 \x01(\tR\abatchId\x12;\n" +
 	"\vobserved_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"observedAt2\xb7\x04\n" +
+	"observedAt2\xeb\x06\n" +
 	"\x0fPipelineService\x12\xc1\x01\n" +
 	"\x0fEnrolRepository\x12\".reliant.v1.EnrolRepositoryRequest\x1a#.reliant.v1.EnrolRepositoryResponse\"e\xa2\xbb\x18^:\\\n" +
 	"\x05enrol\x12G\n" +
@@ -1117,7 +1459,11 @@ const file_reliant_v1_pipeline_proto_rawDesc = "" +
 	"\bset_mode\x128\n" +
 	"\rpipeline_repo\x12\arepo_id\x1a\x1eresponse.repository.repository*\x04mode\x12b\n" +
 	"\x10GetPipelineState\x12#.reliant.v1.GetPipelineStateRequest\x1a$.reliant.v1.GetPipelineStateResponse\"\x03\x90\x02\x01\x12M\n" +
-	"\tListQueue\x12\x1c.reliant.v1.ListQueueRequest\x1a\x1d.reliant.v1.ListQueueResponse\"\x03\x90\x02\x01B:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
+	"\tListQueue\x12\x1c.reliant.v1.ListQueueRequest\x1a\x1d.reliant.v1.ListQueueResponse\"\x03\x90\x02\x01\x12n\n" +
+	"\x14ListCapabilityGrants\x12'.reliant.v1.ListCapabilityGrantsRequest\x1a(.reliant.v1.ListCapabilityGrantsResponse\"\x03\x90\x02\x01\x12\xc1\x01\n" +
+	"\x15RevokeCapabilityGrant\x12(.reliant.v1.RevokeCapabilityGrantRequest\x1a).reliant.v1.RevokeCapabilityGrantResponse\"S\xa2\xbb\x18L:J\n" +
+	"\x06revoke\x12@\n" +
+	"\x19pipeline_capability_grant\x12\bgrant_id\x1a\x19response.grant.capability\x90\x02\x02B:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
 
 var (
 	file_reliant_v1_pipeline_proto_rawDescOnce sync.Once
@@ -1131,51 +1477,64 @@ func file_reliant_v1_pipeline_proto_rawDescGZIP() []byte {
 	return file_reliant_v1_pipeline_proto_rawDescData
 }
 
-var file_reliant_v1_pipeline_proto_msgTypes = make([]protoimpl.MessageInfo, 13)
+var file_reliant_v1_pipeline_proto_msgTypes = make([]protoimpl.MessageInfo, 18)
 var file_reliant_v1_pipeline_proto_goTypes = []any{
-	(*EnrolRepositoryRequest)(nil),   // 0: reliant.v1.EnrolRepositoryRequest
-	(*EnrolRepositoryResponse)(nil),  // 1: reliant.v1.EnrolRepositoryResponse
-	(*SetPipelineModeRequest)(nil),   // 2: reliant.v1.SetPipelineModeRequest
-	(*SetPipelineModeResponse)(nil),  // 3: reliant.v1.SetPipelineModeResponse
-	(*GetPipelineStateRequest)(nil),  // 4: reliant.v1.GetPipelineStateRequest
-	(*GetPipelineStateResponse)(nil), // 5: reliant.v1.GetPipelineStateResponse
-	(*ListQueueRequest)(nil),         // 6: reliant.v1.ListQueueRequest
-	(*ListQueueResponse)(nil),        // 7: reliant.v1.ListQueueResponse
-	(*PipelineRepository)(nil),       // 8: reliant.v1.PipelineRepository
-	(*PipelineStateCount)(nil),       // 9: reliant.v1.PipelineStateCount
-	(*PipelineQueueEntry)(nil),       // 10: reliant.v1.PipelineQueueEntry
-	(*PipelineQueueBatch)(nil),       // 11: reliant.v1.PipelineQueueBatch
-	(*PipelineMainHealth)(nil),       // 12: reliant.v1.PipelineMainHealth
-	(*timestamppb.Timestamp)(nil),    // 13: google.protobuf.Timestamp
+	(*ListCapabilityGrantsRequest)(nil),   // 0: reliant.v1.ListCapabilityGrantsRequest
+	(*ListCapabilityGrantsResponse)(nil),  // 1: reliant.v1.ListCapabilityGrantsResponse
+	(*RevokeCapabilityGrantRequest)(nil),  // 2: reliant.v1.RevokeCapabilityGrantRequest
+	(*RevokeCapabilityGrantResponse)(nil), // 3: reliant.v1.RevokeCapabilityGrantResponse
+	(*PipelineCapabilityGrant)(nil),       // 4: reliant.v1.PipelineCapabilityGrant
+	(*EnrolRepositoryRequest)(nil),        // 5: reliant.v1.EnrolRepositoryRequest
+	(*EnrolRepositoryResponse)(nil),       // 6: reliant.v1.EnrolRepositoryResponse
+	(*SetPipelineModeRequest)(nil),        // 7: reliant.v1.SetPipelineModeRequest
+	(*SetPipelineModeResponse)(nil),       // 8: reliant.v1.SetPipelineModeResponse
+	(*GetPipelineStateRequest)(nil),       // 9: reliant.v1.GetPipelineStateRequest
+	(*GetPipelineStateResponse)(nil),      // 10: reliant.v1.GetPipelineStateResponse
+	(*ListQueueRequest)(nil),              // 11: reliant.v1.ListQueueRequest
+	(*ListQueueResponse)(nil),             // 12: reliant.v1.ListQueueResponse
+	(*PipelineRepository)(nil),            // 13: reliant.v1.PipelineRepository
+	(*PipelineStateCount)(nil),            // 14: reliant.v1.PipelineStateCount
+	(*PipelineQueueEntry)(nil),            // 15: reliant.v1.PipelineQueueEntry
+	(*PipelineQueueBatch)(nil),            // 16: reliant.v1.PipelineQueueBatch
+	(*PipelineMainHealth)(nil),            // 17: reliant.v1.PipelineMainHealth
+	(*timestamppb.Timestamp)(nil),         // 18: google.protobuf.Timestamp
 }
 var file_reliant_v1_pipeline_proto_depIdxs = []int32{
-	8,  // 0: reliant.v1.EnrolRepositoryResponse.repository:type_name -> reliant.v1.PipelineRepository
-	8,  // 1: reliant.v1.SetPipelineModeResponse.repository:type_name -> reliant.v1.PipelineRepository
-	8,  // 2: reliant.v1.GetPipelineStateResponse.repository:type_name -> reliant.v1.PipelineRepository
-	9,  // 3: reliant.v1.GetPipelineStateResponse.pr_states:type_name -> reliant.v1.PipelineStateCount
-	11, // 4: reliant.v1.GetPipelineStateResponse.latest_batches:type_name -> reliant.v1.PipelineQueueBatch
-	12, // 5: reliant.v1.GetPipelineStateResponse.main_health:type_name -> reliant.v1.PipelineMainHealth
-	10, // 6: reliant.v1.ListQueueResponse.entries:type_name -> reliant.v1.PipelineQueueEntry
-	11, // 7: reliant.v1.ListQueueResponse.current_batch:type_name -> reliant.v1.PipelineQueueBatch
-	13, // 8: reliant.v1.PipelineRepository.created_at:type_name -> google.protobuf.Timestamp
-	13, // 9: reliant.v1.PipelineRepository.updated_at:type_name -> google.protobuf.Timestamp
-	13, // 10: reliant.v1.PipelineQueueEntry.enqueued_at:type_name -> google.protobuf.Timestamp
-	13, // 11: reliant.v1.PipelineQueueBatch.started_at:type_name -> google.protobuf.Timestamp
-	13, // 12: reliant.v1.PipelineQueueBatch.finished_at:type_name -> google.protobuf.Timestamp
-	13, // 13: reliant.v1.PipelineMainHealth.observed_at:type_name -> google.protobuf.Timestamp
-	0,  // 14: reliant.v1.PipelineService.EnrolRepository:input_type -> reliant.v1.EnrolRepositoryRequest
-	2,  // 15: reliant.v1.PipelineService.SetPipelineMode:input_type -> reliant.v1.SetPipelineModeRequest
-	4,  // 16: reliant.v1.PipelineService.GetPipelineState:input_type -> reliant.v1.GetPipelineStateRequest
-	6,  // 17: reliant.v1.PipelineService.ListQueue:input_type -> reliant.v1.ListQueueRequest
-	1,  // 18: reliant.v1.PipelineService.EnrolRepository:output_type -> reliant.v1.EnrolRepositoryResponse
-	3,  // 19: reliant.v1.PipelineService.SetPipelineMode:output_type -> reliant.v1.SetPipelineModeResponse
-	5,  // 20: reliant.v1.PipelineService.GetPipelineState:output_type -> reliant.v1.GetPipelineStateResponse
-	7,  // 21: reliant.v1.PipelineService.ListQueue:output_type -> reliant.v1.ListQueueResponse
-	18, // [18:22] is the sub-list for method output_type
-	14, // [14:18] is the sub-list for method input_type
-	14, // [14:14] is the sub-list for extension type_name
-	14, // [14:14] is the sub-list for extension extendee
-	0,  // [0:14] is the sub-list for field type_name
+	4,  // 0: reliant.v1.ListCapabilityGrantsResponse.grants:type_name -> reliant.v1.PipelineCapabilityGrant
+	4,  // 1: reliant.v1.RevokeCapabilityGrantResponse.grant:type_name -> reliant.v1.PipelineCapabilityGrant
+	18, // 2: reliant.v1.PipelineCapabilityGrant.granted_at:type_name -> google.protobuf.Timestamp
+	18, // 3: reliant.v1.PipelineCapabilityGrant.revoked_at:type_name -> google.protobuf.Timestamp
+	13, // 4: reliant.v1.EnrolRepositoryResponse.repository:type_name -> reliant.v1.PipelineRepository
+	13, // 5: reliant.v1.SetPipelineModeResponse.repository:type_name -> reliant.v1.PipelineRepository
+	13, // 6: reliant.v1.GetPipelineStateResponse.repository:type_name -> reliant.v1.PipelineRepository
+	14, // 7: reliant.v1.GetPipelineStateResponse.pr_states:type_name -> reliant.v1.PipelineStateCount
+	16, // 8: reliant.v1.GetPipelineStateResponse.latest_batches:type_name -> reliant.v1.PipelineQueueBatch
+	17, // 9: reliant.v1.GetPipelineStateResponse.main_health:type_name -> reliant.v1.PipelineMainHealth
+	15, // 10: reliant.v1.ListQueueResponse.entries:type_name -> reliant.v1.PipelineQueueEntry
+	16, // 11: reliant.v1.ListQueueResponse.current_batch:type_name -> reliant.v1.PipelineQueueBatch
+	18, // 12: reliant.v1.PipelineRepository.created_at:type_name -> google.protobuf.Timestamp
+	18, // 13: reliant.v1.PipelineRepository.updated_at:type_name -> google.protobuf.Timestamp
+	18, // 14: reliant.v1.PipelineQueueEntry.enqueued_at:type_name -> google.protobuf.Timestamp
+	18, // 15: reliant.v1.PipelineQueueBatch.started_at:type_name -> google.protobuf.Timestamp
+	18, // 16: reliant.v1.PipelineQueueBatch.finished_at:type_name -> google.protobuf.Timestamp
+	18, // 17: reliant.v1.PipelineMainHealth.observed_at:type_name -> google.protobuf.Timestamp
+	5,  // 18: reliant.v1.PipelineService.EnrolRepository:input_type -> reliant.v1.EnrolRepositoryRequest
+	7,  // 19: reliant.v1.PipelineService.SetPipelineMode:input_type -> reliant.v1.SetPipelineModeRequest
+	9,  // 20: reliant.v1.PipelineService.GetPipelineState:input_type -> reliant.v1.GetPipelineStateRequest
+	11, // 21: reliant.v1.PipelineService.ListQueue:input_type -> reliant.v1.ListQueueRequest
+	0,  // 22: reliant.v1.PipelineService.ListCapabilityGrants:input_type -> reliant.v1.ListCapabilityGrantsRequest
+	2,  // 23: reliant.v1.PipelineService.RevokeCapabilityGrant:input_type -> reliant.v1.RevokeCapabilityGrantRequest
+	6,  // 24: reliant.v1.PipelineService.EnrolRepository:output_type -> reliant.v1.EnrolRepositoryResponse
+	8,  // 25: reliant.v1.PipelineService.SetPipelineMode:output_type -> reliant.v1.SetPipelineModeResponse
+	10, // 26: reliant.v1.PipelineService.GetPipelineState:output_type -> reliant.v1.GetPipelineStateResponse
+	12, // 27: reliant.v1.PipelineService.ListQueue:output_type -> reliant.v1.ListQueueResponse
+	1,  // 28: reliant.v1.PipelineService.ListCapabilityGrants:output_type -> reliant.v1.ListCapabilityGrantsResponse
+	3,  // 29: reliant.v1.PipelineService.RevokeCapabilityGrant:output_type -> reliant.v1.RevokeCapabilityGrantResponse
+	24, // [24:30] is the sub-list for method output_type
+	18, // [18:24] is the sub-list for method input_type
+	18, // [18:18] is the sub-list for extension type_name
+	18, // [18:18] is the sub-list for extension extendee
+	0,  // [0:18] is the sub-list for field type_name
 }
 
 func init() { file_reliant_v1_pipeline_proto_init() }
@@ -1183,13 +1542,14 @@ func file_reliant_v1_pipeline_proto_init() {
 	if File_reliant_v1_pipeline_proto != nil {
 		return
 	}
+	file_reliant_v1_pipeline_proto_msgTypes[0].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_reliant_v1_pipeline_proto_rawDesc), len(file_reliant_v1_pipeline_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   13,
+			NumMessages:   18,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

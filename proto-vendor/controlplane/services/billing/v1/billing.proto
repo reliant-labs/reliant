@@ -1220,6 +1220,8 @@ message GetFreeHostingStatusResponse {
   // The org's live static sites counted against the allowance (only when
   // is_designated).
   repeated FreeHostingSite sites = 4;
+  // Site-count limit of the allowance. 0 means no limit (signed-in free
+  // hosting has none); a positive value is a cap.
   int32 sites_limit = 5;
   // Aggregate static storage of those sites, and its limit.
   int64 storage_bytes = 6;

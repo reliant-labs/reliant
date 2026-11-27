@@ -37,6 +37,12 @@ import (
 // shows (GitHub's own limit for the endpoint is 100 MB).
 const MaxBytes = 2 << 20
 
+// MaxInFlight bounds the reads one Reader holds at once, so the bytes it
+// holds stay under MaxInFlight * MaxBytes however many viewers ask together:
+// the API server reads covered files, and must not run out of memory doing
+// it. A read past the bound waits for a slot, or for its context.
+const MaxInFlight = 4
+
 // Service is the adapter's surface. *Reader implements it.
 type Service interface {
 	// Read returns the bytes of blob blobID in owner/repo, read as userID.
@@ -59,11 +65,14 @@ type Deps struct {
 	// Tokens supplies the caller's own GitHub token for each Read.
 	Tokens TokenSource
 	// APIBaseURL overrides GitHub's API (tests). Empty is DefaultAPIBaseURL.
+	// forge:optional-dep
 	APIBaseURL string
 	// HTTPClient performs the calls. nil is an SSRF-guarded client with a
 	// 20s timeout.
+	// forge:optional-dep
 	HTTPClient *http.Client
 	// MaxBytes bounds one blob. 0 is MaxBytes.
+	// forge:optional-dep
 	MaxBytes int64
 }
 

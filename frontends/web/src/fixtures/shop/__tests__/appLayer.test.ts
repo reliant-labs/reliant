@@ -16,6 +16,7 @@ import { createClient, createRouterTransport, type Transport } from "@connectrpc
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { BillingService } from "@/gen/controlplane/services/billing/v1/billing_pb";
+import { GitCredentialService } from "@/gen/controlplane/services/git_credential/v1/git_credential_pb";
 import { ObservabilityBillingService } from "@/gen/controlplane/services/observability_billing/v1/observability_billing_pb";
 import { DaemonService } from "@/gen/controlplane/services/daemon/v1/daemon_pb";
 import { LLMGatewayService } from "@/gen/controlplane/services/llm_gateway/v1/llm_gateway_pb";
@@ -66,7 +67,7 @@ const SERVICES: DescService[] = [
   ApprovalService, AttachmentService, CatalogService, ChatService, DaemonRegistryService, ForgeService, MCPService, ProjectService, QuestionService, RunService,
   SettingsService, StreamingService, TriggerService, WorkflowService, WorktreeService, BillingService, UserService, ObservabilityBillingService,
   BackgroundService, ConnectorService, InboxService, PresetService, ProviderAccountService, SharingService, SystemService,
-  DaemonService, LLMGatewayService, OrganizationService,
+  DaemonService, LLMGatewayService, OrganizationService, GitCredentialService,
 ];
 const METHODS = new Map<string, DescMethod>(SERVICES.flatMap((s) => s.methods.map((m) => [`${s.typeName}/${m.name}`, m] as const)));
 
@@ -93,6 +94,9 @@ const CONTROL_PLANE_KEYS = [
   "controlplane.v1.LLMGatewayService/GetLLMSpend",
   "controlplane.v1.DaemonService/GetDaemon",
   "observability_billing.v1.ObservabilityBillingService/GetObservabilityUsage",
+  "controlplane.v1.GitCredentialService/GetGitCredential",
+  "controlplane.v1.OrganizationService/ListGitHubAppInstallations",
+  "controlplane.v1.OrganizationService/ListLinkableGitHubAppInstallations",
 ];
 
 /** The request each key is asked with: one that names something the story has. */
@@ -115,6 +119,8 @@ const REQUESTS: Record<string, Record<string, unknown>> = {
   "reliant.v1.WorkflowService/GetWorkflow": { projectId: PROJECT_IDS.shop, name: "builtin://agent" },
   "controlplane.v1.OrganizationService/ListMembers": { orgId: "org-acme" },
   "controlplane.v1.DaemonService/GetDaemon": { daemonId: "shop-d-cloud" },
+  "controlplane.v1.OrganizationService/ListGitHubAppInstallations": { orgId: "org-acme" },
+  "controlplane.v1.OrganizationService/ListLinkableGitHubAppInstallations": { orgId: "org-acme" },
 };
 
 /** The app pack, served as fixture mode serves it (today's read-only classifier, the pack clock). */
