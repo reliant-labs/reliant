@@ -279,17 +279,17 @@ export function releasesFixtureHandlers(api: ReleasesFixtureApi): MockHandlers {
 }
 
 /**
- * The fixture ledger's rpcs answered from `api`; every other rpc goes to the
- * app's transport (lib/connect.ts), so a test's own `setTransport` still
- * answers the reads this ledger does not hold.
+ * The fixture ledger's rpcs answered from `api`; every other rpc goes to
+ * `fallback` (the app's transport by default). A test can compose this with
+ * another fixture transport before binding its QueryClient to one scope.
  */
-function ledgerTransport(api: ReleasesFixtureApi): Transport {
+export function ledgerTransport(api: ReleasesFixtureApi, fallback: Transport = appTransport): Transport {
   const handlers = releasesFixtureHandlers(api);
   const ledger = mockTransport(handlers);
   const owns = (method: { parent: { typeName: string }; name: string }) => `${method.parent.typeName}/${method.name}` in handlers;
   return {
-    unary: (method, ...rest) => (owns(method) ? ledger : appTransport).unary(method, ...rest),
-    stream: (method, ...rest) => (owns(method) ? ledger : appTransport).stream(method, ...rest),
+    unary: (method, ...rest) => (owns(method) ? ledger : fallback).unary(method, ...rest),
+    stream: (method, ...rest) => (owns(method) ? ledger : fallback).stream(method, ...rest),
   };
 }
 
