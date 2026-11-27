@@ -34,6 +34,11 @@ const SOURCE_ICON = { [GtmAssetSource.CHAT]: Bot, [GtmAssetSource.WORKFLOW]: Wor
 
 export const UPLOADS_UNAVAILABLE = "Uploads are unavailable here until asset storage is set up.";
 
+/** The largest file the page offers to upload: 25 MiB. Checked before CreateAssetUpload, so a large file is refused at once, not after a request. */
+export const MAX_ASSET_BYTES = 25 * 1024 * 1024;
+
+export const tooLargeMessage = (file: File) => `${file.name} is ${size(BigInt(file.size))}. Files up to 25 MB can be uploaded.`;
+
 function size(bytes: bigint): string {
   const n = Number(bytes);
   return n >= 1024 * 1024 ? `${(n / (1024 * 1024)).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`;
@@ -56,6 +61,11 @@ export function AssetPanel({ owner, label = "Assets" }: { owner: AssetOwner; lab
   const assets = assetsQ.data?.assets ?? [];
 
   async function upload(file: File) {
+    if (file.size > MAX_ASSET_BYTES) {
+      toast.warning(tooLargeMessage(file));
+      if (input.current) input.current.value = "";
+      return;
+    }
     setUploading(file.name);
     try {
       const target = "itemId" in owner ? { case: "itemId" as const, value: owner.itemId } : { case: "campaignId" as const, value: owner.campaignId };
@@ -81,6 +91,8 @@ export function AssetPanel({ owner, label = "Assets" }: { owner: AssetOwner; lab
           ref={input}
           type="file"
           className="sr-only"
+          // The Upload button opens it; the input itself is not a second tab stop.
+          tabIndex={-1}
           aria-label={`Upload a file to ${label.toLowerCase()}`}
           onChange={(e) => {
             const file = e.target.files?.[0];
