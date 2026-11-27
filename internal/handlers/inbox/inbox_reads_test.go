@@ -20,6 +20,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/launch"
 	"github.com/reliant-labs/reliant/internal/store/triggertest"
+	"github.com/reliant-labs/reliant/internal/triggers"
 )
 
 // countingRepo counts the reads a workflow resolution makes.
@@ -166,6 +167,63 @@ func TestListInbox_BatchedDraftReadListsTheSame(t *testing.T) {
 type noDraftBatchRepo struct{ *db.Repo }
 
 func (noDraftBatchRepo) GetWorkflowDraftsBySlugs() {}
+
+// Owner grouping in the activation helper must preserve both tenant keys and
+// lookup-time org authorization, even when owners share workflow names.
+func TestPrefetchActivationDraftsIsolatesOwners(t *testing.T) {
+	f := newInboxFixture(t)
+	other := uuid.NewString()
+	member := authz.WithMembership(f.ctx, memberOf{"home": true, "acme": true})
+	left := authz.WithMembership(f.ctx, memberOf{"home": true})
+	at := time.Date(2026, 11, 18, 12, 0, 0, 0, time.UTC)
+	acme := "acme"
+	want := map[string]string{}
+	var activations []*core.Trigger
+	for _, owner := range []string{f.userID, other} {
+		id := uuid.NewString()
+		want[owner] = id
+		require.NoError(t, f.repo.CreateWorkflowDraft(member, &db.WorkflowDraft{
+			ID: id, UserID: owner, Name: "release", Slug: "release", Status: db.WorkflowDraftStatusComplete,
+			Definition: releaseWorkflow, CreatedAt: at, UpdatedAt: at,
+		}))
+		require.NoError(t, f.repo.CreateWorkflowDraft(member, &db.WorkflowDraft{
+			ID: uuid.NewString(), UserID: owner, Name: "private", Slug: "private", Status: db.WorkflowDraftStatusComplete,
+			OrgID: &acme, Definition: releaseWorkflow, CreatedAt: at, UpdatedAt: at,
+		}))
+		activations = append(activations,
+			&core.Trigger{UserID: owner, Workflow: "release"},
+			&core.Trigger{UserID: owner, Workflow: "release"},
+			&core.Trigger{UserID: owner, Workflow: "private"})
+	}
+	counting := &countingRepo{Repo: f.repo}
+	r := launch.NewRequestResolver(counting)
+	triggers.PrefetchActivationDrafts(member, r, activations, "test")
+	require.EqualValues(t, 2, counting.draftBatches.Load(), "one batch per owner, not per slug")
+	for _, owner := range []string{f.userID, other} {
+		draft, err := r.GetWorkflowDraftBySlug(left, owner, "release")
+		require.NoError(t, err)
+		require.NotNil(t, draft)
+		require.Equal(t, want[owner], draft.ID)
+		usable, err := r.GetUsableWorkflowBySlug(left, owner, "release")
+		require.NoError(t, err)
+		require.NotNil(t, usable)
+		require.Equal(t, want[owner], usable.ID)
+		for _, ctx := range []context.Context{left, member, left} {
+			draft, err = r.GetWorkflowDraftBySlug(ctx, owner, "private")
+			require.NoError(t, err)
+			usable, err = r.GetUsableWorkflowBySlug(ctx, owner, "private")
+			require.NoError(t, err)
+			if ctx == member {
+				require.NotNil(t, draft)
+				require.NotNil(t, usable)
+			} else {
+				require.Nil(t, draft, "an inaccessible org draft must stay hidden")
+				require.Nil(t, usable, "an inaccessible org workflow must stay hidden")
+			}
+		}
+	}
+	require.Zero(t, counting.drafts.Load(), "all assertions must exercise the prefetched batches")
+}
 
 // A prefetched draft is authorized under each lookup's own context, as the
 // single read is, never under the context it was prefetched with: an org

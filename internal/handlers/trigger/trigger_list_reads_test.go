@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
+	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
@@ -86,6 +87,19 @@ func TestListTriggersReadsEachCatalogOnce(t *testing.T) {
 		}
 	}
 
+	// A different owner's draft of a requested slug must not become a
+	// shadowed account source (or otherwise affect rendered workflows).
+	before, err := env.svc.ListTriggers(env.ctx, connect.NewRequest(&reliantv1.ListTriggersRequest{ProjectId: &env.projectID}))
+	require.NoError(t, err)
+	foreignID := uuid.NewString()
+	const foreignName = "foreign-account-workflow-must-not-leak"
+	now := time.Now().UTC()
+	require.NoError(t, env.repo.CreateWorkflowDraft(ctx, &db.WorkflowDraft{
+		ID: foreignID, UserID: uuid.NewString(), Name: foreignName, Slug: "triage-0",
+		Status: db.WorkflowDraftStatusComplete, Definition: declaringWorkflowYAML,
+		CreatedAt: now, UpdatedAt: now,
+	}))
+
 	counting := &countingRepo{Repo: env.repo}
 	env.configure(t, func(d *Deps) { d.Repo = counting })
 
@@ -101,6 +115,19 @@ func TestListTriggersReadsEachCatalogOnce(t *testing.T) {
 	require.EqualValues(t, 1, counting.draftBatches.Load(), "the activations' account workflows are read in one query")
 	require.LessOrEqual(t, counting.drafts.Load(), int64(2),
 		"only shared-step, which no activation names, is read alone (once per lookup method)")
+
+	// Compare by ID rather than relying on list ordering. Neither workflow
+	// nor source information may change after adding a foreign draft.
+	baseline := make(map[string]*reliantv1.Trigger)
+	for _, got := range before.Msg.GetTriggers() {
+		baseline[got.GetId()] = got
+	}
+	require.Len(t, baseline, len(listed))
+	for _, got := range listed {
+		require.NotContains(t, got.String(), foreignID)
+		require.NotContains(t, got.String(), foreignName)
+		require.True(t, proto.Equal(baseline[got.GetId()], got), "foreign draft changed activation %s", got.GetName())
+	}
 
 	// Reading once changes nothing about what is rendered.
 	for _, got := range listed {
