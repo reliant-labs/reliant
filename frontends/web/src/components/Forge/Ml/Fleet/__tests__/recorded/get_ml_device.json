@@ -1,0 +1,178 @@
+{
+  "device": {
+    "uuid": "GPU-00000000-0000-0000-0000-000000000000",
+    "nodeId": "ml-fleet-e2e/k3d-ml-fleet-e2e-agent-1",
+    "product": "NVIDIA-A100-SXM4-80GB",
+    "health": "ML_HEALTH_HEALTHY",
+    "busyRatio": 0.65,
+    "smActive": "NaN",
+    "memoryUsedGb": 80,
+    "memoryTotalGb": 80,
+    "powerW": "NaN",
+    "powerLimitW": "NaN",
+    "temperatureC": "NaN",
+    "memoryTemperatureC": "NaN",
+    "allocatedTo": {
+      "kind": "ML_SUBJECT_KIND_POD",
+      "id": "default/gpu-train",
+      "label": "gpu-train"
+    },
+    "fields": [
+      {
+        "key": "gpu.util",
+        "label": "GPU utilisation",
+        "group": "ML_FIELD_GROUP_UTILIZATION",
+        "value": 65,
+        "unit": "percent",
+        "sourceField": "DCGM_FI_DEV_GPU_UTIL",
+        "collection": "ML_COLLECTION_COLLECTED"
+      },
+      {
+        "key": "gpu.gr_engine_active",
+        "label": "Graphics engine active",
+        "group": "ML_FIELD_GROUP_PROFILING",
+        "unit": "ratio",
+        "sourceField": "DCGM_FI_PROF_GR_ENGINE_ACTIVE",
+        "collection": "ML_COLLECTION_NOT_COLLECTED",
+        "missingSource": "the DCGM exporter on this node does not report DCGM_FI_PROF_GR_ENGINE_ACTIVE"
+      },
+      {
+        "key": "gpu.sm_active",
+        "label": "SM active",
+        "group": "ML_FIELD_GROUP_PROFILING",
+        "unit": "ratio",
+        "sourceField": "DCGM_FI_PROF_SM_ACTIVE",
+        "collection": "ML_COLLECTION_NOT_COLLECTED",
+        "missingSource": "the DCGM exporter on this node does not report DCGM_FI_PROF_SM_ACTIVE"
+      },
+      {
+        "key": "gpu.sm_occupancy",
+        "label": "SM occupancy",
+        "group": "ML_FIELD_GROUP_PROFILING",
+        "unit": "ratio",
+        "sourceField": "DCGM_FI_PROF_SM_OCCUPANCY",
+        "collection": "ML_COLLECTION_NOT_COLLECTED",
+        "missingSource": "the DCGM exporter on this node does not report DCGM_FI_PROF_SM_OCCUPANCY"
+      },
+      {
+        "key": "gpu.tensor_active",
+        "label": "Tensor pipe active",
+        "group": "ML_FIELD_GROUP_PROFILING",
+        "unit": "ratio",
+        "sourceField": "DCGM_FI_PROF_PIPE_TENSOR_ACTIVE",
+        "collection": "ML_COLLECTION_NOT_COLLECTED",
+        "missingSource": "the DCGM exporter on this node does not report DCGM_FI_PROF_PIPE_TENSOR_ACTIVE"
+      },
+      {
+        "key": "gpu.dram_active",
+        "label": "Memory bandwidth active",
+        "group": "ML_FIELD_GROUP_PROFILING",
+        "unit": "ratio",
+        "sourceField": "DCGM_FI_PROF_DRAM_ACTIVE",
+        "collection": "ML_COLLECTION_NOT_COLLECTED",
+        "missingSource": "the DCGM exporter on this node does not report DCGM_FI_PROF_DRAM_ACTIVE"
+      },
+      {
+        "key": "gpu.memory.used",
+        "label": "Framebuffer used",
+        "group": "ML_FIELD_GROUP_MEMORY",
+        "value": 81920,
+        "unit": "MiB",
+        "sourceField": "DCGM_FI_DEV_FB_USED",
+        "collection": "ML_COLLECTION_COLLECTED"
+      },
+      {
+        "key": "gpu.memory.free",
+        "label": "Framebuffer free",
+        "group": "ML_FIELD_GROUP_MEMORY",
+        "unit": "MiB",
+        "sourceField": "DCGM_FI_DEV_FB_FREE",
+        "collection": "ML_COLLECTION_COLLECTED"
+      },
+      {
+        "key": "gpu.power",
+        "label": "Power draw",
+        "group": "ML_FIELD_GROUP_POWER",
+        "unit": "W",
+        "sourceField": "DCGM_FI_DEV_POWER_USAGE",
+        "collection": "ML_COLLECTION_NOT_COLLECTED",
+        "missingSource": "the DCGM exporter on this node does not report DCGM_FI_DEV_POWER_USAGE"
+      },
+      {
+        "key": "gpu.temperature",
+        "label": "GPU temperature",
+        "group": "ML_FIELD_GROUP_THERMAL",
+        "unit": "C",
+        "sourceField": "DCGM_FI_DEV_GPU_TEMP",
+        "collection": "ML_COLLECTION_NOT_COLLECTED",
+        "missingSource": "the DCGM exporter on this node does not report DCGM_FI_DEV_GPU_TEMP"
+      },
+      {
+        "key": "gpu.memory_temperature",
+        "label": "Memory temperature",
+        "group": "ML_FIELD_GROUP_THERMAL",
+        "unit": "C",
+        "sourceField": "DCGM_FI_DEV_MEMORY_TEMP",
+        "collection": "ML_COLLECTION_NOT_COLLECTED",
+        "missingSource": "the DCGM exporter on this node does not report DCGM_FI_DEV_MEMORY_TEMP"
+      },
+      {
+        "key": "gpu.clock.sm",
+        "label": "SM clock",
+        "group": "ML_FIELD_GROUP_CLOCKS",
+        "unit": "MHz",
+        "sourceField": "DCGM_FI_DEV_SM_CLOCK",
+        "collection": "ML_COLLECTION_NOT_COLLECTED",
+        "missingSource": "the DCGM exporter on this node does not report DCGM_FI_DEV_SM_CLOCK"
+      },
+      {
+        "key": "gpu.clock.memory",
+        "label": "Memory clock",
+        "group": "ML_FIELD_GROUP_CLOCKS",
+        "unit": "MHz",
+        "sourceField": "DCGM_FI_DEV_MEM_CLOCK",
+        "collection": "ML_COLLECTION_NOT_COLLECTED",
+        "missingSource": "the DCGM exporter on this node does not report DCGM_FI_DEV_MEM_CLOCK"
+      },
+      {
+        "key": "gpu.clock.event_reasons",
+        "label": "Clock-event reasons",
+        "group": "ML_FIELD_GROUP_CLOCKS",
+        "sourceField": "DCGM_FI_DEV_CLOCK_THROTTLE_REASONS",
+        "collection": "ML_COLLECTION_NOT_COLLECTED",
+        "missingSource": "the DCGM exporter on this node does not report DCGM_FI_DEV_CLOCK_THROTTLE_REASONS"
+      },
+      {
+        "key": "gpu.xid.last",
+        "label": "Last Xid",
+        "group": "ML_FIELD_GROUP_XID",
+        "sourceField": "DCGM_FI_DEV_XID_ERRORS",
+        "collection": "ML_COLLECTION_NOT_COLLECTED",
+        "missingSource": "the DCGM exporter on this node does not report DCGM_FI_DEV_XID_ERRORS"
+      },
+      {
+        "key": "gpu.ecc.sbe_volatile",
+        "label": "ECC single-bit (volatile)",
+        "group": "ML_FIELD_GROUP_ECC",
+        "unit": "count",
+        "sourceField": "DCGM_FI_DEV_ECC_SBE_VOL_TOTAL",
+        "collection": "ML_COLLECTION_NOT_COLLECTED",
+        "missingSource": "the DCGM exporter on this node does not report DCGM_FI_DEV_ECC_SBE_VOL_TOTAL"
+      },
+      {
+        "key": "gpu.ecc.dbe_volatile",
+        "label": "ECC double-bit (volatile)",
+        "group": "ML_FIELD_GROUP_ECC",
+        "unit": "count",
+        "sourceField": "DCGM_FI_DEV_ECC_DBE_VOL_TOTAL",
+        "collection": "ML_COLLECTION_NOT_COLLECTED",
+        "missingSource": "the DCGM exporter on this node does not report DCGM_FI_DEV_ECC_DBE_VOL_TOTAL"
+      }
+    ]
+  },
+  "placements": [
+    {
+      "nodeId": "ml-fleet-e2e/k3d-ml-fleet-e2e-agent-1"
+    }
+  ]
+}

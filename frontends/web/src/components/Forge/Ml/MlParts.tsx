@@ -151,6 +151,22 @@ export function MlNoData({ what }: { what: string }) {
   );
 }
 
+/**
+ * Entitled, the control plane answers, and no cluster reports yet (a fleet
+ * answer with observed_at unset, a setup answer with no cluster): how to
+ * connect one. Never a page of zeros.
+ */
+export function MlNoCluster() {
+  return (
+    <StateFrame testId="ml-no-cluster" icon={<Cpu className="h-4 w-4" />} title="No cluster is reporting yet">
+      <p>
+        Connect a cluster with <code className="font-mono text-ink">reliant forge cluster connect</code> and declare an <code className="font-mono text-ink">MLStack</code> for it: its
+        nodes and accelerators appear here within a couple of minutes of the first report.
+      </p>
+    </StateFrame>
+  );
+}
+
 function MlReadError({ error, what, onRetry, retrying }: { error: unknown; what: string; onRetry: () => void; retrying: boolean }) {
   const kind = mlErrorKind(error);
   if (kind === "denied") {

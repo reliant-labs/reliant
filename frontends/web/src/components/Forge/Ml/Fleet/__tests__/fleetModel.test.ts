@@ -4,10 +4,10 @@ import "@/components/Forge/Ml/__tests__/jsdomShims";
 import { create } from "@bufbuild/protobuf";
 import { describe, expect, it } from "vitest";
 
-import { MlCollection, MlEventKind, MlEventSchema, MlFieldGroup, MlFieldValueSchema, MlNvlinkPairSchema } from "@/gen/controlplane/services/ml_early_access/v1/ml_early_access_pb";
+import { MlCollection, MlDeviceSchema, MlEventKind, MlEventSchema, MlFieldGroup, MlFieldValueSchema, MlNvlinkPairSchema } from "@/gen/controlplane/services/ml_early_access/v1/ml_early_access_pb";
 import { timestampFromMs } from "@bufbuild/protobuf/wkt";
 
-import { eventCountSeries, fmtField, groupFields, nvlinkMatrix, parseFleetRoute } from "../fleetModel";
+import { deviceMemory, devicePower, eventCountSeries, fmtField, groupFields, groupNotApplicable, groupUncollected, isStale, nodeMemory, nodePower, nvlinkMatrix, parseFleetRoute, plural, STALE_AFTER_MS } from "../fleetModel";
 
 describe("fleetModel", () => {
   it("parses the fleet routes", () => {
@@ -42,5 +42,50 @@ describe("fleetModel", () => {
     const s = eventCountSeries([e(MlEventKind.XID, 1), e(MlEventKind.THROTTLE, 2), e(MlEventKind.THROTTLE, 2.5), e(MlEventKind.XID, 100)], now, 48, 3);
     expect(s.find((x) => x.label === "Xid")!.y.reduce((a, b) => a + b, 0)).toBe(1);
     expect(s.find((x) => x.label === "Throttle")!.y.at(-1)).toBe(2);
+  });
+
+  it("reads real-data edge cases: stale clusters, whole groups not collected, plurals", () => {
+    const at = Date.UTC(2026, 10, 26, 12);
+    expect(isStale({ lastSeenAt: timestampFromMs(at - STALE_AFTER_MS + 1) }, at)).toBe(false);
+    expect(isStale({ lastSeenAt: timestampFromMs(at - STALE_AFTER_MS - 1) }, at)).toBe(true);
+    expect(isStale({ lastSeenAt: undefined }, at)).toBe(true);
+    const nc = (key: string, group: MlFieldGroup) => create(MlFieldValueSchema, { key, group, value: NaN, collection: MlCollection.NOT_COLLECTED });
+    const fields = [create(MlFieldValueSchema, { key: "gpu.util", group: MlFieldGroup.UTILIZATION, value: 0.7, collection: MlCollection.COLLECTED }), nc("gpu.temp", MlFieldGroup.THERMAL), nc("gpu.xid.last", MlFieldGroup.XID)];
+    expect(groupUncollected(fields, MlFieldGroup.XID)).toBe(true);
+    expect(groupUncollected(fields, MlFieldGroup.UTILIZATION)).toBe(false);
+    // A group nothing sent says nothing: neither collected nor "not collected".
+    expect(groupUncollected(fields, MlFieldGroup.NVLINK)).toBe(false);
+    expect(groupNotApplicable(fields, MlFieldGroup.NVLINK)).toBe(false);
+    expect(plural(1, "cluster")).toBe("1 cluster");
+    expect(plural(0, "pool")).toBe("0 pools");
+  });
+
+  it("device headlines follow the field that backs them, never a scalar the field contradicts", () => {
+    const fv = (key: string, value: number, unit: string, collection = MlCollection.COLLECTED) => create(MlFieldValueSchema, { key, value, unit, collection, sourceField: key });
+    // Scalars claim 300 W and 80/80 GB; the fields say power and free are not collected.
+    const claims = { powerW: 300, powerLimitW: 400, memoryUsedGb: 80, memoryTotalGb: 80 };
+    const d = create(MlDeviceSchema, { ...claims, fields: [fv("gpu.memory.used", 81920, "MiB"), fv("gpu.memory.free", NaN, "MiB", MlCollection.NOT_COLLECTED), fv("gpu.power", NaN, "W", MlCollection.NOT_COLLECTED)] });
+    expect(devicePower(d).power.state).toBe("not_collected");
+    expect(devicePower(d).limit.state).toBe("not_reported");
+    const m = deviceMemory(d);
+    expect(m.used).toEqual({ state: "collected", value: 80 });
+    expect(m.free.state).toBe("not_collected");
+    expect(m.totalGb).toBeNull();
+    // Free collected, used not: the other half is the missing one.
+    const flipped = deviceMemory(create(MlDeviceSchema, { ...claims, fields: [fv("gpu.memory.used", NaN, "MiB", MlCollection.NOT_COLLECTED), fv("gpu.memory.free", 0, "MiB")] }));
+    expect(flipped.used.state).toBe("not_collected");
+    expect(flipped.free).toEqual({ state: "collected", value: 0 });
+    // A collected zero is a real zero: total = used + free.
+    const full = create(MlDeviceSchema, { ...claims, fields: [fv("gpu.memory.used", 81920, "MiB"), fv("gpu.memory.free", 0, "MiB"), fv("gpu.power", 250, "W")] });
+    expect(deviceMemory(full).totalGb).toBe(80);
+    // Node: sums never take a NaN or a scalar default, and total only over GPUs that answer free.
+    expect(nodePower([d, full])).toMatchObject({ watts: 250, reporting: 1 });
+    expect(nodePower([d])).toMatchObject({ watts: 0, reporting: 0 });
+    expect(nodeMemory([d, full])).toMatchObject({ usedGb: 160, totalGb: null, usedReporting: 2, freeMissing: 1 });
+    expect(nodeMemory([full, full])).toMatchObject({ usedGb: 160, totalGb: 160, freeMissing: 0 });
+    // A device with no field metadata at all keeps its (NaN-guarded) scalars.
+    const bare = create(MlDeviceSchema, { ...claims, powerW: NaN });
+    expect(devicePower(bare).power.state).toBe("not_reported");
+    expect(deviceMemory(bare)).toMatchObject({ used: { state: "collected", value: 80 }, totalGb: 80 });
   });
 });
