@@ -61,15 +61,24 @@ func (s *Service) ListInbox(
 		return nil, err
 	}
 
-	read, err := s.sharedRead(withCallerJWT(ctx, auth.BearerToken(req.Header().Get("Authorization"))), userID)
+	readCtx := withCallerJWT(ctx, auth.BearerToken(req.Header().Get("Authorization")))
+	var read *inboxReads
+	if categories := req.Msg.GetCategories(); len(categories) > 0 && slices.Contains(categories, reliantv1.InboxCategory_INBOX_CATEGORY_HOUSEKEEPING) && !slices.ContainsFunc(categories, func(c reliantv1.InboxCategory) bool {
+		return c != reliantv1.InboxCategory_INBOX_CATEGORY_HOUSEKEEPING
+	}) {
+		read, err = s.readHousekeeping(readCtx, userID)
+	} else {
+		read, err = s.sharedRead(readCtx, userID)
+	}
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list inbox"))
 	}
 	items := make([]*reliantv1.InboxItem, 0, len(read.pending)+len(read.failing)+len(read.storage)+len(read.declarations))
 	for _, p := range read.pending {
-		it := inboxItemFromPending(p)
-		it.Habitual = read.pendingHabitual[it.ItemId]
-		items = append(items, it)
+		// Pending items do not identify a trigger's failure streak. A
+		// prior failure may precede a successful run, so it cannot make
+		// a new launch failure or paused run habitual.
+		items = append(items, inboxItemFromPending(p))
 	}
 	// The read may be shared with concurrent calls (sharedRead): this
 	// response gets its own copies.
@@ -172,6 +181,21 @@ func (s *Service) sharedRead(ctx context.Context, userID string) (*inboxReads, e
 	return v.(*inboxReads), nil
 }
 
+// readHousekeeping keeps the machine settings surface independent of pending
+// items, automation health and recoveries. It uses the same storage cache and
+// org resolution as the full Inbox, but does not share that read's failures.
+func (s *Service) readHousekeeping(ctx context.Context, userID string) (*inboxReads, error) {
+	items, err := s.storageItems(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	reads := s.readableItem()
+	for _, it := range items {
+		reads.resolveOrg(ctx, userID, it)
+	}
+	return &inboxReads{storage: items, orgs: reads.orgs}, nil
+}
+
 // readInbox runs ListInbox's reads concurrently, at most inboxReadConcurrency
 // at once plus inboxHealthReadConcurrency of automation health. The pending
 // rows and automation health are the inbox: either one failing fails the
@@ -200,14 +224,6 @@ func (s *Service) readInbox(ctx context.Context, userID string) (*inboxReads, er
 			return err
 		}); err != nil {
 			return err
-		}
-		// Only when an automation's launch failed or its run paused: the
-		// usual pending read asks nothing more.
-		if candidates := pendingHabitualCandidates(out.pending); len(candidates) > 0 {
-			_ = lim.do(gctx, func() error {
-				out.pendingHabitual = s.readHabitual(gctx, userID, candidates)
-				return nil
-			})
 		}
 		return nil
 	})

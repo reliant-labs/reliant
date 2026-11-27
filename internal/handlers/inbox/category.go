@@ -165,23 +165,6 @@ func (s *Service) readHabitual(ctx context.Context, userID string, candidates []
 	return out
 }
 
-// pendingHabitualCandidates are the launch-failed and paused-run items of
-// pending: each began at its WaitingSince (the episode's first failure, the
-// failure that paused the run).
-func pendingHabitualCandidates(pending []*core.InboxPending) []habitualCandidate {
-	var out []habitualCandidate
-	for _, p := range pending {
-		if p.TriggerID == "" {
-			continue
-		}
-		switch p.Kind {
-		case core.InboxPendingLaunchFailed, core.InboxPendingRunPaused:
-			out = append(out, habitualCandidate{key: pendingItemID(p), triggerID: p.TriggerID, start: p.WaitingSince})
-		}
-	}
-	return out
-}
-
 // pendingItemID is the item id inboxItemFromPending gives p.
 func pendingItemID(p *core.InboxPending) string {
 	return inboxItemFromPending(p).ItemId

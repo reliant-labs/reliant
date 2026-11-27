@@ -243,12 +243,12 @@ func TestListInbox_FailureAfterAQuietDayIsNews(t *testing.T) {
 	assert.Zero(t, resp.HabitualCount)
 }
 
-// An automation that cannot launch, launches again, then cannot launch within
-// the day is habitual too: the launch-failed item is the same model.
-func TestListInbox_LaunchFailedEpisodeIsHabitualWithinAQuietWindow(t *testing.T) {
+// A successful run separates launch failures: a new launch failure must not
+// be hidden just because another failure occurred within the quiet window.
+func TestListInbox_LaunchFailureAfterSuccessIsNews(t *testing.T) {
 	f := newInboxFixture(t)
 	f.trigger(t, "trg-lf")
-	base := time.Now().UTC().Add(-3 * time.Hour)
+	base := time.Date(2026, time.January, 2, 9, 0, 0, 0, time.UTC)
 	f.firing(t, "lf-1", "trg-lf", core.TriggerEventFailed, "daemon gone", base)
 	resp := f.list(t, nil)
 	launchFailed := inboxByKind(resp.Items, reliantv1.InboxItemKind_INBOX_ITEM_KIND_AUTOMATION_LAUNCH_FAILED)
@@ -259,13 +259,16 @@ func TestListInbox_LaunchFailedEpisodeIsHabitualWithinAQuietWindow(t *testing.T)
 	f.runFiring(t, "lf-2", "trg-lf", base.Add(time.Hour), false)
 	f.firing(t, "lf-3", "trg-lf", core.TriggerEventFailed, "gone again", base.Add(2*time.Hour))
 	resp = f.list(t, nil)
-	assert.Empty(t, inboxByKind(resp.Items, reliantv1.InboxItemKind_INBOX_ITEM_KIND_AUTOMATION_LAUNCH_FAILED))
-	assert.EqualValues(t, 1, resp.HabitualCount)
+	launchFailed = inboxByKind(resp.Items, reliantv1.InboxItemKind_INBOX_ITEM_KIND_AUTOMATION_LAUNCH_FAILED)
+	require.Len(t, launchFailed, 1)
+	assert.Equal(t, "automation_launch_failed:lf-3", launchFailed[0].ItemId)
+	assert.False(t, launchFailed[0].Habitual)
+	assert.Zero(t, resp.HabitualCount)
 
 	launchFailed = inboxByKind(f.listCategories(t, reliantv1.InboxCategory_INBOX_CATEGORY_AUTOMATION).Items, reliantv1.InboxItemKind_INBOX_ITEM_KIND_AUTOMATION_LAUNCH_FAILED)
 	require.Len(t, launchFailed, 1)
 	assert.Equal(t, "automation_launch_failed:lf-3", launchFailed[0].ItemId)
-	assert.True(t, launchFailed[0].Habitual)
+	assert.False(t, launchFailed[0].Habitual)
 }
 
 // Needs-you items are listed whatever the filters, and categories narrow to
