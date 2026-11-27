@@ -64,10 +64,13 @@ type Host struct {
 	// (DaemonConfig egress_*); a zero field takes the default. Ignored on a
 	// managed daemon.
 	Egress egresslimit.Limits
-	// GateImage and GateVulnDBDir configure the merge queue's gates on this
-	// machine (DaemonConfig gate_*; cmd_gate.go).
-	GateImage     string
-	GateVulnDBDir string
+	// GateImage, GateVulnDBDir and GateTrustedGoCache configure the merge
+	// queue's gates on this machine (DaemonConfig gate_*; cmd_gate.go).
+	// GateTrustedGoCache is the raw setting: "" (the default directory),
+	// "off" or a directory (gaterun.TrustedGoCacheDir).
+	GateImage          string
+	GateVulnDBDir      string
+	GateTrustedGoCache string
 }
 
 // Managed reports whether the PLATFORM has declared this process a managed

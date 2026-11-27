@@ -595,13 +595,14 @@ jobs:
   # nor the release record's, continue-on-error, and the script exits 0 with a
   # warning when it cannot upload (no credential, a forge without --upload).
   #
-  # The credential is forge's to find: FORGE_CONTROL_PLANE_TOKEN when the
-  # `tests-upload` environment holds it (never a repository secret: reliant
-  # is public), else this job's GitHub Actions OIDC identity (`id-token:
+  # The credential is this job's GitHub Actions OIDC identity (`id-token:
   # write`), which the control plane exchanges for a short-lived tests:write
-  # token. Only a push to main of this repository reaches the job, so the
-  # code holding either is main's own, already merged, and a fork's pull
-  # request never gets it.
+  # token (forge's cloud.ResolveCredentialFor). The upload step passes no
+  # FORGE_CONTROL_PLANE_TOKEN, so the exchange is what runs; the `tests-upload`
+  # environment keeps its token (never a repository secret: reliant is
+  # public) as the rollback. Only a push to main of this repository reaches
+  # the job, so the code holding either is main's own, already merged, and a
+  # fork's pull request never gets it.
   test-upload:
     name: Upload main's test results
     needs: [release-gate]
@@ -612,7 +613,7 @@ jobs:
     environment: tests-upload
     permissions:
       contents: read
-      # forge's GitHub Actions OIDC exchange, when no token is set.
+      # forge's GitHub Actions OIDC exchange: the upload's credential.
       id-token: write
     # Every action this job runs is pinned to a reviewed commit, as in any
     # privileged job (internal/version's action-pin test): it holds an OIDC
@@ -633,9 +634,11 @@ jobs:
           pattern: test-runs-*
           merge-multiple: true
           path: .forge/tests/runs
+      # No FORGE_CONTROL_PLANE_TOKEN: the upload uses the OIDC exchange alone
+      # (TestMainTestUploadHoldsOIDC). Rollback is passing the environment's
+      # token again, `FORGE_CONTROL_PLANE_TOKEN: secrets.FORGE_CONTROL_PLANE_TOKEN`
+      # in this step's env, and dropping that test's assertion.
       - name: forge test report --upload
-        env:
-          FORGE_CONTROL_PLANE_TOKEN: ${{ secrets.FORGE_CONTROL_PLANE_TOKEN }}
         run: scripts/test-upload.sh "${GITHUB_SHA}"
 
   # ── The compile cache every Go job restores (main only) ───────────────────
