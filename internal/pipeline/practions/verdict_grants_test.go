@@ -154,3 +154,40 @@ func TestVerdictPassWithNoAuthorizerIsRefusedInModeOn(t *testing.T) {
 	_, err := h.do(serveraction.PRVerdict, verdictCall(review("pass", "session-r1")))
 	refused(t, err, serveraction.CodePermissionDenied)
 }
+
+// pr.next's own pass of a low-risk head approves as a model's does, so in
+// mode on it too needs the approve grant: refused and unwritten without
+// it, and recorded with its activation and machine once granted.
+func TestStructuralPassNeedsTheApproveGrantInModeOn(t *testing.T) {
+	t.Parallel()
+	g := newGrantsHarness(t, core.PipelineRepoModeOn)
+	g.gh.set(g.number, "head-1", "docs/guide.md@b1")
+	_, err := g.do(serveraction.PRNext, g.call(call{node: "decide"}))
+	refused(t, err, serveraction.CodePermissionDenied)
+	if vs := g.verdicts(); len(vs) != 0 {
+		t.Fatalf("a refused structural pass writes nothing: %+v", vs)
+	}
+
+	g.grant(grants.Approve)
+	if next := g.must(serveraction.PRNext, g.call(call{node: "decide"})); next["next"] != practions.NextEnqueue {
+		t.Fatalf("a granted structural pass enqueues: %v", next)
+	}
+	vs := g.verdicts()
+	if len(vs) != 1 || vs[0].Rule != core.PRVerdictRuleNoModelLowRisk || vs[0].TriggerID != g.f.TriggerID || vs[0].DaemonID != g.f.DaemonID {
+		t.Fatalf("the structural verdict names its activation and machine: %+v", vs)
+	}
+}
+
+// In shadow the structural pass is recorded without a grant, with its
+// activation and machine.
+func TestStructuralPassInShadowIsRecordedWithoutAGrant(t *testing.T) {
+	t.Parallel()
+	g := newGrantsHarness(t, core.PipelineRepoModeShadow)
+	g.gh.set(g.number, "head-1", "docs/guide.md@b1")
+	if next := g.must(serveraction.PRNext, g.call(call{node: "decide"})); next["next"] != practions.NextEnqueue {
+		t.Fatalf("shadow enqueues: %v", next)
+	}
+	if vs := g.verdicts(); len(vs) != 1 || vs[0].TriggerID != g.f.TriggerID {
+		t.Fatalf("recorded with its activation: %+v", vs)
+	}
+}

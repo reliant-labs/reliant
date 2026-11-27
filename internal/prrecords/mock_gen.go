@@ -110,7 +110,7 @@ func (m *MockStore) ApplyPRRecordChangeCalls() []MockStoreApplyPRRecordChangeCal
 var _ Store = (*MockStore)(nil)
 
 // forge:section MockPipelineStore
-// forge:hash=976770bb033a3eb09191ec13779fa97b382b4c715e0fcb5a98ac3c7c3035fd95
+// forge:hash=23ed4d5aeff9d8f77a1a91c1041b008b1a6be84fc780aaf93a6e2ad992ae5c77
 
 // MockPipelineStore is a test mock for the PipelineStore interface.
 //
@@ -121,16 +121,14 @@ var _ Store = (*MockStore)(nil)
 // canonical "MockPipelineStore.<Method>Func not set" error.
 type MockPipelineStore struct {
 	contractkit.Recorder
-	GetPipelineRepoByRepositoryFunc func(context.Context, string, string) (*core.PipelineRepo, error)
-	GetPipelineRepoFunc             func(context.Context, string) (*core.PipelineRepo, error)
-	RecordPipelineRepoConfigFunc    func(context.Context, string, int64, string, []byte, []core.PipelineConfigChange) (*core.PipelineRepo, error)
-	SetPipelineRepoConfigErrorFunc  func(context.Context, string, int64, string, string) (*core.PipelineRepo, error)
-	GetPRRecordByNumberFunc         func(context.Context, string, string, int) (*core.PRRecord, error)
-	GetPRRecordByMergeCommitFunc    func(context.Context, string, string, string) (*core.PRRecord, error)
-	GetPRPipelineFunc               func(context.Context, string) (*core.PRPipeline, error)
-	EnsurePRPipelineFunc            func(context.Context, core.PRPipelineNew) (*core.PRPipeline, bool, error)
-	ResetPRPipelineForHeadFunc      func(context.Context, string, int64, string, core.PRPipelineNext) (*core.PRPipeline, error)
-	TransitionPRPipelineFunc        func(context.Context, string, int64, core.PRPipeline) (*core.PRPipeline, error)
+	GetPipelineRepoByRepositoryFunc  func(context.Context, string, string) (*core.PipelineRepo, error)
+	GetPipelineRepoFunc              func(context.Context, string) (*core.PipelineRepo, error)
+	SetPipelineRepoConfigPendingFunc func(context.Context, string, int64, core.PipelineConfigPending) (*core.PipelineRepo, error)
+	GetPRRecordByNumberFunc          func(context.Context, string, string, int) (*core.PRRecord, error)
+	GetPRPipelineFunc                func(context.Context, string) (*core.PRPipeline, error)
+	EnsurePRPipelineFunc             func(context.Context, core.PRPipelineNew) (*core.PRPipeline, bool, error)
+	ResetPRPipelineForHeadFunc       func(context.Context, string, int64, string, core.PRPipelineNext) (*core.PRPipeline, error)
+	TransitionPRPipelineFunc         func(context.Context, string, int64, core.PRPipeline) (*core.PRPipeline, error)
 }
 
 // GetPipelineRepoByRepository records the call and delegates to GetPipelineRepoByRepositoryFunc when set.
@@ -151,22 +149,13 @@ func (m *MockPipelineStore) GetPipelineRepo(ctx context.Context, id string) (*co
 	return nil, contractkit.MockNotSet("MockPipelineStore", "GetPipelineRepo")
 }
 
-// RecordPipelineRepoConfig records the call and delegates to RecordPipelineRepoConfigFunc when set.
-func (m *MockPipelineStore) RecordPipelineRepoConfig(ctx context.Context, id string, version int64, sha string, config []byte, changes []core.PipelineConfigChange) (*core.PipelineRepo, error) {
-	m.Recorder.Record("RecordPipelineRepoConfig", ctx, id, version, sha, config, changes)
-	if m.RecordPipelineRepoConfigFunc != nil {
-		return m.RecordPipelineRepoConfigFunc(ctx, id, version, sha, config, changes)
+// SetPipelineRepoConfigPending records the call and delegates to SetPipelineRepoConfigPendingFunc when set.
+func (m *MockPipelineStore) SetPipelineRepoConfigPending(ctx context.Context, id string, version int64, p core.PipelineConfigPending) (*core.PipelineRepo, error) {
+	m.Recorder.Record("SetPipelineRepoConfigPending", ctx, id, version, p)
+	if m.SetPipelineRepoConfigPendingFunc != nil {
+		return m.SetPipelineRepoConfigPendingFunc(ctx, id, version, p)
 	}
-	return nil, contractkit.MockNotSet("MockPipelineStore", "RecordPipelineRepoConfig")
-}
-
-// SetPipelineRepoConfigError records the call and delegates to SetPipelineRepoConfigErrorFunc when set.
-func (m *MockPipelineStore) SetPipelineRepoConfigError(ctx context.Context, id string, version int64, sha string, reason string) (*core.PipelineRepo, error) {
-	m.Recorder.Record("SetPipelineRepoConfigError", ctx, id, version, sha, reason)
-	if m.SetPipelineRepoConfigErrorFunc != nil {
-		return m.SetPipelineRepoConfigErrorFunc(ctx, id, version, sha, reason)
-	}
-	return nil, contractkit.MockNotSet("MockPipelineStore", "SetPipelineRepoConfigError")
+	return nil, contractkit.MockNotSet("MockPipelineStore", "SetPipelineRepoConfigPending")
 }
 
 // GetPRRecordByNumber records the call and delegates to GetPRRecordByNumberFunc when set.
@@ -176,15 +165,6 @@ func (m *MockPipelineStore) GetPRRecordByNumber(ctx context.Context, provider st
 		return m.GetPRRecordByNumberFunc(ctx, provider, repositoryID, number)
 	}
 	return nil, contractkit.MockNotSet("MockPipelineStore", "GetPRRecordByNumber")
-}
-
-// GetPRRecordByMergeCommit records the call and delegates to GetPRRecordByMergeCommitFunc when set.
-func (m *MockPipelineStore) GetPRRecordByMergeCommit(ctx context.Context, provider string, repositoryID string, sha string) (*core.PRRecord, error) {
-	m.Recorder.Record("GetPRRecordByMergeCommit", ctx, provider, repositoryID, sha)
-	if m.GetPRRecordByMergeCommitFunc != nil {
-		return m.GetPRRecordByMergeCommitFunc(ctx, provider, repositoryID, sha)
-	}
-	return nil, contractkit.MockNotSet("MockPipelineStore", "GetPRRecordByMergeCommit")
 }
 
 // GetPRPipeline records the call and delegates to GetPRPipelineFunc when set.
@@ -265,55 +245,25 @@ func (m *MockPipelineStore) GetPipelineRepoCalls() []MockPipelineStoreGetPipelin
 	return out
 }
 
-// MockPipelineStoreRecordPipelineRepoConfigCall is one recorded call of MockPipelineStore.RecordPipelineRepoConfig, one
+// MockPipelineStoreSetPipelineRepoConfigPendingCall is one recorded call of MockPipelineStore.SetPipelineRepoConfigPending, one
 // field per parameter.
-type MockPipelineStoreRecordPipelineRepoConfigCall struct {
+type MockPipelineStoreSetPipelineRepoConfigPendingCall struct {
 	Ctx     context.Context
 	ID      string
 	Version int64
-	Sha     string
-	Config  []byte
-	Changes []core.PipelineConfigChange
+	P       core.PipelineConfigPending
 }
 
-// RecordPipelineRepoConfigCalls returns every recorded RecordPipelineRepoConfig call, oldest first, with
-// its arguments typed. It reads the same log as Calls("RecordPipelineRepoConfig").
-func (m *MockPipelineStore) RecordPipelineRepoConfigCalls() []MockPipelineStoreRecordPipelineRepoConfigCall {
-	var out []MockPipelineStoreRecordPipelineRepoConfigCall
-	for _, c := range m.Recorder.Calls("RecordPipelineRepoConfig") {
-		var r MockPipelineStoreRecordPipelineRepoConfigCall
+// SetPipelineRepoConfigPendingCalls returns every recorded SetPipelineRepoConfigPending call, oldest first, with
+// its arguments typed. It reads the same log as Calls("SetPipelineRepoConfigPending").
+func (m *MockPipelineStore) SetPipelineRepoConfigPendingCalls() []MockPipelineStoreSetPipelineRepoConfigPendingCall {
+	var out []MockPipelineStoreSetPipelineRepoConfigPendingCall
+	for _, c := range m.Recorder.Calls("SetPipelineRepoConfigPending") {
+		var r MockPipelineStoreSetPipelineRepoConfigPendingCall
 		r.Ctx, _ = c.Args[0].(context.Context)
 		r.ID, _ = c.Args[1].(string)
 		r.Version, _ = c.Args[2].(int64)
-		r.Sha, _ = c.Args[3].(string)
-		r.Config, _ = c.Args[4].([]byte)
-		r.Changes, _ = c.Args[5].([]core.PipelineConfigChange)
-		out = append(out, r)
-	}
-	return out
-}
-
-// MockPipelineStoreSetPipelineRepoConfigErrorCall is one recorded call of MockPipelineStore.SetPipelineRepoConfigError, one
-// field per parameter.
-type MockPipelineStoreSetPipelineRepoConfigErrorCall struct {
-	Ctx     context.Context
-	ID      string
-	Version int64
-	Sha     string
-	Reason  string
-}
-
-// SetPipelineRepoConfigErrorCalls returns every recorded SetPipelineRepoConfigError call, oldest first, with
-// its arguments typed. It reads the same log as Calls("SetPipelineRepoConfigError").
-func (m *MockPipelineStore) SetPipelineRepoConfigErrorCalls() []MockPipelineStoreSetPipelineRepoConfigErrorCall {
-	var out []MockPipelineStoreSetPipelineRepoConfigErrorCall
-	for _, c := range m.Recorder.Calls("SetPipelineRepoConfigError") {
-		var r MockPipelineStoreSetPipelineRepoConfigErrorCall
-		r.Ctx, _ = c.Args[0].(context.Context)
-		r.ID, _ = c.Args[1].(string)
-		r.Version, _ = c.Args[2].(int64)
-		r.Sha, _ = c.Args[3].(string)
-		r.Reason, _ = c.Args[4].(string)
+		r.P, _ = c.Args[3].(core.PipelineConfigPending)
 		out = append(out, r)
 	}
 	return out
@@ -338,30 +288,6 @@ func (m *MockPipelineStore) GetPRRecordByNumberCalls() []MockPipelineStoreGetPRR
 		r.Provider, _ = c.Args[1].(string)
 		r.RepositoryID, _ = c.Args[2].(string)
 		r.Number, _ = c.Args[3].(int)
-		out = append(out, r)
-	}
-	return out
-}
-
-// MockPipelineStoreGetPRRecordByMergeCommitCall is one recorded call of MockPipelineStore.GetPRRecordByMergeCommit, one
-// field per parameter.
-type MockPipelineStoreGetPRRecordByMergeCommitCall struct {
-	Ctx          context.Context
-	Provider     string
-	RepositoryID string
-	Sha          string
-}
-
-// GetPRRecordByMergeCommitCalls returns every recorded GetPRRecordByMergeCommit call, oldest first, with
-// its arguments typed. It reads the same log as Calls("GetPRRecordByMergeCommit").
-func (m *MockPipelineStore) GetPRRecordByMergeCommitCalls() []MockPipelineStoreGetPRRecordByMergeCommitCall {
-	var out []MockPipelineStoreGetPRRecordByMergeCommitCall
-	for _, c := range m.Recorder.Calls("GetPRRecordByMergeCommit") {
-		var r MockPipelineStoreGetPRRecordByMergeCommitCall
-		r.Ctx, _ = c.Args[0].(context.Context)
-		r.Provider, _ = c.Args[1].(string)
-		r.RepositoryID, _ = c.Args[2].(string)
-		r.Sha, _ = c.Args[3].(string)
 		out = append(out, r)
 	}
 	return out

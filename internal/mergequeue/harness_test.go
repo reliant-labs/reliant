@@ -23,6 +23,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/mergequeue/fakegithub"
 	"github.com/reliant-labs/reliant/internal/mergequeue/ghport"
 	"github.com/reliant-labs/reliant/internal/mergequeue/gitport"
+	"github.com/reliant-labs/reliant/internal/pipeline/grants"
 	"github.com/reliant-labs/reliant/pkg/config"
 )
 
@@ -45,6 +46,10 @@ const (
 	testOrg     = "org-1"
 	testProject = "test-project"
 	testUser    = "test-user"
+	// testTrigger and testDaemon are the activation and machine of the run
+	// that wrote every pass verdict the fixture records.
+	testTrigger = "trigger-1"
+	testDaemon  = "daemon-1"
 )
 
 // fixture is one enrolled repository on fakegithub, a real git workdir, a
@@ -60,6 +65,7 @@ type fixture struct {
 	wd   localBuilder
 	gate *fakeGate
 	land *fakeLander
+	auth *fakeAuth
 	prs  map[string]*testPR
 }
 
@@ -94,7 +100,7 @@ func newFixture(t *testing.T, mode core.PipelineRepoMode) *fixture {
 	return &fixture{
 		t: t, ctx: ctx, db: repo, raw: raw, g: g, r: r, repo: pr,
 		wd:   localBuilder{job: candidate.Job{Ports: candidate.Ports{Git: wk, Remote: r.URL(), GitHub: g}}, g: g},
-		gate: &fakeGate{g: g, r: r}, land: &fakeLander{}, prs: map[string]*testPR{},
+		gate: &fakeGate{g: g, r: r}, land: &fakeLander{}, auth: &fakeAuth{}, prs: map[string]*testPR{},
 	}
 }
 
@@ -112,13 +118,19 @@ func (f *fixture) setConfig(doc string) {
 
 func (f *fixture) scheduler() *mergequeue.Scheduler {
 	f.t.Helper()
+	return f.schedulerWith(f.wd)
+}
+
+// schedulerWith is the fixture's scheduler over builder.
+func (f *fixture) schedulerWith(builder mergequeue.Builder) *mergequeue.Scheduler {
+	f.t.Helper()
 	locks, err := dblock.New(dblock.Deps{Logger: slog.Default(), Config: &config.Config{}, Sessions: f.db.SessionPool()})
 	if err != nil {
 		f.t.Fatal(err)
 	}
 	s, err := mergequeue.New(mergequeue.Deps{
 		Store: f.db, Leader: mergequeue.AdvisoryLeader{Locks: locks},
-		Refs: f.wd, Builder: f.wd, Gate: f.gate, Lander: f.land,
+		Refs: f.wd, Builder: builder, Gate: f.gate, Lander: f.land, Authorizer: f.auth,
 	})
 	if err != nil {
 		f.t.Fatal(err)
@@ -184,6 +196,7 @@ func (f *fixture) pass(p *testPR, head string) {
 	if _, err := f.db.InsertPRHeadVerdict(f.ctx, core.PRHeadVerdictRecord{
 		OrgID: testOrg, ProjectID: testProject, RecordID: p.recordID, HeadSHA: head, Round: 1,
 		Verdict: core.PRHeadVerdictPass, Rule: core.PRVerdictRuleNoModelLowRisk, RiskTier: "low", ReviewerPrincipal: "test",
+		TriggerID: testTrigger, DaemonID: testDaemon,
 	}); err != nil {
 		f.t.Fatalf("verdict: %v", err)
 	}
@@ -367,4 +380,34 @@ func (l *fakeLander) Land(_ context.Context, req mergequeue.LandRequest) error {
 	defer l.mu.Unlock()
 	l.lands = append(l.lands, req)
 	return nil
+}
+
+// fakeAuth grants every capability except to the activations in deny, and
+// records what it was asked.
+type fakeAuth struct {
+	mu    sync.Mutex
+	deny  map[string]bool
+	asked []grants.Run
+}
+
+func (a *fakeAuth) Authorize(_ context.Context, run grants.Run, c grants.Capability) error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.asked = append(a.asked, run)
+	if c != grants.Land {
+		return &grants.NotAuthorizedError{Capability: c, Reason: grants.ReasonNoGrant, Detail: "the queue asks only for land"}
+	}
+	if a.deny[run.TriggerID] {
+		return &grants.NotAuthorizedError{Capability: c, Reason: grants.ReasonNoGrant, Detail: "revoked"}
+	}
+	return nil
+}
+
+func (a *fakeAuth) revoke(trigger string) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.deny == nil {
+		a.deny = map[string]bool{}
+	}
+	a.deny[trigger] = true
 }

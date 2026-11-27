@@ -331,12 +331,20 @@ func (s *Service) structuralVerdict(ctx context.Context, p *prCall, verdicts []*
 	if v := latestOnHead(verdicts, head); v != nil {
 		round = v.Round + 1
 	}
+	// A structural pass approves as a model's does, so it is held to the
+	// same grant: in mode on the run's activation must hold approve.
+	if err := s.authorizeApprove(ctx, p); err != nil {
+		return nil, err
+	}
 	inv := p.req.Invocation
 	v, err := s.deps.Store.InsertPRHeadVerdict(ctx, core.PRHeadVerdictRecord{
 		OrgID: p.repo.OrgID, ProjectID: p.repo.ProjectID, RecordID: p.rec.ID, HeadSHA: head, Round: round,
 		Verdict: core.PRHeadVerdictPass, Rule: core.PRVerdictRule(risk.Rule), RiskTier: core.PRRiskTier(risk.Tier),
 		RequiredDecisions: requiredDecisions(p.cfg, head, diffPaths(files.Diff)),
 		RunID:             inv.RunID, NodeID: inv.NodeID, ReviewerPrincipal: principalName,
+		// The activation and machine of the run that wrote it, as a model
+		// verdict records them, so the land check can ask about them.
+		TriggerID: p.req.Principal.TriggerID, DaemonID: p.req.Principal.DaemonID,
 	})
 	if errors.Is(err, core.ErrPipelineVerdictExists) {
 		// A concurrent or retried pr.next wrote this round already.

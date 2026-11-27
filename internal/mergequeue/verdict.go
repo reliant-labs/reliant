@@ -51,8 +51,20 @@ type Verdict struct {
 	WouldPush []WouldPush `json:"would_push,omitempty"`
 	// Flaky are the tests that failed and then passed on the same tree.
 	Flaky []string `json:"flaky,omitempty"`
+	// LandNotGranted are the entries whose approver no longer held the
+	// land capability when the batch was about to land: the batch was
+	// abandoned and nothing merged.
+	LandNotGranted []LandRefusal `json:"land_not_granted,omitempty"`
 	// Note says, for a person, what happened.
 	Note string `json:"note,omitempty"`
+}
+
+// LandRefusal is an entry refused the land capability before its batch
+// landed, and why.
+type LandRefusal struct {
+	EntryID string `json:"entry_id"`
+	Head    string `json:"head"`
+	Reason  string `json:"reason"`
 }
 
 // GateAttempt is one earlier gate of a batch.

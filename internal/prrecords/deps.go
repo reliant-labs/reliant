@@ -19,20 +19,19 @@ type Store interface {
 type PipelineStore interface {
 	GetPipelineRepoByRepository(ctx context.Context, provider, repositoryID string) (*core.PipelineRepo, error)
 	GetPipelineRepo(ctx context.Context, id string) (*core.PipelineRepo, error)
-	RecordPipelineRepoConfig(ctx context.Context, id string, version int64, sha string, config []byte, changes []core.PipelineConfigChange) (*core.PipelineRepo, error)
-	SetPipelineRepoConfigError(ctx context.Context, id string, version int64, sha, reason string) (*core.PipelineRepo, error)
+	SetPipelineRepoConfigPending(ctx context.Context, id string, version int64, p core.PipelineConfigPending) (*core.PipelineRepo, error)
 	GetPRRecordByNumber(ctx context.Context, provider, repositoryID string, number int) (*core.PRRecord, error)
-	GetPRRecordByMergeCommit(ctx context.Context, provider, repositoryID, sha string) (*core.PRRecord, error)
 	GetPRPipeline(ctx context.Context, recordID string) (*core.PRPipeline, error)
 	EnsurePRPipeline(ctx context.Context, p core.PRPipelineNew) (*core.PRPipeline, bool, error)
 	ResetPRPipelineForHead(ctx context.Context, recordID string, version int64, head string, next core.PRPipelineNext) (*core.PRPipeline, error)
 	TransitionPRPipeline(ctx context.Context, recordID string, version int64, to core.PRPipeline) (*core.PRPipeline, error)
 }
 
-// Contents reads one repository file at a commit. No server role
-// implements it: a server holds no repository bytes (owner, 2026-11-27), so
-// pipeline.yaml is to be read by a gate pool daemon and reported back.
-// Until then the projector records "no reader" as the config error.
+// Contents reads one repository file at a commit. No server role reads it
+// itself: a server holds no repository bytes (owner, 2026-11-27), so
+// pipeline.yaml is read by a gate pool daemon and reported back (jobrun's
+// ConfigReader), for the [ConfigRefresher]. A read waits on a daemon, so
+// it never runs in webhook delivery.
 type Contents interface {
 	Read(ctx context.Context, req ContentsRequest) ([]byte, error)
 }
