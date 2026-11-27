@@ -221,7 +221,7 @@ func TestSendGtmEmail_RefusedUnattended(t *testing.T) {
 	_, needs, err := f.card(t, true)
 	require.Error(t, err)
 	assert.False(t, needs)
-	assert.Equal(t, email.ErrUnattended.Error(), tools.ActivationRefusalReason(err))
+	assert.Contains(t, tools.ActivationRefusalReason(err), "an unattended run cannot show one")
 
 	exec := approved("call-1", "any")
 	exec.Unattended = true

@@ -5,12 +5,15 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
 	"github.com/reliant-labs/reliant/internal/automationpolicy"
@@ -688,8 +691,11 @@ func TestSendGtmEmail_RefusalsAreActivationRefusals(t *testing.T) {
 		input      string
 		reason     string
 	}{
-		"unattended": {&fakeSender{prepareErr: errors.New("an unattended run cannot show a card; nothing was sent")}, true,
-			`{"item_id":"item-1","expected_revision":3}`, "an unattended run cannot show a card; nothing was sent"},
+		"unattended": {&fakeSender{}, true, `{"item_id":"item-1","expected_revision":3}`, gtmUnattendedSend},
+		"a store error": {&fakeSender{prepareErr: errors.New("dial tcp db-primary.internal.example:5432: connection refused")}, false,
+			`{"item_id":"item-1","expected_revision":3}`, svcerr.InternalMessage},
+		"a missing item": {&fakeSender{prepareErr: gtm.ErrNotFound}, false, `{"item_id":"item-1","expected_revision":3}`,
+			gtmNotFound("item", "item-1", ToolListGtmCalendar)},
 		"not approved": {&fakeSender{prepareErr: gtm.ErrNotApproved}, false, `{"item_id":"item-1","expected_revision":3}`, gtm.ErrNotApproved.Error()},
 		"no sender":    {nil, false, `{"item_id":"item-1","expected_revision":3}`, "GTM email is unavailable on this server"},
 		"a mailbox named by the model": {&fakeSender{}, false, `{"item_id":"item-1","expected_revision":3,"connection_id":"conn-x"}`,
@@ -707,11 +713,20 @@ func TestSendGtmEmail_RefusalsAreActivationRefusals(t *testing.T) {
 			assert.Equal(t, tc.reason, ActivationRefusalReason(err))
 		})
 	}
-	t.Run("unattended reaches the sender as unattended", func(t *testing.T) {
-		sender := &fakeSender{prepareErr: errors.New("unattended")}
+	t.Run("unattended never reaches the sender", func(t *testing.T) {
+		sender := &fakeSender{}
 		tool := newGTMTestTool(ToolSendGtmEmail, nil, sender).(AutomationApprovalTool)
-		_, _, _ = tool.PrepareAutomation(gtmToolCtx(context.Background()), ToolCall{ID: "call-1", Input: `{"item_id":"item-1","expected_revision":3}`}, true)
-		assert.Equal(t, []bool{true}, sender.prepared)
+		_, _, err := tool.PrepareAutomation(gtmToolCtx(context.Background()), ToolCall{ID: "call-1", Input: `{"item_id":"item-1","expected_revision":3}`}, true)
+		require.Error(t, err)
+		assert.Empty(t, sender.prepared)
+	})
+	t.Run("raw error text never reaches the refusal", func(t *testing.T) {
+		const host = "db-primary.internal.example"
+		tool := newGTMTestTool(ToolSendGtmEmail, nil, &fakeSender{prepareErr: fmt.Errorf("gmail send: dial tcp %s:5432: i/o timeout", host)}).(AutomationApprovalTool)
+		_, _, err := tool.PrepareAutomation(gtmToolCtx(context.Background()), ToolCall{ID: "call-1", Input: `{"item_id":"item-1","expected_revision":3}`}, false)
+		require.Error(t, err)
+		assert.NotContains(t, ActivationRefusalReason(err), host)
+		assert.ErrorContains(t, err, host, "the cause is kept for the log")
 	})
 }
 
@@ -758,4 +773,42 @@ func TestSendGtmEmail_NoSenderSendsNothing(t *testing.T) {
 func TestGTMTools_NoServiceIsUnavailable(t *testing.T) {
 	resp := runGTM(t, NewToolsFactory(&ToolsOptions{}).ListGtmIdeas(), gtmTestChat, `{}`)
 	assert.True(t, resp.IsError)
+}
+
+// Lists stay compact: at most 50 channels, each with the start of its
+// instructions, and at most gtmDetailCap coverage rows.
+func TestGTMTools_ListCaps(t *testing.T) {
+	long := strings.Repeat("Post it by hand. ", 40)
+	m := gtmMock(t)
+	m.ListChannelsFunc = func(context.Context, gtm.Actor, gtm.ListChannelsInput) (gtm.ListChannelsResult, error) {
+		var res gtm.ListChannelsResult
+		for i := 0; i < 60; i++ {
+			res.Channels = append(res.Channels, gtm.Channel{ID: fmt.Sprintf("ch-%d", i), Key: fmt.Sprintf("c%d", i), Mode: gtm.ChannelManual, ManualInstructionsMD: long})
+		}
+		return res, nil
+	}
+	m.GetChannelFunc = func(context.Context, gtm.Actor, gtm.GetChannelInput) (gtm.Channel, error) {
+		return gtm.Channel{ID: "ch-1", Mode: gtm.ChannelManual, ManualInstructionsMD: long}, nil
+	}
+	m.GetCampaignFunc = func(context.Context, gtm.Actor, gtm.GetCampaignInput) (gtm.CampaignDetail, error) {
+		d := gtm.CampaignDetail{Campaign: gtm.Campaign{ID: "camp-1"}}
+		for i := 0; i < 60; i++ {
+			d.Coverage = append(d.Coverage, gtm.CoverageRow{ChannelID: fmt.Sprintf("ch-%d", i), Planned: true})
+		}
+		return d, nil
+	}
+
+	list := decodeGTM(t, runGTM(t, newGTMTestTool(ToolListGtmChannels, m, nil), gtmTestChat, `{}`))
+	assert.Len(t, list["channels"], gtmMaxChannels)
+	assert.Equal(t, true, list["truncated"])
+	first := list["channels"].([]any)[0].(map[string]any)
+	assert.Equal(t, true, first["manual_instructions_truncated"])
+	assert.Less(t, len(first["manual_instructions_md"].(string)), len(long))
+
+	one := decodeGTM(t, runGTM(t, newGTMTestTool(ToolListGtmChannels, m, nil), gtmTestChat, `{"id":"ch-1"}`))
+	assert.Equal(t, long, one["manual_instructions_md"], "an id read is whole")
+
+	camp := decodeGTM(t, runGTM(t, newGTMTestTool(ToolListGtmCampaigns, m, nil), gtmTestChat, `{"id":"camp-1"}`))
+	assert.Len(t, camp["coverage"], gtmDetailCap)
+	assert.Equal(t, true, camp["coverage_truncated"])
 }

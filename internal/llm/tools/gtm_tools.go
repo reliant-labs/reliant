@@ -450,27 +450,36 @@ func gtmItem(i gtm.Item, full bool) gtmItemView {
 	return v
 }
 
+// gtmMaxChannels caps list_gtm_channels (the service reads channels
+// unpaged, up to gtm.MaxChannels).
+const gtmMaxChannels = gtmMaxPage
+
 type gtmChannelView struct {
-	ID                   string   `json:"id"`
-	Key                  string   `json:"key"`
-	Name                 string   `json:"name"`
-	Mode                 string   `json:"mode"`
-	IntegrationKind      string   `json:"integration_kind,omitempty"`
-	ConnectionState      string   `json:"connection_state,omitempty"`
-	ManualInstructionsMD string   `json:"manual_instructions_md,omitempty"`
-	ChannelTypes         []string `json:"channel_types,omitempty"`
-	Status               string   `json:"status"`
-	Source               string   `json:"source,omitempty"`
-	Revision             int32    `json:"revision"`
+	ID                    string   `json:"id"`
+	Key                   string   `json:"key"`
+	Name                  string   `json:"name"`
+	Mode                  string   `json:"mode"`
+	IntegrationKind       string   `json:"integration_kind,omitempty"`
+	ConnectionState       string   `json:"connection_state,omitempty"`
+	ManualInstructionsMD  string   `json:"manual_instructions_md,omitempty"`
+	InstructionsTruncated bool     `json:"manual_instructions_truncated,omitempty"`
+	ChannelTypes          []string `json:"channel_types,omitempty"`
+	Status                string   `json:"status"`
+	Source                string   `json:"source,omitempty"`
+	Revision              int32    `json:"revision"`
 }
 
-func gtmChannel(c gtm.Channel) gtmChannelView {
-	return gtmChannelView{
+func gtmChannel(c gtm.Channel, full bool) gtmChannelView {
+	v := gtmChannelView{
 		ID: c.ID, Key: c.Key, Name: c.Name, Mode: gtmShort(gtmChannelMode, string(c.Mode)), IntegrationKind: c.IntegrationKind,
 		ConnectionState: gtmShort(gtmConnection, string(c.ConnectionState)), ManualInstructionsMD: c.ManualInstructionsMD,
 		ChannelTypes: c.ChannelTypes, Status: gtmShort(gtmChannelStatus, string(c.Status)),
 		Source: gtmShort(gtmChannelSource, string(c.Source)), Revision: c.Revision,
 	}
+	if !full {
+		v.ManualInstructionsMD, v.InstructionsTruncated = gtmPreview(c.ManualInstructionsMD)
+	}
+	return v
 }
 
 // =============================================================================
@@ -817,10 +826,11 @@ func listGtmCampaigns(ctx context.Context, svc GTMService, actor gtm.Actor, p Li
 		}
 		out := struct {
 			gtmCampaignView
-			Ideas     []gtmIdeaView     `json:"ideas"`
-			Items     []gtmItemView     `json:"items"`
-			Truncated bool              `json:"truncated,omitempty"`
-			Coverage  []gtmCoverageView `json:"coverage"`
+			Ideas             []gtmIdeaView     `json:"ideas"`
+			Items             []gtmItemView     `json:"items"`
+			Truncated         bool              `json:"truncated,omitempty"`
+			Coverage          []gtmCoverageView `json:"coverage"`
+			CoverageTruncated bool              `json:"coverage_truncated,omitempty"`
 		}{gtmCampaignView: gtmCampaign(d.Campaign), Ideas: []gtmIdeaView{}, Items: []gtmItemView{}, Truncated: d.Truncated, Coverage: []gtmCoverageView{}}
 		for i, idea := range d.Ideas {
 			if i == gtmDetailCap {
@@ -836,7 +846,11 @@ func listGtmCampaigns(ctx context.Context, svc GTMService, actor gtm.Actor, p Li
 			}
 			out.Items = append(out.Items, gtmItem(it, false))
 		}
-		for _, c := range d.Coverage {
+		for i, c := range d.Coverage {
+			if i == gtmDetailCap {
+				out.CoverageTruncated = true
+				break
+			}
 			row := gtmCoverageView{ChannelID: c.ChannelID, Format: gtmShort(gtmItemFormat, string(c.Format)), Planned: c.Planned, Total: c.Total}
 			if len(c.Counts) > 0 {
 				row.Counts = map[string]int{}
@@ -1090,7 +1104,7 @@ type ListGtmChannelsParams struct {
 	Mode   string `json:"mode,omitempty" jsonschema:"enum=INTEGRATED,enum=MANUAL,description=Only INTEGRATED channels (sent through a Reliant integration\\, e.g. gmail) or MANUAL ones (a person posts by hand)."`
 }
 
-const listGtmChannelsDescription = "List the org's GTM channels, the places items go out (blog, email, hacker-news, reddit, linkedin, x, youtube and any the org added), by key, or read one with id. Each shows its id, key, name, mode (INTEGRATED through a Reliant integration such as gmail, or MANUAL: a person posts by hand following manual_instructions_md), connection_state for an integrated one (whether the user's integration is connected now), status and revision."
+const listGtmChannelsDescription = "List the org's GTM channels, the places items go out (blog, email, hacker-news, reddit, linkedin, x, youtube and any the org added), by key, or read one with id (a list shows at most 50, with the start of each one's instructions; status and mode filter it). Each shows its id, key, name, mode (INTEGRATED through a Reliant integration such as gmail, or MANUAL: a person posts by hand following manual_instructions_md), connection_state for an integrated one (whether the user's integration is connected now), status and revision."
 
 func listGtmChannels(ctx context.Context, svc GTMService, actor gtm.Actor, p ListGtmChannelsParams) ToolResponse {
 	if id := strings.TrimSpace(p.ID); id != "" {
@@ -1098,7 +1112,7 @@ func listGtmChannels(ctx context.Context, svc GTMService, actor gtm.Actor, p Lis
 		if err != nil {
 			return gtmFailure(err, gtmNotFound("channel", id, ToolListGtmChannels), false)
 		}
-		return gtmJSON(gtmChannel(c))
+		return gtmJSON(gtmChannel(c, true))
 	}
 	res, err := svc.ListChannels(ctx, actor, gtm.ListChannelsInput{
 		Status: gtm.ChannelStatus(gtmLong(gtmChannelStatus, p.Status)), Mode: gtm.ChannelMode(gtmLong(gtmChannelMode, p.Mode)),
@@ -1107,10 +1121,15 @@ func listGtmChannels(ctx context.Context, svc GTMService, actor gtm.Actor, p Lis
 		return gtmFailure(err, "Not found.", false)
 	}
 	out := struct {
-		Channels []gtmChannelView `json:"channels"`
+		Channels  []gtmChannelView `json:"channels"`
+		Truncated bool             `json:"truncated,omitempty"`
 	}{Channels: []gtmChannelView{}}
-	for _, c := range res.Channels {
-		out.Channels = append(out.Channels, gtmChannel(c))
+	for i, c := range res.Channels {
+		if i == gtmMaxChannels {
+			out.Truncated = true
+			break
+		}
+		out.Channels = append(out.Channels, gtmChannel(c, false))
 	}
 	return gtmJSON(out)
 }
@@ -1149,7 +1168,7 @@ func saveGtmChannel(ctx context.Context, svc GTMService, actor gtm.Actor, p Save
 		if err != nil {
 			return gtmFailure(err, "Not found.", true)
 		}
-		return gtmJSON(gtmChannel(c))
+		return gtmJSON(gtmChannel(c, true))
 	}
 	c, err := svc.UpdateChannel(ctx, actor, gtm.UpdateChannelInput{
 		ID: id, ExpectedRevision: p.ExpectedRevision, Key: trimPtr(p.Key), Name: p.Name,
@@ -1158,7 +1177,7 @@ func saveGtmChannel(ctx context.Context, svc GTMService, actor gtm.Actor, p Save
 	if err != nil {
 		return gtmFailure(err, gtmNotFound("channel", id, ToolListGtmChannels), true)
 	}
-	return gtmJSON(gtmChannel(c))
+	return gtmJSON(gtmChannel(c, true))
 }
 
 // =============================================================================
@@ -1369,6 +1388,9 @@ type SendGtmEmailParams struct {
 
 const sendGtmEmailDescription = "Send an APPROVED GTM email item (format EMAIL or COLD_OUTREACH) through the owner's Gmail, once. Every send shows the owner an approval card with exactly what goes out: recipients, subject, body and the sending account. It is sent only if they approve that card and the item has not changed since. You cannot approve the item yourself: a person sets it to APPROVED in the GTM pages of the Reliant web app. The email is built from the stored item, so edit it with save_gtm_item (which takes it back to review) rather than here. Refused in an unattended run, for an item that is not APPROVED, already SENT, or at another revision, and when no Gmail account is connected; you cannot connect one. A send that may have gone out without being recorded holds the item until a person checks the sent mail."
 
+// gtmUnattendedSend is send_gtm_email's refusal in an unattended run.
+const gtmUnattendedSend = "sending a GTM email needs the owner's approval card, and an unattended run cannot show one; nothing was sent"
+
 // sendGtmEmailTool is send_gtm_email: an AutomationApprovalTool whose
 // PrepareAutomation raises the owner's card for every attended call and
 // refuses an unattended one, and whose execution sends only what the card
@@ -1424,13 +1446,19 @@ func (t *sendGtmEmailTool) decode(call ToolCall) (SendGtmEmailParams, error) {
 }
 
 // PrepareAutomation implements AutomationApprovalTool. A send ALWAYS needs
-// the owner's card: an attended call returns the card with needsApproval
-// true, and anything the sender refuses (an unattended run among it) is the
-// refusal. It never answers "no approval needed".
+// the owner's card: an unattended call is refused before anything is read,
+// an attended one returns the card with needsApproval true, and anything the
+// sender refuses is the refusal, in sanitized words. It never answers "no
+// approval needed".
 func (t *sendGtmEmailTool) PrepareAutomation(ctx *rctx.ToolContext, call ToolCall, unattended bool) (ActivationPreview, bool, error) {
 	actor, failure := gtmActor(ctx, t.repo)
 	if failure != nil {
 		return ActivationPreview{}, false, RefuseActivation("the calling chat could not be resolved", fmt.Errorf("%s", failure.Content))
+	}
+	if unattended {
+		// Refused here, whatever the sender would say: nobody can see a card.
+		err := errors.New(gtmUnattendedSend)
+		return ActivationPreview{}, false, RefuseActivation(gtmUnattendedSend, err)
 	}
 	if t.sender == nil {
 		return ActivationPreview{}, false, RefuseActivation("GTM email is unavailable on this server", errors.New("no GTM email sender"))
@@ -1439,9 +1467,12 @@ func (t *sendGtmEmailTool) PrepareAutomation(ctx *rctx.ToolContext, call ToolCal
 	if err != nil {
 		return ActivationPreview{}, false, err
 	}
-	title, hash, err := t.sender.PrepareSend(ctx.Context, actor, strings.TrimSpace(p.ItemID), p.ExpectedRevision, unattended)
+	itemID := strings.TrimSpace(p.ItemID)
+	title, hash, err := t.sender.PrepareSend(ctx.Context, actor, itemID, p.ExpectedRevision, false)
 	if err != nil {
-		return ActivationPreview{}, false, RefuseActivation(err.Error(), err)
+		// The reason is shown to the agent and the owner: the domain's own
+		// words, never raw store or driver text (gtmErrorText).
+		return ActivationPreview{}, false, RefuseActivation(gtmErrorText(err, gtmNotFound("item", itemID, ToolListGtmCalendar)), err)
 	}
 	if hash == "" {
 		err := errors.New("the send could not be bound to an approval")

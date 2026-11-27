@@ -222,7 +222,7 @@ func TestActivationPreviewIsBounded(t *testing.T) {
 // (the preview always asks for one) and is bound to the approved hash;
 // unattended, it is refused without a card, whatever the preview says.
 func TestSendGtmEmailAlwaysNeedsACard(t *testing.T) {
-	require.True(t, isActivationCall(toolSendGtmEmail))
+	require.True(t, isActivationCall(names.ToolSendGtmEmail))
 	for _, unattended := range []bool{false, true} {
 		t.Run(map[bool]string{false: "attended", true: "unattended"}[unattended], func(t *testing.T) {
 			var suite temporaltest.WorkflowTestSuite
@@ -230,7 +230,7 @@ func TestSendGtmEmailAlwaysNeedsACard(t *testing.T) {
 			creates := 0
 			var executed types.RuntimeContext
 			env.RegisterActivityWithOptions(func(_ context.Context, in types.AutomationApprovalInput) (types.AutomationApprovalPreview, error) {
-				require.Equal(t, toolSendGtmEmail, in.ToolName)
+				require.Equal(t, names.ToolSendGtmEmail, in.ToolName)
 				require.Equal(t, unattended, in.Unattended)
 				// A preview that (wrongly) offers a card to an unattended run
 				// is still refused by the runtime: nobody can approve it.
@@ -239,7 +239,7 @@ func TestSendGtmEmailAlwaysNeedsACard(t *testing.T) {
 			env.RegisterActivityWithOptions(func(_ context.Context, in map[string]interface{}) (map[string]interface{}, error) {
 				creates++
 				require.Equal(t, "Send email “Launch” to 2 recipients?", in["title"])
-				require.Equal(t, toolSendGtmEmail, in["tool_name"])
+				require.Equal(t, names.ToolSendGtmEmail, in["tool_name"])
 				return map[string]interface{}{"approval_id": "approval"}, nil
 			}, activity.RegisterOptions{Name: "ApprovalCreate"})
 			env.RegisterActivityWithOptions(func(context.Context, map[string]interface{}) (map[string]interface{}, error) {
@@ -257,8 +257,8 @@ func TestSendGtmEmailAlwaysNeedsACard(t *testing.T) {
 			env.ExecuteWorkflow(func(ctx workflow.Context) error {
 				ac := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{StartToCloseTimeout: time.Minute})
 				node := &pb.Node{Args: &pb.Node_ExecuteTools{ExecuteTools: &pb.ExecuteToolsArgs{
-					Capabilities:      &pb.ToolCapabilities{Offered: []string{toolSendGtmEmail}},
-					ResolvedToolCalls: []*pb.ToolCallMsg{{Id: "call", Name: toolSendGtmEmail, Input: `{"item_id":"item-1","expected_revision":3}`}},
+					Capabilities:      &pb.ToolCapabilities{Offered: []string{names.ToolSendGtmEmail}},
+					ResolvedToolCalls: []*pb.ToolCallMsg{{Id: "call", Name: names.ToolSendGtmEmail, Input: `{"item_id":"item-1","expected_revision":3}`}},
 				}}}
 				return executeWithActivationApprovals(ctx, ac, types.RuntimeContext{ChatID: "chat", Thread: "thread"}, node, unattended).Get(ctx, nil)
 			})
