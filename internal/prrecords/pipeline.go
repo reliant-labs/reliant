@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log/slog"
 	"strings"
 	"time"
 
@@ -27,10 +26,11 @@ import (
 //     and a comment on the PR. The record_due trigger (M4) turns the wake
 //     into one run of the `pr` workflow, whose pr.next decides. A label
 //     event wakes nothing: labels are display, never input;
-//   - keeps the repository's config: on a push to its base branch, the
-//     .reliant/pipeline.yaml at the pushed commit, validated, with the gate
-//     stages it turns off or back on recorded as setting changes. Config
-//     is never read from a PR head.
+//   - keeps the repository's config: a push to its base branch leaves the
+//     .reliant/pipeline.yaml at the pushed commit to read, and the worker's
+//     ConfigRefresher reads it on a gate pool daemon and records it,
+//     validated, with the gate stages it turns off or back on recorded as
+//     setting changes (configread.go). Config is never read from a PR head.
 //
 // Every write is level-triggered (it reads the record as applied, not the
 // event) and a compare-and-set, so a redelivered or out-of-order event, or
@@ -80,7 +80,7 @@ func (p *projector) projectPipeline(ctx context.Context, provider string, ev Eve
 	family, action, _ := strings.Cut(ev.Type, ".")
 	switch family {
 	case "push":
-		return p.refreshConfig(ctx, provider, ev, repo)
+		return p.refreshConfig(ctx, ev, repo)
 	case "pull_request":
 		switch action {
 		case "opened", "reopened", "ready_for_review", "synchronize", "closed":
@@ -200,112 +200,36 @@ func (p *projector) converge(ctx context.Context, rec *core.PRRecord, row *core.
 	return err
 }
 
-// refreshConfig reads .reliant/pipeline.yaml at a commit pushed to the
-// repository's base branch and records it, with the gate stages it turns off
-// or back on. A file that is missing, unreadable or invalid keeps the config
-// in force and is recorded as the repository's config error; the delivery
-// still succeeds, since retrying it would read the same file.
+// refreshConfig records that .reliant/pipeline.yaml is to be read at a
+// commit pushed to the repository's base branch: the file is read on a gate
+// pool daemon, which a webhook delivery never waits on, so the projector
+// leaves the read to the worker's [ConfigRefresher] (pipeline_repos
+// .config_pending_sha), with the pusher a gate stage change is attributed
+// to when no merged PR is.
 //
 // A push that cannot have changed the file (GitHub lists every commit's
 // changed paths, and none is the file) is skipped once a config is
-// recorded, so config_sha is the last commit that could have changed it.
-func (p *projector) refreshConfig(ctx context.Context, provider string, ev Event, repo *core.PipelineRepo) error {
+// recorded, so config_sha is the last commit that could have changed it; so
+// is a push of the commit already recorded or already pending.
+func (p *projector) refreshConfig(ctx context.Context, ev Event, repo *core.PipelineRepo) error {
 	if ev.Attributes["branch"] != repo.BaseBranch || ev.Data["deleted"] == true {
 		return nil
 	}
 	sha := lowerSHA(strOf(ev.Data["after"]))
-	if !isSHA(sha) || sha == repo.ConfigSHA || (repo.ConfigSHA != "" && !mayTouch(ev.Data, config.FilePath)) {
+	if !isSHA(sha) || sha == repo.ConfigSHA || sha == repo.ConfigPending.SHA || (repo.ConfigSHA != "" && !mayTouch(ev.Data, config.FilePath)) {
 		return nil
 	}
-	resolved, raw, reason := p.readConfig(ctx, repo, sha)
+	pending := core.PipelineConfigPending{SHA: sha, SenderID: ev.Attributes["sender_id"], SenderLogin: ev.Attributes["sender"]}
 	for range casTries {
-		var err error
-		if reason != "" {
-			slog.InfoContext(ctx, "pipeline config not recorded; the previous config stays in force",
-				"repository", repo.Repository, "sha", sha, "reason", reason)
-			_, err = p.pipeline.SetPipelineRepoConfigError(ctx, repo.ID, repo.Version, sha, reason)
-		} else {
-			var changes []core.PipelineConfigChange
-			if changes, err = p.stageChanges(ctx, provider, ev, repo, sha, resolved); err != nil {
-				return err
-			}
-			_, err = p.pipeline.RecordPipelineRepoConfig(ctx, repo.ID, repo.Version, sha, raw, changes)
-		}
+		_, err := p.pipeline.SetPipelineRepoConfigPending(ctx, repo.ID, repo.Version, pending)
 		if !errors.Is(err, core.ErrPipelineVersionConflict) {
 			return err
 		}
-		if repo, err = p.pipeline.GetPipelineRepo(ctx, repo.ID); err != nil || repo == nil || repo.ConfigSHA == sha {
+		if repo, err = p.pipeline.GetPipelineRepo(ctx, repo.ID); err != nil || repo == nil || repo.ConfigSHA == sha || repo.ConfigPending.SHA == sha {
 			return err
 		}
 	}
 	return fmt.Errorf("pipeline repo %s kept changing: %w", repo.ID, core.ErrPipelineVersionConflict)
-}
-
-// readConfig reads and validates the file at sha. It returns the resolved
-// config and the file as JSON (the form config_json stores: JSON is YAML,
-// so config.Parse reads it back), or the reason it cannot be recorded.
-func (p *projector) readConfig(ctx context.Context, repo *core.PipelineRepo, sha string) (config.Resolved, []byte, string) {
-	if p.contents == nil {
-		return config.Resolved{}, nil, "this server has no GitHub App to read " + config.FilePath + " with"
-	}
-	owner, name, _ := strings.Cut(repo.Repository, "/")
-	data, err := p.contents.Read(ctx, ContentsRequest{
-		UserID: repo.CreatedByUserID, OrgID: repo.OrgID, Owner: owner, Repo: name, Path: config.FilePath, Ref: sha,
-	})
-	switch {
-	case errors.Is(err, ErrContentsNotFound):
-		return config.Resolved{}, nil, config.FilePath + " is missing at " + sha
-	case err != nil:
-		return config.Resolved{}, nil, "could not read " + config.FilePath + ": " + err.Error()
-	}
-	resolved, err := config.Load(data)
-	if err != nil {
-		return config.Resolved{}, nil, config.FilePath + " is invalid: " + err.Error()
-	}
-	raw, err := configJSON(data)
-	if err != nil {
-		return config.Resolved{}, nil, config.FilePath + " cannot be stored: " + err.Error()
-	}
-	return resolved, raw, ""
-}
-
-// stageChanges is the setting changes recording resolved over the config in
-// force carries (config.StageChanges), each attributed to the author of the
-// PR the commit merged, else to whoever pushed it.
-func (p *projector) stageChanges(ctx context.Context, provider string, ev Event, repo *core.PipelineRepo, sha string, resolved config.Resolved) ([]core.PipelineConfigChange, error) {
-	var old config.Resolved
-	if len(repo.ConfigJSON) > 0 {
-		// The stored config was valid when it was recorded; one this
-		// build no longer reads counts as no config (every stage on).
-		old, _ = config.Load(repo.ConfigJSON)
-	}
-	diff := config.StageChanges(old, resolved)
-	if len(diff) == 0 {
-		return nil, nil
-	}
-	actor := core.PipelineConfigChange{
-		ChangedByProvider: provider, ChangedByProviderUserID: ev.Attributes["sender_id"], ChangedByLogin: ev.Attributes["sender"],
-	}
-	merged, err := p.pipeline.GetPRRecordByMergeCommit(ctx, provider, repo.RepositoryID, sha)
-	if err != nil {
-		return nil, err
-	}
-	if merged != nil && merged.AuthorID != "" && merged.AuthorLogin != "" {
-		actor.ConfigRecordID, actor.ChangedByProviderUserID, actor.ChangedByLogin = merged.ID, merged.AuthorID, merged.AuthorLogin
-	}
-	if actor.ChangedByProviderUserID == "" || actor.ChangedByLogin == "" {
-		// GitHub always names a push's sender; without one there is no
-		// actor to record, and a setting change is never recorded
-		// anonymously.
-		return nil, fmt.Errorf("push %s to %s names no sender to record its gate stage changes against", sha, repo.Repository)
-	}
-	out := make([]core.PipelineConfigChange, 0, len(diff))
-	for _, d := range diff {
-		c := actor
-		c.Setting, c.OldValue, c.NewValue = core.PipelineSetting(d.Setting), string(d.Old), string(d.New)
-		out = append(out, c)
-	}
-	return out, nil
 }
 
 // pushCommitsListed is how many commits a push event lists at most (GitHub

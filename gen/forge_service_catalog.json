@@ -540,6 +540,7 @@
         "IntegrationsWriteledger",
         "LedgerRetention",
         "MachineController",
+        "MergeQueue",
         "NATSConn",
         "OrgMoves",
         "OrgPolicyResolver",
@@ -547,6 +548,7 @@
         "OrgResolver",
         "PauseService",
         "PayloadStore",
+        "PipelineConfigRefresh",
         "Privacy",
         "ProcessRuntime",
         "ProcessSettings",
@@ -57804,6 +57806,18 @@
       "implementation_candidates": []
     },
     {
+      "id": "MergeQueue",
+      "name": "MergeQueue",
+      "kind": "provider",
+      "type": "*github.com/reliant-labs/reliant/internal/app.MergeQueue",
+      "source": {
+        "path": "internal/app/providers_mergequeue.go",
+        "symbol": "NewMergeQueue"
+      },
+      "methods": [],
+      "implementation_candidates": []
+    },
+    {
       "id": "Message",
       "name": "Message",
       "kind": "component",
@@ -58015,6 +58029,18 @@
       "source": {
         "path": "internal/handlers/pipeline/service.go",
         "symbol": "New"
+      },
+      "methods": [],
+      "implementation_candidates": []
+    },
+    {
+      "id": "PipelineConfigRefresh",
+      "name": "PipelineConfigRefresh",
+      "kind": "provider",
+      "type": "*github.com/reliant-labs/reliant/internal/app.PipelineConfigRefresh",
+      "source": {
+        "path": "internal/app/providers_mergequeue.go",
+        "symbol": "NewPipelineConfigRefresh"
       },
       "methods": [],
       "implementation_candidates": []

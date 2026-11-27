@@ -1136,9 +1136,9 @@ func NewTriggerDeliveryRelay(d TriggerDeliveryRelayDeps) (*TriggerDeliveryRelay,
 	relay := webhook.NewRelay(webhook.NewStores(repo), intake, d.ConnectionVault, triggers.NewAutoPause(store.NewTriggerWritesExtStore(repo.ORM()), nil))
 	records := prrecords.Deps{Store: store.NewPrRecordExtStore(repo.ORM()), Scope: prrecords.NewScope(d.Integrations.PRRecordRepositories)}
 	if d.Pipeline.GetEnabled() {
-		// No Contents: a server role reads no repository contents (owner,
-		// 2026-11-27), so the projector records "no reader" as the config
-		// error until a gate pool daemon reads pipeline.yaml for it.
+		// A base-branch push only leaves pipeline.yaml pending here: the
+		// worker's PipelineConfigRefresh reads it on a gate pool daemon,
+		// which webhook delivery never waits on.
 		records.Pipeline = repo
 	}
 	if !records.Scope.Empty() || records.Pipeline != nil {

@@ -57,13 +57,33 @@ type PipelineRepo struct {
 	// was not recorded (missing, unreadable, invalid); the config above
 	// stayed in force. Empty once a valid file is recorded.
 	ConfigError, ConfigErrorSHA string
-	QueueState                  PipelineQueueState
-	QueuePausedByDecisionID     string
-	CreatedByUserID             string
-	CreatedAt, UpdatedAt        time.Time
+	// ConfigPending is the base-branch commit whose pipeline.yaml a push
+	// left to read, and its read's progress; the zero value when none is.
+	ConfigPending           PipelineConfigPending `bun:"embed:config_pending_"`
+	QueueState              PipelineQueueState
+	QueuePausedByDecisionID string
+	CreatedByUserID         string
+	CreatedAt, UpdatedAt    time.Time
 	// Version is the compare-and-set counter: every Set* names the version
 	// it read.
 	Version int64
+}
+
+// PipelineConfigPending is a pipeline.yaml read a base-branch push left to
+// do (pipeline_repos.config_pending_*): the projector records it in webhook
+// delivery, and a worker loop reads the file on a gate pool daemon.
+type PipelineConfigPending struct {
+	// SHA is the commit to read the file at; "" when nothing is pending.
+	SHA string
+	// At is when the push was projected.
+	At *time.Time
+	// SenderID and SenderLogin are the push's sender, whom a gate stage
+	// change the file carries is attributed to when no merged PR is.
+	SenderID, SenderLogin string
+	// Attempts counts the reads started.
+	Attempts int
+	// RetryAt is when it is next due.
+	RetryAt *time.Time
 }
 
 // PipelineRepoEnrolment is what enrolling a repository writes. A new row

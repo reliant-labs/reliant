@@ -10,6 +10,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/pipeline/config"
+	"github.com/reliant-labs/reliant/internal/pipeline/grants"
 	"github.com/reliant-labs/reliant/internal/pipeline/prpolicy"
 )
 
@@ -23,6 +24,11 @@ type Deps struct {
 	// on a gate pool daemon: the queue holds no repository bytes.
 	Builder Builder
 	Gate    Gate
+	// Authorizer decides the land capability (internal/pipeline/grants):
+	// in mode on an entry is admitted, and a passed batch handed to the
+	// lander, only while the run that approved each head holds land.
+	// grants.Service implements it.
+	Authorizer grants.Authorizer
 	// Configs is nil for StoredConfig.
 	// forge:optional-dep
 	Configs Configs
@@ -50,8 +56,8 @@ type Scheduler struct {
 
 // New builds a Scheduler.
 func New(d Deps) (*Scheduler, error) {
-	if d.Store == nil || d.Leader == nil || d.Refs == nil || d.Builder == nil || d.Gate == nil {
-		return nil, errors.New("mergequeue: Deps needs Store, Leader, Refs, Builder and Gate")
+	if d.Store == nil || d.Leader == nil || d.Refs == nil || d.Builder == nil || d.Gate == nil || d.Authorizer == nil {
+		return nil, errors.New("mergequeue: Deps needs Store, Leader, Refs, Builder, Gate and Authorizer")
 	}
 	sch := &Scheduler{deps: d, configs: d.Configs, lander: d.Lander, logger: d.Logger, now: d.Now}
 	if sch.configs == nil {
@@ -66,7 +72,7 @@ func New(d Deps) (*Scheduler, error) {
 	if sch.now == nil {
 		sch.now = time.Now
 	}
-	sch.adm = admission{store: d.Store, now: sch.now}
+	sch.adm = admission{store: d.Store, auth: d.Authorizer, now: sch.now}
 	return sch, nil
 }
 
@@ -311,6 +317,10 @@ func (r *round) pick(ctx context.Context) ([]*core.QueueEntry, error) {
 			return nil, err
 		}
 		if !refusal.Admissible() {
+			if refusal.Code == RefuseLandNotGranted {
+				r.s.logger.InfoContext(ctx, "merge queue entry waits: its approver does not hold land",
+					"repo_id", r.repo.ID, "entry_id", e.ID, "record_id", e.RecordID, "head", head, "reason", refusal.Reason)
+			}
 			continue
 		}
 		if prpolicy.IsUrgent(e.Priority) {

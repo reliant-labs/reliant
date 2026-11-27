@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -56,7 +57,7 @@ func GetPRRecordByMergeCommit(ctx context.Context, db orm.Context, provider, rep
 // base branch at sha, and the gate-stage changes it carries, in one
 // transaction, if the repository is still at version: a lost race changes
 // nothing and is core.ErrPipelineVersionConflict. Any recorded config error
-// is cleared. READ COMMITTED is correct: the compare-and-set on version is
+// is cleared, and so is a pending read of sha. READ COMMITTED is correct: the compare-and-set on version is
 // the only read the write depends on, and it locks the row it updates.
 func RecordPipelineRepoConfig(ctx context.Context, db orm.Context, id string, version int64, sha string, config []byte, changes []core.PipelineConfigChange) (*core.PipelineRepo, error) {
 	if sha == "" || len(config) == 0 {
@@ -72,8 +73,10 @@ func RecordPipelineRepoConfig(ctx context.Context, db orm.Context, id string, ve
 	}
 	var out *core.PipelineRepo
 	err := db.RunTx(ctx, orm.ReadCommitted, func(tx context.Context) error {
+		clear, clearArgs := clearPending(sha)
 		r, err := casPipelineRepo(tx, db, id, version,
-			`config_sha = ?, config_json = ?::jsonb, config_error = NULL, config_error_sha = NULL`, sha, string(config))
+			`config_sha = ?, config_json = ?::jsonb, config_error = NULL, config_error_sha = NULL, `+clear,
+			append([]any{sha, string(config)}, clearArgs...)...)
 		if err != nil {
 			return err
 		}
@@ -98,10 +101,102 @@ func RecordPipelineRepoConfig(ctx context.Context, db orm.Context, id string, ve
 
 // SetPipelineRepoConfigError records why the pipeline.yaml read from the
 // base branch at sha was not recorded, keeping the config in force, if the
-// repository is still at version.
+// repository is still at version. A pending read of sha is done: the file
+// is missing or invalid, and reading it again reads the same file.
 func SetPipelineRepoConfigError(ctx context.Context, db orm.Context, id string, version int64, sha, reason string) (*core.PipelineRepo, error) {
 	if reason == "" {
 		return nil, errors.New("set pipeline repo config error: a reason is required")
 	}
-	return casPipelineRepo(ctx, db, id, version, `config_error = ?, config_error_sha = NULLIF(?, '')`, reason, sha)
+	clear, clearArgs := clearPending(sha)
+	return casPipelineRepo(ctx, db, id, version, `config_error = ?, config_error_sha = NULLIF(?, ''), `+clear,
+		append([]any{reason, sha}, clearArgs...)...)
+}
+
+// pendingColumns are the pending config read's columns but its sha.
+var pendingColumns = []string{"config_pending_at", "config_pending_sender_id", "config_pending_sender_login",
+	"config_pending_attempts", "config_pending_retry_at"}
+
+// clearPending is the SET fragment, and its arguments, that clears the
+// pending config read when it is of sha; a read of another commit stays
+// pending. Every right-hand side of an UPDATE reads the row as it was, so
+// each column compares the old config_pending_sha.
+func clearPending(sha string) (string, []any) {
+	var b strings.Builder
+	var args []any
+	for _, c := range pendingColumns {
+		fmt.Fprintf(&b, "%s = CASE WHEN config_pending_sha = ? THEN NULL ELSE %s END, ", c, c)
+		args = append(args, sha)
+	}
+	b.WriteString("config_pending_sha = NULLIF(config_pending_sha, ?)")
+	return b.String(), append(args, sha)
+}
+
+// SetPipelineRepoConfigPending records that the pipeline.yaml at sha, on the
+// base branch, is still to be read (a push that may have changed it), due
+// now, if the repository is still at version. It replaces a pending read of
+// another commit: the newest push is the one whose file counts.
+func SetPipelineRepoConfigPending(ctx context.Context, db orm.Context, id string, version int64, p core.PipelineConfigPending) (*core.PipelineRepo, error) {
+	if p.SHA == "" {
+		return nil, errors.New("set pipeline repo config pending: a sha is required")
+	}
+	return casPipelineRepo(ctx, db, id, version, `config_pending_sha = ?, config_pending_at = now(),
+		config_pending_sender_id = NULLIF(?, ''), config_pending_sender_login = NULLIF(?, ''),
+		config_pending_attempts = 0, config_pending_retry_at = now()`, p.SHA, p.SenderID, p.SenderLogin)
+}
+
+// ListDuePipelineConfigReads lists the enrolled repositories (mode not off)
+// with a pending config read due at now, oldest due first, at most limit
+// (0 is 100).
+func ListDuePipelineConfigReads(ctx context.Context, db orm.Context, now time.Time, limit int) ([]*core.PipelineRepo, error) {
+	if limit <= 0 {
+		limit = 100
+	}
+	var out []*core.PipelineRepo
+	if err := db.Bun().NewRaw(`SELECT `+pipelineRepoColumns+` FROM pipeline_repos
+		WHERE mode <> ? AND config_pending_sha IS NOT NULL AND coalesce(config_pending_retry_at, created_at) <= ?
+		ORDER BY coalesce(config_pending_retry_at, created_at), id LIMIT ?`,
+		core.PipelineRepoModeOff, now, limit).Scan(ctx, &out); err != nil {
+		return nil, fmt.Errorf("list due pipeline config reads: %w", err)
+	}
+	return out, nil
+}
+
+// ClaimPipelineConfigRead takes the repository's pending read of sha for
+// one attempt, until lease: it counts the attempt and holds the read off
+// every other worker until then, if the repository is still at version and
+// still pending at sha. Another worker's claim, or a newer push, is
+// core.ErrPipelineVersionConflict.
+func ClaimPipelineConfigRead(ctx context.Context, db orm.Context, id string, version int64, sha string, lease time.Time) (*core.PipelineRepo, error) {
+	return casPendingRead(ctx, db, id, version, sha,
+		`config_pending_attempts = coalesce(config_pending_attempts, 0) + 1, config_pending_retry_at = ?`, lease)
+}
+
+// DeferPipelineConfigRead records why the pending read of sha reached no
+// answer (no gate pool daemon read it) as the repository's config error,
+// keeping the config in force and the read pending, due again at retry, if
+// the repository is still at version and still pending at sha.
+func DeferPipelineConfigRead(ctx context.Context, db orm.Context, id string, version int64, sha, reason string, retry time.Time) (*core.PipelineRepo, error) {
+	if reason == "" {
+		return nil, errors.New("defer pipeline config read: a reason is required")
+	}
+	return casPendingRead(ctx, db, id, version, sha,
+		`config_error = ?, config_error_sha = ?, config_pending_retry_at = ?`, reason, sha, retry)
+}
+
+// casPendingRead is casPipelineRepo on a row whose pending read is of sha.
+func casPendingRead(ctx context.Context, db orm.Context, id string, version int64, sha, set string, args ...any) (*core.PipelineRepo, error) {
+	if sha == "" {
+		return nil, errors.New("pipeline config read: a sha is required")
+	}
+	args = append(args, id, version, sha)
+	r, err := scanPipelineRepo(ctx, db.Bun().NewRaw(`UPDATE pipeline_repos SET `+set+`,
+		version = version + 1, updated_at = now()
+		WHERE id = ? AND version = ? AND config_pending_sha = ? RETURNING `+pipelineRepoColumns, args...))
+	if err != nil {
+		return nil, fmt.Errorf("update pipeline repo %s: %w", id, err)
+	}
+	if r == nil {
+		return nil, fmt.Errorf("pipeline repo %s at version %d pending %s: %w", id, version, sha, core.ErrPipelineVersionConflict)
+	}
+	return r, nil
 }

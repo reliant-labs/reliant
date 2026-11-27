@@ -33,9 +33,10 @@ func TestDispatchGateMapsTheGateRunner(t *testing.T) {
 	}}
 	res, err := mergequeue.DispatchGate{Dispatcher: d}.Run(ctx, mergequeue.GateRequest{
 		RepoID: "r", BatchID: "b", Attempt: 2, CandidateRef: "reliant-queue/b", CandidateSHA: "abc", BaseSHA: "def", Shadow: true,
-		Gate: config.ResolvedGate{AllowUnisolated: true},
+		Gate: config.ResolvedGate{AllowUnisolated: true}, PreferMachine: "builder-1",
 	})
-	if err != nil || got.RepoID != "r" || got.Attempt != 2 || got.CandidateRef != "reliant-queue/b" || got.BaseSHA != "def" || !got.Shadow || !got.AllowUnisolated {
+	if err != nil || got.RepoID != "r" || got.Attempt != 2 || got.CandidateRef != "reliant-queue/b" || got.BaseSHA != "def" || !got.Shadow || !got.AllowUnisolated ||
+		got.PreferMachine != "builder-1" {
 		t.Fatalf("request %+v, err %v", got, err)
 	}
 	var stages map[string]any
@@ -109,7 +110,7 @@ func TestTheQueueRejectsABuildReportOutsideItsRefs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s, err := mergequeue.New(mergequeue.Deps{Store: f.db, Leader: mergequeue.AdvisoryLeader{Locks: locks}, Refs: f.wd, Builder: lie, Gate: f.gate})
+	s, err := mergequeue.New(mergequeue.Deps{Store: f.db, Leader: mergequeue.AdvisoryLeader{Locks: locks}, Refs: f.wd, Builder: lie, Gate: f.gate, Authorizer: f.auth})
 	if err != nil {
 		t.Fatal(err)
 	}
