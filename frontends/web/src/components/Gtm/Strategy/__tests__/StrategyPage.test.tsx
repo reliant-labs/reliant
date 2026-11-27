@@ -3,10 +3,11 @@
 /**
  * GTM › Strategy over GtmService (a mock transport): the org's strategies,
  * one strategy with its campaigns and a person's status moves on the
- * revision on screen, a new strategy; the library filtered by category,
- * search and facet, "Use this strategy" with an optional first campaign; a
- * pending prune request confirmed or cancelled by a person; the import
- * history. The library entries here are made-up placeholders.
+ * revision on screen, a new strategy. The library: Fits my business by
+ * default with Show all beside it, the filters sent to ListStrategyLibrary,
+ * the hint to set the business profile, an entry's detail (why it works,
+ * tailor questions, suggested workflow), and "Use this strategy" with an
+ * optional first campaign. The library entries here are made-up.
  */
 
 import { create } from "@bufbuild/protobuf";
@@ -15,22 +16,21 @@ import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/re
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+  GtmBusinessModel,
+  GtmBusinessType,
   GtmCampaignSchema,
-  GtmCredentialKind,
-  GtmLibraryDepth,
-  GtmLibraryImportSchema,
-  GtmLibraryPruneRequestSchema,
-  GtmPruneRequestStatus,
+  GtmPositioningSchema,
   GtmStrategyCategory,
   GtmStrategyLibraryEntrySchema,
   GtmStrategySchema,
   GtmStrategyStatus,
+  type ListStrategyLibraryRequest,
   type UpdateStrategyRequest,
   type UseLibraryStrategyRequest,
 } from "@/gen/reliant/v1/gtm_pb";
 
 import { renderGtm, TEST_ORG } from "../../shared/__tests__/gtmHarness";
-import { entryFacets, humanize } from "../Library";
+import { entryFacets, entryFits } from "../Library";
 import { StrategyView } from "../StrategyPage";
 
 const toasts = vi.hoisted(() => ({ success: vi.fn(), warning: vi.fn(), error: vi.fn() }));
@@ -56,18 +56,38 @@ const active = create(GtmStrategySchema, {
 const draft = create(GtmStrategySchema, { id: "str-2", orgId: TEST_ORG, name: "Office hours", status: GtmStrategyStatus.DRAFT, revision: 1 });
 const campaign = create(GtmCampaignSchema, { id: "cmp-1", orgId: TEST_ORG, strategyId: "str-1", name: "Sites launch" });
 
-const entry = (key: string, name: string, category: GtmStrategyCategory, extra: Partial<{ stage: string; cost: string; fits: string[] }> = {}) =>
-  create(GtmStrategyLibraryEntrySchema, { key, name, category, depth: GtmLibraryDepth.PLAY, summaryMd: `Placeholder: ${name}.`, stage: "early", cost: "low", ...extra });
-const launchWeek = entry("sample-launch-week", "Launch week", GtmStrategyCategory.LAUNCHES_PR, { fits: ["b2b"] });
-const officeHours = entry("sample-office-hours", "Office hours", GtmStrategyCategory.COMMUNITY_EVENTS, { stage: "growth", cost: "free", fits: ["b2c"] });
-const faq = entry("sample-faq", "Answer pages", GtmStrategyCategory.ORGANIC_CONTENT_SEO, { fits: ["b2b"] });
+const shipDaily = create(GtmStrategyLibraryEntrySchema, {
+  key: "sample-ship-daily",
+  name: "Ship something daily",
+  category: GtmStrategyCategory.LAUNCHES_PR,
+  summaryMd: "Ship one small thing a day for a week.",
+  whyItWorksMd: "Five reasons to talk about you in one week.",
+  stages: ["launch"],
+  objective: "awareness",
+  effort: "medium",
+  cost: "free",
+  signalDays: 7,
+  tailorQuestions: ["What five small things could ship this month?", "Who would share a daily update?"],
+  suggestedWorkflowMd: "Each morning of launch week, draft the day's post from the changelog for a person to approve.",
+  kpis: ["Sign-ups during the week"],
+});
+const meetup = create(GtmStrategyLibraryEntrySchema, {
+  key: "sample-local-meetup",
+  name: "Host a local meetup",
+  category: GtmStrategyCategory.COMMUNITY_EVENTS,
+  summaryMd: "A monthly evening for people who use tools like yours.",
+  businessTypes: [GtmBusinessType.DEVELOPER_TOOLS],
+  businessModels: [GtmBusinessModel.FREE_OSS],
+  effort: "high",
+  cost: "low",
+});
 
 const reads = {
   "GtmService.ListStrategies": { response: { strategies: [draft, active] } },
   "GtmService.GetStrategy": { response: { strategy: active, campaigns: [campaign] } },
-  "GtmService.ListStrategyLibrary": { response: { entries: [launchWeek, officeHours, faq] } },
-  "GtmService.ListLibraryPruneRequests": { response: { requests: [] } },
-  "GtmService.ListLibraryImports": { response: { imports: [] } },
+  "GtmService.ListStrategyLibrary": { response: { entries: [shipDaily, meetup] } },
+  "GtmService.GetPositioning": { response: { positioning: create(GtmPositioningSchema, { orgId: TEST_ORG, businessType: GtmBusinessType.B2B_SAAS, revision: 1 }) } },
+  "GtmService.GetStrategyLibraryEntry": { response: { entry: shipDaily } },
 };
 
 const at = (search = "") => ({ path: `/gtm/strategy${search}`, routePath: "/gtm/strategy" });
@@ -147,72 +167,163 @@ describe("Your strategies", () => {
 });
 
 describe("the library", () => {
-  it("has all 13 categories, and filters by category, search and facet", async () => {
-    renderGtm(<StrategyView />, reads, at("?view=library"));
+  const lastReq = (list: { mock: { calls: unknown[][] } }) => list.mock.calls[list.mock.calls.length - 1]![0] as ListStrategyLibraryRequest;
+
+  it("opens on what fits the business, with Show all, and sends every filter to the service, keeping them on the URL", async () => {
+    const list = vi.fn(() => ({ entries: [shipDaily, meetup] }));
+    const { router } = renderGtm(<StrategyView />, { ...reads, "GtmService.ListStrategyLibrary": list }, at("?view=library"));
     const lib = await screen.findByTestId("gtm-library");
-    expect(await within(lib).findByText("3 of 3 entries")).toBeInTheDocument();
-    const chips = within(within(lib).getByRole("group", { name: "Category" })).getAllByRole("button");
-    expect(chips).toHaveLength(14);
-    fireEvent.click(within(lib).getByRole("button", { name: /^Launches & PR/ }));
-    expect(within(lib).getByText("1 of 3 entries")).toBeInTheDocument();
-    expect(within(lib).getByRole("heading", { name: "Launch week" })).toBeInTheDocument();
-    fireEvent.click(within(lib).getByRole("button", { name: /^All categories/ }));
-    fireEvent.change(within(lib).getByLabelText("Fits"), { target: { value: "b2b" } });
-    expect(within(lib).getByText("2 of 3 entries")).toBeInTheDocument();
-    // Facet values read as words, each labelled with its facet.
-    expect(within(within(lib).getByLabelText("Fits")).getByRole("option", { name: "Fits: B2B (2)" })).toBeInTheDocument();
-    expect(within(lib).getAllByText("Fits: B2B").length).toBeGreaterThan(0);
-    fireEvent.change(within(lib).getByPlaceholderText("Search plays and tactics"), { target: { value: "answer" } });
-    expect(within(lib).getByText("1 of 3 entries")).toBeInTheDocument();
-    expect(within(lib).getByRole("heading", { name: "Answer pages" })).toBeInTheDocument();
+    expect(await within(lib).findByRole("heading", { name: "Ship something daily" })).toBeInTheDocument();
+    // One choice: a radio group, Fits my business checked.
+    const which = within(lib).getByRole("radiogroup", { name: "Which entries" });
+    expect(within(which).getByRole("radio", { name: "Fits my business" })).toHaveAttribute("aria-checked", "true");
+    expect(lastReq(list)).toEqual(expect.objectContaining({ orgId: TEST_ORG, fitsMyBusiness: true, categories: [], businessModels: [], businessTypes: [] }));
+    // No prune banner or import history: the library is built in.
+    expect(screen.queryByTestId("gtm-prune-requests")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("gtm-import-history")).not.toBeInTheDocument();
+
+    // Arrow keys move the choice, as a radio group's do.
+    fireEvent.keyDown(within(which).getByRole("radio", { name: "Fits my business" }), { key: "ArrowRight" });
+    await waitFor(() => expect(lastReq(list).fitsMyBusiness).toBe(false));
+    expect(within(which).getByRole("radio", { name: "Show all" })).toHaveAttribute("aria-checked", "true");
+    expect(within(within(lib).getByRole("group", { name: "Category" })).getAllByRole("button")).toHaveLength(13);
+    fireEvent.click(within(lib).getByRole("button", { name: "Community & events" }));
+    fireEvent.click(within(within(lib).getByRole("group", { name: "Business model" })).getByRole("button", { name: "Subscription" }));
+    fireEvent.click(within(within(lib).getByRole("group", { name: "Business model" })).getByRole("button", { name: "Freemium" }));
+    fireEvent.change(within(lib).getByLabelText("Business type"), { target: { value: String(GtmBusinessType.DEVELOPER_TOOLS) } });
+    fireEvent.change(within(lib).getByLabelText("Stage"), { target: { value: "launch" } });
+    fireEvent.change(within(lib).getByLabelText("Effort"), { target: { value: "low" } });
+    fireEvent.change(within(lib).getByLabelText("Cost"), { target: { value: "free" } });
+    fireEvent.change(within(lib).getByPlaceholderText("Search the library"), { target: { value: "meetup" } });
+    await waitFor(() =>
+      expect(lastReq(list)).toEqual(
+        expect.objectContaining({
+          categories: [GtmStrategyCategory.COMMUNITY_EVENTS],
+          businessModels: [GtmBusinessModel.SUBSCRIPTION, GtmBusinessModel.FREEMIUM],
+          businessTypes: [GtmBusinessType.DEVELOPER_TOOLS],
+          stage: "launch",
+          effort: "low",
+          cost: "free",
+          query: "meetup",
+          fitsMyBusiness: false,
+        }),
+      ),
+    );
+    // Every filter is on the URL, as on the other GTM pages.
+    expect(router.state.location.search).toEqual(
+      expect.objectContaining({
+        view: "library",
+        all: "1",
+        cat: String(GtmStrategyCategory.COMMUNITY_EVENTS),
+        model: `${GtmBusinessModel.SUBSCRIPTION},${GtmBusinessModel.FREEMIUM}`,
+        type: String(GtmBusinessType.DEVELOPER_TOOLS),
+        stage: "launch",
+        effort: "low",
+        cost: "free",
+        q: "meetup",
+      }),
+    );
+    fireEvent.click(within(lib).getByRole("button", { name: "Clear filters (8)" }));
+    await waitFor(() => expect(lastReq(list)).toEqual(expect.objectContaining({ categories: [], businessModels: [], businessTypes: [], fitsMyBusiness: false })));
+    expect(lastReq(list).query).toBeUndefined();
+    expect(within(lib).getByPlaceholderText("Search the library")).toHaveValue("");
+    expect(router.state.location.search).toEqual({ view: "library", all: "1" });
   });
 
-  it("labels and humanizes an entry's facets", () => {
-    expect(humanize("DEVELOPER_TOOLS")).toBe("Developer tools");
-    expect(humanize("PRE_LAUNCH")).toBe("Pre-launch");
-    expect(humanize("B2B")).toBe("B2B");
-    expect(humanize("saas")).toBe("SaaS");
-    expect(humanize("low")).toBe("Low");
-    expect(entryFacets({ stage: "GROWTH", cost: "MEDIUM", difficulty: "MEDIUM", fits: ["DEVELOPER_TOOLS", "B2B"] })).toEqual([
-      "Stage: Growth",
-      "Cost: Medium",
-      "Difficulty: Medium",
-      "Fits: Developer tools, B2B",
-    ]);
-  });
-
-  it("stops reading pages when one fails, and offers a retry", async () => {
+  it("keeps the last answer and its count on screen while a filter change is read", async () => {
     let calls = 0;
-    const page = vi.fn((req: unknown) => {
-      calls += 1;
-      if ((req as { pageToken: string }).pageToken === "") return { entries: [launchWeek], nextPageToken: "p2" };
-      throw new ConnectError("down", Code.Unavailable);
-    });
-    renderGtm(<StrategyView />, { ...reads, "GtmService.ListStrategyLibrary": page }, at("?view=library"));
-    expect(await screen.findByTestId("gtm-library-partial")).toBeInTheDocument();
-    await new Promise((r) => setTimeout(r, 50));
-    expect(calls).toBe(2);
-    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
-    await waitFor(() => expect(calls).toBe(3));
+    const list = vi.fn(() => (++calls === 1 ? { entries: [shipDaily, meetup] } : new Promise(() => {})));
+    renderGtm(<StrategyView />, { ...reads, "GtmService.ListStrategyLibrary": list }, at("?view=library"));
+    const lib = await screen.findByTestId("gtm-library");
+    expect(await within(lib).findByText("2 entries")).toBeInTheDocument();
+    fireEvent.click(within(lib).getByRole("button", { name: "Community & events" }));
+    await waitFor(() => expect(list).toHaveBeenCalledTimes(2));
+    expect(within(lib).getByText("2 entries")).toBeInTheDocument();
+    expect(within(lib).getByRole("heading", { name: "Ship something daily" })).toBeInTheDocument();
+  });
+
+  it("reads its filters from the URL, and leaving the library drops them", async () => {
+    const list = vi.fn(() => ({ entries: [meetup] }));
+    const { router } = renderGtm(
+      <StrategyView />,
+      { ...reads, "GtmService.ListStrategyLibrary": list },
+      at(`?view=library&all=1&cat=${GtmStrategyCategory.COMMUNITY_EVENTS}&model=${GtmBusinessModel.FREE_OSS}&stage=growth&q=meetup`),
+    );
+    const lib = await screen.findByTestId("gtm-library");
+    await within(lib).findByRole("heading", { name: "Host a local meetup" });
+    expect(lastReq(list)).toEqual(
+      expect.objectContaining({ fitsMyBusiness: false, categories: [GtmStrategyCategory.COMMUNITY_EVENTS], businessModels: [GtmBusinessModel.FREE_OSS], stage: "growth", query: "meetup" }),
+    );
+    expect(within(lib).getByRole("radio", { name: "Show all" })).toHaveAttribute("aria-checked", "true");
+    expect(within(lib).getByRole("button", { name: "Community & events", pressed: true })).toBeInTheDocument();
+    expect(within(lib).getByPlaceholderText("Search the library")).toHaveValue("meetup");
+    fireEvent.click(screen.getByRole("tab", { name: "Your strategies" }));
+    await waitFor(() => expect(router.state.location.search).toEqual({}));
+  });
+
+  it("hints at Positioning when the business type and models are not set", async () => {
+    renderGtm(
+      <StrategyView />,
+      { ...reads, "GtmService.GetPositioning": { response: { positioning: create(GtmPositioningSchema, { orgId: TEST_ORG, revision: 0 }) } } },
+      at("?view=library"),
+    );
+    const hint = await screen.findByTestId("gtm-library-profile-hint");
+    expect(within(hint).getByRole("link", { name: "Set them on Positioning" })).toHaveAttribute("href", "/gtm/positioning");
+    cleanup();
+    renderGtm(<StrategyView />, reads, at("?view=library"));
+    await screen.findByRole("heading", { name: "Ship something daily" });
+    expect(screen.queryByTestId("gtm-library-profile-hint")).not.toBeInTheDocument();
+  });
+
+  it("labels an entry's facets and who it fits", async () => {
+    expect(entryFacets(shipDaily)).toEqual(["Stage: Launch", "Effort: Medium", "Cost: Free"]);
+    expect(entryFits(shipDaily)).toBe("Any business");
+    expect(entryFits(meetup)).toBe("Developer tools · Free / open source");
+    renderGtm(<StrategyView />, reads, at("?view=library"));
+    const card = await screen.findByRole("article", { name: "Host a local meetup" });
+    expect(within(card).getByText("Fits: Developer tools · Free / open source")).toBeInTheDocument();
+  });
+
+  it("opens an entry: why it works, the questions that tailor it, and its suggested workflow", async () => {
+    const get = vi.fn(() => ({ entry: shipDaily }));
+    const { router } = renderGtm(<StrategyView />, { ...reads, "GtmService.GetStrategyLibraryEntry": get }, at("?view=library"));
+    fireEvent.click(await screen.findByRole("button", { name: "Details: Ship something daily" }));
+    await waitFor(() => expect(router.state.location.search).toEqual(expect.objectContaining({ view: "library", entry: "sample-ship-daily" })));
+    const detail = await screen.findByTestId("gtm-library-entry");
+    expect(await within(detail).findByText("Five reasons to talk about you in one week.")).toBeInTheDocument();
+    expect(within(detail).getByText("What five small things could ship this month?")).toBeInTheDocument();
+    const workflow = within(detail).getByTestId("gtm-suggested-workflow");
+    expect(within(workflow).getByText(/draft the day's post from the changelog/)).toBeInTheDocument();
+    expect(within(workflow).getByRole("button", { name: "Create this workflow" })).toBeInTheDocument();
+    expect(get).toHaveBeenCalledWith(expect.objectContaining({ orgId: TEST_ORG, key: "sample-ship-daily" }));
+  });
+
+  it("says so when a linked entry is no longer in the library", async () => {
+    renderGtm(
+      <StrategyView />,
+      { ...reads, "GtmService.GetStrategyLibraryEntry": { error: new ConnectError("no", Code.NotFound) } },
+      at("?view=library&entry=sample-gone"),
+    );
+    expect(await screen.findByText('The library no longer has "sample-gone".')).toBeInTheDocument();
   });
 
   it("uses a strategy, with a first campaign, and opens it", async () => {
     const use = vi.fn(() => ({ strategy: { ...draft, id: "str-new" } }));
     const { router } = renderGtm(<StrategyView />, { ...reads, "GtmService.UseLibraryStrategy": use }, at("?view=library"));
-    fireEvent.click(await screen.findByRole("button", { name: "Use this strategy: Launch week" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Use this strategy: Ship something daily" }));
     const dialog = await screen.findByTestId("gtm-use-strategy-dialog");
-    fireEvent.change(within(dialog).getByLabelText("Campaign name"), { target: { value: "Launch week, March" } });
+    fireEvent.change(within(dialog).getByLabelText("Campaign name"), { target: { value: "Ship daily, March" } });
     fireEvent.click(screen.getByRole("button", { name: "Create strategy" }));
     await waitFor(() => expect(use).toHaveBeenCalled());
     const req = (use.mock.calls[0] as unknown[])[0] as UseLibraryStrategyRequest;
-    expect(req).toEqual(expect.objectContaining({ orgId: TEST_ORG, libraryKey: "sample-launch-week", createFirstCampaign: true, campaignName: "Launch week, March" }));
+    expect(req).toEqual(expect.objectContaining({ orgId: TEST_ORG, libraryKey: "sample-ship-daily", createFirstCampaign: true, campaignName: "Ship daily, March" }));
     await waitFor(() => expect(router.state.location.search).toEqual(expect.objectContaining({ strategy: "str-new" })));
   });
 
   it("uses a strategy without a campaign", async () => {
     const use = vi.fn(() => ({ strategy: { ...draft, id: "str-new" } }));
     renderGtm(<StrategyView />, { ...reads, "GtmService.UseLibraryStrategy": use }, at("?view=library"));
-    fireEvent.click(await screen.findByRole("button", { name: "Use this strategy: Office hours" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Use this strategy: Host a local meetup" }));
     const dialog = await screen.findByTestId("gtm-use-strategy-dialog");
     fireEvent.click(within(dialog).getByRole("switch"));
     fireEvent.click(screen.getByRole("button", { name: "Create strategy" }));
@@ -221,60 +332,18 @@ describe("the library", () => {
     expect(req.createFirstCampaign).toBe(false);
     expect(req.campaignName).toBeUndefined();
   });
-});
 
-describe("a pending prune request", () => {
-  const request = create(GtmLibraryPruneRequestSchema, {
-    id: "pr-1",
-    orgId: TEST_ORG,
-    credentialKind: GtmCredentialKind.TOKEN,
-    sourceRevision: "abc1234",
-    removeKeys: ["sample-old-one", "sample-old-two"],
-    status: GtmPruneRequestStatus.PENDING,
-  });
-  const withRequest = { ...reads, "GtmService.ListLibraryPruneRequests": { response: { requests: [request] } } };
-
-  it("lists the keys and asks a person, then confirms", async () => {
-    const list = vi.fn(() => ({ requests: [request] }));
-    const confirm = vi.fn(() => ({ removed: 2, request: { ...request, status: GtmPruneRequestStatus.CONFIRMED } }));
-    renderGtm(<StrategyView />, { ...withRequest, "GtmService.ListLibraryPruneRequests": list, "GtmService.ConfirmLibraryPrune": confirm }, at("?view=library"));
-    const banner = await screen.findByTestId("gtm-prune-banner");
-    expect(within(banner).getByText("sample-old-one")).toBeInTheDocument();
-    expect(within(banner).getByText("Only a person")).toBeInTheDocument();
-    expect(list).toHaveBeenCalledWith(expect.objectContaining({ orgId: TEST_ORG, status: GtmPruneRequestStatus.PENDING }));
-    fireEvent.click(within(banner).getByRole("button", { name: "Remove them" }));
-    // A confirm first, with every key: nothing is removed until it is confirmed.
-    const dialog = await screen.findByTestId("gtm-prune-confirm");
-    expect(confirm).not.toHaveBeenCalled();
-    expect(within(within(dialog).getByRole("list", { name: "Every key to remove" })).getAllByRole("listitem")).toHaveLength(2);
-    fireEvent.click(screen.getByRole("button", { name: "Remove 2" }));
-    await waitFor(() => expect(confirm).toHaveBeenCalledWith(expect.objectContaining({ orgId: TEST_ORG, requestId: "pr-1" })));
-    await waitFor(() => expect(toasts.success).toHaveBeenCalledWith("Removed 2 entries from the library."));
-  });
-
-  it("shows every key in the confirm, however many there are", async () => {
-    const many = create(GtmLibraryPruneRequestSchema, { ...request, removeKeys: Array.from({ length: 30 }, (_, i) => `sample-key-${i}`) });
-    renderGtm(<StrategyView />, { ...reads, "GtmService.ListLibraryPruneRequests": { response: { requests: [many] } } }, at("?view=library"));
-    const banner = await screen.findByTestId("gtm-prune-banner");
-    expect(within(banner).getByRole("button", { name: "and 22 more" })).toBeInTheDocument();
-    fireEvent.click(within(banner).getByRole("button", { name: "Remove them" }));
-    const dialog = await screen.findByTestId("gtm-prune-confirm");
-    expect(within(within(dialog).getByRole("list", { name: "Every key to remove" })).getAllByRole("listitem")).toHaveLength(30);
-    expect(within(dialog).getByText("sample-key-29")).toBeInTheDocument();
-  });
-
-  it("cancels, removing nothing", async () => {
-    const cancel = vi.fn(() => ({ request: { ...request, status: GtmPruneRequestStatus.CANCELLED } }));
-    renderGtm(<StrategyView />, { ...withRequest, "GtmService.CancelLibraryPrune": cancel }, at("?view=library"));
-    fireEvent.click(await screen.findByRole("button", { name: "Keep them" }));
-    await waitFor(() => expect(cancel).toHaveBeenCalledWith(expect.objectContaining({ orgId: TEST_ORG, requestId: "pr-1" })));
-  });
-
-  it("shows the import history", async () => {
-    const imp = create(GtmLibraryImportSchema, { id: "imp-1", orgId: TEST_ORG, credentialKind: GtmCredentialKind.TOKEN, sourceRevision: "abc1234", created: 3, unchanged: 5, pruneRequestId: "pr-1" });
-    renderGtm(<StrategyView />, { ...withRequest, "GtmService.ListLibraryImports": { response: { imports: [imp] } } }, at("?view=library"));
-    const history = await screen.findByTestId("gtm-import-history");
-    expect(within(history).getByText("Access token")).toBeInTheDocument();
-    expect(within(history).getByText("3 new · 5 unchanged · a removal waiting for a person")).toBeInTheDocument();
+  it("offers more when the service has another page, and keeps what it read when that fails", async () => {
+    const page = vi.fn((req: unknown) => {
+      if ((req as { pageToken: string }).pageToken === "") return { entries: [shipDaily], nextPageToken: "p2" };
+      throw new ConnectError("down", Code.Unavailable);
+    });
+    renderGtm(<StrategyView />, { ...reads, "GtmService.ListStrategyLibrary": page }, at("?view=library"));
+    expect(await screen.findByText("1+ entry")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Show more" }));
+    expect(await screen.findByTestId("gtm-library-partial")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Ship something daily" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    await waitFor(() => expect(page).toHaveBeenCalledTimes(3));
   });
 });

@@ -2,10 +2,10 @@
 
 /**
  * GTM › Strategy: what the org is going for and how it will know, above the
- * campaigns (every campaign belongs to one strategy), and the org's strategy
+ * campaigns (every campaign belongs to one strategy), and the strategy
  * library to start a new one from. Views on the URL: the org's strategies
  * (default), one strategy (`?strategy=<id>`), and the library
- * (`?view=library`).
+ * (`?view=library`, one entry open over it with `&entry=<key>`).
  */
 
 import { useSearch } from "@tanstack/react-router";
@@ -33,6 +33,7 @@ export function StrategyView() {
   const nav = useStrategyNav();
   const view: StrategyPageView = search.view === "library" ? "library" : "strategies";
   const strategyId = typeof search.strategy === "string" ? search.strategy : "";
+  const entryKey = typeof search.entry === "string" ? search.entry : "";
 
   return (
     <>
@@ -53,7 +54,9 @@ export function StrategyView() {
         onChange={(id) => (id === "library" ? nav.library() : nav.list())}
         ariaLabel="Strategy view"
       />
-      {view === "library" ? <LibraryView onStarted={nav.strategy} /> : strategyId ? <StrategyDetail id={strategyId} /> : <StrategiesView />}
+      {view === "library" ? (
+        <LibraryView onStarted={nav.strategy} entryKey={entryKey} onOpenEntry={nav.entry} onCloseEntry={nav.library} />
+      ) : strategyId ? <StrategyDetail id={strategyId} /> : <StrategiesView />}
     </>
   );
 }

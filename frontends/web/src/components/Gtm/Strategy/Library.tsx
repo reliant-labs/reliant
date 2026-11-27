@@ -1,284 +1,428 @@
 // Copyright (c) 2026 Reliant Labs
 
 /**
- * The org's strategy library (ListStrategyLibrary): the plays and tactics it
- * imported, to start a strategy from. Reliant ships no entries; each org
- * imports its own (ImportStrategyLibrary), so only the 13 category names are
- * known here.
+ * The strategy library (ListStrategyLibrary): a bank of generic plays built
+ * into Reliant and the same for every org, read-only. Each is a jumping-off
+ * point: what it is, why it works, the questions that tailor it to a
+ * business, and optionally a tool-agnostic automation that carries it out.
  *
- * The library is read whole (it is a few hundred entries at most, in pages
- * of 200) and filtered in the page: a chip per category, a search over name
- * and summary, and facets for stage, cost, difficulty and fit, whose values
- * are the library's own (free vocabularies, as imported).
+ * It opens on what fits the org's business (fits_my_business: the business
+ * type and models on Positioning), with "Show all" beside it, and filters by
+ * business model, business type, category, stage, effort, cost and a search;
+ * the service filters, in pages of 50. The filters live on the URL
+ * (nav.ts), so a filtered library can be shared and survives a reload; the
+ * last answer stays on screen while the next is read. When the org has no
+ * business type or models yet, a hint links to Positioning.
  *
- * "Use this strategy" (UseLibraryStrategy) makes a DRAFT strategy from an
- * entry, and optionally a first DRAFT campaign planned on the org's channels
- * that fit it.
- *
- * Two pieces of library housekeeping sit above it: a PENDING prune request
- * (an import over an access token never removes entries; it stages the
- * removal for a person to confirm or cancel here), and the import history.
+ * An entry opens in a dialog (`?entry=<key>`, gtmLibraryPath). "Use this
+ * strategy" (UseLibraryStrategy) makes a DRAFT strategy from it, and
+ * optionally a first DRAFT campaign planned on the org's channels that fit.
  */
 
-import { useQueryClient } from "@tanstack/react-query";
-import { Plus, Trash2 } from "lucide-react";
+import { Code } from "@connectrpc/connect";
+import { Info, Plus } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import Button from "@/components/forge-ui/button";
 import EmptyState from "@/components/forge-ui/empty_state";
 import { filterChipClass, FilterSearch } from "@/components/forge-ui/filter_bar";
 import Input from "@/components/forge-ui/input";
+import Link from "@/components/forge-ui/link";
 import Modal from "@/components/forge-ui/modal";
-import Mono from "@/components/forge-ui/mono";
 import SkeletonLoader from "@/components/forge-ui/skeleton_loader";
 import Tag from "@/components/forge-ui/tag";
 import ToggleSwitch from "@/components/forge-ui/toggle_switch";
-import {
-  GtmCredentialKind,
-  GtmLibraryDepth,
-  GtmPruneRequestStatus,
-  type GtmLibraryPruneRequest,
-  type GtmStrategyCategory,
-  type GtmStrategyLibraryEntry,
-} from "@/gen/reliant/v1/gtm_pb";
-import {
-  useCancelLibraryPrune,
-  useConfirmLibraryPrune,
-  useListLibraryImports,
-  useListLibraryPruneRequests,
-  useListStrategyLibraryInfinite,
-  useUseLibraryStrategy,
-} from "@/hooks/gtm-service-hooks_gen";
-import { toast } from "@/lib/toast-manager";
+import { GtmBusinessType, type GtmStrategyLibraryEntry } from "@/gen/reliant/v1/gtm_pb";
+import { useGetPositioning, useGetStrategyLibraryEntry, useListStrategyLibraryInfinite, useUseLibraryStrategy } from "@/hooks/gtm-service-hooks_gen";
+import { keepPreviousInOrg } from "@/lib/orgScope";
+import { gtmPath } from "@/lib/paths";
 
 import { useGtmOrgId } from "../shared/GtmShell";
-import { PersonOnlyTag } from "../shared/PersonAction";
-import { categoryLabel, Fields, formatDay, STRATEGY_CATEGORIES } from "../shared/ui";
-import { reportGtmWriteError, useGtmWriteError } from "../shared/writes";
+import { SuggestedWorkflow } from "../shared/SuggestedWorkflow";
+import {
+  BUSINESS_MODELS,
+  BUSINESS_TYPES,
+  businessModelLabel,
+  businessTypeLabel,
+  categoryLabel,
+  Fields,
+  LIBRARY_COSTS,
+  LIBRARY_EFFORTS,
+  LIBRARY_OBJECTIVES,
+  LIBRARY_STAGES,
+  STRATEGY_CATEGORIES,
+  vocabLabel,
+} from "../shared/ui";
+import { useGtmWriteError } from "../shared/writes";
+import { useLibraryFilters, useStrategyNav, type LibraryFilterChange, type LibraryFilters } from "./nav";
 
-const LIBRARY_PAGE = 200;
+const LIBRARY_PAGE = 50;
 
-interface Facets {
-  stage?: string;
-  cost?: string;
-  difficulty?: string;
-  fit?: string;
-}
-
-function matches(e: GtmStrategyLibraryEntry, q: string, category: GtmStrategyCategory | null, f: Facets): boolean {
-  if (category !== null && e.category !== category) return false;
-  if (f.stage && e.stage !== f.stage) return false;
-  if (f.cost && e.cost !== f.cost) return false;
-  if (f.difficulty && e.difficulty !== f.difficulty) return false;
-  if (f.fit && !e.fits.includes(f.fit)) return false;
-  const needle = q.trim().toLowerCase();
-  return !needle || e.name.toLowerCase().includes(needle) || e.summaryMd.toLowerCase().includes(needle);
-}
-
-/** Words a facet value keeps as written: acronyms. */
-const ACRONYMS = new Set(["api", "ai", "b2b", "b2c", "b2b2c", "d2c", "dtc", "pr", "seo", "smb", "saas", "ugc", "abm", "plg", "gtm"]);
-const ACRONYM_CASE: Record<string, string> = { saas: "SaaS" };
-const PHRASES: Record<string, string> = { pre_launch: "Pre-launch", prelaunch: "Pre-launch", post_launch: "Post-launch" };
-
-/**
- * A facet value as a person reads it. The library's vocabularies are free
- * strings, often enum-shaped: "DEVELOPER_TOOLS" → "Developer tools",
- * "PRE_LAUNCH" → "Pre-launch", "B2B" stays "B2B", "low" → "Low".
- */
-export function humanize(value: string): string {
-  const key = value.trim().toLowerCase();
-  if (PHRASES[key]) return PHRASES[key];
-  const words = key.split(/[\s_-]+/).filter(Boolean);
-  return words
-    .map((w, i) => (ACRONYMS.has(w) ? (ACRONYM_CASE[w] ?? w.toUpperCase()) : i === 0 ? w.charAt(0).toUpperCase() + w.slice(1) : w))
-    .join(" ");
-}
-
-/** The library's own values for a facet, sorted. */
-const valuesOf = (entries: GtmStrategyLibraryEntry[], pick: (e: GtmStrategyLibraryEntry) => string[]) =>
-  [...new Set(entries.flatMap(pick).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+const SELECT =
+  "h-8 rounded-md border bg-surface px-2.5 text-sm text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
 const CHIP_ON =
   "inline-flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md border border-ink bg-ink px-2.5 text-sm font-medium text-surface transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
 /**
- * A category chip. Drawn here, not with FilterChip: FilterChip's set state is
+ * A toggle chip. Drawn here, not with FilterChip: FilterChip's set state is
  * the accent tint, and Reliant's light accent is a near-white grey, so a set
  * chip did not read. A set chip here is the ink fill instead.
  */
-function CategoryChip({ on, count, onClick, children }: { on: boolean; count: number; onClick: () => void; children: string }) {
+function Chip({ on, onClick, children }: { on: boolean; onClick: () => void; children: string }) {
   return (
     <button type="button" aria-pressed={on} onClick={onClick} className={on ? CHIP_ON : filterChipClass(false)}>
       {children}
-      <span aria-hidden="true" className={`min-w-[1.25rem] rounded-full px-1.5 text-center text-meta leading-4 tabular-nums ${on ? "bg-surface/20 text-surface" : "bg-ink/5 text-ink-muted"}`}>
-        {count}
-      </span>
     </button>
   );
 }
 
-/** A facet: a native select shaped like the filter controls, its set state the ink edge. */
-function FacetSelect({ label, any, value, values, count, onChange }: { label: string; any: string; value: string | undefined; values: string[]; count: (v: string) => number; onChange: (v: string | undefined) => void }) {
-  if (values.length === 0) return null;
+/** A pick-one filter: a native select, its set state the ink edge. */
+function FilterSelect({ label, any, value, options, onChange }: { label: string; any: string; value: string; options: readonly { id: string; label: string }[]; onChange: (v: string) => void }) {
   return (
-    <select
-      aria-label={label}
-      value={value ?? ""}
-      onChange={(e) => onChange(e.target.value || undefined)}
-      className={`h-8 rounded-md border bg-surface px-2.5 text-sm text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${value ? "border-ink font-medium" : "border-border-strong"}`}
-    >
+    <select aria-label={label} value={value} onChange={(e) => onChange(e.target.value)} className={`${SELECT} ${value ? "border-ink font-medium" : "border-border-strong"}`}>
       <option value="">{any}</option>
-      {values.map((v) => (
-        <option key={v} value={v}>
-          {label}: {humanize(v)} ({count(v)})
+      {options.map((o) => (
+        <option key={o.id} value={o.id}>
+          {label}: {o.label}
         </option>
       ))}
     </select>
   );
 }
 
-export function LibraryView({ onStarted }: { onStarted: (strategyId: string) => void }) {
-  const orgId = useGtmOrgId();
-  const libraryQ = useListStrategyLibraryInfinite({ orgId, pageSize: LIBRARY_PAGE }, { enabled: !!orgId });
-  const { hasNextPage, isFetchingNextPage, isFetchNextPageError, fetchNextPage } = libraryQ;
-  // The whole library, page after page: the filters below work over all of it.
-  // A page that fails stops the walk (no retry loop); the page says so and offers a retry.
-  useEffect(() => {
-    if (hasNextPage && !isFetchingNextPage && !isFetchNextPageError) void fetchNextPage();
-  }, [hasNextPage, isFetchingNextPage, isFetchNextPageError, fetchNextPage]);
-  const library = useMemo(() => libraryQ.data?.pages.flatMap((p) => p.entries) ?? [], [libraryQ.data]);
+/** An entry's facets, labelled: "Stage: Launch, Growth", "Effort: Low", "Cost: Free". */
+export function entryFacets(entry: Pick<GtmStrategyLibraryEntry, "stages" | "effort" | "cost">): string[] {
+  return [
+    entry.stages.length > 0 && `Stage: ${entry.stages.map((s) => vocabLabel(LIBRARY_STAGES, s)).join(", ")}`,
+    entry.effort && `Effort: ${vocabLabel(LIBRARY_EFFORTS, entry.effort)}`,
+    entry.cost && `Cost: ${vocabLabel(LIBRARY_COSTS, entry.cost)}`,
+  ].filter(Boolean) as string[];
+}
 
-  const [q, setQ] = useState("");
-  const [category, setCategory] = useState<GtmStrategyCategory | null>(null);
-  const [facets, setFacets] = useState<Facets>({});
-  const [using, setUsing] = useState<GtmStrategyLibraryEntry | null>(null);
-  const rows = useMemo(() => library.filter((e) => matches(e, q, category, facets)), [library, q, category, facets]);
-  const inCategory = (c: GtmStrategyCategory | null) => library.filter((e) => matches(e, q, c, facets)).length;
-  const facetCount = (key: keyof Facets, value: string) => library.filter((e) => matches(e, q, category, { ...facets, [key]: value })).length;
-  const active = Object.values(facets).filter(Boolean).length + (q ? 1 : 0) + (category !== null ? 1 : 0);
-  const facetValues = useMemo(
-    () => ({
-      stage: valuesOf(library, (e) => [e.stage]),
-      cost: valuesOf(library, (e) => [e.cost]),
-      difficulty: valuesOf(library, (e) => [e.difficulty]),
-      fit: valuesOf(library, (e) => e.fits),
-    }),
-    [library],
+/** Who an entry fits: "Any business", or its types and models. */
+export function entryFits(entry: Pick<GtmStrategyLibraryEntry, "businessTypes" | "businessModels">): string {
+  const types = entry.businessTypes.map(businessTypeLabel);
+  const models = entry.businessModels.map(businessModelLabel);
+  if (types.length === 0 && models.length === 0) return "Any business";
+  return [types.length ? types.join(", ") : "Any type", models.length ? models.join(", ") : "any model"].join(" · ");
+}
+
+const NO_FILTERS: Omit<LibraryFilters, "fits"> = { categories: [], businessModels: [], businessType: GtmBusinessType.UNSPECIFIED, stage: "", effort: "", cost: "", query: "" };
+
+/**
+ * Fits my business or Show all: one choice, a radio group drawn as a
+ * segmented control (arrow keys move between the two).
+ */
+function FitsToggle({ fits, onChange }: { fits: boolean; onChange: (fits: boolean) => void }) {
+  const options = [
+    { value: true, label: "Fits my business" },
+    { value: false, label: "Show all" },
+  ];
+  return (
+    <div
+      role="radiogroup"
+      aria-label="Which entries"
+      className="inline-flex rounded-md border border-border-strong bg-surface p-0.5"
+      onKeyDown={(e) => {
+        if (e.key !== "ArrowLeft" && e.key !== "ArrowRight" && e.key !== "ArrowUp" && e.key !== "ArrowDown") return;
+        e.preventDefault();
+        onChange(!fits);
+        const next = e.currentTarget.querySelector<HTMLButtonElement>(`[data-fits="${String(!fits)}"]`);
+        next?.focus();
+      }}
+    >
+      {options.map((o) => {
+        const on = o.value === fits;
+        return (
+          <button
+            key={o.label}
+            type="button"
+            role="radio"
+            aria-checked={on}
+            tabIndex={on ? 0 : -1}
+            data-fits={String(o.value)}
+            onClick={() => onChange(o.value)}
+            className={`h-7 rounded px-3 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+              on ? "bg-ink font-medium text-surface" : "text-ink-muted hover:text-ink"
+            }`}
+          >
+            {o.label}
+          </button>
+        );
+      })}
+    </div>
   );
+}
+
+const toggle = <T,>(list: T[], v: T) => (list.includes(v) ? list.filter((x) => x !== v) : [...list, v]);
+
+function useDebounced<T>(value: T, ms: number): T {
+  const [settled, setSettled] = useState(value);
+  useEffect(() => {
+    const t = setTimeout(() => setSettled(value), ms);
+    return () => clearTimeout(t);
+  }, [value, ms]);
+  return settled;
+}
+
+export function LibraryView({
+  onStarted,
+  entryKey,
+  onOpenEntry,
+  onCloseEntry,
+}: {
+  onStarted: (strategyId: string) => void;
+  /** The entry open in the detail dialog (`?entry=`); "" for none. */
+  entryKey: string;
+  onOpenEntry: (key: string) => void;
+  onCloseEntry: () => void;
+}) {
+  const orgId = useGtmOrgId();
+  const nav = useStrategyNav();
+  const filters = useLibraryFilters();
+  const { fits } = filters;
+  const set = (change: LibraryFilterChange) => nav.filter(change, entryKey || undefined);
+  // The search box types locally and reaches the URL (and the service) after a pause.
+  const [typed, setTyped] = useState(filters.query);
+  const settled = useDebounced(typed, 300);
+  const urlQuery = filters.query;
+  useEffect(() => {
+    if (settled.trim() !== urlQuery.trim()) set({ query: settled });
+    // Only a settled edit writes the URL; set is a new function each render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settled]);
+  // The URL moved on its own (Clear filters, Back): the box follows it.
+  useEffect(() => {
+    setTyped((t) => (t.trim() === urlQuery.trim() ? t : urlQuery));
+  }, [urlQuery]);
+  const query = urlQuery.trim();
+  const [using, setUsing] = useState<GtmStrategyLibraryEntry | null>(null);
+
+  const positioningQ = useGetPositioning({ orgId }, { enabled: !!orgId });
+  const profile = positioningQ.data?.positioning;
+  const noProfile =
+    !positioningQ.isPending &&
+    (positioningQ.isError ? positioningQ.error.code === Code.NotFound : (profile?.businessType ?? GtmBusinessType.UNSPECIFIED) === GtmBusinessType.UNSPECIFIED && (profile?.businessModels.length ?? 0) === 0);
+
+  const libraryQ = useListStrategyLibraryInfinite(
+    {
+      orgId,
+      categories: filters.categories,
+      businessTypes: filters.businessType ? [filters.businessType] : [],
+      businessModels: filters.businessModels,
+      ...(filters.stage ? { stage: filters.stage } : {}),
+      ...(filters.effort ? { effort: filters.effort } : {}),
+      ...(filters.cost ? { cost: filters.cost } : {}),
+      ...(query ? { query } : {}),
+      fitsMyBusiness: fits,
+      pageSize: LIBRARY_PAGE,
+    },
+    // A filter change keeps the last answer (and its count) on screen until the next arrives.
+    { enabled: !!orgId, placeholderData: keepPreviousInOrg(orgId) },
+  );
+  const entries = useMemo(() => libraryQ.data?.pages.flatMap((p) => p.entries) ?? [], [libraryQ.data]);
+  const active =
+    filters.categories.length + filters.businessModels.length + [filters.businessType, filters.stage, filters.effort, filters.cost, filters.query.trim()].filter(Boolean).length;
 
   return (
     <div className="space-y-4" data-testid="gtm-library">
-      <PruneRequests />
-      <p className="text-sm text-ink-muted">Plays and tactics to start a strategy from: your org&apos;s own library, as it imported it.</p>
+      <p className="text-sm text-ink-muted">Plays to start a strategy from. Each is a starting point to tailor to your business, not a script.</p>
+      <FitsToggle fits={fits} onChange={(v) => set({ fits: v })} />
+      {noProfile && (
+        <p className="flex items-start gap-2 rounded-lg border border-border bg-surface-muted px-3 py-2 text-sm text-ink-muted" data-testid="gtm-library-profile-hint">
+          <Info className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+          <span>
+            Your business type and models are not set, so every entry counts as a fit.{" "}
+            <Link href={gtmPath("positioning")} className="font-medium text-ink underline underline-offset-2">
+              Set them on Positioning
+            </Link>
+            .
+          </span>
+        </p>
+      )}
       {/* One scrolling row on a phone: thirteen wrapped chips would push the entries off the first screen. */}
       <div className="flex gap-2 overflow-x-auto pb-1 sm:flex-wrap sm:overflow-visible sm:pb-0" role="group" aria-label="Category">
-        <CategoryChip on={category === null} onClick={() => setCategory(null)} count={inCategory(null)}>
-          All categories
-        </CategoryChip>
         {STRATEGY_CATEGORIES.map((c) => (
-          <CategoryChip key={c.id} on={category === c.id} onClick={() => setCategory(category === c.id ? null : c.id)} count={inCategory(c.id)}>
+          <Chip key={c.id} on={filters.categories.includes(c.id)} onClick={() => set((f) => ({ categories: toggle(f.categories, c.id) }))}>
             {c.label}
-          </CategoryChip>
+          </Chip>
+        ))}
+      </div>
+      <div className="flex gap-2 overflow-x-auto pb-1 sm:flex-wrap sm:overflow-visible sm:pb-0" role="group" aria-label="Business model">
+        {BUSINESS_MODELS.map((m) => (
+          <Chip key={m.id} on={filters.businessModels.includes(m.id)} onClick={() => set((f) => ({ businessModels: toggle(f.businessModels, m.id) }))}>
+            {m.label}
+          </Chip>
         ))}
       </div>
       <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Filter the library">
-        <FilterSearch value={q} onChange={setQ} placeholder="Search plays and tactics" className="w-full sm:w-64" />
-        <FacetSelect label="Stage" any="Any stage" value={facets.stage} values={facetValues.stage} count={(v) => facetCount("stage", v)} onChange={(v) => setFacets({ ...facets, stage: v })} />
-        <FacetSelect label="Cost" any="Any cost" value={facets.cost} values={facetValues.cost} count={(v) => facetCount("cost", v)} onChange={(v) => setFacets({ ...facets, cost: v })} />
-        <FacetSelect
-          label="Difficulty"
-          any="Any difficulty"
-          value={facets.difficulty}
-          values={facetValues.difficulty}
-          count={(v) => facetCount("difficulty", v)}
-          onChange={(v) => setFacets({ ...facets, difficulty: v })}
+        <FilterSearch value={typed} onChange={setTyped} placeholder="Search the library" className="w-full sm:w-64" />
+        <FilterSelect
+          label="Business type"
+          any="Any business type"
+          value={filters.businessType ? String(filters.businessType) : ""}
+          options={BUSINESS_TYPES.map((t) => ({ id: String(t.id), label: t.label }))}
+          onChange={(v) => set({ businessType: (Number(v) || 0) as GtmBusinessType })}
         />
-        <FacetSelect label="Fits" any="Fits anyone" value={facets.fit} values={facetValues.fit} count={(v) => facetCount("fit", v)} onChange={(v) => setFacets({ ...facets, fit: v })} />
+        <FilterSelect label="Stage" any="Any stage" value={filters.stage} options={LIBRARY_STAGES} onChange={(v) => set({ stage: v })} />
+        <FilterSelect label="Effort" any="Any effort" value={filters.effort} options={LIBRARY_EFFORTS} onChange={(v) => set({ effort: v })} />
+        <FilterSelect label="Cost" any="Any cost" value={filters.cost} options={LIBRARY_COSTS} onChange={(v) => set({ cost: v })} />
         {active > 0 && (
           <Button
             variant="ghost"
             size="sm"
             onClick={() => {
-              setQ("");
-              setCategory(null);
-              setFacets({});
+              setTyped("");
+              set(NO_FILTERS);
             }}
           >
             Clear filters ({active})
           </Button>
         )}
       </div>
-      {libraryQ.isPending ? (
+      {libraryQ.isPending && !libraryQ.data ? (
         <SkeletonLoader variant="card" count={2} />
-      ) : libraryQ.isError && library.length === 0 ? (
+      ) : libraryQ.isError && entries.length === 0 ? (
         <EmptyState title="Couldn't load the library" description="Something went wrong reading it." actionLabel="Try again" onAction={() => void libraryQ.refetch()} />
-      ) : library.length === 0 ? (
-        <EmptyState title="No library yet" description="Your org has not imported a strategy library. A person imports one with an access token; it shows here." />
+      ) : entries.length === 0 ? (
+        <EmptyState
+          title="Nothing matches"
+          description={fits ? "Nothing that fits your business matches these filters. Show all, or clear the filters." : "Try another category, or clear the filters."}
+        />
       ) : (
         <>
           <p className="text-xs text-ink-muted" aria-live="polite">
-            {rows.length} of {library.length} entries
+            {entries.length}
+            {libraryQ.hasNextPage ? "+" : ""} {entries.length === 1 ? "entry" : "entries"}
           </p>
-          {isFetchNextPageError && (
-            <p className="flex flex-wrap items-center gap-2 text-sm text-ink-muted" role="alert" data-testid="gtm-library-partial">
-              The rest of the library could not be read, so these are only part of it.
-              <Button variant="ghost" size="xs" onClick={() => void fetchNextPage()}>
-                Try again
-              </Button>
+          <ul className="grid gap-3 md:grid-cols-2">
+            {entries.map((e) => (
+              <li key={e.key}>
+                <LibraryCard entry={e} onOpen={() => onOpenEntry(e.key)} onUse={() => setUsing(e)} />
+              </li>
+            ))}
+          </ul>
+          {libraryQ.isFetchNextPageError && (
+            <p className="text-sm text-ink-muted" role="alert" data-testid="gtm-library-partial">
+              The next entries could not be read.
             </p>
           )}
-          {rows.length === 0 ? (
-            <EmptyState title="Nothing matches" description="Try another category, or clear the filters." />
-          ) : (
-            <ul className="grid gap-3 md:grid-cols-2">
-              {rows.map((e) => (
-                <li key={e.key}>
-                  <LibraryCard entry={e} onUse={() => setUsing(e)} />
-                </li>
-              ))}
-            </ul>
+          {libraryQ.hasNextPage && (
+            <div className="flex justify-center">
+              <Button variant="outline" size="sm" loading={libraryQ.isFetchingNextPage} onClick={() => void libraryQ.fetchNextPage()}>
+                {libraryQ.isFetchNextPageError ? "Try again" : "Show more"}
+              </Button>
+            </div>
           )}
         </>
       )}
-      <ImportHistory />
+      {entryKey && <EntryDialog entryKey={entryKey} onClose={onCloseEntry} onUse={(e) => setUsing(e)} />}
       {using && <UseStrategyDialog entry={using} onClose={() => setUsing(null)} onStarted={onStarted} />}
     </div>
   );
 }
 
-/** An entry's facets, labelled: "Stage: Early", "Cost: Medium", "Difficulty: Medium", "Fits: B2B, Developer tools". */
-export function entryFacets(entry: Pick<GtmStrategyLibraryEntry, "stage" | "cost" | "difficulty" | "fits">): string[] {
-  return [
-    entry.stage && `Stage: ${humanize(entry.stage)}`,
-    entry.cost && `Cost: ${humanize(entry.cost)}`,
-    entry.difficulty && `Difficulty: ${humanize(entry.difficulty)}`,
-    entry.fits.length > 0 && `Fits: ${entry.fits.map(humanize).join(", ")}`,
-  ].filter(Boolean) as string[];
-}
-
-function LibraryCard({ entry, onUse }: { entry: GtmStrategyLibraryEntry; onUse: () => void }) {
-  const facts = [entry.hours ? `~${entry.hours} h` : "", entry.northStar].filter(Boolean).join(" · ");
+function LibraryCard({ entry, onOpen, onUse }: { entry: GtmStrategyLibraryEntry; onOpen: () => void; onUse: () => void }) {
   return (
     <article className="flex h-full flex-col rounded-lg border border-border bg-surface p-4" aria-label={entry.name}>
       <div className="flex flex-wrap items-center gap-2 text-xs text-ink-muted">
         <span>{categoryLabel(entry.category)}</span>
-        <span aria-hidden="true">·</span>
-        <span>{entry.depth === GtmLibraryDepth.PLAY ? "Play" : "Tactic"}</span>
+        {entry.objective && (
+          <>
+            <span aria-hidden="true">·</span>
+            <span>{vocabLabel(LIBRARY_OBJECTIVES, entry.objective)}</span>
+          </>
+        )}
       </div>
       <h3 className="mt-1 text-sm font-semibold text-ink">{entry.name}</h3>
-      {entry.summaryMd && <p className="mt-1 line-clamp-4 whitespace-pre-wrap text-sm text-ink-muted">{entry.summaryMd}</p>}
+      {entry.summaryMd && <p className="mt-1 line-clamp-3 whitespace-pre-wrap text-sm text-ink-muted">{entry.summaryMd}</p>}
       <div className="mt-3 flex flex-wrap gap-1.5">
         {entryFacets(entry).map((t) => (
           <Tag key={t}>{t}</Tag>
         ))}
       </div>
-      <div className="mt-auto flex flex-wrap items-center justify-between gap-2 pt-4">
-        <span className="text-xs text-ink-muted">{facts}</span>
+      <p className="mt-2 text-xs text-ink-muted">Fits: {entryFits(entry)}</p>
+      <div className="mt-auto flex flex-wrap items-center justify-end gap-2 pt-4">
+        <Button variant="ghost" size="sm" onClick={onOpen} aria-haspopup="dialog" aria-label={`Details: ${entry.name}`}>
+          Details
+        </Button>
         <Button variant="outline" size="sm" leftIcon={<Plus />} onClick={onUse} aria-haspopup="dialog" aria-label={`Use this strategy: ${entry.name}`}>
           Use this strategy
         </Button>
       </div>
     </article>
+  );
+}
+
+/** One entry, whole (GetStrategyLibraryEntry): what it is, why it works, the questions that tailor it, its suggested workflow. */
+function EntryDialog({ entryKey, onClose, onUse }: { entryKey: string; onClose: () => void; onUse: (entry: GtmStrategyLibraryEntry) => void }) {
+  const orgId = useGtmOrgId();
+  const q = useGetStrategyLibraryEntry({ orgId, key: entryKey }, { enabled: !!orgId });
+  const entry = q.data?.entry;
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      size="lg"
+      sheetOnMobile
+      title={entry?.name ?? "Library entry"}
+      description={entry ? categoryLabel(entry.category) : undefined}
+      footer={
+        <div className="flex w-full justify-end gap-2">
+          <Button variant="secondary" size="sm" onClick={onClose}>
+            Close
+          </Button>
+          {entry && (
+            <Button variant="primary" size="sm" leftIcon={<Plus />} onClick={() => onUse(entry)} aria-haspopup="dialog">
+              Use this strategy
+            </Button>
+          )}
+        </div>
+      }
+    >
+      <div className="space-y-5 text-sm" data-testid="gtm-library-entry">
+        {q.isPending ? (
+          <SkeletonLoader variant="text" count={4} />
+        ) : !entry ? (
+          <p className="text-ink-muted">{q.isError && q.error.code !== Code.NotFound ? "This entry could not be read." : `The library no longer has "${entryKey}".`}</p>
+        ) : (
+          <>
+            {entry.summaryMd && <p className="whitespace-pre-wrap text-ink">{entry.summaryMd}</p>}
+            {entry.whyItWorksMd && (
+              <section aria-label="Why it works" className="space-y-1.5">
+                <h3 className="font-medium text-ink">Why it works</h3>
+                <p className="whitespace-pre-wrap text-ink-muted">{entry.whyItWorksMd}</p>
+              </section>
+            )}
+            {entry.tailorQuestions.length > 0 && (
+              <section aria-label="Questions to tailor it" className="space-y-1.5">
+                <h3 className="font-medium text-ink">Questions to tailor it</h3>
+                <ol className="list-decimal space-y-1 pl-5 text-ink">
+                  {entry.tailorQuestions.map((t) => (
+                    <li key={t}>{t}</li>
+                  ))}
+                </ol>
+              </section>
+            )}
+            <Fields
+              columns={2}
+              fields={[
+                ...(entry.objective ? [{ label: "Objective", value: vocabLabel(LIBRARY_OBJECTIVES, entry.objective) }] : []),
+                { label: "Stage", value: entry.stages.length ? entry.stages.map((s) => vocabLabel(LIBRARY_STAGES, s)).join(", ") : "Any" },
+                ...(entry.effort ? [{ label: "Effort", value: vocabLabel(LIBRARY_EFFORTS, entry.effort) }] : []),
+                ...(entry.cost ? [{ label: "Cost", value: vocabLabel(LIBRARY_COSTS, entry.cost) }] : []),
+                ...(entry.signalDays ? [{ label: "First signal", value: `In about ${entry.signalDays} ${entry.signalDays === 1 ? "day" : "days"}` }] : []),
+                { label: "Fits", value: entryFits(entry) },
+                ...(entry.kpis.length ? [{ label: "Measure", value: entry.kpis.join(", ") }] : []),
+                ...(entry.channelTypes.length ? [{ label: "Channel types", value: entry.channelTypes.join(", ") }] : []),
+              ]}
+            />
+            <SuggestedWorkflow text={entry.suggestedWorkflowMd} />
+          </>
+        )}
+      </div>
+    </Modal>
   );
 }
 
@@ -313,9 +457,7 @@ function UseStrategyDialog({ entry, onClose, onStarted }: { entry: GtmStrategyLi
             size="sm"
             loading={use.isPending}
             disabled={withCampaign && !campaignName.trim()}
-            onClick={() =>
-              use.mutate({ orgId, libraryKey: entry.key, createFirstCampaign: withCampaign, ...(withCampaign ? { campaignName: campaignName.trim() } : {}) })
-            }
+            onClick={() => use.mutate({ orgId, libraryKey: entry.key, createFirstCampaign: withCampaign, ...(withCampaign ? { campaignName: campaignName.trim() } : {}) })}
           >
             Create strategy
           </Button>
@@ -326,7 +468,6 @@ function UseStrategyDialog({ entry, onClose, onStarted }: { entry: GtmStrategyLi
         <Fields
           fields={[
             { label: "Category", value: categoryLabel(entry.category) },
-            ...(entry.northStar ? [{ label: "Goal", value: entry.northStar }] : []),
             ...(entry.kpis.length ? [{ label: "Target", value: entry.kpis.join(", ") }] : []),
           ]}
         />
@@ -345,156 +486,5 @@ function UseStrategyDialog({ entry, onClose, onStarted }: { entry: GtmStrategyLi
         <p className="text-xs text-ink-muted">Both start as drafts. Nothing is published or sent.</p>
       </div>
     </Modal>
-  );
-}
-
-// ── Library housekeeping ──────────────────────────────────────────────────
-
-/**
- * PENDING prune requests: an import over an access token asked to remove
- * entries it no longer has, and only a person (signed in here) may confirm
- * it. Confirming removes the listed keys that are still in the library and
- * were not imported again since; cancelling removes nothing.
- */
-function PruneRequests() {
-  const orgId = useGtmOrgId();
-  const q = useListLibraryPruneRequests({ orgId, status: GtmPruneRequestStatus.PENDING, pageSize: 20 }, { enabled: !!orgId });
-  const pending = q.data?.requests ?? [];
-  if (pending.length === 0) return null;
-  return (
-    <div className="space-y-3" data-testid="gtm-prune-requests">
-      {pending.map((r) => (
-        <PruneBanner key={r.id} request={r} />
-      ))}
-    </div>
-  );
-}
-
-function PruneBanner({ request }: { request: GtmLibraryPruneRequest }) {
-  const orgId = useGtmOrgId();
-  const queryClient = useQueryClient();
-  const [showAll, setShowAll] = useState(false);
-  const [confirming, setConfirming] = useState(false);
-  const onError = (e: unknown) => reportGtmWriteError(queryClient, e);
-  const confirm = useConfirmLibraryPrune({
-    onSuccess: (r) => {
-      setConfirming(false);
-      toast.success(`Removed ${r.removed} ${r.removed === 1 ? "entry" : "entries"} from the library.`);
-    },
-    onError: (e) => {
-      setConfirming(false);
-      onError(e);
-    },
-  });
-  const cancel = useCancelLibraryPrune({ onSuccess: () => toast.success("Prune cancelled. Nothing was removed."), onError });
-  const keys = showAll ? request.removeKeys : request.removeKeys.slice(0, 8);
-  const busy = confirm.isPending || cancel.isPending;
-  return (
-    <section aria-labelledby={`gtm-prune-${request.id}`} className="rounded-lg border border-warning/40 bg-warning-surface p-4 text-sm" data-testid="gtm-prune-banner">
-      <div className="flex flex-wrap items-center gap-2">
-        <Trash2 className="size-4 text-warning-ink" aria-hidden="true" />
-        <h3 id={`gtm-prune-${request.id}`} className="font-medium text-ink">
-          An import wants to remove {request.removeKeys.length} {request.removeKeys.length === 1 ? "entry" : "entries"} from the library
-        </h3>
-        <PersonOnlyTag />
-      </div>
-      <p className="mt-1 text-ink-muted">
-        {request.credentialKind === GtmCredentialKind.TOKEN ? "An import through an access token" : "An import"}
-        {request.sourceRevision ? ` of ${request.sourceRevision}` : ""} no longer has these entries. Access tokens never remove entries themselves, so it
-        waits for you{request.expiresAt ? `, until ${formatDay(request.expiresAt)}` : ""}. Entries imported again since are kept.
-      </p>
-      <ul className="mt-2 flex flex-wrap gap-1.5" aria-label="Keys to remove">
-        {keys.map((k) => (
-          <li key={k}>
-            <Mono value={k} copy={false} className="rounded bg-surface px-1.5 py-0.5 text-xs text-ink" />
-          </li>
-        ))}
-        {!showAll && request.removeKeys.length > keys.length && (
-          <li>
-            <Button variant="ghost" size="xs" onClick={() => setShowAll(true)}>
-              and {request.removeKeys.length - keys.length} more
-            </Button>
-          </li>
-        )}
-      </ul>
-      <div className="mt-3 flex flex-wrap gap-2">
-        <Button variant="danger" size="sm" disabled={busy} onClick={() => setConfirming(true)} aria-haspopup="dialog">
-          Remove them
-        </Button>
-        <Button variant="secondary" size="sm" loading={cancel.isPending} disabled={busy} onClick={() => cancel.mutate({ orgId, requestId: request.id })}>
-          Keep them
-        </Button>
-      </div>
-      <Modal
-        open={confirming}
-        onClose={() => setConfirming(false)}
-        size="md"
-        sheetOnMobile
-        title={`Remove ${request.removeKeys.length} ${request.removeKeys.length === 1 ? "entry" : "entries"} from the library?`}
-        description="Each key below that is still in the library, and was not imported again since, is removed."
-        footer={
-          <div className="flex w-full justify-end gap-2">
-            <Button variant="secondary" size="sm" onClick={() => setConfirming(false)} disabled={confirm.isPending}>
-              Cancel
-            </Button>
-            <Button variant="danger" size="sm" loading={confirm.isPending} onClick={() => confirm.mutate({ orgId, requestId: request.id })}>
-              Remove {request.removeKeys.length}
-            </Button>
-          </div>
-        }
-      >
-        <div className="space-y-3 text-sm" data-testid="gtm-prune-confirm">
-          <div className="flex items-center gap-2">
-            <PersonOnlyTag />
-            <span className="text-ink-muted">Agents cannot do this.</span>
-          </div>
-          <ul className="max-h-64 space-y-1 overflow-y-auto rounded-md border border-border bg-surface-sunken p-2" aria-label="Every key to remove" tabIndex={0}>
-            {request.removeKeys.map((k) => (
-              <li key={k}>
-                <Mono value={k} copy={false} className="text-xs text-ink" />
-              </li>
-            ))}
-          </ul>
-        </div>
-      </Modal>
-    </section>
-  );
-}
-
-const CREDENTIAL: Record<number, string> = { [GtmCredentialKind.PERSON]: "Signed in", [GtmCredentialKind.TOKEN]: "Access token" };
-
-/** The last imports (ListLibraryImports): when, by whom and through what, from which revision, and what changed. */
-function ImportHistory() {
-  const orgId = useGtmOrgId();
-  const q = useListLibraryImports({ orgId, pageSize: 10 }, { enabled: !!orgId });
-  const imports = q.data?.imports ?? [];
-  if (imports.length === 0) return null;
-  return (
-    <section aria-labelledby="gtm-imports" className="space-y-2" data-testid="gtm-import-history">
-      <h3 id="gtm-imports" className="text-sm font-medium text-ink">
-        Imports
-      </h3>
-      <ul className="divide-y divide-border rounded-lg border border-border bg-surface text-sm">
-        {imports.map((i) => {
-          const changes = [
-            i.created ? `${i.created} new` : "",
-            i.updated ? `${i.updated} updated` : "",
-            i.unchanged ? `${i.unchanged} unchanged` : "",
-            i.pruned ? `${i.pruned} removed` : "",
-            i.pruneRequestId ? "a removal waiting for a person" : "",
-          ].filter(Boolean);
-          return (
-            <li key={i.id} className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 px-3 py-2">
-              <span className="flex min-w-0 flex-wrap items-center gap-2">
-                <span className="text-ink">{formatDay(i.createdAt)}</span>
-                <Tag>{CREDENTIAL[i.credentialKind] ?? "Unknown"}</Tag>
-                {i.sourceRevision && <Mono value={i.sourceRevision.slice(0, 12)} copy={false} className="text-xs text-ink-muted" />}
-              </span>
-              <span className="text-xs text-ink-muted">{changes.join(" · ") || "no changes"}</span>
-            </li>
-          );
-        })}
-      </ul>
-    </section>
   );
 }
