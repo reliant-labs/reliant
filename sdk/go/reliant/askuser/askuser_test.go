@@ -82,6 +82,42 @@ func TestParseMetadataLegacyEnvelope(t *testing.T) {
 	}
 }
 
+func TestParseMetadataLegacyEnvelopeTask(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		inner any
+		outer any
+		want  bool
+	}{
+		{name: "nested true", inner: true, want: true},
+		{name: "nested string true", inner: "true", want: true},
+		{name: "nested false", inner: false, want: false},
+		{name: "outer false wins", inner: true, outer: false, want: false},
+		{name: "outer true wins", inner: false, outer: true, want: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			inner := mustJSON(t, map[string]any{
+				"task":      tc.inner,
+				"questions": []any{map[string]any{"question": "Sign in"}},
+			})
+			raw := map[string]any{"type": "ask_user", "input": inner}
+			if tc.outer != nil {
+				raw["task"] = tc.outer
+			}
+			md, ok := ParseMetadata(mustJSON(t, raw))
+			if !ok {
+				t.Fatal("expected ok")
+			}
+			if md.Task != tc.want {
+				t.Errorf("Task = %v, want %v", md.Task, tc.want)
+			}
+			if len(md.Questions) != 1 || md.Questions[0].Question != "Sign in" {
+				t.Fatalf("questions = %+v", md.Questions)
+			}
+		})
+	}
+}
+
 func TestParseMetadataDoubleEncodedQuestions(t *testing.T) {
 	questions := mustJSON(t, []any{
 		map[string]any{"question": "Which approach?", "options": []any{map[string]any{"label": "A"}}},

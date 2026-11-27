@@ -123,6 +123,9 @@ func ParseMetadata(metadata string) (*Metadata, bool) {
 		if err := json.Unmarshal([]byte(inner), &innerRaw); err == nil {
 			if qs := normalizeQuestions(innerRaw["questions"]); len(qs) > 0 {
 				md.Questions = qs
+				if _, present := raw["task"]; !present {
+					md.Task = rawFlag(innerRaw["task"])
+				}
 				return md, true
 			}
 		}
