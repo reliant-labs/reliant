@@ -83,6 +83,7 @@ withhold DaemonService            # daemon-facing wiring
 withhold DaemonRegistryService    # daemon-facing wiring
 withhold FileSystemService        # daemon-facing wiring
 withhold ForgeService             # not part of the first public surface
+withhold GtmService               # internal GTM, allowlisted orgs only; never public
 withhold MCPService               # not part of the first public surface
 withhold MessageService           # not part of the first public surface
 withhold ModelEndpointService     # not part of the first public surface

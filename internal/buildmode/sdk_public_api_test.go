@@ -70,6 +70,7 @@ var neverPublicServices = map[string]string{
 	"FileSystemService":      "daemon-facing",
 	"BackgroundService":      "daemon-facing",
 	"PackageCommandsService": "daemon-facing",
+	"GtmService":             "internal GTM, allowlisted orgs only",
 }
 
 type verdict string

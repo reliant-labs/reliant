@@ -1,0 +1,2181 @@
+// Copyright (c) 2026 Reliant Labs. All rights reserved.
+syntax = "proto3";
+
+package reliant.v1;
+
+import "buf/validate/validate.proto";
+import "forge/v1/forge.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
+
+// GtmService is go-to-market work inside Reliant: strategies (a goal over a
+// period) and the campaigns under them, ideas (what to build or say next, with
+// the evidence behind them), the items that carry them out (posts, emails,
+// videos, pitches: the calendar), each in a format and on a channel (where it
+// goes out: integrated, like Gmail, or manual), the files attached to items
+// and campaigns (assets), the org's positioning, and its claims registry (the
+// facts an item may state, each with its source).
+//
+// INTERNAL. It is never public (proto/public-api.txt withholds it) and it
+// answers only orgs the deployment allowlists (GtmConfig). For any other org
+// every rpc but GetGtmAccess is NotFound, never PermissionDenied, so the
+// surface cannot be probed; GetGtmAccess answers enabled = false.
+//
+// Every request names its org (org_id), and every row read or written is that
+// org's. A link to a strategy, campaign, channel, idea or item of another org
+// is NotFound.
+//
+// The (buf.validate) rules state the contract; the user API chain does not
+// run them (serverkit.NoValidate), so the service checks each one and answers
+// InvalidArgument. A date field (YYYY-MM-DD) must be a real calendar date:
+// the service rejects an impossible one such as 2026-02-30.
+//
+// Writes are optimistic: an update names the revision it read
+// (expected_revision), and a row that moved since is Aborted with a
+// GtmRevisionConflict detail carrying the current revision.
+//
+// A person is a caller with a person-class credential (a signed-in session,
+// a shared key, a browser session). Every other credential, access tokens and
+// the CLI login an agent's shell inherits included, acts as an agent.
+//
+// Only a person may accept or reject an idea, approve an item, or verify a
+// claim; an agent proposes ideas, drafts items (and dates them while they are
+// DRAFT or REVIEW) and proposes claims. The item lifecycle is on GtmItemStatus,
+// the claim rules on UpsertClaim. Nothing here publishes or sends: there is no
+// publish rpc, and an item becomes SENT only through the approved email path.
+service GtmService {
+  // GetGtmAccess reports whether GTM is enabled for the org. It is the one
+  // rpc an org without access gets an answer from (enabled = false); the web
+  // reads it to decide whether to show GTM at all.
+  rpc GetGtmAccess(GetGtmAccessRequest) returns (GetGtmAccessResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {none: "read-only: whether GTM is enabled for the org"}
+    };
+  }
+
+  // ListStrategies lists the org's strategies, newest first.
+  rpc ListStrategies(ListStrategiesRequest) returns (ListStrategiesResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {none: "read-only"}
+    };
+  }
+
+  // GetStrategy returns one strategy with its campaigns, at most 200
+  // (truncated says when the list was cut; ListCampaigns with strategy_id
+  // pages through all of them).
+  rpc GetStrategy(GetStrategyRequest) returns (GetStrategyResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {none: "read-only"}
+    };
+  }
+
+  // CreateStrategy adds a strategy. An agent creates DRAFT strategies only;
+  // a person may create one in any status (unset: DRAFT).
+  rpc CreateStrategy(CreateStrategyRequest) returns (CreateStrategyResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {
+        verb: "create"
+        target: {
+          kind: "gtm_strategy"
+          id: "response.strategy.id"
+          label: "response.strategy.name"
+        }
+        scope: "org_id"
+      }
+    };
+  }
+
+  // UpdateStrategy edits a strategy or moves its status. Unset fields are
+  // left alone. An agent edits DRAFT strategies only and never changes a
+  // status; only a person moves a strategy to ACTIVE, DONE or ARCHIVED, or
+  // edits one that is not DRAFT (PermissionDenied for an agent). Several
+  // strategies may be ACTIVE at once.
+  rpc UpdateStrategy(UpdateStrategyRequest) returns (UpdateStrategyResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {
+        verb: "update"
+        target: {
+          kind: "gtm_strategy"
+          id: "id"
+          label: "response.strategy.name"
+        }
+        scope: "org_id"
+        detail: ["response.strategy.status"]
+      }
+    };
+  }
+
+  // ListChannels lists the org's channels by key. An allowlisted org with no
+  // channel yet is given the default set on its first List or Get (blog,
+  // email, hacker-news, reddit, linkedin, x, youtube), each with a small
+  // generic channel_types set. Declared NO_SIDE_EFFECTS though that first
+  // read seeds the defaults: the seed is idempotent (ON CONFLICT DO NOTHING)
+  // and no reliant client enables Connect's useHttpGet, so nothing caches or
+  // replays it. connection_state is computed per caller (whether that
+  // caller can reach the integration), so one caller's answer is not
+  // another's.
+  rpc ListChannels(ListChannelsRequest) returns (ListChannelsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {none: "read-only (the first read seeds the default channels, idempotently)"}
+    };
+  }
+
+  // GetChannel returns one channel (seeding the defaults as ListChannels does).
+  rpc GetChannel(GetChannelRequest) returns (GetChannelResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {none: "read-only (the first read seeds the default channels, idempotently)"}
+    };
+  }
+
+  // CreateChannel adds a channel. A key the org already holds is
+  // AlreadyExists. An agent may create a channel, with its channel_types,
+  // always MANUAL (mode,
+  // integration_kind and connection_id are a person's to set:
+  // PermissionDenied). No agent ever connects an integration or stores a
+  // credential: connecting is Reliant's own connect flow, by a person, in the
+  // app.
+  rpc CreateChannel(CreateChannelRequest) returns (CreateChannelResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {
+        verb: "create"
+        target: {
+          kind: "gtm_channel"
+          id: "response.channel.id"
+          label: "response.channel.name"
+        }
+        scope: "org_id"
+      }
+    };
+  }
+
+  // UpdateChannel edits a channel. Unset fields are left alone. An agent may
+  // change a MANUAL channel's name, key, manual_instructions_md, status and
+  // channel_types; only a person sets
+  // mode INTEGRATED, integration_kind or connection_id, or changes any field
+  // of an INTEGRATED channel's integration (PermissionDenied for an agent). A
+  // new key the org already holds is AlreadyExists.
+  rpc UpdateChannel(UpdateChannelRequest) returns (UpdateChannelResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {
+        verb: "update"
+        target: {
+          kind: "gtm_channel"
+          id: "id"
+          label: "response.channel.name"
+        }
+        scope: "org_id"
+        detail: ["response.channel.status"]
+      }
+    };
+  }
+
+  // ListAssets lists the files attached to an item or a campaign (exactly
+  // one of the two), newest first. Metadata only.
+  rpc ListAssets(ListAssetsRequest) returns (ListAssetsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {none: "read-only"}
+    };
+  }
+
+  // GetAsset returns one asset's metadata.
+  rpc GetAsset(GetAssetRequest) returns (GetAssetResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {none: "read-only"}
+    };
+  }
+
+  // CreateAssetUpload starts an upload: it records a PENDING asset and
+  // returns a presigned PUT, conditioned on size_bytes and content_type, for
+  // the STAGING key gtm/<org_id>/<asset_id>.upload in the org's bucket. The
+  // client PUTs the bytes to upload_url with required_headers before
+  // expires_at (15 minutes), then calls ConfirmAssetUpload, which checks the
+  // staged bytes and copies them to the asset's final key
+  // gtm/<org_id>/<asset_id> (object_key). No client can ever write a final
+  // key. Limits are the service's: 25 MiB per asset (64 MiB when an agent
+  // copies a chat attachment), about 2 GiB per org (ResourceExhausted past
+  // either). A PENDING asset counts toward the org's quota, at its declared
+  // size, only until its upload URL expires (plus 5 minutes' grace, so 20
+  // minutes); the storage implementation sweeps a PENDING asset older than 24
+  // hours, row and objects.
+  rpc CreateAssetUpload(CreateAssetUploadRequest) returns (CreateAssetUploadResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {
+        verb: "upload_start"
+        target: {
+          kind: "gtm_asset"
+          id: "response.asset.id"
+          label: "response.asset.filename"
+        }
+        scope: "org_id"
+      }
+    };
+  }
+
+  // ConfirmAssetUpload finishes an upload: the server reads the staged
+  // object (gtm/<org_id>/<asset_id>.upload), checks its size against the
+  // declared one, sniffs its type against the allowlist and computes its
+  // sha256, copies it to the final key and removes the staged one, then marks
+  // the asset READY. If any check fails it deletes the object and the row
+  // (InvalidArgument). An asset that is not PENDING is FailedPrecondition.
+  rpc ConfirmAssetUpload(ConfirmAssetUploadRequest) returns (ConfirmAssetUploadResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {
+        verb: "upload"
+        target: {
+          kind: "gtm_asset"
+          id: "asset_id"
+          label: "response.asset.filename"
+        }
+        scope: "org_id"
+      }
+    };
+  }
+
+  // DeleteAsset removes an asset: its row and its objects (final and
+  // staging). A person's act only (PermissionDenied for an agent).
+  rpc DeleteAsset(DeleteAssetRequest) returns (DeleteAssetResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {
+        verb: "delete"
+        target: {
+          kind: "gtm_asset"
+          id: "asset_id"
+        }
+        scope: "org_id"
+      }
+    };
+  }
+
+  // GetAssetDownload returns a short-lived URL for a READY asset's bytes:
+  // either a presigned GET on the bucket or the gated proxy handler
+  // (/api/gtm/assets/{id}/content), whichever the storage work (PR-13)
+  // settles on. A PENDING asset is FailedPrecondition. Not a cacheable
+  // read: every call mints a new URL, a bearer secret until it expires.
+  // forge:mutation: mints a short-lived download URL on every call
+  rpc GetAssetDownload(GetAssetDownloadRequest) returns (GetAssetDownloadResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {none: "mints a short-lived download URL; changes no stored state"}
+    };
+  }
+
+  // ListStrategyLibrary lists the strategy library: the generic idea bank
+  // embedded in Reliant, read-only and the same for every allowlisted org (an
+  // org's own strategies and ideas are its rows). By category then name, paged;
+  // with diverse, a spread across categories instead (see the request).
+  rpc ListStrategyLibrary(ListStrategyLibraryRequest) returns (ListStrategyLibraryResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {none: "read-only"}
+    };
+  }
+
+  // GetStrategyLibraryEntry returns one entry of the embedded idea bank by key
+  // (NotFound for a key the bank does not hold).
+  rpc GetStrategyLibraryEntry(GetStrategyLibraryEntryRequest) returns (GetStrategyLibraryEntryResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {none: "read-only"}
+    };
+  }
+
+  // UseLibraryStrategy makes a DRAFT strategy from an entry of the embedded
+  // idea bank: name, goal (from its summary_md and objective), target metric
+  // (from its kpis), category and library_key. With create_first_campaign it also makes a
+  // first DRAFT campaign under it (campaign_name, or the entry's name), whose
+  // planned_channel_ids are the org's ACTIVE channels that fit the entry: a
+  // channel whose channel_types share a type with the entry's channel_types,
+  // or whose key equals one of them. A person or an agent may call it.
+  rpc UseLibraryStrategy(UseLibraryStrategyRequest) returns (UseLibraryStrategyResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {
+        verb: "use_library"
+        target: {
+          kind: "gtm_strategy"
+          id: "response.strategy.id"
+          label: "response.strategy.name"
+        }
+        scope: "org_id"
+        detail: ["library_key"]
+      }
+    };
+  }
+
+  // ListIdeas lists the org's ideas, newest first.
+  rpc ListIdeas(ListIdeasRequest) returns (ListIdeasResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {none: "read-only"}
+    };
+  }
+
+  // GetIdea returns one idea.
+  rpc GetIdea(GetIdeaRequest) returns (GetIdeaResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {none: "read-only"}
+    };
+  }
+
+  // CreateIdea adds a PROPOSED idea. Its source (AGENT or HUMAN) and creator
+  // are the caller's. An idea drawn from the idea bank names its entry
+  // (library_key) and answers that entry's tailor_questions
+  // (tailor_answers).
+  rpc CreateIdea(CreateIdeaRequest) returns (CreateIdeaResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {
+        verb: "create"
+        target: {
+          kind: "gtm_idea"
+          id: "response.idea.id"
+          label: "response.idea.title"
+        }
+        scope: "org_id"
+      }
+    };
+  }
+
+  // UpdateIdea edits an idea's content and campaign link. Unset fields are
+  // left alone. Its status moves only through SetIdeaStatus.
+  rpc UpdateIdea(UpdateIdeaRequest) returns (UpdateIdeaResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {
+        verb: "update"
+        target: {
+          kind: "gtm_idea"
+          id: "id"
+          label: "response.idea.title"
+        }
+        scope: "org_id"
+      }
+    };
+  }
+
+  // SetIdeaStatus moves an idea: PROPOSED -> ACCEPTED -> DONE, or to
+  // REJECTED. ACCEPTED and REJECTED are a person's decision.
+  rpc SetIdeaStatus(SetIdeaStatusRequest) returns (SetIdeaStatusResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {
+        verb: "set_status"
+        target: {
+          kind: "gtm_idea"
+          id: "id"
+          label: "response.idea.title"
+        }
+        scope: "org_id"
+        detail: ["status"]
+      }
+    };
+  }
+
+  // ListCampaigns lists the org's campaigns, newest first.
+  rpc ListCampaigns(ListCampaignsRequest) returns (ListCampaignsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {none: "read-only"}
+    };
+  }
+
+  // GetCampaign returns one campaign with the ideas and items linked to it,
+  // at most 200 of each (truncated says when either list was cut; ListIdeas
+  // and ListItems with campaign_id page through all of them), and its
+  // coverage: what it planned (planned_channel_ids x planned_formats) against
+  // what its items are, counted by status, over ALL its items.
+  rpc GetCampaign(GetCampaignRequest) returns (GetCampaignResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {none: "read-only"}
+    };
+  }
+
+  // CreateCampaign adds a campaign under a strategy of the org, DRAFT unless
+  // the request says otherwise. Every planned channel id must be a channel of
+  // the org (NotFound otherwise).
+  rpc CreateCampaign(CreateCampaignRequest) returns (CreateCampaignResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {
+        verb: "create"
+        target: {
+          kind: "gtm_campaign"
+          id: "response.campaign.id"
+          label: "response.campaign.name"
+        }
+        scope: "org_id"
+      }
+    };
+  }
+
+  // UpdateCampaign edits a campaign. Unset fields are left alone. It may move
+  // the campaign to another strategy of the same org.
+  rpc UpdateCampaign(UpdateCampaignRequest) returns (UpdateCampaignResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {
+        verb: "update"
+        target: {
+          kind: "gtm_campaign"
+          id: "id"
+          label: "response.campaign.name"
+        }
+        scope: "org_id"
+      }
+    };
+  }
+
+  // ListItems lists the org's items. With a scheduled range it is the
+  // calendar: the items scheduled inside [scheduled_from, scheduled_to),
+  // soonest first. Without one, newest first. Filters: campaign, format,
+  // channel, status.
+  rpc ListItems(ListItemsRequest) returns (ListItemsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {none: "read-only"}
+    };
+  }
+
+  // GetItem returns one item.
+  rpc GetItem(GetItemRequest) returns (GetItemResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {none: "read-only"}
+    };
+  }
+
+  // CreateItem adds an item, DRAFT or REVIEW (unset: DRAFT). No other status
+  // is created: an item reaches APPROVED only through a person's UpdateItem.
+  rpc CreateItem(CreateItemRequest) returns (CreateItemResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {
+        verb: "create"
+        target: {
+          kind: "gtm_item"
+          id: "response.item.id"
+          label: "response.item.title"
+        }
+        scope: "org_id"
+      }
+    };
+  }
+
+  // UpdateItem edits an item, its schedule or its status. Unset fields are
+  // left alone. Who may make which change is the lifecycle on GtmItemStatus;
+  // a change it does not allow is PermissionDenied (an agent) or
+  // FailedPrecondition (a transition no one may make). In short:
+  //
+  //   - An agent edits content and sets or clears scheduled_at only on a
+  //     DRAFT or REVIEW item, moves status only between DRAFT and REVIEW, and
+  //     never touches an item in any other status.
+  //   - A content edit by a person on an APPROVED or SCHEDULED item returns
+  //     it to REVIEW (it must be approved again).
+  //   - PUBLISHED on an item whose channel is MANUAL needs published_url, set
+  //     in the same UpdateItem or before (FailedPrecondition otherwise).
+  //   - SENT is never set here: only the approved email path writes it, and a
+  //     SENT item is not edited.
+  rpc UpdateItem(UpdateItemRequest) returns (UpdateItemResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {
+        verb: "update"
+        target: {
+          kind: "gtm_item"
+          id: "id"
+          label: "response.item.title"
+        }
+        scope: "org_id"
+        detail: ["status"]
+      }
+    };
+  }
+
+  // ResolveItemSend resolves a HELD email (GtmItem.approval_hash set while it
+  // is not SENT): one whose send started and whose outcome is unknown. A
+  // person's act only; an agent is PermissionDenied. approval_hash must be the
+  // item's own (the send being resolved).
+  //
+  //   - With gmail_message_id: the person found the email in Gmail. The item
+  //     becomes SENT with that id, sent by the caller.
+  //   - Without it: the person checked Gmail and it did not go out. The hold
+  //     is released and the item stays APPROVED, to be sent again.
+  //
+  // An item that is not held is FailedPrecondition.
+  rpc ResolveItemSend(ResolveItemSendRequest) returns (ResolveItemSendResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {
+        verb: "resolve_send"
+        target: {
+          kind: "gtm_item"
+          id: "id"
+          label: "response.item.title"
+        }
+        scope: "org_id"
+        detail: ["response.item.status"]
+      }
+    };
+  }
+
+  // GetPositioning returns the org's positioning. An org that has none yet
+  // gets an empty one at revision 0.
+  rpc GetPositioning(GetPositioningRequest) returns (GetPositioningResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {none: "read-only"}
+    };
+  }
+
+  // UpdatePositioning replaces the org's positioning. expected_revision 0
+  // creates it.
+  rpc UpdatePositioning(UpdatePositioningRequest) returns (UpdatePositioningResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {
+        verb: "update"
+        target: {
+          kind: "gtm_positioning"
+          id: "org_id"
+        }
+        scope: "org_id"
+      }
+    };
+  }
+
+  // ListClaims lists the org's claims registry.
+  rpc ListClaims(ListClaimsRequest) returns (ListClaimsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {none: "read-only"}
+    };
+  }
+
+  // UpsertClaim adds an UNVERIFIED claim (id empty) or changes one (id set,
+  // with expected_revision). A claim's text and category are fixed at
+  // creation: they are what a verification vouches for. A create whose text
+  // normalizes (text_norm) to a claim the org already holds is AlreadyExists.
+  //
+  // Who may do what:
+  //   - Setting status VERIFIED is a person's act and needs the evidence
+  //     (source_url and source_kind; a COMPARISON needs a PRIMARY_THIRD_PARTY
+  //     source); the verifier and time are the caller's and now.
+  //   - An agent creates UNVERIFIED claims and edits UNVERIFIED claims only.
+  //     It never changes a VERIFIED or RETIRED claim in any field (status,
+  //     source_url, source_kind, expires_or_recheck_at, notes):
+  //     PermissionDenied.
+  rpc UpsertClaim(UpsertClaimRequest) returns (UpsertClaimResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {
+        verb: "upsert"
+        target: {
+          kind: "gtm_claim"
+          id: "response.claim.id"
+          label: "response.claim.text"
+        }
+        scope: "org_id"
+        detail: ["status"]
+      }
+    };
+  }
+
+  // CheckClaims finds the candidate claims in a text (markdown) and matches
+  // each against the org's registry. Nothing is stored.
+  rpc CheckClaims(CheckClaimsRequest) returns (CheckClaimsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {none: "read-only check: stores nothing"}
+    };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Enums. The tables store each value by its name (gtm_* CHECK lists); the
+// UNSPECIFIED zero means "unset" in a message and is never stored.
+// ---------------------------------------------------------------------------
+
+// GtmIdeaKind is what an idea is about.
+enum GtmIdeaKind {
+  GTM_IDEA_KIND_UNSPECIFIED = 0;
+  // Something to build or change in the product.
+  GTM_IDEA_KIND_PRODUCT = 1;
+  // A go-to-market move: pricing, a channel, a launch, an audience.
+  GTM_IDEA_KIND_GTM = 2;
+  // A piece of content to write.
+  GTM_IDEA_KIND_CONTENT = 3;
+}
+
+// GtmIdeaStatus is an idea's lifecycle: PROPOSED -> ACCEPTED -> DONE, or
+// REJECTED.
+enum GtmIdeaStatus {
+  GTM_IDEA_STATUS_UNSPECIFIED = 0;
+  GTM_IDEA_STATUS_PROPOSED = 1;
+  // A person accepted it.
+  GTM_IDEA_STATUS_ACCEPTED = 2;
+  GTM_IDEA_STATUS_DONE = 3;
+  // A person rejected it.
+  GTM_IDEA_STATUS_REJECTED = 4;
+}
+
+// GtmIdeaSource is who proposed an idea.
+enum GtmIdeaSource {
+  GTM_IDEA_SOURCE_UNSPECIFIED = 0;
+  GTM_IDEA_SOURCE_AGENT = 1;
+  GTM_IDEA_SOURCE_HUMAN = 2;
+}
+
+// GtmCampaignStatus is a campaign's lifecycle.
+enum GtmCampaignStatus {
+  GTM_CAMPAIGN_STATUS_UNSPECIFIED = 0;
+  GTM_CAMPAIGN_STATUS_DRAFT = 1;
+  GTM_CAMPAIGN_STATUS_ACTIVE = 2;
+  GTM_CAMPAIGN_STATUS_DONE = 3;
+  GTM_CAMPAIGN_STATUS_ARCHIVED = 4;
+}
+
+// GtmStrategyStatus is a strategy's lifecycle. An agent creates and edits
+// DRAFT strategies only; only a person moves one to ACTIVE, DONE or ARCHIVED.
+enum GtmStrategyStatus {
+  GTM_STRATEGY_STATUS_UNSPECIFIED = 0;
+  GTM_STRATEGY_STATUS_DRAFT = 1;
+  // Being worked; several strategies may be ACTIVE at once.
+  GTM_STRATEGY_STATUS_ACTIVE = 2;
+  GTM_STRATEGY_STATUS_DONE = 3;
+  GTM_STRATEGY_STATUS_ARCHIVED = 4;
+}
+
+// GtmChannelMode is how items go out on a channel.
+enum GtmChannelMode {
+  GTM_CHANNEL_MODE_UNSPECIFIED = 0;
+  // Through a Reliant integration (integration_kind), e.g. Gmail.
+  GTM_CHANNEL_MODE_INTEGRATED = 1;
+  // By hand, following manual_instructions_md; the person records the
+  // published URL on the item.
+  GTM_CHANNEL_MODE_MANUAL = 2;
+}
+
+// GtmChannelStatus is a channel's lifecycle.
+enum GtmChannelStatus {
+  GTM_CHANNEL_STATUS_UNSPECIFIED = 0;
+  GTM_CHANNEL_STATUS_ACTIVE = 1;
+  GTM_CHANNEL_STATUS_PAUSED = 2;
+  GTM_CHANNEL_STATUS_ARCHIVED = 3;
+}
+
+// GtmConnectionState is whether the caller can reach an INTEGRATED channel's
+// integration right now. Display only, computed per read, never stored and
+// never used to authorize anything.
+enum GtmConnectionState {
+  // A MANUAL channel (nothing to connect).
+  GTM_CONNECTION_STATE_UNSPECIFIED = 0;
+  GTM_CONNECTION_STATE_CONNECTED = 1;
+  GTM_CONNECTION_STATE_NOT_CONNECTED = 2;
+  // The state could not be read.
+  GTM_CONNECTION_STATE_UNKNOWN = 3;
+}
+
+// GtmItemFormat is what an item is, apart from where it goes (its channel).
+// EMAIL and COLD_OUTREACH are the EMAIL-TYPE formats: sent through the email
+// send path, never SCHEDULED or PUBLISHED (GtmItemStatus).
+enum GtmItemFormat {
+  GTM_ITEM_FORMAT_UNSPECIFIED = 0;
+  // A short post: a social post, a forum or community post.
+  GTM_ITEM_FORMAT_SHORT_POST = 1;
+  // A long post: a blog post, an article.
+  GTM_ITEM_FORMAT_LONG_POST = 2;
+  // An email (email-type).
+  GTM_ITEM_FORMAT_EMAIL = 3;
+  // A first email to someone who does not know the org (email-type).
+  GTM_ITEM_FORMAT_COLD_OUTREACH = 4;
+  GTM_ITEM_FORMAT_VIDEO = 5;
+  // A pitch to a journalist, podcast or newsletter.
+  GTM_ITEM_FORMAT_MEDIA_PITCH = 6;
+  GTM_ITEM_FORMAT_AD = 7;
+  GTM_ITEM_FORMAT_OTHER = 8;
+}
+
+// GtmAssetStatus is whether an asset's bytes are in place.
+enum GtmAssetStatus {
+  GTM_ASSET_STATUS_UNSPECIFIED = 0;
+  // CreateAssetUpload issued an upload URL (to the staging key); the bytes
+  // are not confirmed. It counts toward the org's quota until the URL expires
+  // (20 minutes), and is swept (row and objects) after 24 hours.
+  GTM_ASSET_STATUS_PENDING = 1;
+  // ConfirmAssetUpload checked the bytes (size, type, sha256).
+  GTM_ASSET_STATUS_READY = 2;
+}
+
+// GtmChannelSource is who added a channel.
+enum GtmChannelSource {
+  GTM_CHANNEL_SOURCE_UNSPECIFIED = 0;
+  // One of the defaults the service seeds.
+  GTM_CHANNEL_SOURCE_SEED = 1;
+  // An agent added it (always MANUAL when added); the web badges it.
+  GTM_CHANNEL_SOURCE_AGENT = 2;
+  GTM_CHANNEL_SOURCE_PERSON = 3;
+}
+
+// GtmStrategyCategory is a strategy's or library entry's category: the 13
+// categories of the strategy catalog. The comment on each is its display
+// label.
+enum GtmStrategyCategory {
+  GTM_STRATEGY_CATEGORY_UNSPECIFIED = 0;
+  // Pricing, offers & incentives
+  GTM_STRATEGY_CATEGORY_PRICING_OFFERS_INCENTIVES = 1;
+  // Referral & viral growth
+  GTM_STRATEGY_CATEGORY_REFERRAL_VIRAL_GROWTH = 2;
+  // Paid acquisition
+  GTM_STRATEGY_CATEGORY_PAID_ACQUISITION = 3;
+  // Organic content & SEO
+  GTM_STRATEGY_CATEGORY_ORGANIC_CONTENT_SEO = 4;
+  // Outbound sales & prospecting
+  GTM_STRATEGY_CATEGORY_OUTBOUND_SALES_PROSPECTING = 5;
+  // Partnerships & distribution
+  GTM_STRATEGY_CATEGORY_PARTNERSHIPS_DISTRIBUTION = 6;
+  // Launches & PR
+  GTM_STRATEGY_CATEGORY_LAUNCHES_PR = 7;
+  // Community & events
+  GTM_STRATEGY_CATEGORY_COMMUNITY_EVENTS = 8;
+  // Product-led growth
+  GTM_STRATEGY_CATEGORY_PRODUCT_LED_GROWTH = 9;
+  // Conversion optimization
+  GTM_STRATEGY_CATEGORY_CONVERSION_OPTIMIZATION = 10;
+  // Retention & expansion
+  GTM_STRATEGY_CATEGORY_RETENTION_EXPANSION = 11;
+  // Trust & reputation
+  GTM_STRATEGY_CATEGORY_TRUST_REPUTATION = 12;
+  // Market research & positioning
+  GTM_STRATEGY_CATEGORY_MARKET_RESEARCH_POSITIONING = 13;
+}
+
+// GtmBusinessType is what kind of business an org is (its positioning), and
+// which kinds a library entry fits.
+enum GtmBusinessType {
+  GTM_BUSINESS_TYPE_UNSPECIFIED = 0;
+  GTM_BUSINESS_TYPE_B2B_SAAS = 1;
+  GTM_BUSINESS_TYPE_B2C_APP = 2;
+  GTM_BUSINESS_TYPE_DEVELOPER_TOOLS = 3;
+  GTM_BUSINESS_TYPE_ECOMMERCE = 4;
+  GTM_BUSINESS_TYPE_MARKETPLACE = 5;
+  GTM_BUSINESS_TYPE_AGENCY_SERVICES = 6;
+  GTM_BUSINESS_TYPE_CREATOR_MEDIA = 7;
+  GTM_BUSINESS_TYPE_LOCAL_BUSINESS = 8;
+  GTM_BUSINESS_TYPE_OPEN_SOURCE = 9;
+  GTM_BUSINESS_TYPE_HARDWARE = 10;
+}
+
+// GtmBusinessModel is how an org makes money (its positioning; it may have
+// several), and which models a library entry fits.
+enum GtmBusinessModel {
+  GTM_BUSINESS_MODEL_UNSPECIFIED = 0;
+  GTM_BUSINESS_MODEL_SUBSCRIPTION = 1;
+  GTM_BUSINESS_MODEL_USAGE_BASED = 2;
+  GTM_BUSINESS_MODEL_ONE_TIME = 3;
+  GTM_BUSINESS_MODEL_FREEMIUM = 4;
+  // Free, open source.
+  GTM_BUSINESS_MODEL_FREE_OSS = 5;
+  // Takes a cut of transactions between others.
+  GTM_BUSINESS_MODEL_MARKETPLACE = 6;
+  GTM_BUSINESS_MODEL_SERVICES = 7;
+  GTM_BUSINESS_MODEL_AD_SUPPORTED = 8;
+}
+
+// GtmAssetSource is where an asset came from.
+enum GtmAssetSource {
+  GTM_ASSET_SOURCE_UNSPECIFIED = 0;
+  // Copied from a chat attachment: by an agent's tool, or by the person in
+  // the chat. (An agent's copy is CHAT; there is no separate agent source.)
+  GTM_ASSET_SOURCE_CHAT = 1;
+  // Written by a workflow run.
+  GTM_ASSET_SOURCE_WORKFLOW = 2;
+  // Uploaded by a person.
+  GTM_ASSET_SOURCE_PERSON = 3;
+}
+
+// GtmItemStatus is an item's lifecycle. These transitions are the only ones;
+// the service refuses every other.
+//
+// An AGENT:
+//   - creates an item as DRAFT or REVIEW, and moves it only DRAFT <-> REVIEW;
+//   - edits its content and sets or clears scheduled_at only while it is
+//     DRAFT or REVIEW;
+//   - never touches an item in any other status.
+//
+// A PERSON:
+//   - every change an agent may make (DRAFT <-> REVIEW, content and date
+//     edits on a DRAFT or REVIEW item);
+//   - DRAFT or REVIEW -> APPROVED;
+//   - APPROVED -> SCHEDULED, for an item that is not email-type;
+//   - any status (but SENT) -> PAUSED, and PAUSED -> DRAFT;
+//   - APPROVED or SCHEDULED -> PUBLISHED, for an item that is not
+//     email-type: a manual "it went out" marker, since publishing happens
+//     outside GTM. On a MANUAL channel it needs published_url: the person
+//     who posted by hand records the URL and marks it PUBLISHED in one
+//     UpdateItem;
+//   - a content edit of an APPROVED or SCHEDULED item returns it to REVIEW.
+//
+// A CONTENT EDIT changes any of title, body_md, format, channel_id, email_to
+// or email_subject. scheduled_at and published_url are not content: dating an
+// APPROVED item keeps it APPROVED, and recording its URL changes no status.
+// clear_scheduled_at on a SCHEDULED item is FailedPrecondition, and there is
+// no SCHEDULED -> APPROVED: to take an item off the calendar, pause it
+// (PAUSED -> DRAFT) and approve it again.
+//
+// EMAIL-TYPE items (format EMAIL or COLD_OUTREACH): the EMAIL SEND PATH alone
+// writes SENT, from APPROVED, and only when the item's channel, if set, is
+// ACTIVE, INTEGRATED and integration_kind "gmail". A send whose outcome is
+// unknown leaves the item HELD (GtmItem.approval_hash) and frozen until a
+// person resolves it with ResolveItemSend, which records SENT (the email went
+// out) or releases the hold (it did not). An email-type item never uses
+// SCHEDULED or PUBLISHED (the table refuses both): a person may date an
+// APPROVED one (scheduled_at) and it stays APPROVED until the send path sends
+// it.
+enum GtmItemStatus {
+  GTM_ITEM_STATUS_UNSPECIFIED = 0;
+  GTM_ITEM_STATUS_DRAFT = 1;
+  // Ready for a person to review.
+  GTM_ITEM_STATUS_REVIEW = 2;
+  // A person approved it.
+  GTM_ITEM_STATUS_APPROVED = 3;
+  // A person put an approved non-email-type item on the calendar
+  // (scheduled_at is set). Scheduling publishes nothing.
+  GTM_ITEM_STATUS_SCHEDULED = 4;
+  // The approved email was sent (written only by the email send path).
+  GTM_ITEM_STATUS_SENT = 5;
+  // A person marked a non-email-type item as gone out; publishing itself
+  // happens outside GTM (the owner's own workflow, or by hand).
+  GTM_ITEM_STATUS_PUBLISHED = 6;
+  // A person paused it; it goes back to DRAFT to resume.
+  GTM_ITEM_STATUS_PAUSED = 7;
+}
+
+// GtmClaimCategory is what kind of fact a claim states.
+enum GtmClaimCategory {
+  GTM_CLAIM_CATEGORY_UNSPECIFIED = 0;
+  GTM_CLAIM_CATEGORY_PRICING = 1;
+  GTM_CLAIM_CATEGORY_CAPABILITY = 2;
+  GTM_CLAIM_CATEGORY_LIMIT = 3;
+  GTM_CLAIM_CATEGORY_LICENSE = 4;
+  GTM_CLAIM_CATEGORY_TIMING = 5;
+  // A claim about another company. Verified only by a dated primary source of
+  // theirs (GTM_CLAIM_SOURCE_KIND_PRIMARY_THIRD_PARTY).
+  GTM_CLAIM_CATEGORY_COMPARISON = 6;
+}
+
+// GtmClaimStatus is a claim's lifecycle.
+enum GtmClaimStatus {
+  GTM_CLAIM_STATUS_UNSPECIFIED = 0;
+  // A person vouched for it, with its evidence.
+  GTM_CLAIM_STATUS_VERIFIED = 1;
+  GTM_CLAIM_STATUS_UNVERIFIED = 2;
+  // No longer true.
+  GTM_CLAIM_STATUS_RETIRED = 3;
+}
+
+// GtmClaimSourceKind is where a verified claim's evidence comes from.
+enum GtmClaimSourceKind {
+  // No source yet: an unverified claim.
+  GTM_CLAIM_SOURCE_KIND_UNSPECIFIED = 0;
+  GTM_CLAIM_SOURCE_KIND_DOCS = 1;
+  GTM_CLAIM_SOURCE_KIND_PRICING_CATALOG = 2;
+  GTM_CLAIM_SOURCE_KIND_CODE = 3;
+  GTM_CLAIM_SOURCE_KIND_PRIMARY_THIRD_PARTY = 4;
+}
+
+// GtmClaimFindingKind is what the registry says about one candidate claim.
+enum GtmClaimFindingKind {
+  GTM_CLAIM_FINDING_KIND_UNSPECIFIED = 0;
+  // The text states a claim the registry has verified.
+  GTM_CLAIM_FINDING_KIND_MATCHED_VERIFIED = 1;
+  // The text states a claim the registry holds but does not vouch for: it is
+  // unverified, retired, or past its recheck date (see reason). Blocks.
+  GTM_CLAIM_FINDING_KIND_MATCHED_UNVERIFIED = 2;
+  // The text states a risky claim (a number, price, duration, "free", a
+  // license, a superlative, a competitor, "never"/"always") the registry does
+  // not hold. Blocks.
+  GTM_CLAIM_FINDING_KIND_UNMATCHED_RISKY = 3;
+}
+
+// ---------------------------------------------------------------------------
+// Entities. Each mirrors its gtm_* table.
+// ---------------------------------------------------------------------------
+
+// GtmStrategy is one strategy (gtm_strategies): a goal over a period, and the
+// campaigns that pursue it.
+message GtmStrategy {
+  string id = 1;
+  string org_id = 2;
+  string name = 3;
+  // The goal, its north star, in markdown.
+  string goal_md = 4;
+  // What success is measured by, free text: "200 weekly active orgs".
+  string target_metric = 5;
+  // The period, as real calendar dates (YYYY-MM-DD); empty for open.
+  string period_start = 6;
+  string period_end = 7;
+  GtmStrategyStatus status = 8;
+  int32 revision = 9;
+  string created_by = 10;
+  string updated_by = 11;
+  google.protobuf.Timestamp created_at = 12;
+  google.protobuf.Timestamp updated_at = 13;
+  GtmStrategyCategory category = 14;
+  // The idea bank entry it was made from (UseLibraryStrategy); empty for
+  // none. A reference, not a link: a later release may drop the entry.
+  string library_key = 15;
+}
+
+// GtmChannel is one place items go out (gtm_channels): integrated (a Reliant
+// integration such as Gmail) or manual (a person posts by hand and records
+// the URL).
+message GtmChannel {
+  string id = 1;
+  string org_id = 2;
+  // A slug, unique in the org: "blog", "hacker-news". UpdateChannel may
+  // change it (a key the org already holds is AlreadyExists).
+  string key = 3;
+  string name = 4;
+  GtmChannelMode mode = 5;
+  // INTEGRATED only: the Reliant integration catalog id, e.g. "gmail". Empty
+  // here is NULL in the table (never stored as '').
+  string integration_kind = 6;
+  // INTEGRATED only: the Reliant connection to use; empty (NULL in the table)
+  // means the acting user's default connection for integration_kind.
+  string connection_id = 7;
+  // How to post on it by hand (MANUAL), in markdown.
+  string manual_instructions_md = 8;
+  GtmChannelStatus status = 9;
+  // Whether the caller can reach integration_kind now (INTEGRATED);
+  // UNSPECIFIED for a MANUAL channel. Display only, never authorization.
+  GtmConnectionState connection_state = 10;
+  int32 revision = 11;
+  google.protobuf.Timestamp created_at = 12;
+  google.protobuf.Timestamp updated_at = 13;
+  // Who added it: seeded, an agent ("Added by agent"), or a person.
+  GtmChannelSource source = 14;
+  // The user who added it (for an agent, the user it ran as); empty when
+  // seeded.
+  string created_by = 15;
+  // The kinds of channel it is, as slugs (^[a-z0-9-]{1,32}$): what a library
+  // entry's channel_types are matched against (UseLibraryStrategy). The org
+  // chooses its own; the seeded defaults carry a small generic set.
+  repeated string channel_types = 16;
+}
+
+// GtmChannelTypeList is a whole channel_types list, so an update can tell
+// "replace with this list" (set, possibly empty) from "leave alone" (unset).
+message GtmChannelTypeList {
+  repeated string types = 1 [(buf.validate.field).repeated = {
+    max_items: 32
+    items: {
+      string: {pattern: "^[a-z0-9-]{1,32}$"}
+    }
+  }];
+}
+
+// GtmStrategyLibraryEntry is one idea of the strategy library: the generic
+// idea bank embedded in Reliant (internal/gtm/library), the same, read-only,
+// for every allowlisted org. An entry is a jumping-off point an agent tailors
+// to the business (tailor_questions), not a script.
+message GtmStrategyLibraryEntry {
+  // A slug, unique across the bank (^[a-z0-9][a-z0-9_-]{0,127}$).
+  string key = 1;
+  GtmStrategyCategory category = 2;
+  string name = 3;
+  // What it is, in markdown.
+  string summary_md = 4;
+  // Why it works, in markdown.
+  string why_it_works_md = 5;
+  // The businesses it fits; empty means any.
+  repeated GtmBusinessType business_types = 6;
+  repeated GtmBusinessModel business_models = 7;
+  // The stages it fits, each one of pre_launch, launch, early_traction, growth, scale; empty means any.
+  repeated string stages = 8;
+  // One of awareness, acquisition, activation, conversion, retention, expansion, referral, research.
+  string objective = 9;
+  // low, medium or high.
+  string effort = 10;
+  // free, low, medium or high.
+  string cost = 11;
+  // Days to a first signal; 0 when the entry does not say.
+  int32 signal_days = 12;
+  // The 2 to 5 questions an agent answers for this business before proposing
+  // the idea (GtmIdea.tailor_answers).
+  repeated string tailor_questions = 13;
+  // A tool-agnostic description of an automation that carries the idea out,
+  // in markdown; empty for none.
+  string suggested_workflow_md = 14;
+  // The kinds of channel it runs on (the GtmChannel.channel_types
+  // vocabulary): what UseLibraryStrategy maps to the org's channels.
+  repeated string channel_types = 15;
+  // What to measure.
+  repeated string kpis = 16;
+}
+
+// GtmTailorAnswer is an agent's answer to one of a library entry's
+// tailor_questions, for this business.
+message GtmTailorAnswer {
+  string question = 1 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 2000
+  }];
+  string answer = 2 [(buf.validate.field).string.max_len = 2000];
+}
+
+// GtmTailorAnswerList is a whole tailor_answers list, so an update can tell
+// "replace with this list" (set, possibly empty) from "leave alone" (unset).
+message GtmTailorAnswerList {
+  repeated GtmTailorAnswer answers = 1 [(buf.validate.field).repeated.max_items = 20];
+}
+
+// GtmAsset is one file attached to an item or a campaign (gtm_assets):
+// metadata only. The bytes live in the org's bucket under
+// gtm/<org_id>/<id>: written through CreateAssetUpload and
+// ConfirmAssetUpload, read through GetAssetDownload (a presigned URL, or the
+// gated HTTP handler /api/gtm/assets/{id}/content; the download path is not an
+// rpc that carries bytes).
+message GtmAsset {
+  string id = 1;
+  string org_id = 2;
+  // The item and/or campaign it is attached to; at least one is set.
+  string item_id = 3;
+  string campaign_id = 4;
+  string filename = 5;
+  // The confirmed (sniffed) type once READY; the declared one while PENDING.
+  string content_type = 6;
+  // The declared size while PENDING, the checked size once READY.
+  int64 size_bytes = 7;
+  // Hex SHA-256 of the bytes; set once READY.
+  string sha256 = 8;
+  string uploaded_by = 9;
+  GtmAssetSource source = 10;
+  google.protobuf.Timestamp created_at = 11;
+  GtmAssetStatus status = 12;
+}
+
+// GtmEvidence is one piece of evidence behind an idea: an analytics readout,
+// a link, a note.
+message GtmEvidence {
+  // What it is, free-form: "analytics", "link", "note", "feedback".
+  string kind = 1;
+  string title = 2;
+  // Where it can be seen, when it is somewhere.
+  string url = 3;
+  // What it shows, in markdown (a readout's numbers, a quote).
+  string summary_md = 4;
+  // When it was observed (an analytics readout's time).
+  google.protobuf.Timestamp observed_at = 5;
+}
+
+// GtmEvidenceList is a whole evidence list, so an update can tell "replace
+// with this list" (set, possibly empty) from "leave alone" (unset).
+message GtmEvidenceList {
+  repeated GtmEvidence evidence = 1;
+}
+
+// GtmIdea is one idea (gtm_ideas).
+message GtmIdea {
+  string id = 1;
+  string org_id = 2;
+  GtmIdeaKind kind = 3;
+  string title = 4;
+  string body_md = 5;
+  repeated GtmEvidence evidence = 6;
+  GtmIdeaStatus status = 7;
+  GtmIdeaSource source = 8;
+  // The chat that proposed it, when an agent did.
+  string source_chat_id = 9;
+  // The user who created it (for an agent, the user it ran as).
+  string created_by = 10;
+  // The campaign it belongs to; empty for none.
+  string campaign_id = 11;
+  int32 revision = 12;
+  google.protobuf.Timestamp created_at = 13;
+  google.protobuf.Timestamp updated_at = 14;
+  // The idea bank entry it came from (GtmStrategyLibraryEntry.key); empty for
+  // none.
+  string library_key = 15;
+  // The entry's tailor_questions, answered for this business.
+  repeated GtmTailorAnswer tailor_answers = 16;
+  // A tool-agnostic description of an automation that carries it out, in
+  // markdown (the entry's, tailored); empty for none.
+  string suggested_workflow_md = 17;
+}
+
+// GtmCampaign is one campaign (gtm_campaigns).
+message GtmCampaign {
+  string id = 1;
+  string org_id = 2;
+  string name = 3;
+  // What the campaign is for: its north star.
+  string goal = 4;
+  google.protobuf.Timestamp period_start = 5;
+  google.protobuf.Timestamp period_end = 6;
+  GtmCampaignStatus status = 7;
+  int32 revision = 8;
+  google.protobuf.Timestamp created_at = 9;
+  google.protobuf.Timestamp updated_at = 10;
+  // The strategy it belongs to (every campaign has one).
+  string strategy_id = 11;
+  // The channels (GtmChannel.id) and formats it plans to use. Coverage
+  // (GetCampaignResponse.coverage) holds them against its items.
+  repeated string planned_channel_ids = 12;
+  repeated GtmItemFormat planned_formats = 13;
+}
+
+// GtmChannelIdList is a whole list of channel ids, so an update can tell
+// "replace with this list" (set, possibly empty) from "leave alone" (unset).
+message GtmChannelIdList {
+  repeated string ids = 1;
+}
+
+// GtmItemFormatList is a whole list of formats, for the same reason.
+message GtmItemFormatList {
+  repeated GtmItemFormat formats = 1 [(buf.validate.field).repeated.items.enum = {
+    defined_only: true
+    not_in: [0]
+  }];
+}
+
+// GtmItemStatusCount is how many items are in one status.
+message GtmItemStatusCount {
+  GtmItemStatus status = 1;
+  int32 count = 2;
+}
+
+// GtmCoverageRow is one (channel, format) pair of a campaign: planned
+// (planned_channel_ids x planned_formats), used by its items, or both, with
+// its items counted by status. A planned pair no item uses has no counts
+// ("Reddit planned, nothing drafted").
+message GtmCoverageRow {
+  // Empty on a planned row: any channel (only formats were planned). Empty on
+  // an unplanned row: items with no channel yet.
+  string channel_id = 1;
+  // UNSPECIFIED on a planned row: any format (only channels were planned).
+  GtmItemFormat format = 2;
+  // Whether the campaign planned this pair.
+  bool planned = 3;
+  // The pair's items by status; only statuses with a count above zero.
+  repeated GtmItemStatusCount counts = 4;
+  // All the pair's items.
+  int32 total = 5;
+}
+
+// GtmItem is one post, email, video, pitch or ad (gtm_items): an entry on the calendar
+// once it has a date.
+message GtmItem {
+  string id = 1;
+  string org_id = 2;
+  // The campaign it belongs to; empty for none.
+  string campaign_id = 3;
+  // The idea it carries out; empty for none.
+  string idea_id = 4;
+  GtmItemFormat format = 5;
+  // The channel it goes out on (GtmChannel.id); empty for none yet.
+  string channel_id = 6;
+  string title = 7;
+  string body_md = 8;
+  GtmItemStatus status = 9;
+  // When it is planned for. Unset: not on the calendar yet.
+  google.protobuf.Timestamp scheduled_at = 10;
+  // Email-type only: the recipients and subject.
+  repeated string email_to = 11;
+  string email_subject = 12;
+  // Email-type only, once SENT: Gmail's id for the sent message, when and by
+  // whom it was sent.
+  string gmail_message_id = 13;
+  google.protobuf.Timestamp sent_at = 14;
+  string sent_by = 15;
+  // Email-type only: the hash of the approval card the email is sent under. Set
+  // while status is not SENT, the item is HELD: a send started and its
+  // outcome is unknown. A held item is frozen (every UpdateItem is
+  // FailedPrecondition) until a person resolves it with ResolveItemSend; the
+  // web shows that action for it. Once SENT, it is the card it was sent under.
+  string approval_hash = 16;
+  int32 revision = 17;
+  google.protobuf.Timestamp created_at = 18;
+  google.protobuf.Timestamp updated_at = 19;
+  // Where it went out (http or https), recorded by a person; required to mark
+  // an item on a MANUAL channel PUBLISHED. Empty: not recorded.
+  string published_url = 20;
+}
+
+// GtmPositioning is the org's positioning (gtm_positioning): one per org.
+message GtmPositioning {
+  string org_id = 1;
+  string positioning_md = 2;
+  // Who the org sells to, one audience per entry.
+  repeated string audiences = 3;
+  string updated_by = 4;
+  // 0: the org has none yet.
+  int32 revision = 5;
+  google.protobuf.Timestamp updated_at = 6;
+  // What kind of business it is; UNSPECIFIED for not said.
+  GtmBusinessType business_type = 7;
+  // How it makes money (may be several); empty for not said.
+  repeated GtmBusinessModel business_models = 8;
+}
+
+// GtmClaim is one fact an item may state (gtm_claims). text_norm is the
+// lower-cased, whitespace-collapsed form postgres derives; an org holds each
+// once.
+message GtmClaim {
+  string id = 1;
+  string org_id = 2;
+  string text = 3;
+  string text_norm = 4;
+  GtmClaimCategory category = 5;
+  GtmClaimStatus status = 6;
+  string source_url = 7;
+  GtmClaimSourceKind source_kind = 8;
+  google.protobuf.Timestamp verified_at = 9;
+  // The person who verified it.
+  string verified_by = 10;
+  // When to check it again. Past it, a verified claim no longer vouches.
+  google.protobuf.Timestamp expires_or_recheck_at = 11;
+  string notes = 12;
+  int32 revision = 13;
+  google.protobuf.Timestamp created_at = 14;
+  google.protobuf.Timestamp updated_at = 15;
+}
+
+// GtmClaimFinding is one candidate claim found in a text and what the
+// registry says about it (claimcheck.Finding).
+message GtmClaimFinding {
+  GtmClaimFindingKind kind = 1;
+  // Which rule found it: number, price, duration, percent, size, multiplier,
+  // free, no_account, license, superlative, competitor, absolute.
+  string mention_kind = 2;
+  // The words in the text, e.g. "$5/mo".
+  string mention = 3;
+  // The sentence it appears in.
+  string context = 4;
+  // The registry claim it matched, when it matched one.
+  string claim_id = 5;
+  string claim_text = 6;
+  // For MATCHED_UNVERIFIED: "unverified", "retired" or "recheck overdue".
+  string reason = 7;
+  // Whether this finding blocks approval (every kind but MATCHED_VERIFIED).
+  bool blocking = 8;
+}
+
+// GtmRevisionConflict is the error detail of an update that named a revision
+// the row has moved past (Aborted). The client re-reads and tries again.
+message GtmRevisionConflict {
+  string id = 1;
+  int32 expected_revision = 2;
+  int32 current_revision = 3;
+}
+
+// ---------------------------------------------------------------------------
+// Access.
+// ---------------------------------------------------------------------------
+
+message GetGtmAccessRequest {
+  string org_id = 1 [(buf.validate.field).required = true];
+}
+
+message GetGtmAccessResponse {
+  bool enabled = 1;
+}
+
+// ---------------------------------------------------------------------------
+// Strategies.
+// ---------------------------------------------------------------------------
+
+message ListStrategiesRequest {
+  string org_id = 1 [(buf.validate.field).required = true];
+  optional GtmStrategyStatus status = 2;
+  // page_size is at most 200; 0 is 50.
+  int32 page_size = 3 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 200
+  }];
+  string page_token = 4;
+}
+
+message ListStrategiesResponse {
+  repeated GtmStrategy strategies = 1;
+  string next_page_token = 2;
+}
+
+message GetStrategyRequest {
+  string org_id = 1 [(buf.validate.field).required = true];
+  string id = 2 [(buf.validate.field).required = true];
+}
+
+message GetStrategyResponse {
+  GtmStrategy strategy = 1;
+  // Its campaigns, newest first, at most 200.
+  repeated GtmCampaign campaigns = 2;
+  // True when campaigns was cut at 200.
+  bool truncated = 3;
+}
+
+message CreateStrategyRequest {
+  option (buf.validate.message).cel = {
+    id: "strategy_period_order"
+    message: "period_end must not be before period_start"
+    expression: "this.period_start == '' || this.period_end == '' || this.period_end >= this.period_start"
+  };
+  string org_id = 1 [(buf.validate.field).required = true];
+  string name = 2 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 200
+  }];
+  string goal_md = 3;
+  string target_metric = 4 [(buf.validate.field).string.max_len = 500];
+  // A real calendar date, YYYY-MM-DD (2026-02-30 is InvalidArgument), or empty.
+  string period_start = 5 [(buf.validate.field).string.pattern = "^([0-9]{4}-[0-9]{2}-[0-9]{2})?$"];
+  string period_end = 6 [(buf.validate.field).string.pattern = "^([0-9]{4}-[0-9]{2}-[0-9]{2})?$"];
+  // Unset: DRAFT. An agent creates DRAFT only.
+  optional GtmStrategyStatus status = 7 [(buf.validate.field).enum = {
+    defined_only: true
+    not_in: [0]
+  }];
+  // Unset: no category.
+  optional GtmStrategyCategory category = 8 [(buf.validate.field).enum = {
+    defined_only: true
+    not_in: [0]
+  }];
+}
+
+message CreateStrategyResponse {
+  GtmStrategy strategy = 1;
+}
+
+message UpdateStrategyRequest {
+  string org_id = 1 [(buf.validate.field).required = true];
+  string id = 2 [(buf.validate.field).required = true];
+  int32 expected_revision = 3 [(buf.validate.field).int32.gt = 0];
+  optional string name = 4 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 200
+  }];
+  optional string goal_md = 5;
+  optional string target_metric = 6 [(buf.validate.field).string.max_len = 500];
+  // Set: a real calendar date, YYYY-MM-DD, or empty to clear.
+  optional string period_start = 7 [(buf.validate.field).string.pattern = "^([0-9]{4}-[0-9]{2}-[0-9]{2})?$"];
+  optional string period_end = 8 [(buf.validate.field).string.pattern = "^([0-9]{4}-[0-9]{2}-[0-9]{2})?$"];
+  // A person's act only.
+  optional GtmStrategyStatus status = 9 [(buf.validate.field).enum = {
+    defined_only: true
+    not_in: [0]
+  }];
+  // Set: its category; UNSPECIFIED clears it.
+  optional GtmStrategyCategory category = 10 [(buf.validate.field).enum.defined_only = true];
+}
+
+message UpdateStrategyResponse {
+  GtmStrategy strategy = 1;
+}
+
+// ---------------------------------------------------------------------------
+// Channels.
+// ---------------------------------------------------------------------------
+
+message ListChannelsRequest {
+  string org_id = 1 [(buf.validate.field).required = true];
+  optional GtmChannelStatus status = 2;
+  optional GtmChannelMode mode = 3;
+}
+
+message ListChannelsResponse {
+  // Every channel of the org (a handful, so no paging), by key.
+  repeated GtmChannel channels = 1;
+}
+
+message GetChannelRequest {
+  string org_id = 1 [(buf.validate.field).required = true];
+  string id = 2 [(buf.validate.field).required = true];
+}
+
+message GetChannelResponse {
+  GtmChannel channel = 1;
+}
+
+message CreateChannelRequest {
+  option (buf.validate.message).cel = {
+    id: "channel_mode_integration"
+    message: "an INTEGRATED channel needs integration_kind; a MANUAL one takes neither integration_kind nor connection_id"
+    expression: "this.mode == 1 ? this.integration_kind != '' : (this.integration_kind == '' && this.connection_id == '')"
+  };
+  string org_id = 1 [(buf.validate.field).required = true];
+  string key = 2 [(buf.validate.field).string.pattern = "^[a-z0-9-]{1,32}$"];
+  string name = 3 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 100
+  }];
+  GtmChannelMode mode = 4 [(buf.validate.field).enum = {
+    defined_only: true
+    not_in: [0]
+  }];
+  // Empty is stored as NULL.
+  string integration_kind = 5;
+  // Empty (stored as NULL): the acting user's default connection for
+  // integration_kind.
+  string connection_id = 6;
+  string manual_instructions_md = 7;
+  // Unset: ACTIVE.
+  optional GtmChannelStatus status = 8 [(buf.validate.field).enum = {
+    defined_only: true
+    not_in: [0]
+  }];
+  repeated string channel_types = 9 [(buf.validate.field).repeated = {
+    max_items: 32
+    items: {
+      string: {pattern: "^[a-z0-9-]{1,32}$"}
+    }
+  }];
+}
+
+message CreateChannelResponse {
+  GtmChannel channel = 1;
+}
+
+message UpdateChannelRequest {
+  string org_id = 1 [(buf.validate.field).required = true];
+  string id = 2 [(buf.validate.field).required = true];
+  int32 expected_revision = 3 [(buf.validate.field).int32.gt = 0];
+  optional string name = 4 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 100
+  }];
+  // A change of mode must leave integration_kind / connection_id consistent
+  // with it (InvalidArgument otherwise; the table refuses it too).
+  optional GtmChannelMode mode = 5 [(buf.validate.field).enum = {
+    defined_only: true
+    not_in: [0]
+  }];
+  // Set: replaces it; empty clears it (NULL in the table).
+  optional string integration_kind = 6;
+  optional string connection_id = 7;
+  optional string manual_instructions_md = 8;
+  optional GtmChannelStatus status = 9 [(buf.validate.field).enum = {
+    defined_only: true
+    not_in: [0]
+  }];
+  // Set: renames the key; a key the org already holds is AlreadyExists.
+  optional string key = 10 [(buf.validate.field).string.pattern = "^[a-z0-9-]{1,32}$"];
+  // Set: replaces channel_types (empty clears them).
+  GtmChannelTypeList channel_types = 11;
+}
+
+message UpdateChannelResponse {
+  GtmChannel channel = 1;
+}
+
+// ---------------------------------------------------------------------------
+// Assets: metadata here, bytes in the org's bucket (presigned upload,
+// confirm, short-lived download URL).
+// ---------------------------------------------------------------------------
+
+message ListAssetsRequest {
+  option (buf.validate.message).cel = {
+    id: "assets_of_one"
+    message: "exactly one of item_id and campaign_id"
+    expression: "has(this.item_id) != has(this.campaign_id)"
+  };
+  string org_id = 1 [(buf.validate.field).required = true];
+  optional string item_id = 2 [(buf.validate.field).string.min_len = 1];
+  optional string campaign_id = 3 [(buf.validate.field).string.min_len = 1];
+  // page_size is at most 200; 0 is 50.
+  int32 page_size = 4 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 200
+  }];
+  string page_token = 5;
+}
+
+message ListAssetsResponse {
+  repeated GtmAsset assets = 1;
+  string next_page_token = 2;
+}
+
+message GetAssetRequest {
+  string org_id = 1 [(buf.validate.field).required = true];
+  string id = 2 [(buf.validate.field).required = true];
+}
+
+message GetAssetResponse {
+  GtmAsset asset = 1;
+}
+
+message CreateAssetUploadRequest {
+  string org_id = 1 [(buf.validate.field).required = true];
+  // What the asset is attached to.
+  oneof target {
+    option (buf.validate.oneof).required = true;
+    string item_id = 2 [(buf.validate.field).string.min_len = 1];
+    string campaign_id = 3 [(buf.validate.field).string.min_len = 1];
+  }
+  string filename = 4 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 255
+  }];
+  // The client's claim; ConfirmAssetUpload sniffs the bytes against the
+  // allowlist.
+  string content_type = 5 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 255
+  }];
+  // The exact size the PUT must carry. At most 64 MiB (the most any path
+  // allows); the service's per-asset and per-org limits are lower
+  // (CreateAssetUpload).
+  int64 size_bytes = 6 [(buf.validate.field).int64 = {
+    gt: 0
+    lte: 67108864
+  }];
+}
+
+message CreateAssetUploadResponse {
+  // The PENDING asset.
+  GtmAsset asset = 1;
+  // Where to PUT the bytes, and the headers the PUT must carry exactly.
+  string upload_url = 2;
+  map<string, string> required_headers = 3;
+  google.protobuf.Timestamp expires_at = 4;
+}
+
+message ConfirmAssetUploadRequest {
+  string org_id = 1 [(buf.validate.field).required = true];
+  string asset_id = 2 [(buf.validate.field).required = true];
+}
+
+message ConfirmAssetUploadResponse {
+  // The READY asset.
+  GtmAsset asset = 1;
+}
+
+message GetAssetDownloadRequest {
+  string org_id = 1 [(buf.validate.field).required = true];
+  string asset_id = 2 [(buf.validate.field).required = true];
+}
+
+message GetAssetDownloadResponse {
+  // Grants the asset's bytes to whoever holds it, until expires_at: a
+  // secret; never log or store it.
+  string download_url = 1;
+  google.protobuf.Timestamp expires_at = 2;
+}
+
+message DeleteAssetRequest {
+  string org_id = 1 [(buf.validate.field).required = true];
+  string asset_id = 2 [(buf.validate.field).required = true];
+}
+
+message DeleteAssetResponse {}
+
+// ---------------------------------------------------------------------------
+// Strategy library.
+// ---------------------------------------------------------------------------
+
+message ListStrategyLibraryRequest {
+  string org_id = 1 [(buf.validate.field).required = true];
+  // Entries in any of these categories; empty means all.
+  repeated GtmStrategyCategory categories = 2 [(buf.validate.field).repeated = {
+    max_items: 13
+    items: {
+      enum: {
+        defined_only: true
+        not_in: [0]
+      }
+    }
+  }];
+  // Entries that fit any of these (an entry with none fits all); empty means
+  // no filter.
+  repeated GtmBusinessType business_types = 3 [(buf.validate.field).repeated = {
+    max_items: 10
+    items: {
+      enum: {
+        defined_only: true
+        not_in: [0]
+      }
+    }
+  }];
+  repeated GtmBusinessModel business_models = 4 [(buf.validate.field).repeated = {
+    max_items: 8
+    items: {
+      enum: {
+        defined_only: true
+        not_in: [0]
+      }
+    }
+  }];
+  optional string stage = 5 [(buf.validate.field).string = {
+    in: [
+      "pre_launch",
+      "launch",
+      "early_traction",
+      "growth",
+      "scale"
+    ]
+  }];
+  optional string objective = 6 [(buf.validate.field).string = {
+    in: [
+      "awareness",
+      "acquisition",
+      "activation",
+      "conversion",
+      "retention",
+      "expansion",
+      "referral",
+      "research"
+    ]
+  }];
+  optional string effort = 7 [(buf.validate.field).string = {
+    in: [
+      "low",
+      "medium",
+      "high"
+    ]
+  }];
+  optional string cost = 8 [(buf.validate.field).string = {
+    in: [
+      "free",
+      "low",
+      "medium",
+      "high"
+    ]
+  }];
+  // Matches name and summary_md (case-insensitive substring).
+  optional string query = 9 [(buf.validate.field).string.max_len = 200];
+  // Only entries that fit the org's positioning: (the entry names no
+  // business model, OR the org has none, OR they share one) AND (the entry
+  // names no business type, OR the org has none, OR the entry's include the
+  // org's). Combines with the filters above.
+  optional bool fits_my_business = 10;
+  // A spread instead of a page: up to page_size entries (0 is 50), taken
+  // round-robin across the matching categories in a stable order, so no
+  // category dominates. Deterministic; page_token is ignored and
+  // next_page_token is empty.
+  optional bool diverse = 11;
+  // page_size is at most 200; 0 is 50.
+  int32 page_size = 12 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 200
+  }];
+  string page_token = 13;
+}
+
+message ListStrategyLibraryResponse {
+  repeated GtmStrategyLibraryEntry entries = 1;
+  string next_page_token = 2;
+}
+
+message GetStrategyLibraryEntryRequest {
+  string org_id = 1 [(buf.validate.field).required = true];
+  string key = 2 [(buf.validate.field).required = true];
+}
+
+message GetStrategyLibraryEntryResponse {
+  GtmStrategyLibraryEntry entry = 1;
+}
+
+message UseLibraryStrategyRequest {
+  string org_id = 1 [(buf.validate.field).required = true];
+  string library_key = 2 [(buf.validate.field).required = true];
+  bool create_first_campaign = 3;
+  // The first campaign's name; unset: the entry's name.
+  optional string campaign_name = 4 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 200
+  }];
+}
+
+message UseLibraryStrategyResponse {
+  // The DRAFT strategy.
+  GtmStrategy strategy = 1;
+  // The DRAFT first campaign; unset when none was asked for.
+  GtmCampaign campaign = 2;
+}
+
+// ---------------------------------------------------------------------------
+// Ideas.
+// ---------------------------------------------------------------------------
+
+message ListIdeasRequest {
+  string org_id = 1 [(buf.validate.field).required = true];
+  optional GtmIdeaKind kind = 2;
+  optional GtmIdeaStatus status = 3;
+  optional string campaign_id = 4;
+  // page_size is at most 200; 0 is 50.
+  int32 page_size = 5 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 200
+  }];
+  // page_token is a previous response's next_page_token.
+  string page_token = 6;
+}
+
+message ListIdeasResponse {
+  repeated GtmIdea ideas = 1;
+  // next_page_token is empty on the last page.
+  string next_page_token = 2;
+}
+
+message GetIdeaRequest {
+  string org_id = 1 [(buf.validate.field).required = true];
+  string id = 2 [(buf.validate.field).required = true];
+}
+
+message GetIdeaResponse {
+  GtmIdea idea = 1;
+}
+
+message CreateIdeaRequest {
+  string org_id = 1 [(buf.validate.field).required = true];
+  GtmIdeaKind kind = 2 [(buf.validate.field).enum = {
+    defined_only: true
+    not_in: [0]
+  }];
+  string title = 3 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 300
+  }];
+  string body_md = 4;
+  repeated GtmEvidence evidence = 5;
+  // The chat proposing it, when an agent is.
+  string source_chat_id = 6;
+  // The campaign it belongs to; empty for none.
+  string campaign_id = 7;
+  // The idea bank entry it comes from; empty for none. A key the bank does
+  // not hold is InvalidArgument.
+  string library_key = 8 [(buf.validate.field).string.pattern = "^([a-z0-9][a-z0-9_-]{0,127})?$"];
+  // At most 20.
+  repeated GtmTailorAnswer tailor_answers = 9 [(buf.validate.field).repeated.max_items = 20];
+  string suggested_workflow_md = 10 [(buf.validate.field).string.max_len = 20000];
+}
+
+message CreateIdeaResponse {
+  GtmIdea idea = 1;
+}
+
+message UpdateIdeaRequest {
+  string org_id = 1 [(buf.validate.field).required = true];
+  string id = 2 [(buf.validate.field).required = true];
+  // The revision the caller read.
+  int32 expected_revision = 3 [(buf.validate.field).int32.gt = 0];
+  optional GtmIdeaKind kind = 4 [(buf.validate.field).enum = {
+    defined_only: true
+    not_in: [0]
+  }];
+  optional string title = 5 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 300
+  }];
+  optional string body_md = 6;
+  // Set: replaces the whole list (empty clears it).
+  GtmEvidenceList evidence = 7;
+  // Set: links the campaign; empty unlinks it.
+  optional string campaign_id = 8;
+  // Set: the idea bank entry it comes from (a key the bank does not hold is
+  // InvalidArgument); empty clears it.
+  optional string library_key = 9 [(buf.validate.field).string.pattern = "^([a-z0-9][a-z0-9_-]{0,127})?$"];
+  // Set: replaces the whole list (empty clears it).
+  GtmTailorAnswerList tailor_answers = 10;
+  optional string suggested_workflow_md = 11 [(buf.validate.field).string.max_len = 20000];
+}
+
+message UpdateIdeaResponse {
+  GtmIdea idea = 1;
+}
+
+message SetIdeaStatusRequest {
+  string org_id = 1 [(buf.validate.field).required = true];
+  string id = 2 [(buf.validate.field).required = true];
+  int32 expected_revision = 3 [(buf.validate.field).int32.gt = 0];
+  GtmIdeaStatus status = 4 [(buf.validate.field).enum = {
+    defined_only: true
+    not_in: [0]
+  }];
+}
+
+message SetIdeaStatusResponse {
+  GtmIdea idea = 1;
+}
+
+// ---------------------------------------------------------------------------
+// Campaigns.
+// ---------------------------------------------------------------------------
+
+message ListCampaignsRequest {
+  string org_id = 1 [(buf.validate.field).required = true];
+  optional GtmCampaignStatus status = 2;
+  // page_size is at most 200; 0 is 50.
+  int32 page_size = 3 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 200
+  }];
+  string page_token = 4;
+  optional string strategy_id = 5;
+}
+
+message ListCampaignsResponse {
+  repeated GtmCampaign campaigns = 1;
+  string next_page_token = 2;
+}
+
+message GetCampaignRequest {
+  string org_id = 1 [(buf.validate.field).required = true];
+  string id = 2 [(buf.validate.field).required = true];
+}
+
+message GetCampaignResponse {
+  GtmCampaign campaign = 1;
+  // The ideas linked to it, newest first.
+  repeated GtmIdea ideas = 2;
+  // The items linked to it: scheduled ones soonest first, then the rest
+  // newest first.
+  repeated GtmItem items = 3;
+  // ideas and items each hold at most 200 rows; true when either was cut.
+  bool truncated = 4;
+  // Planned against actual, over ALL its items (not only those above):
+  // planned rows first, then one row per unplanned (channel, format) pair its
+  // items use. The planned rows are planned_channel_ids x planned_formats,
+  // in that order. A one-sided plan leaves the other side unset: planned
+  // channels only give one row per channel with format UNSPECIFIED (any
+  // format), planned formats only give one row per format with channel_id
+  // empty (any channel). An item counts in the first planned row it matches,
+  // else in its unplanned pair.
+  repeated GtmCoverageRow coverage = 5;
+}
+
+message CreateCampaignRequest {
+  string org_id = 1 [(buf.validate.field).required = true];
+  string name = 2 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 200
+  }];
+  string goal = 3;
+  google.protobuf.Timestamp period_start = 4;
+  google.protobuf.Timestamp period_end = 5;
+  // Unset: DRAFT.
+  optional GtmCampaignStatus status = 6 [(buf.validate.field).enum = {
+    defined_only: true
+    not_in: [0]
+  }];
+  // The strategy it belongs to, in the same org.
+  string strategy_id = 7 [(buf.validate.field).required = true];
+  repeated string planned_channel_ids = 8;
+  repeated GtmItemFormat planned_formats = 9 [(buf.validate.field).repeated.items.enum = {
+    defined_only: true
+    not_in: [0]
+  }];
+}
+
+message CreateCampaignResponse {
+  GtmCampaign campaign = 1;
+}
+
+message UpdateCampaignRequest {
+  string org_id = 1 [(buf.validate.field).required = true];
+  string id = 2 [(buf.validate.field).required = true];
+  int32 expected_revision = 3 [(buf.validate.field).int32.gt = 0];
+  optional string name = 4 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 200
+  }];
+  optional string goal = 5;
+  google.protobuf.Timestamp period_start = 6;
+  google.protobuf.Timestamp period_end = 7;
+  // Clears period_start / period_end (wins over a value in the same request).
+  bool clear_period_start = 8;
+  bool clear_period_end = 9;
+  optional GtmCampaignStatus status = 10 [(buf.validate.field).enum = {
+    defined_only: true
+    not_in: [0]
+  }];
+  // Set: moves the campaign to this strategy of the same org.
+  optional string strategy_id = 11 [(buf.validate.field).string.min_len = 1];
+  // Set: replaces the planned channels / formats (empty clears them).
+  GtmChannelIdList planned_channel_ids = 12;
+  GtmItemFormatList planned_formats = 13;
+}
+
+message UpdateCampaignResponse {
+  GtmCampaign campaign = 1;
+}
+
+// ---------------------------------------------------------------------------
+// Items (the calendar).
+// ---------------------------------------------------------------------------
+
+message ListItemsRequest {
+  option (buf.validate.message).cel = {
+    id: "scheduled_range_order"
+    message: "scheduled_to must be after scheduled_from"
+    expression: "!has(this.scheduled_from) || !has(this.scheduled_to) || this.scheduled_to > this.scheduled_from"
+  };
+  string org_id = 1 [(buf.validate.field).required = true];
+  optional string campaign_id = 2;
+  optional GtmItemFormat format = 3;
+  optional GtmItemStatus status = 4;
+  // The scheduled range, half-open: scheduled_from <= scheduled_at <
+  // scheduled_to. Either bound set lists only scheduled items.
+  google.protobuf.Timestamp scheduled_from = 5;
+  google.protobuf.Timestamp scheduled_to = 6;
+  // page_size is at most 500; 0 is 100.
+  int32 page_size = 7 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 500
+  }];
+  string page_token = 8;
+  optional string channel_id = 9;
+}
+
+message ListItemsResponse {
+  repeated GtmItem items = 1;
+  string next_page_token = 2;
+}
+
+message GetItemRequest {
+  string org_id = 1 [(buf.validate.field).required = true];
+  string id = 2 [(buf.validate.field).required = true];
+}
+
+message GetItemResponse {
+  GtmItem item = 1;
+}
+
+message CreateItemRequest {
+  string org_id = 1 [(buf.validate.field).required = true];
+  GtmItemFormat format = 2 [(buf.validate.field).enum = {
+    defined_only: true
+    not_in: [0]
+  }];
+  string title = 3 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 300
+  }];
+  string body_md = 4;
+  // The channel (GtmChannel.id) it goes out on; empty for none yet.
+  string channel_id = 5;
+  // Empty: no campaign / idea.
+  string campaign_id = 6;
+  string idea_id = 7;
+  google.protobuf.Timestamp scheduled_at = 8;
+  // Email-type only.
+  repeated string email_to = 9;
+  string email_subject = 10;
+  // DRAFT or REVIEW; unset: DRAFT.
+  optional GtmItemStatus status = 11 [(buf.validate.field).enum = {
+    in: [
+      1,
+      2
+    ]
+  }];
+}
+
+message CreateItemResponse {
+  GtmItem item = 1;
+}
+
+// GtmEmailRecipients is a whole recipient list, so an update can tell
+// "replace" (set, possibly empty) from "leave alone" (unset).
+message GtmEmailRecipients {
+  repeated string addresses = 1;
+}
+
+message UpdateItemRequest {
+  string org_id = 1 [(buf.validate.field).required = true];
+  string id = 2 [(buf.validate.field).required = true];
+  int32 expected_revision = 3 [(buf.validate.field).int32.gt = 0];
+  optional GtmItemFormat format = 4 [(buf.validate.field).enum = {
+    defined_only: true
+    not_in: [0]
+  }];
+  optional string title = 5 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 300
+  }];
+  optional string body_md = 6;
+  // Set: moves it to this channel; empty takes it off any channel.
+  optional string channel_id = 7;
+  // Set: links the campaign / idea; empty unlinks it.
+  optional string campaign_id = 8;
+  optional string idea_id = 9;
+  google.protobuf.Timestamp scheduled_at = 10;
+  // Takes the item off the calendar (wins over scheduled_at).
+  bool clear_scheduled_at = 11;
+  // Set: replaces the recipients.
+  GtmEmailRecipients email_to = 12;
+  optional string email_subject = 13;
+  // The status to move to, along the lifecycle on GtmItemStatus. Never SENT.
+  optional GtmItemStatus status = 14 [(buf.validate.field).enum = {
+    defined_only: true
+    not_in: [0]
+  }];
+  // Set: records where it went out (http or https); empty clears it. Not a
+  // content edit. A person's act.
+  optional string published_url = 15 [(buf.validate.field).string = {
+    pattern: "^(https?://.+)?$"
+    max_len: 2048
+  }];
+}
+
+message UpdateItemResponse {
+  GtmItem item = 1;
+}
+
+message ResolveItemSendRequest {
+  string org_id = 1 [(buf.validate.field).required = true];
+  string id = 2 [(buf.validate.field).required = true];
+  // The held send's approval hash (GtmItem.approval_hash), as the person saw it.
+  string approval_hash = 3 [(buf.validate.field).required = true];
+  // Set: the email went out, with this Gmail message id; the item becomes
+  // SENT. Unset: it did not go out; the hold is released.
+  optional string gmail_message_id = 4 [(buf.validate.field).string.min_len = 1];
+}
+
+message ResolveItemSendResponse {
+  GtmItem item = 1;
+}
+
+// ---------------------------------------------------------------------------
+// Positioning.
+// ---------------------------------------------------------------------------
+
+message GetPositioningRequest {
+  string org_id = 1 [(buf.validate.field).required = true];
+}
+
+message GetPositioningResponse {
+  GtmPositioning positioning = 1;
+}
+
+message UpdatePositioningRequest {
+  string org_id = 1 [(buf.validate.field).required = true];
+  // The revision the caller read; 0 when the org has none yet.
+  int32 expected_revision = 2 [(buf.validate.field).int32.gte = 0];
+  string positioning_md = 3;
+  repeated string audiences = 4;
+  // UNSPECIFIED: not said.
+  GtmBusinessType business_type = 5 [(buf.validate.field).enum.defined_only = true];
+  // Each at most once; empty: not said.
+  repeated GtmBusinessModel business_models = 6 [(buf.validate.field).repeated = {
+    max_items: 8
+    unique: true
+    items: {
+      enum: {
+        defined_only: true
+        not_in: [0]
+      }
+    }
+  }];
+}
+
+message UpdatePositioningResponse {
+  GtmPositioning positioning = 1;
+}
+
+// ---------------------------------------------------------------------------
+// Claims.
+// ---------------------------------------------------------------------------
+
+message ListClaimsRequest {
+  string org_id = 1 [(buf.validate.field).required = true];
+  optional GtmClaimStatus status = 2;
+  optional GtmClaimCategory category = 3;
+  // Matches claims whose text contains it (case-insensitive).
+  optional string search = 4;
+  // page_size is at most 500; 0 is 200.
+  int32 page_size = 5 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 500
+  }];
+  string page_token = 6;
+}
+
+message ListClaimsResponse {
+  repeated GtmClaim claims = 1;
+  string next_page_token = 2;
+}
+
+message UpsertClaimRequest {
+  option (buf.validate.message).cel = {
+    id: "upsert_claim_shape"
+    message: "a create (id empty) needs text and category; a change (id set) needs expected_revision > 0"
+    expression: "this.id == '' ? (has(this.text) && has(this.category)) : this.expected_revision > 0"
+  };
+  string org_id = 1 [(buf.validate.field).required = true];
+  // Empty: create a claim (text and category required). Set: change that
+  // claim (expected_revision > 0 required; text and category must be unset or
+  // equal to the stored ones).
+  string id = 2;
+  int32 expected_revision = 3 [(buf.validate.field).int32.gte = 0];
+  optional string text = 4 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 500
+  }];
+  optional GtmClaimCategory category = 5 [(buf.validate.field).enum = {
+    defined_only: true
+    not_in: [0]
+  }];
+  // VERIFIED (a person only, with the evidence below), UNVERIFIED or RETIRED.
+  // Unset on create: UNVERIFIED.
+  optional GtmClaimStatus status = 6 [(buf.validate.field).enum = {
+    defined_only: true
+    not_in: [0]
+  }];
+  optional string source_url = 7;
+  optional GtmClaimSourceKind source_kind = 8 [(buf.validate.field).enum.defined_only = true];
+  google.protobuf.Timestamp expires_or_recheck_at = 9;
+  // Clears expires_or_recheck_at (wins over a value in the same request).
+  bool clear_expires_or_recheck_at = 10;
+  optional string notes = 11;
+}
+
+message UpsertClaimResponse {
+  GtmClaim claim = 1;
+  // True when this call created the claim.
+  bool created = 2;
+}
+
+message CheckClaimsRequest {
+  string org_id = 1 [(buf.validate.field).required = true];
+  // The text to check, markdown (an item's title and body).
+  string text = 2 [(buf.validate.field).string.max_len = 200000];
+}
+
+message CheckClaimsResponse {
+  repeated GtmClaimFinding findings = 1;
+  // True when any finding blocks approval.
+  bool blocking = 2;
+}

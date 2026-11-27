@@ -19,6 +19,7 @@
       "DaemonService",
       "FileSystemService",
       "ForgeService",
+      "GtmService",
       "InboxService",
       "MCPService",
       "MessageService",
