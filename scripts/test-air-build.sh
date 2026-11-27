@@ -15,8 +15,8 @@
 # build exits non-zero and leaves the shared binary and every delivered copy
 # intact, and the next caller tries again; a lock holder killed mid-build does
 # not wedge the next caller; -w is merged into the last -ldflags (or added as
-# -ldflags=-w), never repeated, and left out under FORGE_DEV_DWARF=1 or when
-# GOFLAGS has the only -ldflags. No step waits a fixed time: each polls for the
+# -ldflags=-w), safely repeated if already present, and left out under
+# FORGE_DEV_DWARF=1 or when GOFLAGS has the only -ldflags. No step waits a fixed time: each polls for the
 # event it needs, with a deadline.
 #
 # The same file lives in control-plane and reliant; change both together.
@@ -223,8 +223,11 @@ ldflags_case "no flags: -ldflags=-w" "-ldflags=-w"
 ldflags_case "-w is merged into an -ldflags=" "-trimpath|-ldflags=-X a.b=c -w" -trimpath "-ldflags=-X a.b=c"
 ldflags_case "-w is merged into an -ldflags <value>" "-ldflags|-X a.b=c -w" -ldflags "-X a.b=c"
 ldflags_case "-w joins the last of two -ldflags" "-ldflags=-s|-ldflags=-X a.b=c -w" -ldflags=-s "-ldflags=-X a.b=c"
-ldflags_case "an -ldflags=-w is not repeated" "-ldflags=-w" -ldflags=-w
-ldflags_case "a merged -w is not repeated" "-ldflags=-X a.b=c -w" "-ldflags=-X a.b=c -w"
+# The build script deliberately appends -w even when it is already present:
+# repetition is safe, and matching text could instead be a linker option value.
+ldflags_case "an existing -w safely receives another -w" "-ldflags=-w -w" -ldflags=-w
+ldflags_case "a merged -w safely receives another -w" "-ldflags=-X a.b=c -w -w" "-ldflags=-X a.b=c -w"
+ldflags_case "-w in a linker option value does not suppress -w" "-ldflags=-X a.b=-w -w" "-ldflags=-X a.b=-w"
 GOFLAGS="-trimpath -ldflags=-s" ldflags_case "an -ldflags in GOFLAGS wins over the default" ""
 GOFLAGS="-ldflags=-s" ldflags_case "a command-line -ldflags still gets -w over GOFLAGS'" "-ldflags=-X a.b=c -w" "-ldflags=-X a.b=c"
 FORGE_DEV_DWARF=1 ldflags_case "FORGE_DEV_DWARF=1 keeps DWARF" "-cover" -cover
