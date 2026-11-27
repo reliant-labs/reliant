@@ -559,9 +559,10 @@ export function consolePageOf(pathname: string): { project: string; page: Consol
       case SITE_INSIGHTS_SEGMENT:
         if (!sub) return { kind: "site-insights" };
         return isSiteInsightsView(sub) && !dashKind ? { kind: "site-insights", view: sub } : null;
-      // The old name: its route redirects here, and until it does it is the same page.
+      // Keep the deprecated target round-trip intact for hosts that still render
+      // the legacy component. The main app's route redirects to Site insights.
       case SPEED_INSIGHTS_SEGMENT:
-        return sub ? null : { kind: "site-insights" };
+        return sub ? null : { kind: "speed-insights" };
       case SECURITY_SEGMENT:
         if (sub === SECURITY_PAGES.vulnerabilities && !dashKey) {
           return dashKind ? { kind: "vulnerability", advisory: safeDecode(dashKind) } : { kind: "vulnerabilities" };

@@ -461,6 +461,14 @@ describe("the project Metrics catalog", () => {
 });
 
 describe("redirects from the retired URLs", () => {
+  it("redirects Speed insights in the main-app configuration without losing its search contract", async () => {
+    // renderAt supplies Site insights only, just like the main app.
+    const router = renderAt("/forge/p/alpha/speed-insights?env=e2e&device=mobile&pct=p95&metric=lcp&range=7d");
+    await landsOn(router, "/forge/p/alpha/site-insights", { env: "e2e", device: "mobile", pct: "p95", metric: "lcp", range: "7d" });
+    expect(await screen.findByTestId("page")).toHaveAttribute("data-page", "site-insights");
+    expect(router.state.matches.at(-1)?.search).toEqual(expect.objectContaining({ device: "mobile", pct: "p95", metric: "lcp", range: "7d" }));
+  });
+
   it("sends a control-plane link's env tab to the page it means, scoped to that env", async () => {
     state.currentProject = PROJECTS[0]!; // Alpha is open; the link is about Beta's "barkshop".
     const router = renderAt("/forge/env/e2e?forgeProject=barkshop&tab=releases");
