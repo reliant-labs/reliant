@@ -200,7 +200,9 @@ func gtmMock(t *testing.T) *gtm.MockService {
 	at := gtmNow().Add(48 * time.Hour)
 	item := gtm.Item{ID: "item-1", Title: "Launch post", Format: gtm.FormatShortPost, ChannelID: "ch-reddit", Status: gtm.ItemDraft, ScheduledAt: &at, BodyMD: "Hello", Revision: 1}
 	channel := gtm.Channel{ID: "ch-reddit", Key: "reddit", Name: "Reddit", Mode: gtm.ChannelManual, Status: gtm.ChannelActive, Source: gtm.ChannelSourceSeed, Revision: 1}
-	entry := gtm.LibraryEntry{Key: "sample-play", Name: "Sample play", Category: gtm.CategoryLaunchesPR, Depth: gtm.DepthPlay, SummaryMD: "A placeholder play.", KPIs: []string{"signups"}}
+	entry := gtm.LibraryEntry{Key: "sample-play", Name: "Sample play", Category: gtm.CategoryLaunchesPR, SummaryMD: "A placeholder play.", KPIs: []string{"signups"},
+		BusinessTypes: []gtm.BusinessType{gtm.BusinessB2BSaaS}, Stages: []string{"launch"}, Effort: "low", TailorQuestions: []string{"Who would show up?"},
+		WhyItWorksMD: "People trust people.", SuggestedWorkflowMD: "Weekly: list events."}
 	return &gtm.MockService{
 		ListIdeasFunc: func(_ context.Context, a gtm.Actor, in gtm.ListIdeasInput) (gtm.ListIdeasResult, error) {
 			agent(a)
@@ -300,7 +302,8 @@ func gtmMock(t *testing.T) *gtm.MockService {
 		},
 		GetPositioningFunc: func(_ context.Context, a gtm.Actor) (gtm.Positioning, error) {
 			agent(a)
-			return gtm.Positioning{PositioningMD: "Agents for teams.", Audiences: []string{"founders"}, Revision: 4, UpdatedAt: gtmNow()}, nil
+			return gtm.Positioning{PositioningMD: "Agents for teams.", Audiences: []string{"founders"}, Revision: 4, UpdatedAt: gtmNow(),
+				BusinessType: gtm.BusinessDeveloperTools, BusinessModels: []gtm.BusinessModel{gtm.ModelFreemium, gtm.ModelSubscription}}, nil
 		},
 		CheckClaimsFunc: func(_ context.Context, a gtm.Actor, in gtm.CheckClaimsInput) (gtm.CheckClaimsResult, error) {
 			agent(a)
@@ -308,7 +311,7 @@ func gtmMock(t *testing.T) *gtm.MockService {
 		},
 		ReadProductAnalyticsFunc: func(_ context.Context, a gtm.Actor, q gtm.AnalyticsQuery) (gtm.AnalyticsResult, error) {
 			agent(a)
-			return gtm.AnalyticsResult{Template: q.Template, From: q.From, To: q.To, HiddenGroups: 2, Rows: []gtm.AnalyticsRow{{Event: "run.started", Value: "", Count: 12}}}, nil
+			return gtm.AnalyticsResult{Template: q.Template, From: q.From, To: q.To, HiddenGroups: 2, Environment: q.Environment, ProjectID: q.ProjectID, Rows: []gtm.AnalyticsRow{{Event: "run.started", Value: "", Count: 12}}}, nil
 		},
 		AttachFromAttachmentFunc: func(_ context.Context, a gtm.Actor, in gtm.AttachFromAttachmentInput) (gtm.Asset, error) {
 			agent(a)
@@ -351,6 +354,19 @@ func TestGTMTools_HappyPaths(t *testing.T) {
 			assert.Equal(t, []gtm.Evidence{{Kind: "analytics", Title: "runs up"}}, in.Evidence)
 			assert.Equal(t, "idea-1", out["id"])
 		}},
+		{ToolSaveGtmIdea, `{"kind":"GTM","title":"Host a meetup","library_key":"sample-play","tailor_answers":[{"question":"Who would show up?","answer":"Platform engineers in Austin"}],"suggested_workflow_md":"Weekly: list events."}`, func(t *testing.T, m *gtm.MockService, out map[string]any) {
+			in := lastInput[gtm.CreateIdeaInput](t, m, "CreateIdea")
+			assert.Equal(t, "sample-play", in.LibraryKey)
+			assert.Equal(t, []gtm.TailorAnswer{{Question: "Who would show up?", Answer: "Platform engineers in Austin"}}, in.TailorAnswers)
+			assert.Equal(t, "Weekly: list events.", in.SuggestedWorkflowMD)
+		}},
+		{ToolSaveGtmIdea, `{"id":"idea-1","expected_revision":1,"library_key":"","tailor_answers":[{"question":"q","answer":"a"}]}`, func(t *testing.T, m *gtm.MockService, out map[string]any) {
+			in := lastInput[gtm.UpdateIdeaInput](t, m, "UpdateIdea")
+			require.NotNil(t, in.LibraryKey)
+			assert.Empty(t, *in.LibraryKey, "an empty library_key clears it")
+			assert.Equal(t, &[]gtm.TailorAnswer{{Question: "q", Answer: "a"}}, in.TailorAnswers)
+			assert.Nil(t, in.SuggestedWorkflowMD, "an omitted field is left alone")
+		}},
 		{ToolSaveGtmIdea, `{"id":"idea-1","expected_revision":1,"campaign_id":""}`, func(t *testing.T, m *gtm.MockService, out map[string]any) {
 			in := lastInput[gtm.UpdateIdeaInput](t, m, "UpdateIdea")
 			assert.Equal(t, int32(1), in.ExpectedRevision)
@@ -381,14 +397,32 @@ func TestGTMTools_HappyPaths(t *testing.T) {
 			assert.Equal(t, "More orgs", *in.GoalMD)
 			assert.Nil(t, in.Status, "an agent never moves a strategy's status")
 		}},
-		{ToolListGtmStrategyLibrary, `{"category":"LAUNCHES_PR","depth":"PLAY","query":"launch"}`, func(t *testing.T, m *gtm.MockService, out map[string]any) {
+		{ToolListGtmStrategyLibrary, `{"diverse":true}`, func(t *testing.T, m *gtm.MockService, out map[string]any) {
 			in := lastInput[gtm.ListStrategyLibraryInput](t, m, "ListStrategyLibrary")
-			assert.Equal(t, gtm.CategoryLaunchesPR, in.Category)
-			assert.Equal(t, gtm.DepthPlay, in.Depth)
-			assert.Equal(t, "sample-play", out["entries"].([]any)[0].(map[string]any)["key"])
+			assert.Equal(t, gtm.ListStrategyLibraryInput{Diverse: true, FitsMyBusiness: true, PageSize: gtmDefaultPage,
+				Categories: []gtm.StrategyCategory{}, BusinessTypes: []gtm.BusinessType{}, BusinessModels: []gtm.BusinessModel{}}, in,
+				"fits_my_business defaults to true")
+			e := out["entries"].([]any)[0].(map[string]any)
+			assert.Equal(t, "sample-play", e["key"])
+			assert.Equal(t, []any{"Who would show up?"}, e["tailor_questions"], "a list carries the questions an idea answers")
+			assert.Equal(t, []any{"B2B_SAAS"}, e["business_types"])
+			assert.Equal(t, true, out["fits_my_business"])
+		}},
+		{ToolListGtmStrategyLibrary, `{"categories":["LAUNCHES_PR","community_events"],"business_types":["DEVELOPER_TOOLS"],"business_models":["FREEMIUM"],"stage":"launch","effort":"low","cost":"free","query":"meetup","fits_my_business":false,"limit":5,"page_token":"p2"}`, func(t *testing.T, m *gtm.MockService, out map[string]any) {
+			in := lastInput[gtm.ListStrategyLibraryInput](t, m, "ListStrategyLibrary")
+			assert.Equal(t, gtm.ListStrategyLibraryInput{
+				Categories:     []gtm.StrategyCategory{gtm.CategoryLaunchesPR, gtm.CategoryCommunityEvents},
+				BusinessTypes:  []gtm.BusinessType{gtm.BusinessDeveloperTools},
+				BusinessModels: []gtm.BusinessModel{gtm.ModelFreemium},
+				Stage:          "launch", Effort: "low", Cost: "free", Query: "meetup", PageSize: 5, PageToken: "p2",
+			}, in)
+			assert.Equal(t, false, out["fits_my_business"])
 		}},
 		{ToolListGtmStrategyLibrary, `{"key":"sample-play"}`, func(t *testing.T, m *gtm.MockService, out map[string]any) {
 			assert.Equal(t, []any{"signups"}, out["kpis"])
+			assert.Equal(t, "People trust people.", out["why_it_works_md"])
+			assert.Equal(t, "Weekly: list events.", out["suggested_workflow_md"])
+			assert.Equal(t, []any{"Who would show up?"}, out["tailor_questions"])
 		}},
 		{ToolListGtmCampaigns, `{"strategy_id":"strat-1"}`, func(t *testing.T, m *gtm.MockService, out map[string]any) {
 			assert.Equal(t, "strat-1", *lastInput[gtm.ListCampaignsInput](t, m, "ListCampaigns").StrategyID)
@@ -462,6 +496,8 @@ func TestGTMTools_HappyPaths(t *testing.T) {
 		{ToolGetGtmPositioning, `{}`, func(t *testing.T, m *gtm.MockService, out map[string]any) {
 			assert.Equal(t, "Agents for teams.", out["positioning_md"])
 			assert.Equal(t, float64(4), out["revision"])
+			assert.Equal(t, "DEVELOPER_TOOLS", out["business_type"])
+			assert.Equal(t, []any{"FREEMIUM", "SUBSCRIPTION"}, out["business_models"])
 		}},
 		{ToolCheckGtmClaims, `{"text":"Free forever."}`, func(t *testing.T, m *gtm.MockService, out map[string]any) {
 			assert.Equal(t, "Free forever.", lastInput[gtm.CheckClaimsInput](t, m, "CheckClaims").Text)
@@ -477,6 +513,16 @@ func TestGTMTools_HappyPaths(t *testing.T) {
 			assert.Equal(t, time.Date(2026, 11, 12, 0, 0, 0, 0, time.UTC), q.From)
 			assert.Equal(t, float64(2), out["hidden_groups"])
 			assert.Equal(t, map[string]any{"event": "run.started", "value": "", "count": float64(12)}, out["rows"].([]any)[0])
+			assert.Empty(t, q.Environment)
+			assert.Empty(t, q.ProjectID)
+			assert.Equal(t, "all environments", out["environment"], "an unscoped read says so")
+		}},
+		{ToolReadProductAnalytics, `{"template":"event_counts","environment":" prod ","project_id":"proj-1"}`, func(t *testing.T, m *gtm.MockService, out map[string]any) {
+			q := lastInput[gtm.AnalyticsQuery](t, m, "ReadProductAnalytics")
+			assert.Equal(t, "prod", q.Environment)
+			assert.Equal(t, "proj-1", q.ProjectID)
+			assert.Equal(t, "prod", out["environment"])
+			assert.Equal(t, "proj-1", out["project_id"])
 		}},
 		{ToolAttachGtmAsset, `{"attachment_id":"att-1","item_id":"item-1"}`, func(t *testing.T, m *gtm.MockService, out map[string]any) {
 			assert.Equal(t, gtm.AttachFromAttachmentInput{AttachmentID: "att-1", ItemID: "item-1"}, lastInput[gtm.AttachFromAttachmentInput](t, m, "AttachFromAttachment"))
@@ -554,10 +600,7 @@ func gtmRealService(rows gtmRows) (gtm.Service, *gtm.MockStore) {
 			}
 			return nil, notFound()
 		},
-		GetCampaignFunc: func(context.Context, string, string) (*store.GtmCampaign, error) { return nil, notFound() },
-		GetLibraryEntryFunc: func(context.Context, string, string) (*store.GtmStrategyLibrary, error) {
-			return nil, notFound()
-		},
+		GetCampaignFunc:   func(context.Context, string, string) (*store.GtmCampaign, error) { return nil, notFound() },
 		CountChannelsFunc: func(context.Context, string) (int64, error) { return 1, nil },
 	}
 	svc := gtm.New(gtm.Deps{
@@ -811,4 +854,29 @@ func TestGTMTools_ListCaps(t *testing.T) {
 	camp := decodeGTM(t, runGTM(t, newGTMTestTool(ToolListGtmCampaigns, m, nil), gtmTestChat, `{"id":"camp-1"}`))
 	assert.Len(t, camp["coverage"], gtmDetailCap)
 	assert.Equal(t, true, camp["coverage_truncated"])
+}
+
+// The idea bank's guidance is in the tool's own description: what the
+// entries are, how to generate ideas from them, and that nothing imports.
+func TestGTMTools_LibraryGuidance(t *testing.T) {
+	d := NewListGtmStrategyLibraryTool(gtmChats{}, nil).Description()
+	for _, want := range []string{
+		"generic jumping-off points to tailor", "not scripts",
+		"diverse=true first", "AT LEAST 4 different categories",
+		"meetups, conferences, hackathons, networking", "founder-led, high-touch outreach",
+		"unless the business makes them impossible", "say why",
+		"library_key", "tailor_questions", "tailor_answers",
+	} {
+		assert.Contains(t, d, want)
+	}
+	assert.NotContains(t, strings.ToLower(d), "import")
+	a := NewReadProductAnalyticsTool(gtmChats{}, nil).Description()
+	for _, want := range []string{
+		`"all environments"`, "preview and local environments", "events with no environment",
+		"matched exactly", "unless project_id is given", "list of available environment names",
+		"at most 30 days", "at most 90 days", "at most 200 rows",
+	} {
+		assert.Contains(t, a, want)
+	}
+	assert.NotContains(t, a, "mixed together")
 }
