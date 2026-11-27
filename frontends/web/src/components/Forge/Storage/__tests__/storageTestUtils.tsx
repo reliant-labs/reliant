@@ -1,7 +1,8 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * Renders the real StorageBrowser against the fixture api, with the URL state
+ * Renders the real StorageBrowser in a TransportScope over the fixture's
+ * StorageBrowserService (its real calls, on a mock transport), with the URL state
  * held in a harness: onNavigate replaces it (so a click that changes the view
  * re-renders the browser on the new state, as the router would), and every
  * navigation is recorded. Links render real hrefs (withSearch, as the console
@@ -15,12 +16,12 @@ import { setReaderPrincipal } from "../../AuditedAccess/readerSession";
 beforeEach(() => setReaderPrincipal("fixture-reader", true));
 import { act, render } from "@testing-library/react";
 import { defaultParseSearch } from "@tanstack/react-router";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient } from "@tanstack/react-query";
 
-import { StorageBrowserApiProvider, type StorageBrowserApi } from "@/services/controlPlane/storageBrowser/StorageBrowserApiContext";
+import { createTransportScope, TransportScopeProvider } from "@/lib/transportScope";
 
 import { withSearch } from "../../Console/paths";
-import type { StorageFixtureApi } from "../__fixtures__/fixtureStorageApi";
+import { storageFixtureTransport, type StorageFixture } from "../__fixtures__/fixtureStorageService";
 import { StorageBrowser } from "../StorageBrowser";
 import type { StorageSearch } from "../storageUrl-model";
 
@@ -37,7 +38,7 @@ export function searchOf(href: string | null): StorageSearch {
   return defaultParseSearch(value.slice(value.indexOf("?"))) as StorageSearch;
 }
 
-export function renderBrowser(api: StorageBrowserApi, initial: StorageSearch = {}, env: { id: string; name: string } = STAGING, options: { pageSize?: number } = {}) {
+export function renderBrowser(api: StorageFixture, initial: StorageSearch = {}, env: { id: string; name: string } = STAGING, options: { pageSize?: number } = {}) {
   const navigations: { search: StorageSearch; replace: boolean }[] = [];
   const downloads: string[] = [];
   let current = initial;
@@ -61,12 +62,11 @@ export function renderBrowser(api: StorageBrowserApi, initial: StorageSearch = {
     );
   }
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const scope = createTransportScope({ id: "storage-fixture", transport: storageFixtureTransport(api), queryClient: client });
   const utils = render(
-    <QueryClientProvider client={client}>
-      <StorageBrowserApiProvider api={api}>
-        <Harness />
-      </StorageBrowserApiProvider>
-    </QueryClientProvider>
+    <TransportScopeProvider scope={scope}>
+      <Harness />
+    </TransportScopeProvider>
   );
   return {
     ...utils,
@@ -80,6 +80,6 @@ export function renderBrowser(api: StorageBrowserApi, initial: StorageSearch = {
 }
 
 /** The calls of one method made, newest last. */
-export function callsOf(api: StorageFixtureApi, method: StorageFixtureApi["calls"][number]["method"]) {
+export function callsOf(api: StorageFixture, method: StorageFixture["calls"][number]["method"]) {
   return api.calls.filter((call) => call.method === method).map((call) => call.req as Record<string, unknown>);
 }

@@ -72,13 +72,16 @@ const (
 type ForgeServiceClient interface {
 	// GetTopology returns the whole release/environment topology. Set verify to
 	// reconcile each environment against its live cluster.
+	// forge:lint-disable-next-line forge-idempotency-read-undeclared: writes as it reads: rememberForgeProjectName stores the project's forge name (SetProjectForgeName) and refreshForgeApps runs in the background
 	GetTopology(context.Context, *connect.Request[v1.GetForgeTopologyRequest]) (*connect.Response[v1.GetForgeTopologyResponse], error)
 	// VerifyEnv reconciles one environment against its live cluster.
 	VerifyEnv(context.Context, *connect.Request[v1.VerifyForgeEnvRequest]) (*connect.Response[v1.VerifyForgeEnvResponse], error)
 	// ListSecrets returns declared/present/inert secrets for an environment.
 	// The report carries NAMES and BOOLEANS only, never a secret value.
+	// forge:lint-disable-next-line forge-idempotency-read-undeclared: calls out: it dispatches forge.secret_list to the user's machine, resolving secret presence from the provider's metadata; not pinned to a read-only argv in the forge handler test
 	ListSecrets(context.Context, *connect.Request[v1.ListForgeSecretsRequest]) (*connect.Response[v1.ListForgeSecretsResponse], error)
 	// GetEnvStatus returns runtime checks for an environment.
+	// forge:lint-disable-next-line forge-idempotency-read-undeclared: calls out: it dispatches forge.env_status to run a forge CLI command on the user's machine, whose argv is not pinned read-only
 	GetEnvStatus(context.Context, *connect.Request[v1.GetForgeEnvStatusRequest]) (*connect.Response[v1.GetForgeEnvStatusResponse], error)
 	// GetEnvShape projects ONE environment's render into the declaration the
 	// control plane records for it — `forge env shape <env> --json`.
@@ -95,6 +98,7 @@ type ForgeServiceClient interface {
 	// records. That identity is what stops a Register from writing a
 	// declaration that disagrees with the next build's, on an env whose kind is
 	// immutable.
+	// forge:lint-disable-next-line forge-idempotency-read-undeclared: calls out: it dispatches forge.env_shape to run a forge CLI command on the user's machine, whose argv is not pinned read-only
 	GetEnvShape(context.Context, *connect.Request[v1.GetForgeEnvShapeRequest]) (*connect.Response[v1.GetForgeEnvShapeResponse], error)
 	// PlanPromote previews binding an environment to a release. READ-ONLY: it
 	// runs `forge env promote <release> --to <env> --plan`, which computes the
@@ -330,13 +334,16 @@ func (c *forgeServiceClient) GetDeployStatus(ctx context.Context, req *connect.R
 type ForgeServiceHandler interface {
 	// GetTopology returns the whole release/environment topology. Set verify to
 	// reconcile each environment against its live cluster.
+	// forge:lint-disable-next-line forge-idempotency-read-undeclared: writes as it reads: rememberForgeProjectName stores the project's forge name (SetProjectForgeName) and refreshForgeApps runs in the background
 	GetTopology(context.Context, *connect.Request[v1.GetForgeTopologyRequest]) (*connect.Response[v1.GetForgeTopologyResponse], error)
 	// VerifyEnv reconciles one environment against its live cluster.
 	VerifyEnv(context.Context, *connect.Request[v1.VerifyForgeEnvRequest]) (*connect.Response[v1.VerifyForgeEnvResponse], error)
 	// ListSecrets returns declared/present/inert secrets for an environment.
 	// The report carries NAMES and BOOLEANS only, never a secret value.
+	// forge:lint-disable-next-line forge-idempotency-read-undeclared: calls out: it dispatches forge.secret_list to the user's machine, resolving secret presence from the provider's metadata; not pinned to a read-only argv in the forge handler test
 	ListSecrets(context.Context, *connect.Request[v1.ListForgeSecretsRequest]) (*connect.Response[v1.ListForgeSecretsResponse], error)
 	// GetEnvStatus returns runtime checks for an environment.
+	// forge:lint-disable-next-line forge-idempotency-read-undeclared: calls out: it dispatches forge.env_status to run a forge CLI command on the user's machine, whose argv is not pinned read-only
 	GetEnvStatus(context.Context, *connect.Request[v1.GetForgeEnvStatusRequest]) (*connect.Response[v1.GetForgeEnvStatusResponse], error)
 	// GetEnvShape projects ONE environment's render into the declaration the
 	// control plane records for it — `forge env shape <env> --json`.
@@ -353,6 +360,7 @@ type ForgeServiceHandler interface {
 	// records. That identity is what stops a Register from writing a
 	// declaration that disagrees with the next build's, on an env whose kind is
 	// immutable.
+	// forge:lint-disable-next-line forge-idempotency-read-undeclared: calls out: it dispatches forge.env_shape to run a forge CLI command on the user's machine, whose argv is not pinned read-only
 	GetEnvShape(context.Context, *connect.Request[v1.GetForgeEnvShapeRequest]) (*connect.Response[v1.GetForgeEnvShapeResponse], error)
 	// PlanPromote previews binding an environment to a release. READ-ONLY: it
 	// runs `forge env promote <release> --to <env> --plan`, which computes the

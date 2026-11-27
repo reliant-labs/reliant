@@ -88,6 +88,7 @@ func TestRecoveryReadRegularSubstitution(t *testing.T) {
 }
 
 func TestRecoveryReadRegularExactAndBounded(t *testing.T) {
+	requireOpenat2(t)
 	file := filepath.Join(t.TempDir(), "raw")
 	data := []byte("raw\r\nbytes\x00\xff")
 	if err := os.WriteFile(file, data, 0755); err != nil {

@@ -15,7 +15,8 @@ import { vi } from "vitest";
 
 import type { DomainsState } from "@/hooks/forge-domain-queries";
 import { createTestQueryClient } from "@/test/renderWithQuery";
-import { ObservabilityApiProvider, type ObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
+import { type ObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
+import { ObservabilityFixtures } from "@/test/observabilityFixtures";
 import { ReleasesApiProvider } from "@/services/forge/ReleasesApiContext";
 import { RepoMetaProvider, type RepoMetaApi } from "@/services/forge/RepoMetaContext";
 import { VulnerabilityApiProvider, type VulnerabilityApi } from "@/services/controlPlane/vulnerabilities/VulnerabilityApiContext";
@@ -41,13 +42,13 @@ export function WorkloadsProviders({
 }) {
   return (
     <QueryClientProvider client={createTestQueryClient()}>
-      <ObservabilityApiProvider api={obs}>
+      <ObservabilityFixtures api={obs}>
         <ReleasesApiProvider api={createReleasesFixtureApi()}>
           <VulnerabilityApiProvider api={vulns}>
             <RepoMetaProvider api={repoMeta}>{children}</RepoMetaProvider>
           </VulnerabilityApiProvider>
         </ReleasesApiProvider>
-      </ObservabilityApiProvider>
+      </ObservabilityFixtures>
     </QueryClientProvider>
   );
 }

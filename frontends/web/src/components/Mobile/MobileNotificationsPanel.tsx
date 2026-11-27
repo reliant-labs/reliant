@@ -31,7 +31,7 @@ function PermissionStatus({
     return (
       <div className="flex items-center gap-2 text-amber-500">
         <AlertTriangle className="h-4 w-4 shrink-0" />
-        <span className="text-sm">Notifications not supported in this browser</span>
+        <span className="text-ui">Notifications not supported in this browser</span>
       </div>
     );
   }
@@ -40,21 +40,21 @@ function PermissionStatus({
       return (
         <div className="flex items-center gap-2 text-green-500">
           <CheckCircle className="h-4 w-4 shrink-0" />
-          <span className="text-sm font-medium">Permission granted</span>
+          <span className="text-ui font-medium">Permission granted</span>
         </div>
       );
     case "denied":
       return (
         <div className="flex items-center gap-2 text-destructive-ink">
           <XCircle className="h-4 w-4 shrink-0" />
-          <span className="text-sm">Permission denied — enable in system settings</span>
+          <span className="text-ui">Permission denied — enable in system settings</span>
         </div>
       );
     default:
       return (
         <div className="flex items-center gap-2 text-muted-foreground">
           <AlertTriangle className="h-4 w-4 shrink-0" />
-          <span className="text-sm">Permission not requested yet</span>
+          <span className="text-ui">Permission not requested yet</span>
         </div>
       );
   }
@@ -113,7 +113,7 @@ export function MobileNotificationsPanel() {
   if (!initialized) {
     return (
       <div className="p-4">
-        <p className="text-sm text-muted-foreground">Loading…</p>
+        <p className="text-ui text-muted-foreground">Loading…</p>
       </div>
     );
   }
@@ -123,14 +123,14 @@ export function MobileNotificationsPanel() {
       <div className="p-4">
         <div className="mb-1 flex items-center gap-2">
           <Bell className="h-4 w-4 text-muted-foreground" />
-          <h3 className="text-sm font-semibold text-foreground">Browser permission</h3>
+          <h3 className="text-ui font-semibold text-foreground">Browser permission</h3>
         </div>
         <PermissionStatus isSupported={isSupported} permission={permission} />
         {permission === "default" && isSupported && (
           <button
             type="button"
             onClick={() => requestPermission()}
-            className="mt-3 flex min-h-[44px] w-full items-center justify-center rounded-md bg-primary text-sm font-medium text-primary-foreground active:opacity-80"
+            className="mt-3 flex min-h-[44px] w-full items-center justify-center rounded-md bg-primary text-ui font-medium text-primary-foreground active:opacity-80"
           >
             Request permission
           </button>
@@ -149,8 +149,8 @@ export function MobileNotificationsPanel() {
         <div className="flex items-start gap-3 border-y border-destructive/40 bg-destructive/10 px-4 py-3">
           <XCircle className="mt-0.5 h-5 w-5 shrink-0 text-destructive" />
           <div>
-            <p className="text-sm font-medium text-foreground">Permission required</p>
-            <p className="mt-0.5 text-xs text-muted-foreground">
+            <p className="text-ui font-medium text-foreground">Permission required</p>
+            <p className="mt-0.5 text-meta text-muted-foreground">
               Notification permission was denied. Allow notifications in your browser
               or system settings, then refresh.
             </p>
@@ -161,7 +161,7 @@ export function MobileNotificationsPanel() {
       {notificationsEnabled && permission === "granted" && (
         <>
           <div className="bg-muted/30 px-4 py-2">
-            <p className="text-xs font-semibold text-muted-foreground">
+            <p className="text-meta font-semibold text-muted-foreground">
               When to notify
             </p>
           </div>
@@ -199,25 +199,25 @@ export function MobileNotificationsPanel() {
       />
 
       <div className="p-4">
-        <p className="mb-1 text-sm font-medium text-foreground">Test notification</p>
-        <p className="mb-3 text-xs text-muted-foreground">
+        <p className="mb-1 text-ui font-medium text-foreground">Test notification</p>
+        <p className="mb-3 text-meta text-muted-foreground">
           Send a test notification to verify your settings.
         </p>
         <button
           type="button"
           onClick={handleTestNotification}
           disabled={!isSupported || permission !== "granted"}
-          className="flex min-h-[44px] w-full items-center justify-center rounded-md border border-border text-sm font-medium text-foreground active:bg-muted disabled:opacity-50"
+          className="flex min-h-[44px] w-full items-center justify-center rounded-md border border-border text-ui font-medium text-foreground active:bg-muted disabled:opacity-50"
         >
           Send test
         </button>
       </div>
 
       <div className="bg-muted/30 p-4">
-        <p className="mb-2 text-xs text-muted-foreground">
+        <p className="mb-2 text-meta text-muted-foreground">
           <strong className="text-foreground">What triggers notifications?</strong>
         </p>
-        <ul className="list-inside list-disc space-y-1 text-xs text-muted-foreground">
+        <ul className="list-inside list-disc space-y-1 text-meta text-muted-foreground">
           <li>Workflow completes (LLM finishes responding)</li>
           <li>Approval required (tool needs your permission)</li>
         </ul>

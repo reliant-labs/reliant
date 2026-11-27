@@ -61,7 +61,7 @@ func testResumeAfterRejoining(t *testing.T, ownOrg bool) {
 	}
 	stored := func() *core.Trigger {
 		t.Helper()
-		row, err := env.repo.GetTrigger(context.Background(), created.GetId())
+		row, err := store.GetTrigger(context.Background(), env.repo.ORM(), created.GetId())
 		require.NoError(t, err)
 		return row
 	}
@@ -118,7 +118,7 @@ func TestSetTriggerEnabled_APersonsPauseClearsTheReason(t *testing.T) {
 
 	_, err = env.svc.SetTriggerEnabled(env.ctx, connect.NewRequest(&reliantv1.SetTriggerEnabledRequest{Id: created.GetId(), Enabled: false}))
 	require.NoError(t, err)
-	row, err := env.repo.GetTrigger(context.Background(), created.GetId())
+	row, err := store.GetTrigger(context.Background(), env.repo.ORM(), created.GetId())
 	require.NoError(t, err)
 	assert.False(t, row.Enabled)
 	assert.Empty(t, row.PausedReason)

@@ -46,14 +46,16 @@ import { CardInset } from "@/components/forge-ui/card";
 import SkeletonLoader from "@/components/forge-ui/skeleton_loader";
 import Card from "@/components/forge-ui/card";
 import Button from "@/components/forge-ui/button";
-import { useIdentityMutation, useIdentityOrg, useIdentityStatus } from "@/hooks/identity-queries";
-import type {
-  IdentityApp,
-  IdentityDeliveryState,
-  IdentityEnvironmentRef,
-  IdentityExportURL,
-  IdentityState,
-  IdentityStatus,
+import { useRequestExport } from "@/hooks/controlplane/identity-service-hooks_gen";
+import { useIdentityExportURL, useIdentityOrg, useIdentityStatus, useIdentityWriteOptions } from "@/hooks/identity-queries";
+import {
+  toIdentityExportURL,
+  type IdentityApp,
+  type IdentityDeliveryState,
+  type IdentityEnvironmentRef,
+  type IdentityExportURL,
+  type IdentityState,
+  type IdentityStatus,
 } from "@/services/controlPlane/identity/api";
 import { identityErrorKind, identityErrorMessage } from "@/services/controlPlane/identity/errors";
 import type { LiveEnv } from "@/services/forge/live";
@@ -582,8 +584,8 @@ function ExportPanel({ orgId, envId, status: s }: { orgId: string; envId: string
   // mutations keep no result in the cache (secret), since the URL is a
   // bearer credential for every user's password hash.
   const [link, setLink] = useState<IdentityExportURL | null>(null);
-  const fetchLink = useIdentityMutation(orgId, envId, (api, o, e, _: void) => api.getExportURL(o, e), { secret: true });
-  const exportNow = useIdentityMutation(orgId, envId, (api, o, e, _: void) => api.requestExport(o, e), { secret: true });
+  const fetchLink = useIdentityExportURL(orgId, envId);
+  const exportNow = useRequestExport(useIdentityWriteOptions(orgId, envId, { secret: true }));
   const serving = s.state === "ready" || s.state === "degraded";
   const { readOnly, reason } = useObsReadOnly();
 
@@ -615,7 +617,7 @@ function ExportPanel({ orgId, envId, status: s }: { orgId: string; envId: string
             loading={exportNow.isPending}
             disabled={readOnly}
             title={readOnly ? reason : undefined}
-            onClick={() => exportNow.mutate(undefined, { onSuccess: setLink })}
+            onClick={() => exportNow.mutate({ orgId, environmentId: envId }, { onSuccess: (r) => setLink(toIdentityExportURL(r)) })}
           >
             Export users
           </Button>

@@ -19,6 +19,7 @@ option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
 service WorkflowService {
   // ListWorkflows returns all available workflows from DB + builtins
   // forge:custom — merges builtin, project and the caller's own workflow definitions for one project
+  // forge:lint-disable-next-line forge-idempotency-secret-response-marked-read: nodes.run.credentials is the credential MODE (none or inherit), not a credential or a per-call value
   rpc ListWorkflows(ListWorkflowsRequest) returns (ListWorkflowsResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
@@ -45,6 +46,7 @@ service WorkflowService {
 
   // GetWorkflow returns a specific workflow by slug
   // forge:custom — resolves a workflow definition by slug across builtin, project and user sources
+  // forge:lint-disable-next-line forge-idempotency-secret-response-marked-read: nodes.run.credentials is the credential MODE (none or inherit), not a credential or a per-call value
   rpc GetWorkflow(GetWorkflowRequest) returns (GetWorkflowResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
@@ -88,6 +90,7 @@ service WorkflowService {
 
   // ExportWorkflow exports a workflow from the database as YAML. A read
   // (NO_SIDE_EFFECTS), like ValidateWorkflow.
+  // forge:lint-disable-next-line forge-idempotency-secret-response-marked-read: nodes.run.credentials is the credential MODE (none or inherit), not a credential or a per-call value
   rpc ExportWorkflow(ExportWorkflowRequest) returns (ExportWorkflowResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
   }

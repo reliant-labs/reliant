@@ -136,15 +136,6 @@ var (
 	// (FailedPrecondition); the asset stays PENDING.
 	ErrAssetNotUploaded = svcerr.FailedPrecondition("the file has not been uploaded yet")
 
-	// ErrPruneRequestNotPending is a confirm or cancel of a prune request
-	// already decided (FailedPrecondition).
-	ErrPruneRequestNotPending = svcerr.FailedPrecondition("the prune request is not pending")
-
-	// ErrPruneRequestExpired is a confirm or cancel of a prune request older
-	// than LibraryPruneRequestTTL (FailedPrecondition); it is recorded
-	// EXPIRED, and a new import stages a new one.
-	ErrPruneRequestExpired = svcerr.FailedPrecondition("the prune request expired: it is older than 7 days")
-
 	// ErrAssetUploadExpired is a confirm of a PENDING asset past its upload
 	// window (FailedPrecondition); the asset is deleted, and the upload
 	// starts again with CreateAssetUpload.

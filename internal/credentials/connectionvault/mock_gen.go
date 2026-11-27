@@ -17,14 +17,15 @@ import (
 )
 
 // forge:section MockService
-// forge:hash=7a193a1f193c23ef2cd21cab83d69eb76f976f57544a6aeeac36ee3a123ab574
+// forge:hash=cc39b80f17c4ad21a0cfa00fea1bbe620204ef0e9a5584180e2a8d51777e6d52
 
 // MockService is a test mock for the Service interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockService.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockService.<Method>Func not set" error.
 type MockService struct {
 	contractkit.Recorder
 	CreateConnectionFunc           func(context.Context, *core.Connection, []core.ConnectionSecret, core.ConnectionEvent) error
@@ -347,6 +348,754 @@ func (m *MockService) UserHasCredentials(ctx context.Context, userID string) (bo
 		return m.UserHasCredentialsFunc(ctx, userID)
 	}
 	return false, contractkit.MockNotSet("MockService", "UserHasCredentials")
+}
+
+// MockServiceCreateConnectionCall is one recorded call of MockService.CreateConnection, one
+// field per parameter.
+type MockServiceCreateConnectionCall struct {
+	Ctx     context.Context
+	C       *core.Connection
+	Secrets []core.ConnectionSecret
+	Ev      core.ConnectionEvent
+}
+
+// CreateConnectionCalls returns every recorded CreateConnection call, oldest first, with
+// its arguments typed. It reads the same log as Calls("CreateConnection").
+func (m *MockService) CreateConnectionCalls() []MockServiceCreateConnectionCall {
+	var out []MockServiceCreateConnectionCall
+	for _, c := range m.Recorder.Calls("CreateConnection") {
+		var r MockServiceCreateConnectionCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.C, _ = c.Args[1].(*core.Connection)
+		r.Secrets, _ = c.Args[2].([]core.ConnectionSecret)
+		r.Ev, _ = c.Args[3].(core.ConnectionEvent)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceReauthorizeConnectionCall is one recorded call of MockService.ReauthorizeConnection, one
+// field per parameter.
+type MockServiceReauthorizeConnectionCall struct {
+	Ctx     context.Context
+	UserID  string
+	ID      string
+	Upd     core.ConnectionUpdate
+	Secrets []core.ConnectionSecret
+	Ev      core.ConnectionEvent
+}
+
+// ReauthorizeConnectionCalls returns every recorded ReauthorizeConnection call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ReauthorizeConnection").
+func (m *MockService) ReauthorizeConnectionCalls() []MockServiceReauthorizeConnectionCall {
+	var out []MockServiceReauthorizeConnectionCall
+	for _, c := range m.Recorder.Calls("ReauthorizeConnection") {
+		var r MockServiceReauthorizeConnectionCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.ID, _ = c.Args[2].(string)
+		r.Upd, _ = c.Args[3].(core.ConnectionUpdate)
+		r.Secrets, _ = c.Args[4].([]core.ConnectionSecret)
+		r.Ev, _ = c.Args[5].(core.ConnectionEvent)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceGetConnectionCall is one recorded call of MockService.GetConnection, one
+// field per parameter.
+type MockServiceGetConnectionCall struct {
+	Ctx    context.Context
+	UserID string
+	ID     string
+}
+
+// GetConnectionCalls returns every recorded GetConnection call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetConnection").
+func (m *MockService) GetConnectionCalls() []MockServiceGetConnectionCall {
+	var out []MockServiceGetConnectionCall
+	for _, c := range m.Recorder.Calls("GetConnection") {
+		var r MockServiceGetConnectionCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.ID, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceGetOwnedConnectionCall is one recorded call of MockService.GetOwnedConnection, one
+// field per parameter.
+type MockServiceGetOwnedConnectionCall struct {
+	Ctx   context.Context
+	Owner core.ConnectionOwner
+	ID    string
+}
+
+// GetOwnedConnectionCalls returns every recorded GetOwnedConnection call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetOwnedConnection").
+func (m *MockService) GetOwnedConnectionCalls() []MockServiceGetOwnedConnectionCall {
+	var out []MockServiceGetOwnedConnectionCall
+	for _, c := range m.Recorder.Calls("GetOwnedConnection") {
+		var r MockServiceGetOwnedConnectionCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Owner, _ = c.Args[1].(core.ConnectionOwner)
+		r.ID, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceListOwnedConnectionsCall is one recorded call of MockService.ListOwnedConnections, one
+// field per parameter.
+type MockServiceListOwnedConnectionsCall struct {
+	Ctx           context.Context
+	Owner         core.ConnectionOwner
+	IntegrationID string
+}
+
+// ListOwnedConnectionsCalls returns every recorded ListOwnedConnections call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListOwnedConnections").
+func (m *MockService) ListOwnedConnectionsCalls() []MockServiceListOwnedConnectionsCall {
+	var out []MockServiceListOwnedConnectionsCall
+	for _, c := range m.Recorder.Calls("ListOwnedConnections") {
+		var r MockServiceListOwnedConnectionsCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Owner, _ = c.Args[1].(core.ConnectionOwner)
+		r.IntegrationID, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceListConnectionsCall is one recorded call of MockService.ListConnections, one
+// field per parameter.
+type MockServiceListConnectionsCall struct {
+	Ctx           context.Context
+	UserID        string
+	IntegrationID string
+}
+
+// ListConnectionsCalls returns every recorded ListConnections call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListConnections").
+func (m *MockService) ListConnectionsCalls() []MockServiceListConnectionsCall {
+	var out []MockServiceListConnectionsCall
+	for _, c := range m.Recorder.Calls("ListConnections") {
+		var r MockServiceListConnectionsCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.IntegrationID, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceDefaultConnectionCall is one recorded call of MockService.DefaultConnection, one
+// field per parameter.
+type MockServiceDefaultConnectionCall struct {
+	Ctx           context.Context
+	UserID        string
+	IntegrationID string
+}
+
+// DefaultConnectionCalls returns every recorded DefaultConnection call, oldest first, with
+// its arguments typed. It reads the same log as Calls("DefaultConnection").
+func (m *MockService) DefaultConnectionCalls() []MockServiceDefaultConnectionCall {
+	var out []MockServiceDefaultConnectionCall
+	for _, c := range m.Recorder.Calls("DefaultConnection") {
+		var r MockServiceDefaultConnectionCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.IntegrationID, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceFindByExternalAccountCall is one recorded call of MockService.FindByExternalAccount, one
+// field per parameter.
+type MockServiceFindByExternalAccountCall struct {
+	Ctx               context.Context
+	UserID            string
+	IntegrationID     string
+	ExternalAccountID string
+}
+
+// FindByExternalAccountCalls returns every recorded FindByExternalAccount call, oldest first, with
+// its arguments typed. It reads the same log as Calls("FindByExternalAccount").
+func (m *MockService) FindByExternalAccountCalls() []MockServiceFindByExternalAccountCall {
+	var out []MockServiceFindByExternalAccountCall
+	for _, c := range m.Recorder.Calls("FindByExternalAccount") {
+		var r MockServiceFindByExternalAccountCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.IntegrationID, _ = c.Args[2].(string)
+		r.ExternalAccountID, _ = c.Args[3].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceFindOwnedByExternalAccountCall is one recorded call of MockService.FindOwnedByExternalAccount, one
+// field per parameter.
+type MockServiceFindOwnedByExternalAccountCall struct {
+	Ctx               context.Context
+	Owner             core.ConnectionOwner
+	IntegrationID     string
+	ExternalAccountID string
+}
+
+// FindOwnedByExternalAccountCalls returns every recorded FindOwnedByExternalAccount call, oldest first, with
+// its arguments typed. It reads the same log as Calls("FindOwnedByExternalAccount").
+func (m *MockService) FindOwnedByExternalAccountCalls() []MockServiceFindOwnedByExternalAccountCall {
+	var out []MockServiceFindOwnedByExternalAccountCall
+	for _, c := range m.Recorder.Calls("FindOwnedByExternalAccount") {
+		var r MockServiceFindOwnedByExternalAccountCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Owner, _ = c.Args[1].(core.ConnectionOwner)
+		r.IntegrationID, _ = c.Args[2].(string)
+		r.ExternalAccountID, _ = c.Args[3].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceReauthorizeOwnedConnectionCall is one recorded call of MockService.ReauthorizeOwnedConnection, one
+// field per parameter.
+type MockServiceReauthorizeOwnedConnectionCall struct {
+	Ctx     context.Context
+	Owner   core.ConnectionOwner
+	ID      string
+	Upd     core.ConnectionUpdate
+	Secrets []core.ConnectionSecret
+	Ev      core.ConnectionEvent
+}
+
+// ReauthorizeOwnedConnectionCalls returns every recorded ReauthorizeOwnedConnection call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ReauthorizeOwnedConnection").
+func (m *MockService) ReauthorizeOwnedConnectionCalls() []MockServiceReauthorizeOwnedConnectionCall {
+	var out []MockServiceReauthorizeOwnedConnectionCall
+	for _, c := range m.Recorder.Calls("ReauthorizeOwnedConnection") {
+		var r MockServiceReauthorizeOwnedConnectionCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Owner, _ = c.Args[1].(core.ConnectionOwner)
+		r.ID, _ = c.Args[2].(string)
+		r.Upd, _ = c.Args[3].(core.ConnectionUpdate)
+		r.Secrets, _ = c.Args[4].([]core.ConnectionSecret)
+		r.Ev, _ = c.Args[5].(core.ConnectionEvent)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceRenameOwnedConnectionCall is one recorded call of MockService.RenameOwnedConnection, one
+// field per parameter.
+type MockServiceRenameOwnedConnectionCall struct {
+	Ctx   context.Context
+	Owner core.ConnectionOwner
+	ID    string
+	Name  string
+	Ev    core.ConnectionEvent
+}
+
+// RenameOwnedConnectionCalls returns every recorded RenameOwnedConnection call, oldest first, with
+// its arguments typed. It reads the same log as Calls("RenameOwnedConnection").
+func (m *MockService) RenameOwnedConnectionCalls() []MockServiceRenameOwnedConnectionCall {
+	var out []MockServiceRenameOwnedConnectionCall
+	for _, c := range m.Recorder.Calls("RenameOwnedConnection") {
+		var r MockServiceRenameOwnedConnectionCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Owner, _ = c.Args[1].(core.ConnectionOwner)
+		r.ID, _ = c.Args[2].(string)
+		r.Name, _ = c.Args[3].(string)
+		r.Ev, _ = c.Args[4].(core.ConnectionEvent)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceSetDefaultOwnedConnectionCall is one recorded call of MockService.SetDefaultOwnedConnection, one
+// field per parameter.
+type MockServiceSetDefaultOwnedConnectionCall struct {
+	Ctx   context.Context
+	Owner core.ConnectionOwner
+	ID    string
+	Ev    core.ConnectionEvent
+}
+
+// SetDefaultOwnedConnectionCalls returns every recorded SetDefaultOwnedConnection call, oldest first, with
+// its arguments typed. It reads the same log as Calls("SetDefaultOwnedConnection").
+func (m *MockService) SetDefaultOwnedConnectionCalls() []MockServiceSetDefaultOwnedConnectionCall {
+	var out []MockServiceSetDefaultOwnedConnectionCall
+	for _, c := range m.Recorder.Calls("SetDefaultOwnedConnection") {
+		var r MockServiceSetDefaultOwnedConnectionCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Owner, _ = c.Args[1].(core.ConnectionOwner)
+		r.ID, _ = c.Args[2].(string)
+		r.Ev, _ = c.Args[3].(core.ConnectionEvent)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceSoftDeleteOwnedConnectionCall is one recorded call of MockService.SoftDeleteOwnedConnection, one
+// field per parameter.
+type MockServiceSoftDeleteOwnedConnectionCall struct {
+	Ctx   context.Context
+	Owner core.ConnectionOwner
+	ID    string
+	Ev    core.ConnectionEvent
+}
+
+// SoftDeleteOwnedConnectionCalls returns every recorded SoftDeleteOwnedConnection call, oldest first, with
+// its arguments typed. It reads the same log as Calls("SoftDeleteOwnedConnection").
+func (m *MockService) SoftDeleteOwnedConnectionCalls() []MockServiceSoftDeleteOwnedConnectionCall {
+	var out []MockServiceSoftDeleteOwnedConnectionCall
+	for _, c := range m.Recorder.Calls("SoftDeleteOwnedConnection") {
+		var r MockServiceSoftDeleteOwnedConnectionCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Owner, _ = c.Args[1].(core.ConnectionOwner)
+		r.ID, _ = c.Args[2].(string)
+		r.Ev, _ = c.Args[3].(core.ConnectionEvent)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceRecordOwnedTestResultCall is one recorded call of MockService.RecordOwnedTestResult, one
+// field per parameter.
+type MockServiceRecordOwnedTestResultCall struct {
+	Ctx          context.Context
+	Owner        core.ConnectionOwner
+	ID           string
+	AccountLabel string
+	SenderID     string
+}
+
+// RecordOwnedTestResultCalls returns every recorded RecordOwnedTestResult call, oldest first, with
+// its arguments typed. It reads the same log as Calls("RecordOwnedTestResult").
+func (m *MockService) RecordOwnedTestResultCalls() []MockServiceRecordOwnedTestResultCall {
+	var out []MockServiceRecordOwnedTestResultCall
+	for _, c := range m.Recorder.Calls("RecordOwnedTestResult") {
+		var r MockServiceRecordOwnedTestResultCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Owner, _ = c.Args[1].(core.ConnectionOwner)
+		r.ID, _ = c.Args[2].(string)
+		r.AccountLabel, _ = c.Args[3].(string)
+		r.SenderID, _ = c.Args[4].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceListAllConnectionEventsCall is one recorded call of MockService.ListAllConnectionEvents, one
+// field per parameter.
+type MockServiceListAllConnectionEventsCall struct {
+	Ctx      context.Context
+	ID       string
+	Limit    int
+	BeforeID int64
+}
+
+// ListAllConnectionEventsCalls returns every recorded ListAllConnectionEvents call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListAllConnectionEvents").
+func (m *MockService) ListAllConnectionEventsCalls() []MockServiceListAllConnectionEventsCall {
+	var out []MockServiceListAllConnectionEventsCall
+	for _, c := range m.Recorder.Calls("ListAllConnectionEvents") {
+		var r MockServiceListAllConnectionEventsCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ID, _ = c.Args[1].(string)
+		r.Limit, _ = c.Args[2].(int)
+		r.BeforeID, _ = c.Args[3].(int64)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceRenameConnectionCall is one recorded call of MockService.RenameConnection, one
+// field per parameter.
+type MockServiceRenameConnectionCall struct {
+	Ctx    context.Context
+	UserID string
+	ID     string
+	Name   string
+	Ev     core.ConnectionEvent
+}
+
+// RenameConnectionCalls returns every recorded RenameConnection call, oldest first, with
+// its arguments typed. It reads the same log as Calls("RenameConnection").
+func (m *MockService) RenameConnectionCalls() []MockServiceRenameConnectionCall {
+	var out []MockServiceRenameConnectionCall
+	for _, c := range m.Recorder.Calls("RenameConnection") {
+		var r MockServiceRenameConnectionCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.ID, _ = c.Args[2].(string)
+		r.Name, _ = c.Args[3].(string)
+		r.Ev, _ = c.Args[4].(core.ConnectionEvent)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceSetDefaultConnectionCall is one recorded call of MockService.SetDefaultConnection, one
+// field per parameter.
+type MockServiceSetDefaultConnectionCall struct {
+	Ctx    context.Context
+	UserID string
+	ID     string
+	Ev     core.ConnectionEvent
+}
+
+// SetDefaultConnectionCalls returns every recorded SetDefaultConnection call, oldest first, with
+// its arguments typed. It reads the same log as Calls("SetDefaultConnection").
+func (m *MockService) SetDefaultConnectionCalls() []MockServiceSetDefaultConnectionCall {
+	var out []MockServiceSetDefaultConnectionCall
+	for _, c := range m.Recorder.Calls("SetDefaultConnection") {
+		var r MockServiceSetDefaultConnectionCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.ID, _ = c.Args[2].(string)
+		r.Ev, _ = c.Args[3].(core.ConnectionEvent)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceDeleteConnectionCall is one recorded call of MockService.DeleteConnection, one
+// field per parameter.
+type MockServiceDeleteConnectionCall struct {
+	Ctx    context.Context
+	UserID string
+	ID     string
+	Ev     core.ConnectionEvent
+}
+
+// DeleteConnectionCalls returns every recorded DeleteConnection call, oldest first, with
+// its arguments typed. It reads the same log as Calls("DeleteConnection").
+func (m *MockService) DeleteConnectionCalls() []MockServiceDeleteConnectionCall {
+	var out []MockServiceDeleteConnectionCall
+	for _, c := range m.Recorder.Calls("DeleteConnection") {
+		var r MockServiceDeleteConnectionCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.ID, _ = c.Args[2].(string)
+		r.Ev, _ = c.Args[3].(core.ConnectionEvent)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceRecordTestResultCall is one recorded call of MockService.RecordTestResult, one
+// field per parameter.
+type MockServiceRecordTestResultCall struct {
+	Ctx          context.Context
+	UserID       string
+	ID           string
+	AccountLabel string
+	SenderID     string
+}
+
+// RecordTestResultCalls returns every recorded RecordTestResult call, oldest first, with
+// its arguments typed. It reads the same log as Calls("RecordTestResult").
+func (m *MockService) RecordTestResultCalls() []MockServiceRecordTestResultCall {
+	var out []MockServiceRecordTestResultCall
+	for _, c := range m.Recorder.Calls("RecordTestResult") {
+		var r MockServiceRecordTestResultCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.ID, _ = c.Args[2].(string)
+		r.AccountLabel, _ = c.Args[3].(string)
+		r.SenderID, _ = c.Args[4].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceTouchConnectionUsedCall is one recorded call of MockService.TouchConnectionUsed, one
+// field per parameter.
+type MockServiceTouchConnectionUsedCall struct {
+	Ctx    context.Context
+	UserID string
+	ID     string
+}
+
+// TouchConnectionUsedCalls returns every recorded TouchConnectionUsed call, oldest first, with
+// its arguments typed. It reads the same log as Calls("TouchConnectionUsed").
+func (m *MockService) TouchConnectionUsedCalls() []MockServiceTouchConnectionUsedCall {
+	var out []MockServiceTouchConnectionUsedCall
+	for _, c := range m.Recorder.Calls("TouchConnectionUsed") {
+		var r MockServiceTouchConnectionUsedCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.ID, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceTouchOwnedConnectionUsedCall is one recorded call of MockService.TouchOwnedConnectionUsed, one
+// field per parameter.
+type MockServiceTouchOwnedConnectionUsedCall struct {
+	Ctx   context.Context
+	Owner core.ConnectionOwner
+	ID    string
+}
+
+// TouchOwnedConnectionUsedCalls returns every recorded TouchOwnedConnectionUsed call, oldest first, with
+// its arguments typed. It reads the same log as Calls("TouchOwnedConnectionUsed").
+func (m *MockService) TouchOwnedConnectionUsedCalls() []MockServiceTouchOwnedConnectionUsedCall {
+	var out []MockServiceTouchOwnedConnectionUsedCall
+	for _, c := range m.Recorder.Calls("TouchOwnedConnectionUsed") {
+		var r MockServiceTouchOwnedConnectionUsedCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Owner, _ = c.Args[1].(core.ConnectionOwner)
+		r.ID, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceGetSecretsCall is one recorded call of MockService.GetSecrets, one
+// field per parameter.
+type MockServiceGetSecretsCall struct {
+	Ctx    context.Context
+	UserID string
+	ID     string
+}
+
+// GetSecretsCalls returns every recorded GetSecrets call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetSecrets").
+func (m *MockService) GetSecretsCalls() []MockServiceGetSecretsCall {
+	var out []MockServiceGetSecretsCall
+	for _, c := range m.Recorder.Calls("GetSecrets") {
+		var r MockServiceGetSecretsCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.ID, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceGetOwnedSecretsCall is one recorded call of MockService.GetOwnedSecrets, one
+// field per parameter.
+type MockServiceGetOwnedSecretsCall struct {
+	Ctx   context.Context
+	Owner core.ConnectionOwner
+	ID    string
+}
+
+// GetOwnedSecretsCalls returns every recorded GetOwnedSecrets call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetOwnedSecrets").
+func (m *MockService) GetOwnedSecretsCalls() []MockServiceGetOwnedSecretsCall {
+	var out []MockServiceGetOwnedSecretsCall
+	for _, c := range m.Recorder.Calls("GetOwnedSecrets") {
+		var r MockServiceGetOwnedSecretsCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Owner, _ = c.Args[1].(core.ConnectionOwner)
+		r.ID, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceWithSecretsLockCall is one recorded call of MockService.WithSecretsLock, one
+// field per parameter.
+type MockServiceWithSecretsLockCall struct {
+	Ctx    context.Context
+	UserID string
+	ID     string
+	Fn     func(*SecretsTx) error
+}
+
+// WithSecretsLockCalls returns every recorded WithSecretsLock call, oldest first, with
+// its arguments typed. It reads the same log as Calls("WithSecretsLock").
+func (m *MockService) WithSecretsLockCalls() []MockServiceWithSecretsLockCall {
+	var out []MockServiceWithSecretsLockCall
+	for _, c := range m.Recorder.Calls("WithSecretsLock") {
+		var r MockServiceWithSecretsLockCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.ID, _ = c.Args[2].(string)
+		r.Fn, _ = c.Args[3].(func(*SecretsTx) error)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceWithOwnedSecretsLockCall is one recorded call of MockService.WithOwnedSecretsLock, one
+// field per parameter.
+type MockServiceWithOwnedSecretsLockCall struct {
+	Ctx   context.Context
+	Owner core.ConnectionOwner
+	ID    string
+	Fn    func(*SecretsTx) error
+}
+
+// WithOwnedSecretsLockCalls returns every recorded WithOwnedSecretsLock call, oldest first, with
+// its arguments typed. It reads the same log as Calls("WithOwnedSecretsLock").
+func (m *MockService) WithOwnedSecretsLockCalls() []MockServiceWithOwnedSecretsLockCall {
+	var out []MockServiceWithOwnedSecretsLockCall
+	for _, c := range m.Recorder.Calls("WithOwnedSecretsLock") {
+		var r MockServiceWithOwnedSecretsLockCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Owner, _ = c.Args[1].(core.ConnectionOwner)
+		r.ID, _ = c.Args[2].(string)
+		r.Fn, _ = c.Args[3].(func(*SecretsTx) error)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceCreateOAuthFlowCall is one recorded call of MockService.CreateOAuthFlow, one
+// field per parameter.
+type MockServiceCreateOAuthFlowCall struct {
+	Ctx context.Context
+	F   *core.OAuthFlow
+}
+
+// CreateOAuthFlowCalls returns every recorded CreateOAuthFlow call, oldest first, with
+// its arguments typed. It reads the same log as Calls("CreateOAuthFlow").
+func (m *MockService) CreateOAuthFlowCalls() []MockServiceCreateOAuthFlowCall {
+	var out []MockServiceCreateOAuthFlowCall
+	for _, c := range m.Recorder.Calls("CreateOAuthFlow") {
+		var r MockServiceCreateOAuthFlowCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.F, _ = c.Args[1].(*core.OAuthFlow)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServicePeekOAuthFlowCall is one recorded call of MockService.PeekOAuthFlow, one
+// field per parameter.
+type MockServicePeekOAuthFlowCall struct {
+	Ctx       context.Context
+	StateHash []byte
+	Now       time.Time
+}
+
+// PeekOAuthFlowCalls returns every recorded PeekOAuthFlow call, oldest first, with
+// its arguments typed. It reads the same log as Calls("PeekOAuthFlow").
+func (m *MockService) PeekOAuthFlowCalls() []MockServicePeekOAuthFlowCall {
+	var out []MockServicePeekOAuthFlowCall
+	for _, c := range m.Recorder.Calls("PeekOAuthFlow") {
+		var r MockServicePeekOAuthFlowCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.StateHash, _ = c.Args[1].([]byte)
+		r.Now, _ = c.Args[2].(time.Time)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceConsumeOAuthFlowCall is one recorded call of MockService.ConsumeOAuthFlow, one
+// field per parameter.
+type MockServiceConsumeOAuthFlowCall struct {
+	Ctx       context.Context
+	StateHash []byte
+	Now       time.Time
+}
+
+// ConsumeOAuthFlowCalls returns every recorded ConsumeOAuthFlow call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ConsumeOAuthFlow").
+func (m *MockService) ConsumeOAuthFlowCalls() []MockServiceConsumeOAuthFlowCall {
+	var out []MockServiceConsumeOAuthFlowCall
+	for _, c := range m.Recorder.Calls("ConsumeOAuthFlow") {
+		var r MockServiceConsumeOAuthFlowCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.StateHash, _ = c.Args[1].([]byte)
+		r.Now, _ = c.Args[2].(time.Time)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceAppendConnectionEventCall is one recorded call of MockService.AppendConnectionEvent, one
+// field per parameter.
+type MockServiceAppendConnectionEventCall struct {
+	Ctx context.Context
+	Ev  core.ConnectionEvent
+}
+
+// AppendConnectionEventCalls returns every recorded AppendConnectionEvent call, oldest first, with
+// its arguments typed. It reads the same log as Calls("AppendConnectionEvent").
+func (m *MockService) AppendConnectionEventCalls() []MockServiceAppendConnectionEventCall {
+	var out []MockServiceAppendConnectionEventCall
+	for _, c := range m.Recorder.Calls("AppendConnectionEvent") {
+		var r MockServiceAppendConnectionEventCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Ev, _ = c.Args[1].(core.ConnectionEvent)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceListConnectionEventsCall is one recorded call of MockService.ListConnectionEvents, one
+// field per parameter.
+type MockServiceListConnectionEventsCall struct {
+	Ctx      context.Context
+	UserID   string
+	ID       string
+	Limit    int
+	BeforeID int64
+}
+
+// ListConnectionEventsCalls returns every recorded ListConnectionEvents call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListConnectionEvents").
+func (m *MockService) ListConnectionEventsCalls() []MockServiceListConnectionEventsCall {
+	var out []MockServiceListConnectionEventsCall
+	for _, c := range m.Recorder.Calls("ListConnectionEvents") {
+		var r MockServiceListConnectionEventsCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.ID, _ = c.Args[2].(string)
+		r.Limit, _ = c.Args[3].(int)
+		r.BeforeID, _ = c.Args[4].(int64)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServicePurgeUserCall is one recorded call of MockService.PurgeUser, one
+// field per parameter.
+type MockServicePurgeUserCall struct {
+	Ctx    context.Context
+	UserID string
+}
+
+// PurgeUserCalls returns every recorded PurgeUser call, oldest first, with
+// its arguments typed. It reads the same log as Calls("PurgeUser").
+func (m *MockService) PurgeUserCalls() []MockServicePurgeUserCall {
+	var out []MockServicePurgeUserCall
+	for _, c := range m.Recorder.Calls("PurgeUser") {
+		var r MockServicePurgeUserCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceUserHasCredentialsCall is one recorded call of MockService.UserHasCredentials, one
+// field per parameter.
+type MockServiceUserHasCredentialsCall struct {
+	Ctx    context.Context
+	UserID string
+}
+
+// UserHasCredentialsCalls returns every recorded UserHasCredentials call, oldest first, with
+// its arguments typed. It reads the same log as Calls("UserHasCredentials").
+func (m *MockService) UserHasCredentialsCalls() []MockServiceUserHasCredentialsCall {
+	var out []MockServiceUserHasCredentialsCall
+	for _, c := range m.Recorder.Calls("UserHasCredentials") {
+		var r MockServiceUserHasCredentialsCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
 }
 
 // Compile-time check.

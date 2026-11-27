@@ -1,0 +1,631 @@
+# yaml-language-server: $schema=../../manifest/schema/manifest.schema.json
+# Google Calendar. Authored from Google's Calendar API v3 discovery document
+# (https://www.googleapis.com/discovery/v1/apis/calendar/v3/rest), whose
+# per-method `scopes` decide the scope list below, and from Google's OAuth 2.0
+# documentation (developers.google.com/identity/protocols/oauth2).
+#
+# Auth: Google OAuth 2.0, authorization code + PKCE (S256), OFFLINE, exactly as
+# gmail/manifest.yaml (read it for why access_type=offline, prompt=consent and
+# the seven-day refresh-token expiry while the consent screen is External +
+# "Testing").
+#
+# SHARED GOOGLE CLIENT. Every Google integration (gmail, google_calendar,
+# google_sheets) uses the deployment's ONE Google OAuth client. Reliant reads a
+# client per integration id (connections.OAuthClientEnv), so the deployment
+# points RELIANT_OAUTH_GOOGLE_CALENDAR_CLIENT_ID / _CLIENT_SECRET at the same
+# secret as RELIANT_OAUTH_GMAIL_*; no code is shared or special-cased. What each
+# integration needs from that one client:
+#   redirect URI   <PUBLIC_URL>/integrations/oauth/google_calendar/callback
+#                  (production: https://api.reliantapi.com/integrations/oauth/google_calendar/callback)
+#                  Google matches redirect URIs exactly, so it must be added to
+#                  the client beside gmail's.
+#   scopes         every scope below must be on the OAuth consent screen.
+#   API enabled    "Google Calendar API" must be enabled in the Google Cloud
+#                  project that owns the client, or every call is a 403
+#                  accessNotConfigured.
+#
+# Scopes (Google's classification; both SENSITIVE, none RESTRICTED, so no CASA
+# assessment, only the standard sensitive-scope verification):
+#   calendar.events                events.list/get/insert/patch/delete
+#   calendar.calendarlist.readonly calendarList.list, and the identity probe
+# include_granted_scopes=true is Google's incremental authorization: a token for
+# a user who already connected Gmail also carries the scopes they granted there.
+#
+# Identity probe: calendarList.get on the alias "primary". The primary
+# calendar's id IS the account's email address, and the call is authorised by
+# calendarlist.readonly, so connecting needs no wider scope. The obvious probe,
+# GET /calendars/primary, is NOT authorised by calendar.events or
+# calendarlist.readonly (only calendar, calendar.readonly,
+# calendar.calendars[.readonly] and calendar.app.created), so using it would have
+# meant asking every user for read access to all their calendars just to learn
+# their address. The email is both the external account id and the label.
+#
+# Free/busy (freeBusy.query) is a later addition. calendar.events does not
+# authorise it; it needs calendar.freebusy (or calendar.events.freebusy), a new
+# scope that must first be added to the consent screen. Until then, List events
+# over a time window answers "what is on my calendar".
+#
+# No trigger yet. A new/changed-event trigger would be POLLED like Gmail's
+# (events.list with a syncToken, then updatedMin); push via events.watch is the
+# later upgrade. That is a follow-up, not part of this manifest.
+#
+# Errors are Google's JSON error model,
+# {"error": {"code", "message", "status", "errors": [{"reason", "domain"}]}},
+# classified once (anchored) and repeated per action:
+#   401                                   the token was refused: reconnect.
+#   403 rateLimitExceeded,
+#       userRateLimitExceeded             retryable (per-user quota).
+#   403 insufficientPermissions /
+#       ACCESS_TOKEN_SCOPE_INSUFFICIENT   the connection lacks the scope.
+#   403 otherwise                         permission (not the organizer, domain
+#                                         policy, API not enabled, ...).
+#   429                                   retryable (RESOURCE_EXHAUSTED).
+#   400                                   invalid request: Google's message.
+#   404                                   not found (or not this account's).
+#   410                                   gone: the event was already deleted.
+#   5xx                                   retryable (the runner's default).
+id: google_calendar
+version: 1
+display_name: Google Calendar
+description: List calendars, find, create, change and delete events, and check when people are free, as the connected Google account.
+icon: google_calendar
+category: communication
+keywords: [calendar, google, events, meetings, schedule, availability, appointments, meet]
+
+connection:
+  base_url: https://www.googleapis.com/calendar/v3
+  default_headers:
+    Accept: application/json
+  auth:
+    - oauth2:
+        authorize_url: https://accounts.google.com/o/oauth2/v2/auth
+        token_url: https://oauth2.googleapis.com/token
+        pkce: S256
+        scopes:
+          - https://www.googleapis.com/auth/calendar.events
+          - https://www.googleapis.com/auth/calendar.calendarlist.readonly
+        authorize_params:
+          access_type: offline
+          prompt: consent
+          include_granted_scopes: "true"
+        revoke:
+          method: POST
+          url: https://oauth2.googleapis.com/revoke
+          token_in: form
+          token_param: token
+  probe:
+    path: /users/me/calendarList/primary
+    external_id: response.id
+    label: response.id
+
+actions:
+  - id: calendar.list
+    display_name: List calendars
+    summary: The calendars on the account's calendar list, with the ids Get/List events take.
+    description: >-
+      List the calendars the connected account has on its calendar list: its
+      own primary calendar, ones it created, ones shared with it and ones it
+      subscribed to (holidays, teammates). Each has the calendar_id to pass as
+      calendar_id to List events, Create event and the rest; the primary
+      calendar's id is the account's email address and can also be written
+      "primary". access_role says what the account may do there (owner,
+      writer, reader, freeBusyReader).
+    keywords: [calendar, calendars, list, ids, shared, subscribed, primary]
+    placement: server
+    mutates: false
+    tool:
+      expose: true
+    params:
+      type: object
+      additionalProperties: false
+      properties:
+        min_access_role:
+          type: string
+          enum: [freeBusyReader, reader, writer, owner]
+          title: Minimum access role
+          description: Only calendars where the account has at least this role. Use writer to list the calendars an event can be created on.
+        show_hidden:
+          type: boolean
+          default: false
+          title: Include hidden calendars
+          description: Also list calendars the account has hidden from its calendar list.
+        page_size:
+          type: integer
+          minimum: 1
+          maximum: 250
+          default: 100
+          title: Page size
+          description: How many calendars to fetch per page, 1 to 250.
+          examples: [100]
+        connection: &connection
+          type: string
+          description: Id of a saved Google Calendar connection to use. Omit to use your default Google Calendar connection.
+    request:
+      method: GET
+      path: /users/me/calendarList
+      query_expr: >-
+        {"maxResults": string(params.page_size),
+         "showHidden": string(params.show_hidden),
+         ?"minAccessRole": params.?min_access_role}
+      pagination:
+        style: cursor
+        cursor_param: pageToken
+        next_cursor: "response.?nextPageToken.orValue('')"
+        max_pages: 5
+      errors: &google_calendar_errors
+        - status: 401
+          retryable: false
+          message: "Google rejected the Google Calendar credential ({{ response.?error.?message.orValue('invalid credentials') }}): reconnect Google Calendar in Settings."
+        - status: 403
+          when: >-
+            type(response) == map &&
+            response.?error.?errors.orValue([]).exists(e, type(e) == map &&
+              e.?reason.orValue('') in ['rateLimitExceeded', 'userRateLimitExceeded'])
+          retryable: true
+          message: &google_calendar_rate_limited "Google Calendar rate limit exceeded ({{ response.?error.?message.orValue('rate limited') }}). Retry after at least 60 seconds."
+        - status: 403
+          when: >-
+            type(response) == map &&
+            (response.?error.?errors.orValue([]).exists(e, type(e) == map &&
+               e.?reason.orValue('') == 'insufficientPermissions') ||
+             response.?error.?details.orValue([]).exists(d, type(d) == map &&
+               d.?reason.orValue('') == 'ACCESS_TOKEN_SCOPE_INSUFFICIENT'))
+          retryable: false
+          message: >-
+            The Google Calendar connection was not granted the access this needs
+            ({{ response.?error.?message.orValue('insufficient permission') }}): reconnect Google Calendar
+            and allow every permission it asks for.
+        - status: 403
+          retryable: false
+          message: "Google Calendar refused the request: {{ response.?error.?message.orValue('forbidden') }}."
+        - status: 429
+          retryable: true
+          message: *google_calendar_rate_limited
+        - status: 400
+          retryable: false
+          message: "Google Calendar rejected the request as invalid: {{ response.?error.?message.orValue('bad request') }}."
+        - status: 404
+          retryable: false
+          message: "Google Calendar returned not found: {{ response.?error.?message.orValue('the calendar or event does not exist, or this account cannot see it') }}."
+        - status: 410
+          retryable: false
+          message: "Google Calendar says it is gone: {{ response.?error.?message.orValue('the event was already deleted') }}."
+    output:
+      select: >-
+        response.?items.orValue([]).map(c, {"id": c.id,
+          "summary": c.?summaryOverride.orValue(c.?summary.orValue('')),
+          "description": c.?description.orValue(null),
+          "primary": c.?primary.orValue(false),
+          "access_role": c.?accessRole.orValue(null),
+          "time_zone": c.?timeZone.orValue(null)})
+      schema:
+        type: object
+        properties:
+          items:
+            type: array
+            items:
+              type: object
+              properties:
+                id: { type: string, description: The calendar_id other actions take; the primary calendar's is the account's email. }
+                summary: { type: string, description: The calendar's name as the account sees it. }
+                description: { type: [string, "null"] }
+                primary: { type: boolean }
+                access_role: { type: [string, "null"], description: "freeBusyReader, reader, writer or owner." }
+                time_zone: { type: [string, "null"] }
+
+  - id: event.list
+    display_name: List events
+    summary: Find events on a calendar by time window and/or text.
+    description: >-
+      List events on a calendar (default the primary one), soonest first.
+      time_min and time_max bound the window and must carry a UTC offset
+      (2026-12-01T00:00:00Z or 2026-12-01T09:00:00-05:00): time_min keeps
+      events that END after it, time_max keeps events that START before it. q
+      is free text matched against title, description, location and
+      attendees. Recurring events are expanded into their individual
+      occurrences unless single_events is false (then order_by startTime is
+      unavailable and the series is returned once). Cancelled events are not
+      listed. Follows Google's paging up to five pages; read one event in full
+      with Get event.
+    keywords: [calendar, events, list, search, find, meetings, agenda, schedule, upcoming, today]
+    placement: server
+    mutates: false
+    tool:
+      expose: true
+    params:
+      type: object
+      additionalProperties: false
+      properties:
+        calendar_id: &calendar_id
+          type: string
+          minLength: 1
+          maxLength: 1024
+          default: primary
+          title: Calendar
+          description: The calendar to use, as an id from List calendars (an email address), or "primary" for the account's own calendar.
+          examples: [primary]
+        time_min:
+          type: string
+          pattern: "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}([.][0-9]+)?(Z|[+-][0-9]{2}:[0-9]{2})$"
+          title: From
+          description: Only events that end after this moment, an RFC 3339 timestamp with a UTC offset. Omit for no lower bound.
+          examples: ["2026-12-01T00:00:00Z"]
+        time_max:
+          type: string
+          pattern: "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}([.][0-9]+)?(Z|[+-][0-9]{2}:[0-9]{2})$"
+          title: Until
+          description: Only events that start before this moment, an RFC 3339 timestamp with a UTC offset. Omit for no upper bound.
+          examples: ["2026-12-08T00:00:00Z"]
+        q:
+          type: string
+          maxLength: 1000
+          title: Search
+          description: Free text matched against an event's title, description, location and attendees.
+          examples: ["quarterly review"]
+        single_events:
+          type: boolean
+          default: true
+          title: Expand recurring events
+          description: Return each occurrence of a recurring event as its own event. Turn off to get a recurring event once, as its series.
+        order_by:
+          type: string
+          enum: [startTime, updated]
+          default: startTime
+          title: Order by
+          description: startTime (soonest first; needs single_events on) or updated (last modified first).
+        page_size:
+          type: integer
+          minimum: 1
+          maximum: 2500
+          default: 100
+          title: Page size
+          description: How many events to fetch per page, 1 to 2500.
+          examples: [50]
+        connection: *connection
+    request:
+      method: GET
+      path: /calendars/{{ params.calendar_id }}/events
+      query_expr: >-
+        {"singleEvents": string(params.single_events),
+         "maxResults": string(params.page_size),
+         ?"orderBy": (params.single_events || params.order_by == 'updated') ? optional.of(params.order_by) : optional.none(),
+         ?"timeMin": params.?time_min,
+         ?"timeMax": params.?time_max,
+         ?"q": params.?q}
+      pagination:
+        style: cursor
+        cursor_param: pageToken
+        next_cursor: "response.?nextPageToken.orValue('')"
+        max_pages: 5
+      errors: *google_calendar_errors
+    output:
+      select: >-
+        response.?items.orValue([]).map(e, {"id": e.id,
+          "summary": e.?summary.orValue(''),
+          "description": e.?description.orValue(null),
+          "start": {"date": e.?start.?date.orValue(null), "date_time": e.?start.?dateTime.orValue(null), "time_zone": e.?start.?timeZone.orValue(null)},
+          "end": {"date": e.?end.?date.orValue(null), "date_time": e.?end.?dateTime.orValue(null), "time_zone": e.?end.?timeZone.orValue(null)},
+          "status": e.?status.orValue(null),
+          "html_link": e.?htmlLink.orValue(null),
+          "attendees": e.?attendees.orValue([]).map(a, {"email": a.?email.orValue(''), "response_status": a.?responseStatus.orValue('needsAction')}),
+          "organizer": {"email": e.?organizer.?email.orValue(null), "display_name": e.?organizer.?displayName.orValue(null), "self": e.?organizer.?self.orValue(false)},
+          "location": e.?location.orValue(null),
+          "hangout_link": e.?hangoutLink.orValue(null)})
+      schema:
+        type: object
+        properties:
+          items:
+            type: array
+            items: &event_item
+              type: object
+              properties:
+                id: { type: string, description: The event id Get, Update and Delete event take. }
+                summary: { type: string, description: The event's title; empty for an untitled event. }
+                description: { type: [string, "null"] }
+                start:
+                  type: object
+                  description: When it starts. An all-day event has date; a timed one has date_time and usually time_zone.
+                  properties:
+                    date: { type: [string, "null"], description: "YYYY-MM-DD, all-day events only." }
+                    date_time: { type: [string, "null"], description: RFC 3339 with a UTC offset. }
+                    time_zone: { type: [string, "null"], description: IANA time zone name. }
+                end:
+                  type: object
+                  description: When it ends. For an all-day event date is the day AFTER the last day.
+                  properties:
+                    date: { type: [string, "null"] }
+                    date_time: { type: [string, "null"] }
+                    time_zone: { type: [string, "null"] }
+                status: { type: [string, "null"], description: "confirmed, tentative or cancelled." }
+                html_link: { type: [string, "null"], description: The event's page in Google Calendar. }
+                attendees:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      email: { type: string }
+                      response_status: { type: string, description: "needsAction, declined, tentative or accepted." }
+                organizer:
+                  type: object
+                  properties:
+                    email: { type: [string, "null"] }
+                    display_name: { type: [string, "null"] }
+                    self: { type: boolean, description: Whether the connected account is the organizer. }
+                location: { type: [string, "null"] }
+                hangout_link: { type: [string, "null"], description: The Google Meet link, when the event has one. }
+
+  - id: event.get
+    display_name: Get event
+    summary: Read one event by id.
+    description: >-
+      Read one event on a calendar by its id, from List events or Create
+      event: title, description, start and end, status, attendees with their
+      responses, organizer, location, its page in Google Calendar and its
+      Google Meet link when it has one.
+    keywords: [calendar, event, get, read, meeting, details, attendees]
+    placement: server
+    mutates: false
+    tool:
+      expose: true
+    params:
+      type: object
+      additionalProperties: false
+      required: [event_id]
+      properties:
+        calendar_id: *calendar_id
+        event_id: &event_id
+          type: string
+          minLength: 1
+          maxLength: 1024
+          pattern: "^[A-Za-z0-9_@.-]+$"
+          title: Event ID
+          description: The event's id, from List events or Create event. An occurrence of a recurring event has its own id (the series id, an underscore and the start time).
+          examples: ["9ru6t0o7gb7sfr09ng0mn4jbc4"]
+        connection: *connection
+    request:
+      method: GET
+      path: /calendars/{{ params.calendar_id }}/events/{{ params.event_id }}
+      errors: *google_calendar_errors
+    output:
+      select: &event_select >-
+        {"id": response.id,
+         "summary": response.?summary.orValue(''),
+         "description": response.?description.orValue(null),
+         "start": {"date": response.?start.?date.orValue(null), "date_time": response.?start.?dateTime.orValue(null), "time_zone": response.?start.?timeZone.orValue(null)},
+         "end": {"date": response.?end.?date.orValue(null), "date_time": response.?end.?dateTime.orValue(null), "time_zone": response.?end.?timeZone.orValue(null)},
+         "status": response.?status.orValue(null),
+         "html_link": response.?htmlLink.orValue(null),
+         "attendees": response.?attendees.orValue([]).map(a, {"email": a.?email.orValue(''), "response_status": a.?responseStatus.orValue('needsAction')}),
+         "organizer": {"email": response.?organizer.?email.orValue(null), "display_name": response.?organizer.?displayName.orValue(null), "self": response.?organizer.?self.orValue(false)},
+         "location": response.?location.orValue(null),
+         "hangout_link": response.?hangoutLink.orValue(null)}
+      schema: *event_item
+
+  - id: event.create
+    display_name: Create event
+    summary: Create an event, optionally with attendees and a Google Meet link.
+    description: >-
+      Create an event on a calendar (default the primary one). Give a summary
+      (the title) and start and end: a timed event takes date_time (RFC 3339;
+      with a UTC offset, or without one when time_zone is given) and an
+      optional time_zone, an all-day event takes date (YYYY-MM-DD) and its end
+      date is the day AFTER the last day. attendees are email addresses; each
+      is invited. send_updates decides who Google emails about it: none (the
+      default, so a workflow never emails people by surprise), externalOnly
+      (guests outside the organizer's domain) or all. Set add_google_meet to
+      attach a new Meet video link; Google sometimes fills it in a moment
+      after creating the event, so when hangout_link is empty read the event
+      again with Get event. Returns the created event, including its id.
+    keywords: [calendar, event, create, schedule, meeting, invite, book, appointment, meet, add]
+    placement: server
+    mutates: true
+    tool:
+      expose: true
+    params:
+      type: object
+      additionalProperties: false
+      required: [summary, start, end]
+      properties:
+        summary:
+          type: string
+          minLength: 1
+          maxLength: 1024
+          title: Title
+          description: The event's title.
+          examples: ["Quarterly review"]
+        start: &start
+          type: object
+          additionalProperties: false
+          title: Start
+          description: >-
+            When it starts. A timed event: date_time (RFC 3339) and, unless that
+            carries a UTC offset, time_zone. An all-day event: date.
+          examples: [{ date_time: "2026-12-01T15:00:00", time_zone: "America/New_York" }]
+          properties:
+            date_time:
+              type: string
+              pattern: "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}([.][0-9]+)?(Z|[+-][0-9]{2}:[0-9]{2})?$"
+              description: "RFC 3339 timestamp, e.g. 2026-12-01T15:00:00-05:00, or 2026-12-01T15:00:00 with a time_zone."
+            time_zone:
+              type: string
+              maxLength: 64
+              description: IANA time zone name, e.g. America/New_York.
+            date:
+              type: string
+              pattern: "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+              description: "An all-day event's day, YYYY-MM-DD."
+        end: &end
+          type: object
+          additionalProperties: false
+          title: End
+          description: >-
+            When it ends, in the same form as start. For an all-day event give the
+            day AFTER the last day (a one-day event on 2026-12-01 ends 2026-12-02).
+          examples: [{ date_time: "2026-12-01T16:00:00", time_zone: "America/New_York" }]
+          properties:
+            date_time:
+              type: string
+              pattern: "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}([.][0-9]+)?(Z|[+-][0-9]{2}:[0-9]{2})?$"
+              description: "RFC 3339 timestamp, e.g. 2026-12-01T16:00:00-05:00, or 2026-12-01T16:00:00 with a time_zone."
+            time_zone:
+              type: string
+              maxLength: 64
+              description: IANA time zone name, e.g. America/New_York.
+            date:
+              type: string
+              pattern: "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+              description: "An all-day event's end day, exclusive, YYYY-MM-DD."
+        description:
+          type: string
+          maxLength: 8192
+          title: Description
+          description: The event's notes. Plain text, or the simple HTML Google Calendar accepts.
+          examples: ["Agenda: pipeline, hiring, Q1 plan."]
+        location:
+          type: string
+          maxLength: 1024
+          title: Location
+          description: Where it happens, free text.
+          examples: ["Room 4B, 500 Howard St"]
+        attendees: &attendees
+          type: array
+          maxItems: 200
+          items: { type: string, minLength: 3, maxLength: 320 }
+          title: Attendees
+          description: Email addresses to invite. Whether Google emails them is up to send_updates.
+          examples: [["ann@example.com", "bo@example.com"]]
+        add_google_meet:
+          type: boolean
+          default: false
+          title: Add Google Meet
+          description: Attach a new Google Meet video link to the event.
+        send_updates: &send_updates
+          type: string
+          enum: [none, externalOnly, all]
+          default: none
+          title: Notify guests
+          description: Who Google emails about this change. none (the default) sends nothing, externalOnly emails only guests outside the organizer's domain, all emails every guest.
+        calendar_id: *calendar_id
+        connection: *connection
+    request:
+      method: POST
+      path: /calendars/{{ params.calendar_id }}/events
+      query_expr: >-
+        {"sendUpdates": params.send_updates,
+         ?"conferenceDataVersion": params.add_google_meet ? optional.of('1') : optional.none()}
+      body_expr: >-
+        {"summary": params.summary,
+         "start": {?"dateTime": params.start.?date_time, ?"timeZone": params.start.?time_zone, ?"date": params.start.?date},
+         "end": {?"dateTime": params.end.?date_time, ?"timeZone": params.end.?time_zone, ?"date": params.end.?date},
+         ?"description": params.?description,
+         ?"location": params.?location,
+         ?"attendees": has(params.attendees) ? optional.of(params.attendees.map(a, {"email": a})) : optional.none(),
+         ?"conferenceData": params.add_google_meet ? optional.of({"createRequest": {
+           "requestId": "reliant-" + (params.summary.size() > 40 ? params.summary.substring(0, 40) : params.summary) + "-" + params.?start.?date_time.orValue(params.?start.?date.orValue('')),
+           "conferenceSolutionKey": {"type": "hangoutsMeet"}}}) : optional.none()}
+      errors: *google_calendar_errors
+    output:
+      select: *event_select
+      schema: *event_item
+
+  - id: event.update
+    display_name: Update event
+    summary: Change fields of an existing event; only the fields you give change.
+    description: >-
+      Change an event: only the fields you pass are modified, the rest stay as
+      they are (this is a patch, not a replacement). Pass summary,
+      description, location, start, end (same forms as Create event) and/or
+      attendees. attendees REPLACES the whole guest list, so to add someone
+      pass the existing guests (from Get event) plus the new one. To clear
+      description or location pass an empty string. send_updates decides who
+      Google emails about the change: none (the default), externalOnly or all.
+      Returns the updated event.
+    keywords: [calendar, event, update, edit, change, reschedule, move, rename, patch, attendees]
+    placement: server
+    mutates: true
+    tool:
+      expose: true
+    params:
+      type: object
+      additionalProperties: false
+      required: [event_id]
+      properties:
+        event_id: *event_id
+        summary:
+          type: string
+          minLength: 1
+          maxLength: 1024
+          title: Title
+          description: A new title for the event.
+          examples: ["Quarterly review (moved)"]
+        start: *start
+        end: *end
+        description:
+          type: string
+          maxLength: 8192
+          title: Description
+          description: New notes for the event. An empty string clears them.
+          examples: ["Agenda: pipeline, hiring, Q1 plan."]
+        location:
+          type: string
+          maxLength: 1024
+          title: Location
+          description: A new location. An empty string clears it.
+          examples: ["Room 4B, 500 Howard St"]
+        attendees: *attendees
+        send_updates: *send_updates
+        calendar_id: *calendar_id
+        connection: *connection
+    request:
+      method: PATCH
+      path: /calendars/{{ params.calendar_id }}/events/{{ params.event_id }}
+      query_expr: '{"sendUpdates": params.send_updates}'
+      body_expr: >-
+        {?"summary": params.?summary,
+         ?"description": params.?description,
+         ?"location": params.?location,
+         ?"start": has(params.start) ? optional.of({?"dateTime": params.start.?date_time, ?"timeZone": params.start.?time_zone, ?"date": params.start.?date}) : optional.none(),
+         ?"end": has(params.end) ? optional.of({?"dateTime": params.end.?date_time, ?"timeZone": params.end.?time_zone, ?"date": params.end.?date}) : optional.none(),
+         ?"attendees": has(params.attendees) ? optional.of(params.attendees.map(a, {"email": a})) : optional.none()}
+      errors: *google_calendar_errors
+    output:
+      select: *event_select
+      schema: *event_item
+
+  - id: event.delete
+    display_name: Delete event
+    summary: Delete an event (cancelling it for its guests when send_updates says so).
+    description: >-
+      Delete an event from a calendar. send_updates decides who Google emails
+      about the cancellation: none (the default, so guests are not told),
+      externalOnly or all. Deleting an event that is already gone fails with
+      "gone". Deleting an occurrence of a recurring event removes that
+      occurrence only; deleting the series id removes every occurrence.
+    keywords: [calendar, event, delete, remove, cancel, meeting]
+    placement: server
+    mutates: true
+    tool:
+      expose: true
+    params:
+      type: object
+      additionalProperties: false
+      required: [event_id]
+      properties:
+        event_id: *event_id
+        send_updates: *send_updates
+        calendar_id: *calendar_id
+        connection: *connection
+    request:
+      method: DELETE
+      path: /calendars/{{ params.calendar_id }}/events/{{ params.event_id }}
+      query_expr: '{"sendUpdates": params.send_updates}'
+      errors: *google_calendar_errors
+    output:
+      select: >-
+        {"deleted": true, "calendar_id": params.calendar_id, "event_id": params.event_id}
+      schema:
+        type: object
+        properties:
+          deleted: { type: boolean }
+          calendar_id: { type: string }
+          event_id: { type: string }

@@ -80,7 +80,7 @@ export function MobileGitHubPanel() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center gap-2 px-4 py-6 text-sm text-muted-foreground">
+      <div className="flex items-center gap-2 px-4 py-6 text-ui text-muted-foreground">
         <Loader2 className="h-4 w-4 animate-spin" />
         Loading…
       </div>
@@ -91,7 +91,7 @@ export function MobileGitHubPanel() {
     <div className="divide-y divide-border">
       {error && (
         <div className="mx-4 mt-4 rounded-lg border border-destructive/30 bg-destructive/10 p-3">
-          <p className="text-sm text-destructive-ink">{error}</p>
+          <p className="text-ui text-destructive-ink">{error}</p>
         </div>
       )}
 
@@ -100,10 +100,10 @@ export function MobileGitHubPanel() {
           <Github className="h-4 w-4" />
         </span>
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-medium text-foreground">
+          <p className="text-ui font-medium text-foreground">
             {hasToken ? "GitHub connected" : "Not connected"}
           </p>
-          <p className="mt-0.5 text-xs text-muted-foreground">
+          <p className="mt-0.5 text-meta text-muted-foreground">
             {hasToken
               ? `Scopes: ${scopes || "(none)"}`
               : "Connect GitHub so Reliant can clone private repos onto your machines."}
@@ -114,7 +114,7 @@ export function MobileGitHubPanel() {
       {hasToken && !hasRepoScope && (
         <div className="mx-4 my-3 flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
-          <p className="text-xs text-amber-900 dark:text-amber-200">
+          <p className="text-meta text-amber-900 dark:text-amber-200">
             This token has no <code>repo</code> scope, so Reliant can only see public
             repositories. Reauthorize to grant full access.
           </p>
@@ -125,7 +125,7 @@ export function MobileGitHubPanel() {
         {hasToken ? (
           confirmingDisconnect ? (
             <div className="flex flex-col gap-2">
-              <p className="text-sm text-muted-foreground">
+              <p className="text-ui text-muted-foreground">
                 Disconnect GitHub? Reliant will lose access to your repos.
               </p>
               <div className="flex gap-2">
@@ -133,7 +133,7 @@ export function MobileGitHubPanel() {
                   type="button"
                   onClick={() => setConfirmingDisconnect(false)}
                   disabled={disconnecting}
-                  className="flex min-h-[44px] flex-1 items-center justify-center rounded-lg border border-border text-sm font-medium text-foreground active:bg-foreground/5 disabled:opacity-60"
+                  className="flex min-h-[44px] flex-1 items-center justify-center rounded-lg border border-border text-ui font-medium text-foreground active:bg-foreground/5 disabled:opacity-60"
                 >
                   Cancel
                 </button>
@@ -141,7 +141,7 @@ export function MobileGitHubPanel() {
                   type="button"
                   onClick={() => void handleDisconnect()}
                   disabled={disconnecting}
-                  className="flex min-h-[44px] flex-1 items-center justify-center rounded-lg bg-destructive text-sm font-medium text-destructive-foreground active:opacity-80 disabled:opacity-60"
+                  className="flex min-h-[44px] flex-1 items-center justify-center rounded-lg bg-destructive text-ui font-medium text-destructive-foreground active:opacity-80 disabled:opacity-60"
                 >
                   {disconnecting ? "Disconnecting…" : "Disconnect"}
                 </button>
@@ -167,7 +167,7 @@ export function MobileGitHubPanel() {
               <button
                 type="button"
                 onClick={() => setConfirmingDisconnect(true)}
-                className="flex min-h-[44px] w-full items-center justify-center rounded-lg border border-border text-sm font-medium text-destructive-ink active:bg-foreground/5"
+                className="flex min-h-[44px] w-full items-center justify-center rounded-lg border border-border text-ui font-medium text-destructive-ink active:bg-foreground/5"
               >
                 Disconnect
               </button>

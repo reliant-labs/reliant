@@ -134,7 +134,7 @@ func rootSchema(payload, activation map[string]any) map[string]any {
 		"type":                 "object",
 		"additionalProperties": false,
 		"properties": map[string]any{
-			"kind":          str("What fired the run: integration, webhook, schedule, workflow_event or manual."),
+			"kind":          str("What fired the run: integration, webhook, schedule, workflow_event, record_due or manual."),
 			"trigger_id":    str("The activated trigger's id."),
 			"event_id":      str("The recorded event's id."),
 			"occurred_at":   str("When the event happened, RFC 3339."),
@@ -153,6 +153,27 @@ func rootSchema(payload, activation map[string]any) map[string]any {
 				},
 			},
 			"origin": originSchema(),
+			"record": recordSchema(),
+		},
+	}
+}
+
+// recordSchema is `trigger.record` as runtime.RecordCELValue builds it:
+// closed, every key always present.
+func recordSchema() map[string]any {
+	str := func(desc string) map[string]any { return map[string]any{"type": "string", "description": desc} }
+	return map[string]any{
+		"type":                 "object",
+		"additionalProperties": false,
+		"description":          "The record the event is about: the due record of a record_due trigger, or the pull request of a GitHub pull request event (repository, number and head_sha only). Empty otherwise.",
+		"properties": map[string]any{
+			"id":          str("The record's id (a record_due trigger's pr_records id); empty on a GitHub event."),
+			"table":       str("The table the record is in (record_due only)."),
+			"repository":  str("The repository, owner/name."),
+			"number":      map[string]any{"type": "integer", "description": "The pull request number; 0 when the event names none."},
+			"head_sha":    str("The pull request's head commit."),
+			"next_action": str("What the record waits for (record_due only)."),
+			"due_at":      str("When it fell due, RFC 3339 (record_due only)."),
 		},
 	}
 }
