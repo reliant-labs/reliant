@@ -2,13 +2,14 @@
 
 /**
  * GtmService, answered in the page: strategies and their campaigns, channels,
- * items (the calendar), assets, the strategy library and its import audit,
- * ideas, positioning and the claims registry, from the sample pack
- * (../../data/gtm.ts) held IN MEMORY. Every rpc is answered. The reads honour
- * their filters; the writes (GTM_ANSWERS, the pack's `answers`) change that
- * memory, so accept, edit, approve, record a URL, resolve a held send, use a
- * library strategy, confirm a prune and drag-to-reschedule visibly work and
- * reset on reload. Nothing here sends, publishes or reaches a server.
+ * items (the calendar), assets, the strategy library (a subset of the real
+ * embedded idea bank, read-only), ideas, positioning and the claims registry,
+ * from the sample pack (../../data/gtm.ts) held IN MEMORY. Every rpc is
+ * answered. The reads honour their filters; the writes (GTM_ANSWERS, the
+ * pack's `answers`) change that memory, so accept, edit, approve, record a
+ * URL, resolve a held send, use a library strategy and drag-to-reschedule
+ * visibly work and reset on reload. Nothing here sends, publishes or reaches
+ * a server.
  *
  * It follows the service's contract where the UI can see it:
  *   - a row is read and written by its org only; any other org is NotFound,
@@ -24,20 +25,29 @@
  *     approval_hash set, not SENT) refuses every edit until ResolveItemSend,
  *     a content edit of an APPROVED or SCHEDULED item returns it to REVIEW,
  *     and PUBLISHED on a MANUAL channel needs published_url;
+ *   - the library follows PR-5's ListStrategyLibrary: categories, business
+ *     types and models (an entry naming none fits all), the bank's lowercase
+ *     stage, objective, effort and cost, a query whose every word must be in
+ *     the name or summary, fits_my_business against the org's positioning,
+ *     and diverse (round-robin across categories, no pages); otherwise by
+ *     category, then name. An idea's library_key must be an entry the
+ *     fixture's bank holds;
  *   - there is no bucket in the preview: CreateAssetUpload and
  *     ConfirmAssetUpload are Unavailable, and GetAssetDownload answers an
- *     inline image;
+ *     inline image as its download_url;
  *   - CheckClaims is a small deterministic stand-in for the Go claim checker:
  *     it flags prices, percentages, durations, "free" and absolutes, and
  *     matches each against the registry.
  *
  * App layer only (../../app.ts): the demo pack never imports this.
  */
-import { create, equals } from "@bufbuild/protobuf";
+import { create } from "@bufbuild/protobuf";
 import { timestampFromMs, timestampMs, type Timestamp } from "@bufbuild/protobuf/wkt";
 import { Code, ConnectError } from "@connectrpc/connect";
 
 import {
+  GtmBusinessModel,
+  GtmBusinessType,
   GtmCampaignSchema,
   GtmCampaignStatus,
   GtmChannelMode,
@@ -52,7 +62,6 @@ import {
   GtmClaimStatus,
   GtmConnectionState,
   GtmCoverageRowSchema,
-  GtmCredentialKind,
   GtmIdeaSchema,
   GtmIdeaSource,
   GtmIdeaStatus,
@@ -60,37 +69,34 @@ import {
   GtmItemSchema,
   GtmItemStatus,
   GtmItemStatusCountSchema,
-  GtmLibraryImportSchema,
-  GtmLibraryPruneRequestSchema,
   GtmPositioningSchema,
-  GtmPruneRequestStatus,
   GtmRevisionConflictSchema,
   GtmService,
   GtmStrategySchema,
+  GtmStrategyCategory,
   GtmStrategyStatus,
-  GtmStrategyLibraryEntrySchema,
   type GtmCampaign,
   type GtmChannel,
   type GtmClaim,
   type GtmClaimFinding,
   type GtmCoverageRow,
   type GtmItem,
-  type GtmLibraryPruneRequest,
+  type GtmPositioning,
   type GtmStrategyLibraryEntry,
+  type GtmTailorAnswer,
 } from "@/gen/reliant/v1/gtm_pb";
 
 import { gtmAssetImageUrl, gtmSampleData, GTM_SAMPLE_PERSON } from "../../data/gtm";
-import { DAY, DEMO_ORG, demoNow, MINUTE } from "../../shopStory";
+import { DEMO_ORG, demoNow, MINUTE } from "../../shopStory";
 import { serve } from "../serve";
 
 /**
  * The GtmService rpcs the pack answers although its transport is read-only:
- * every one not declared NO_SIDE_EFFECTS (the writes, and the two channel
- * reads that may seed the defaults). Each is checked against the proto.
+ * every one not declared NO_SIDE_EFFECTS (the writes, and GetAssetDownload,
+ * which mints a short-lived URL on every call). Each is checked against the
+ * proto.
  */
 export const GTM_ANSWERS = [
-  "reliant.v1.GtmService/ListChannels",
-  "reliant.v1.GtmService/GetChannel",
   "reliant.v1.GtmService/CreateStrategy",
   "reliant.v1.GtmService/UpdateStrategy",
   "reliant.v1.GtmService/CreateChannel",
@@ -98,9 +104,7 @@ export const GTM_ANSWERS = [
   "reliant.v1.GtmService/CreateAssetUpload",
   "reliant.v1.GtmService/ConfirmAssetUpload",
   "reliant.v1.GtmService/DeleteAsset",
-  "reliant.v1.GtmService/ImportStrategyLibrary",
-  "reliant.v1.GtmService/ConfirmLibraryPrune",
-  "reliant.v1.GtmService/CancelLibraryPrune",
+  "reliant.v1.GtmService/GetAssetDownload",
   "reliant.v1.GtmService/UseLibraryStrategy",
   "reliant.v1.GtmService/CreateIdea",
   "reliant.v1.GtmService/UpdateIdea",
@@ -117,11 +121,90 @@ export const GTM_ANSWERS = [
 const SLUG = /^[a-z0-9-]{1,32}$/;
 const LIBRARY_KEY = /^[a-z0-9][a-z0-9_-]{0,127}$/;
 const DATE = /^(\d{4})-(\d{2})-(\d{2})$/;
-const MAX_IMPORT_BATCH = 500;
 /** GetCampaign's cap on each of its ideas and items lists (the domain's MaxCampaignIdeas and MaxCampaignItems). */
 const MAX_CAMPAIGN_ROWS = 200;
-const PRUNE_EXPIRY_MS = 7 * DAY;
 const DOWNLOAD_TTL_MS = 15 * MINUTE;
+
+// The bank's vocabularies (internal/gtm/library), as ListStrategyLibrary takes them.
+const STAGES = ["pre_launch", "launch", "early_traction", "growth", "scale"];
+const OBJECTIVES = ["awareness", "acquisition", "activation", "conversion", "retention", "expansion", "referral", "research"];
+const EFFORTS = ["low", "medium", "high"];
+const COSTS = ["free", "low", "medium", "high"];
+const MAX_LIBRARY_QUERY = 200;
+const MAX_LIBRARY_PAGE = 200;
+// The idea fields that cite the bank (PR-5's MaxTailorAnswers, MaxTailorAnswerLen, MaxSuggestedWorkflowLen).
+const MAX_TAILOR_ANSWERS = 20;
+const MAX_TAILOR_ANSWER_LEN = 2000;
+const MAX_SUGGESTED_WORKFLOW_LEN = 20000;
+
+/** A repeated enum filter: each value defined and not UNSPECIFIED, at most `max`, deduped (PR-5's libraryList). */
+function enumList<T extends number>(field: string, values: readonly T[], max: number, defined: Record<string | number, unknown>): T[] {
+  if (values.length > max) throw invalid(field, `at most ${max}`);
+  const out: T[] = [];
+  for (const v of values) {
+    if (v === 0 || typeof defined[v] !== "string") throw invalid(field, `unknown value ${v}`);
+    if (!out.includes(v)) out.push(v);
+  }
+  return out;
+}
+
+const checkSlug = (field: string, value: string | undefined, vocab: readonly string[]) => {
+  if (value !== undefined && value !== "" && !vocab.includes(value)) throw invalid(field, `one of ${vocab.join(", ")}`);
+};
+
+/** An entry fits a business with this type and these models (library.Fits): an unset side of either never excludes. */
+function fits(e: GtmStrategyLibraryEntry, type: GtmBusinessType, models: readonly GtmBusinessModel[]): boolean {
+  const modelsFit = e.businessModels.length === 0 || models.length === 0 || e.businessModels.some((m) => models.includes(m));
+  const typeFits = type === GtmBusinessType.UNSPECIFIED || e.businessTypes.length === 0 || e.businessTypes.includes(type);
+  return modelsFit && typeFits;
+}
+
+/**
+ * Up to n entries taken round-robin across their categories, in category
+ * order, at most ceil(n / categories-with-matches) from any one (library.Diverse).
+ */
+function diverse(entries: readonly GtmStrategyLibraryEntry[], n: number): GtmStrategyLibraryEntry[] {
+  const groups = new Map<GtmStrategyCategory, GtmStrategyLibraryEntry[]>();
+  for (const e of entries) groups.set(e.category, [...(groups.get(e.category) ?? []), e]);
+  if (n <= 0 || groups.size === 0) return [];
+  const order = [...groups.keys()].sort((a, b) => a - b);
+  const per = Math.ceil(n / groups.size);
+  const out: GtmStrategyLibraryEntry[] = [];
+  for (let round = 0; round < per; round++) {
+    let took = false;
+    for (const c of order) {
+      const e = groups.get(c)![round];
+      if (!e) continue;
+      out.push(e);
+      took = true;
+      if (out.length === n) return out;
+    }
+    if (!took) break;
+  }
+  return out;
+}
+
+/** An idea's bank citation (PR-5's checkIdeaLibrary): a key the bank holds (or none), its answers and its workflow. */
+function checkIdeaLibrary(library: readonly GtmStrategyLibraryEntry[], key: string, answers: readonly GtmTailorAnswer[], workflow: string) {
+  if (key && !library.some((e) => e.key === key)) throw invalid("library_key", `the idea bank holds no entry "${key}"`);
+  if (answers.length > MAX_TAILOR_ANSWERS) throw invalid("tailor_answers", `at most ${MAX_TAILOR_ANSWERS}`);
+  answers.forEach((a, i) => {
+    if (a.question.length < 1 || a.question.length > MAX_TAILOR_ANSWER_LEN) throw invalid(`tailor_answers[${i}].question`, `1 to ${MAX_TAILOR_ANSWER_LEN} characters`);
+    if (a.answer.length > MAX_TAILOR_ANSWER_LEN) throw invalid(`tailor_answers[${i}].answer`, `at most ${MAX_TAILOR_ANSWER_LEN} characters`);
+  });
+  if (workflow.length > MAX_SUGGESTED_WORKFLOW_LEN) throw invalid("suggested_workflow_md", `at most ${MAX_SUGGESTED_WORKFLOW_LEN} characters`);
+}
+
+/** Positioning's business profile (PR-5's checkBusiness): a defined type or none, and defined models, each once. */
+function checkBusiness(type: GtmBusinessType, models: readonly GtmBusinessModel[]) {
+  if (type !== GtmBusinessType.UNSPECIFIED && typeof GtmBusinessType[type] !== "string") throw invalid("business_type", "unknown business type");
+  const seen = new Set<GtmBusinessModel>();
+  for (const m of models) {
+    if (m === GtmBusinessModel.UNSPECIFIED || typeof GtmBusinessModel[m] !== "string") throw invalid("business_models", `unknown business model ${m}`);
+    if (seen.has(m)) throw invalid("business_models", `${GtmBusinessModel[m]} twice`);
+    seen.add(m);
+  }
+}
 
 const notFound = (what: string) => new ConnectError(`${what} not found`, Code.NotFound);
 const invalid = (field: string, reason: string) => new ConnectError(`${field}: ${reason}`, Code.InvalidArgument);
@@ -203,7 +286,6 @@ export function gtmHandlers() {
   const campaign = (orgId: string, id: string) => find(org(orgId).campaigns, id, "campaign");
   const item = (orgId: string, id: string) => find(org(orgId).items, id, "item");
   const asset = (orgId: string, id: string) => find(org(orgId).assets, id, "asset");
-  const pruneRequest = (orgId: string, id: string) => find(org(orgId).pruneRequests, id, "prune request");
 
   /** A link names one of the org's own rows. Empty is none. */
   const link = (orgId: string, id: string | undefined, kind: "campaign" | "idea" | "channel") => {
@@ -230,10 +312,6 @@ export function gtmHandlers() {
     const unscheduled = items.filter((i) => !i.scheduledAt).sort(byCreated);
     return [...scheduled, ...unscheduled];
   };
-
-  /** A pending request past its seven days reads as EXPIRED. */
-  const withExpiry = (req: GtmLibraryPruneRequest): GtmLibraryPruneRequest =>
-    req.status === GtmPruneRequestStatus.PENDING && demoNow() >= ms(req.createdAt) + PRUNE_EXPIRY_MS ? create(GtmLibraryPruneRequestSchema, { ...req, status: GtmPruneRequestStatus.EXPIRED }) : req;
 
   /** One row per planned (channel, format) pair and per pair an item uses, with the items counted by status. */
   const coverageOf = (c: GtmCampaign, items: GtmItem[], channels: GtmChannel[]): GtmCoverageRow[] => {
@@ -395,7 +473,7 @@ export function gtmHandlers() {
     getAssetDownload: (req) => {
       const found = asset(req.orgId, req.assetId);
       if (found.status !== 2 /* READY */) throw precondition("the asset is not ready: its upload has not been confirmed");
-      return { url: gtmAssetImageUrl(found.id), expiresAt: timestampFromMs(demoNow() + DOWNLOAD_TTL_MS) };
+      return { downloadUrl: gtmAssetImageUrl(found.id), expiresAt: timestampFromMs(demoNow() + DOWNLOAD_TTL_MS) };
     },
     deleteAsset: (req) => {
       const all = org(req.orgId);
@@ -404,97 +482,51 @@ export function gtmHandlers() {
       return {};
     },
 
-    // ── Strategy library ─────────────────────────────────────────────────────
+    // ── Strategy library (the embedded idea bank, read-only) ──────────────────
     listStrategyLibrary: (req) => {
-      const query = req.query?.toLowerCase();
-      const rows = org(req.orgId).library
-        .filter((e) =>
-          (req.category === undefined || e.category === req.category) && (req.depth === undefined || e.depth === req.depth) && (req.stage === undefined || e.stage === req.stage) &&
-          (req.cost === undefined || e.cost === req.cost) && (req.difficulty === undefined || e.difficulty === req.difficulty) && (req.fit === undefined || e.fits.includes(req.fit)) &&
-          (!query || e.name.toLowerCase().includes(query) || e.summaryMd.toLowerCase().includes(query)),
-        )
-        .sort((a, b) => a.category - b.category || a.name.localeCompare(b.name));
-      const { rows: entries, next } = page(rows, req.pageSize, 50, req.pageToken);
+      const all = org(req.orgId);
+      if (req.pageSize < 0 || req.pageSize > MAX_LIBRARY_PAGE) throw invalid("page_size", `0 to ${MAX_LIBRARY_PAGE}`);
+      const categories = enumList("categories", req.categories, 13, GtmStrategyCategory);
+      const types = enumList("business_types", req.businessTypes, 10, GtmBusinessType);
+      const models = enumList("business_models", req.businessModels, 8, GtmBusinessModel);
+      checkSlug("stage", req.stage, STAGES);
+      checkSlug("objective", req.objective, OBJECTIVES);
+      checkSlug("effort", req.effort, EFFORTS);
+      checkSlug("cost", req.cost, COSTS);
+      if ((req.query ?? "").length > MAX_LIBRARY_QUERY) throw invalid("query", `at most ${MAX_LIBRARY_QUERY} characters`);
+      // Every word of the query, in the name or the summary.
+      const terms = (req.query ?? "").toLowerCase().split(/\s+/).filter(Boolean);
+      const profile = all.positioning;
+      const matched = all.library.filter((e) => {
+        if (categories.length && !categories.includes(e.category)) return false;
+        if (types.length && e.businessTypes.length && !e.businessTypes.some((t) => types.includes(t))) return false;
+        if (models.length && e.businessModels.length && !e.businessModels.some((m) => models.includes(m))) return false;
+        if (req.stage && e.stages.length && !e.stages.includes(req.stage)) return false;
+        if (req.objective && e.objective !== req.objective) return false;
+        if (req.effort && e.effort !== req.effort) return false;
+        if (req.cost && e.cost !== req.cost) return false;
+        const hay = `${e.name}\n${e.summaryMd}`.toLowerCase();
+        if (!terms.every((t) => hay.includes(t))) return false;
+        return !req.fitsMyBusiness || fits(e, profile.businessType, profile.businessModels);
+      });
+      // A spread has no pages: the token is ignored and no next token is given.
+      if (req.diverse) return { entries: diverse(matched, req.pageSize || 50), nextPageToken: "" };
+      const sorted = [...matched].sort((a, b) => a.category - b.category || (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+      const { rows: entries, next } = page(sorted, req.pageSize, 50, req.pageToken);
       return { entries, nextPageToken: next };
     },
-    getStrategyLibraryEntry: (req) => ({ entry: org(req.orgId).library.find((e) => e.key === req.key) ?? (() => { throw notFound("library entry"); })() }),
-    // The web user is a person-class credential, so a prune here removes at once (a token's prune is staged by the service, which the sample's pending request stands in for).
-    importStrategyLibrary: (req) => {
+    getStrategyLibraryEntry: (req) => {
       const all = org(req.orgId);
-      if (req.entries.length < 1 || req.entries.length > MAX_IMPORT_BATCH) throw invalid("entries", `1 to ${MAX_IMPORT_BATCH} per call`);
-      const keys = new Set<string>();
-      req.entries.forEach((e, i) => {
-        if (!LIBRARY_KEY.test(e.key)) throw invalid(`entries[${i}].key`, "a slug: [a-z0-9][a-z0-9_-]{0,127}");
-        if (keys.has(e.key)) throw invalid(`entries[${i}].key`, `"${e.key}" twice in the batch`);
-        keys.add(e.key);
-        if (!e.name) throw invalid(`entries[${i}].name`, "required");
-        if (e.category === 0) throw invalid(`entries[${i}].category`, "required, one of the 13");
-        if (e.depth === 0) throw invalid(`entries[${i}].depth`, "required: PLAY or TACTIC");
-      });
-      if (req.prune) {
-        if (req.allKeys.length === 0) throw invalid("all_keys", "required with prune: every key of the library");
-        const complete = new Set(req.allKeys);
-        for (const k of keys) if (!complete.has(k)) throw invalid("all_keys", `"${k}" is not in all_keys`);
-      }
-      const stamp = { sourceRevision: req.sourceRevision, importedAt: nowTs(), importedBy: GTM_SAMPLE_PERSON };
-      let created = 0, updated = 0, unchanged = 0;
-      for (const incoming of req.entries) {
-        const at = all.library.findIndex((e) => e.key === incoming.key);
-        const next = create(GtmStrategyLibraryEntrySchema, { ...incoming, ...stamp });
-        if (at < 0) created++;
-        else if (equals(GtmStrategyLibraryEntrySchema, { ...all.library[at]!, ...stamp }, next)) unchanged++;
-        else updated++;
-        if (at < 0) all.library.push(next);
-        else all.library[at] = next;
-      }
-      let pruned = 0;
-      if (req.prune) {
-        const complete = new Set(req.allKeys);
-        const before = all.library.length;
-        all.library = all.library.filter((e) => complete.has(e.key));
-        pruned = before - all.library.length;
-      }
-      all.libraryImports.unshift(create(GtmLibraryImportSchema, {
-        id: nextId("gtm-import"), orgId: req.orgId, actorUserId: GTM_SAMPLE_PERSON, credentialKind: GtmCredentialKind.PERSON, sourceRevision: req.sourceRevision,
-        created, updated, unchanged, pruned, createdAt: nowTs(),
-      }));
-      return { created, updated, unchanged, pruned, pruneRequestId: "", wouldRemove: [] };
-    },
-    listLibraryImports: (req) => {
-      const { rows: imports, next } = page([...org(req.orgId).libraryImports].sort(byCreated), req.pageSize, 50, req.pageToken);
-      return { imports, nextPageToken: next };
-    },
-    listLibraryPruneRequests: (req) => {
-      const rows = org(req.orgId).pruneRequests.map(withExpiry).filter((r) => req.status === undefined || r.status === req.status).sort(byCreated);
-      const { rows: requests, next } = page(rows, req.pageSize, 50, req.pageToken);
-      return { requests, nextPageToken: next };
-    },
-    confirmLibraryPrune: (req) => {
-      const all = org(req.orgId);
-      const current = withExpiry(pruneRequest(req.orgId, req.requestId));
-      if (current.status === GtmPruneRequestStatus.EXPIRED) throw precondition("the prune request expired; ask for a new one");
-      if (current.status !== GtmPruneRequestStatus.PENDING) throw precondition("the prune request was already decided");
-      // Only keys still present and not imported again since the request was made.
-      const before = all.library.length;
-      all.library = all.library.filter((e) => !current.removeKeys.includes(e.key) || ms(e.importedAt) > ms(current.createdAt));
-      const next = create(GtmLibraryPruneRequestSchema, { ...current, status: GtmPruneRequestStatus.CONFIRMED, decidedBy: GTM_SAMPLE_PERSON, decidedAt: nowTs() });
-      put(all.pruneRequests, next);
-      return { removed: before - all.library.length, request: next };
-    },
-    cancelLibraryPrune: (req) => {
-      const all = org(req.orgId);
-      const current = withExpiry(pruneRequest(req.orgId, req.requestId));
-      if (current.status === GtmPruneRequestStatus.EXPIRED) throw precondition("the prune request expired");
-      if (current.status !== GtmPruneRequestStatus.PENDING) throw precondition("the prune request was already decided");
-      const next = create(GtmLibraryPruneRequestSchema, { ...current, status: GtmPruneRequestStatus.CANCELLED, decidedBy: GTM_SAMPLE_PERSON, decidedAt: nowTs() });
-      return { request: put(all.pruneRequests, next) };
+      if (!LIBRARY_KEY.test(req.key)) throw invalid("key", "a library key");
+      return { entry: all.library.find((e) => e.key === req.key) ?? (() => { throw notFound("library entry"); })() };
     },
     useLibraryStrategy: (req) => {
       const all = org(req.orgId);
+      if (!LIBRARY_KEY.test(req.libraryKey)) throw invalid("library_key", "a library key");
       const entry: GtmStrategyLibraryEntry = all.library.find((e) => e.key === req.libraryKey) ?? (() => { throw notFound("library entry"); })();
       if (req.campaignName !== undefined && !req.createFirstCampaign) throw invalid("campaign_name", "only with create_first_campaign");
       const created = put(all.strategies, create(GtmStrategySchema, {
-        id: nextId("gtm-str"), orgId: req.orgId, name: entry.name, goalMd: [entry.northStar, entry.objective].filter((p) => p.trim()).join("\n\n"), targetMetric: entry.kpis.join(", "),
+        id: nextId("gtm-str"), orgId: req.orgId, name: entry.name, goalMd: [entry.summaryMd, entry.objective ? `Objective: ${entry.objective}` : ""].filter((p) => p.trim()).join("\n\n"), targetMetric: entry.kpis.join(", "),
         status: GtmStrategyStatus.DRAFT, category: entry.category, libraryKey: entry.key, revision: 1, createdBy: GTM_SAMPLE_PERSON, updatedBy: GTM_SAMPLE_PERSON, createdAt: nowTs(), updatedAt: nowTs(),
       }));
       if (!req.createFirstCampaign) return { strategy: created };
@@ -522,11 +554,13 @@ export function gtmHandlers() {
     },
     getIdea: (req) => ({ idea: idea(req.orgId, req.id) }),
     createIdea: (req) => {
-      org(req.orgId);
+      const all = org(req.orgId);
       link(req.orgId, req.campaignId, "campaign");
+      checkIdeaLibrary(all.library, req.libraryKey, req.tailorAnswers, req.suggestedWorkflowMd);
       const created = create(GtmIdeaSchema, {
         id: nextId("gtm-idea"), orgId: req.orgId, kind: req.kind, title: req.title, bodyMd: req.bodyMd, evidence: req.evidence, status: GtmIdeaStatus.PROPOSED,
-        source: GtmIdeaSource.HUMAN, sourceChatId: req.sourceChatId, createdBy: GTM_SAMPLE_PERSON, campaignId: req.campaignId, revision: 1, createdAt: nowTs(), updatedAt: nowTs(),
+        source: GtmIdeaSource.HUMAN, sourceChatId: req.sourceChatId, createdBy: GTM_SAMPLE_PERSON, campaignId: req.campaignId,
+        libraryKey: req.libraryKey, tailorAnswers: req.tailorAnswers, suggestedWorkflowMd: req.suggestedWorkflowMd, revision: 1, createdAt: nowTs(), updatedAt: nowTs(),
       });
       return { idea: put(state().ideas, created) };
     },
@@ -534,6 +568,11 @@ export function gtmHandlers() {
       const current = idea(req.orgId, req.id);
       checkRevision(req.id, req.expectedRevision, current.revision);
       link(req.orgId, req.campaignId, "campaign");
+      // Unset leaves a field alone; set (an empty value included) replaces it.
+      const libraryKey = req.libraryKey ?? current.libraryKey;
+      const tailorAnswers = req.tailorAnswers ? req.tailorAnswers.answers : current.tailorAnswers;
+      const suggestedWorkflowMd = req.suggestedWorkflowMd ?? current.suggestedWorkflowMd;
+      checkIdeaLibrary(org(req.orgId).library, libraryKey, tailorAnswers, suggestedWorkflowMd);
       const next = create(GtmIdeaSchema, {
         ...current,
         kind: req.kind ?? current.kind,
@@ -541,6 +580,7 @@ export function gtmHandlers() {
         bodyMd: req.bodyMd ?? current.bodyMd,
         evidence: req.evidence ? req.evidence.evidence : current.evidence,
         campaignId: req.campaignId ?? current.campaignId,
+        libraryKey, tailorAnswers, suggestedWorkflowMd,
         revision: current.revision + 1,
         updatedAt: nowTs(),
       });
@@ -718,8 +758,11 @@ export function gtmHandlers() {
     updatePositioning: (req) => {
       const current = org(req.orgId).positioning;
       checkRevision("positioning", req.expectedRevision, current.revision);
-      const next = create(GtmPositioningSchema, {
-        orgId: req.orgId, positioningMd: req.positioningMd, audiences: req.audiences, updatedBy: GTM_SAMPLE_PERSON, revision: current.revision + 1, updatedAt: nowTs(),
+      checkBusiness(req.businessType, req.businessModels);
+      // The update replaces the whole record, its business profile included: a caller reads, modifies and writes.
+      const next: GtmPositioning = create(GtmPositioningSchema, {
+        orgId: req.orgId, positioningMd: req.positioningMd, audiences: req.audiences, businessType: req.businessType, businessModels: req.businessModels,
+        updatedBy: GTM_SAMPLE_PERSON, revision: current.revision + 1, updatedAt: nowTs(),
       });
       state().positioning = next;
       return { positioning: next };

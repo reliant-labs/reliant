@@ -13,6 +13,8 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { ChatService } from "@/gen/reliant/v1/chat_pb";
 import {
   GtmAssetStatus,
+  GtmBusinessModel,
+  GtmBusinessType,
   GtmCampaignStatus,
   GtmChannelMode,
   GtmChannelSource,
@@ -21,13 +23,10 @@ import {
   GtmClaimSourceKind,
   GtmClaimStatus,
   GtmConnectionState,
-  GtmCredentialKind,
   GtmIdeaKind,
   GtmIdeaStatus,
   GtmItemFormat,
   GtmItemStatus,
-  GtmLibraryDepth,
-  GtmPruneRequestStatus,
   GtmRevisionConflictSchema,
   GtmService,
   GtmStrategyCategory,
@@ -36,7 +35,8 @@ import {
 
 import { createFixtureTransport } from "../../transport";
 import { shopAppPack } from "../app";
-import { GTM_CATEGORY_LABELS, GTM_CHANNEL_IDS, GTM_PRUNE_REQUEST_ID } from "../data/gtm";
+import { GTM_CATEGORY_LABELS, GTM_CHANNEL_IDS } from "../data/gtm";
+import { GTM_BANK_SOURCE, GTM_BANK_SUBSET } from "../data/gtmLibrary.gen";
 import { GTM_ANSWERS } from "../handlers/reliant/gtm";
 import { SHOP_READ_ONLY_MESSAGE } from "../index";
 import { DEMO_ORG, demoNow, resetDemoNowForTests } from "../shopStory";
@@ -85,7 +85,7 @@ describe("the GTM sample pack", () => {
     expect((await rejection(client.listIdeas({ orgId: "org-someone-else" }))).code).toBe(Code.NotFound);
   });
 
-  it("holds the sample volumes: 12 ideas, 2 strategies, 2 campaigns, 9 channels, about 15 items around today, 2 assets, 6 library entries, 8 claims", async () => {
+  it("holds the sample volumes: 12 ideas, 2 strategies, 2 campaigns, 9 channels, about 15 items around today, 2 assets, 25 bank entries, 8 claims", async () => {
     const client = gtmClient();
     const { ideas } = await client.listIdeas(org);
     expect(ideas.length).toBeGreaterThanOrEqual(12);
@@ -114,8 +114,8 @@ describe("the GTM sample pack", () => {
     expect((await client.listAssets({ ...org, campaignId: campaigns[0]!.id })).assets.length + (await client.listAssets({ ...org, campaignId: campaigns[1]!.id })).assets.length).toBe(1);
 
     const { entries } = await client.listStrategyLibrary(org);
-    expect(entries).toHaveLength(6);
-    expect(entries.every((e) => e.name.endsWith("(placeholder)"))).toBe(true);
+    expect(entries).toHaveLength(25);
+    expect(entries.every((e) => !/placeholder/i.test(e.name))).toBe(true);
 
     const { claims } = await client.listClaims(org);
     expect(claims).toHaveLength(8);
@@ -152,6 +152,23 @@ describe("the GTM sample pack", () => {
     expect(sent.every((i) => i.gmailMessageId !== "" && i.sentAt)).toBe(true);
   });
 
+  it("has sample ideas that cite real bank entries and answer each of that entry's tailor questions", async () => {
+    const client = gtmClient();
+    const cited = (await client.listIdeas(org)).ideas.filter((i) => i.libraryKey);
+    expect(cited.map((i) => i.libraryKey).sort()).toEqual([
+      "double-sided-referral-rewards", "founder-led-sales-first-customers", "founder-long-form-blog", "host-local-meetup-series", "own-newsletter", "win-back-campaign",
+    ]);
+    for (const idea of cited) {
+      const entry = (await client.getStrategyLibraryEntry({ ...org, key: idea.libraryKey })).entry!;
+      expect(idea.tailorAnswers.map((a) => a.question), idea.id).toEqual(entry.tailorQuestions);
+      expect(idea.tailorAnswers.every((a) => a.answer.trim().length > 0), idea.id).toBe(true);
+    }
+    // Some carry a suggested workflow, tailored to the business; an in-person and a founder-led idea are among them.
+    expect(cited.filter((i) => i.suggestedWorkflowMd).length).toBeGreaterThanOrEqual(4);
+    expect(cited.some((i) => i.libraryKey === "host-local-meetup-series" && i.suggestedWorkflowMd)).toBe(true);
+    expect(cited.some((i) => i.libraryKey === "founder-led-sales-first-customers")).toBe(true);
+  });
+
   it("has email-type items that are never scheduled or published, whatever the clock says", async () => {
     for (const at of [new Date(2026, 6, 1, 8), new Date(2026, 6, 15, 12), new Date(2026, 6, 30, 23)]) {
       resetDemoNowForTests(at.getTime());
@@ -184,11 +201,11 @@ describe("the GTM sample pack", () => {
 
   it("is generic: nothing in the sample copy names, or restates a fact of, a real product", async () => {
     const client = gtmClient();
-    const downloads = await Promise.all(["gtm-asset-hn-hero", "gtm-asset-brand-sheet"].map(async (assetId) => decodeURIComponent((await client.getAssetDownload({ ...org, assetId })).url)));
+    const downloads = await Promise.all(["gtm-asset-hn-hero", "gtm-asset-brand-sheet"].map(async (assetId) => decodeURIComponent((await client.getAssetDownload({ ...org, assetId })).downloadUrl)));
     const text = JSON.stringify([
       (await client.listIdeas(org)).ideas, (await client.listItems(org)).items, (await client.listClaims(org)).claims, (await client.getPositioning(org)).positioning,
       (await client.listStrategies(org)).strategies, (await client.listChannels(org)).channels, (await client.listCampaigns(org)).campaigns, (await client.listStrategyLibrary(org)).entries,
-      (await client.listLibraryImports(org)).imports, (await client.listLibraryPruneRequests(org)).requests, (await client.listAssets({ ...org, itemId: "gtm-item-show-hn" })).assets,
+      (await client.listAssets({ ...org, itemId: "gtm-item-show-hn" })).assets,
       (await client.listAssets({ ...org, campaignId: "gtm-cmp-weekly-box" })).assets, downloads,
     ], (key, value) => (key === "$typeName" ? undefined : typeof value === "bigint" ? value.toString() : value));
     // The fiction is a coffee company, so none of the real company's own words or facts has a place in it.
@@ -252,46 +269,126 @@ describe("the reads' filters", () => {
     expect([detail.campaigns.length, detail.truncated]).toEqual([2, false]);
   });
 
-  it("filters the library by category, depth, stage, cost, difficulty, fit and a text query, and pages it", async () => {
+  it("filters the library as PR-5 does: categories, business types and models, stage, objective, effort, cost and every word of a query", async () => {
     const client = gtmClient();
     const list = async (req: object) => (await client.listStrategyLibrary({ ...org, ...req })).entries;
-    expect((await list({ category: GtmStrategyCategory.PARTNERSHIPS_DISTRIBUTION })).map((e) => e.key)).toEqual(["sample-tasting-popup"]);
-    expect((await list({ depth: GtmLibraryDepth.PLAY })).every((e) => e.depth === GtmLibraryDepth.PLAY)).toBe(true);
-    expect((await list({ stage: "EARLY" })).every((e) => e.stage === "EARLY")).toBe(true);
-    expect((await list({ cost: "FREE" })).every((e) => e.cost === "FREE")).toBe(true);
-    expect((await list({ difficulty: "EASY" })).every((e) => e.difficulty === "EASY")).toBe(true);
-    expect((await list({ fit: "MARKETPLACE" })).map((e) => e.key)).toEqual(["sample-annual-nudge"]);
-    expect((await list({ query: "QUOTES" })).map((e) => e.key)).toEqual(["sample-quote-wall"]);
-    expect(await list({ query: "no such thing" })).toHaveLength(0);
-    // By category then name.
-    const all = await list({});
-    expect(all.map((e) => e.category)).toEqual([...all.map((e) => e.category)].sort((a, b) => a - b));
-    const first = await client.listStrategyLibrary({ ...org, pageSize: 4 });
-    expect([first.entries.length, first.nextPageToken !== ""]).toEqual([4, true]);
-    expect((await client.listStrategyLibrary({ ...org, pageSize: 4, pageToken: first.nextPageToken })).entries).toHaveLength(2);
-    expect((await client.getStrategyLibraryEntry({ ...org, key: "sample-faq-pages" })).entry?.category).toBe(GtmStrategyCategory.ORGANIC_CONTENT_SEO);
-    expect((await rejection(client.getStrategyLibraryEntry({ ...org, key: "nope" }))).code).toBe(Code.NotFound);
+    const two = await list({ categories: [GtmStrategyCategory.COMMUNITY_EVENTS, GtmStrategyCategory.LAUNCHES_PR] });
+    expect(two.map((e) => e.key).sort()).toEqual(["conference-speaking", "founder-hosted-dinners", "host-local-meetup-series", "launch-directory-day", "trade-press-pitch"]);
+    // A repeated value counts once; more than 13 categories is refused.
+    expect(await list({ categories: [GtmStrategyCategory.COMMUNITY_EVENTS, GtmStrategyCategory.COMMUNITY_EVENTS] })).toHaveLength(3);
+    expect((await rejection(list({ categories: [...Array(14)].map(() => GtmStrategyCategory.LAUNCHES_PR) }))).code).toBe(Code.InvalidArgument);
+    expect((await rejection(list({ categories: [GtmStrategyCategory.UNSPECIFIED] }))).code).toBe(Code.InvalidArgument);
+    // A model or type filter keeps the entries that name it, and those that name none (they fit any business).
+    const usage = await list({ businessModels: [GtmBusinessModel.USAGE_BASED] });
+    expect(usage).toHaveLength(20);
+    expect(usage.every((e) => e.businessModels.length === 0 || e.businessModels.includes(GtmBusinessModel.USAGE_BASED))).toBe(true);
+    const local = await list({ businessTypes: [GtmBusinessType.LOCAL_BUSINESS] });
+    expect(local).toHaveLength(14);
+    expect(local.every((e) => e.businessTypes.length === 0 || e.businessTypes.includes(GtmBusinessType.LOCAL_BUSINESS))).toBe(true);
+    // The bank's lowercase vocabularies; an entry with no stages suits any stage.
+    expect((await list({ stage: "launch" })).every((e) => e.stages.length === 0 || e.stages.includes("launch"))).toBe(true);
+    expect((await list({ objective: "retention" })).map((e) => e.key).sort()).toEqual(["annual-prepay-discount", "failed-payment-recovery", "win-back-campaign"]);
+    expect((await list({ effort: "high" })).map((e) => e.key).sort()).toEqual(["conference-speaking", "founder-led-sales-first-customers", "open-core-paid-tier"]);
+    expect((await list({ cost: "medium" })).every((e) => e.cost === "medium")).toBe(true);
+    for (const bad of [{ stage: "EARLY" }, { objective: "fame" }, { effort: "huge" }, { cost: "FREE" }]) expect((await rejection(list(bad))).code, JSON.stringify(bad)).toBe(Code.InvalidArgument);
+    // Every word of the query, in any order, in the name or the summary.
+    expect((await list({ query: "MEETUP" })).map((e) => e.key)).toEqual(["host-local-meetup-series"]);
+    expect((await list({ query: "dinner founder" })).map((e) => e.key)).toEqual(["founder-hosted-dinners"]);
+    // Words, not a phrase: "such" and "nothing" are both in one summary.
+    expect((await list({ query: "no such thing" })).length).toBe(1);
+    expect(await list({ query: "zebra quokka" })).toHaveLength(0);
+    expect((await rejection(list({ query: "x".repeat(201) }))).code).toBe(Code.InvalidArgument);
   });
 
-  it("names all 13 library categories, and the sample library uses a few", () => {
+  it("orders the library by category, then name, and pages it", async () => {
+    const client = gtmClient();
+    const all = (await client.listStrategyLibrary(org)).entries;
+    const order = all.map((e) => [e.category, e.name] as const);
+    expect(order).toEqual([...order].sort(([ca, na], [cb, nb]) => ca - cb || (na < nb ? -1 : na > nb ? 1 : 0)));
+    const first = await client.listStrategyLibrary({ ...org, pageSize: 20 });
+    expect([first.entries.length, first.nextPageToken !== ""]).toEqual([20, true]);
+    const rest = await client.listStrategyLibrary({ ...org, pageSize: 20, pageToken: first.nextPageToken });
+    expect([rest.entries.length, rest.nextPageToken]).toEqual([5, ""]);
+    expect([...first.entries, ...rest.entries].map((e) => e.key)).toEqual(all.map((e) => e.key));
+    expect((await client.getStrategyLibraryEntry({ ...org, key: "own-newsletter" })).entry?.category).toBe(GtmStrategyCategory.ORGANIC_CONTENT_SEO);
+    expect((await rejection(client.getStrategyLibraryEntry({ ...org, key: "nope" }))).code).toBe(Code.NotFound);
+    expect((await rejection(client.getStrategyLibraryEntry({ ...org, key: "Not A Key" }))).code).toBe(Code.InvalidArgument);
+  });
+
+  it("fits my business against the org's positioning, and a cleared profile fits everything", async () => {
+    const client = gtmClient();
+    const { positioning } = await client.getPositioning(org);
+    expect([positioning?.businessType, positioning?.businessModels]).toEqual([GtmBusinessType.ECOMMERCE, [GtmBusinessModel.SUBSCRIPTION]]);
+    const fitting = (await client.listStrategyLibrary({ ...org, fitsMyBusiness: true })).entries;
+    expect(fitting).toHaveLength(12);
+    expect(fitting[0]?.name).toBe("Annual prepay discount");
+    for (const e of fitting) {
+      expect(e.businessModels.length === 0 || e.businessModels.includes(GtmBusinessModel.SUBSCRIPTION), e.key).toBe(true);
+      expect(e.businessTypes.length === 0 || e.businessTypes.includes(GtmBusinessType.ECOMMERCE), e.key).toBe(true);
+    }
+    // A usage-based-only entry and an in-person entry for other business types are out.
+    expect(fitting.some((e) => e.key === "usage-free-allowance-and-commit-discount" || e.key === "host-local-meetup-series")).toBe(false);
+    // It combines with the other filters.
+    expect((await client.listStrategyLibrary({ ...org, fitsMyBusiness: true, objective: "retention" })).entries.map((e) => e.key).sort()).toEqual(["annual-prepay-discount", "failed-payment-recovery", "win-back-campaign"]);
+    // An org with no type or models: every entry fits.
+    await client.updatePositioning({ ...org, expectedRevision: positioning!.revision, positioningMd: positioning!.positioningMd, audiences: positioning!.audiences });
+    expect((await client.listStrategyLibrary({ ...org, fitsMyBusiness: true })).entries).toHaveLength(25);
+  });
+
+  it("spreads a diverse list round-robin across categories, with no pages", async () => {
+    const client = gtmClient();
+    const thirteen = await client.listStrategyLibrary({ ...org, diverse: true, pageSize: 13 });
+    expect(thirteen.entries.map((e) => e.category)).toEqual([...Array(13)].map((_, i) => i + 1));
+    expect(thirteen.nextPageToken).toBe("");
+    // Each category's first entry in bank order, in category order.
+    const five = await client.listStrategyLibrary({ ...org, diverse: true, pageSize: 5 });
+    expect(five.entries.map((e) => e.key)).toEqual(["annual-prepay-discount", "double-sided-referral-rewards", "sponsor-niche-newsletters", "founder-long-form-blog", "founder-led-sales-first-customers"]);
+    // The page token is ignored, and page_size 0 is 50 (here, every entry, each once).
+    expect((await client.listStrategyLibrary({ ...org, diverse: true, pageSize: 5, pageToken: "10" })).entries.map((e) => e.key)).toEqual(five.entries.map((e) => e.key));
+    const all = (await client.listStrategyLibrary({ ...org, diverse: true })).entries;
+    expect([all.length, new Set(all.map((e) => e.key)).size]).toEqual([25, 25]);
+    // Deterministic, and it spreads only what the other filters left.
+    expect((await client.listStrategyLibrary({ ...org, diverse: true, pageSize: 13 })).entries.map((e) => e.key)).toEqual(thirteen.entries.map((e) => e.key));
+    const fit = (await client.listStrategyLibrary({ ...org, diverse: true, fitsMyBusiness: true, pageSize: 13 })).entries;
+    // The 12 fitting entries span 8 categories: one of each first, then the second round.
+    expect(fit).toHaveLength(12);
+    const firstRound = fit.slice(0, 8).map((e) => e.category);
+    expect([new Set(firstRound).size, new Set(fit.map((e) => e.category)).size]).toEqual([8, 8]);
+    expect(firstRound).toEqual([...firstRound].sort((x, y) => x - y));
+  });
+
+  it("serves real bank entries, generated from the bank's YAML, across all 13 categories", () => {
+    expect(GTM_BANK_SOURCE).toMatch(/^[0-9a-f]{40}$/);
+    expect(GTM_BANK_SUBSET.length).toBeGreaterThanOrEqual(20);
+    expect(GTM_BANK_SUBSET.length).toBeLessThanOrEqual(25);
+    expect(new Set(GTM_BANK_SUBSET.map((e) => e.category)).size).toBe(13);
+    expect(new Set(GTM_BANK_SUBSET.map((e) => e.key)).size).toBe(GTM_BANK_SUBSET.length);
+    // In person and community, founder-led and high-touch, model-specific pricing and retention, and several workflows.
+    expect(GTM_BANK_SUBSET.filter((e) => e.category === "community_events").length).toBeGreaterThanOrEqual(3);
+    expect(GTM_BANK_SUBSET.filter((e) => /founder/i.test(e.key)).length).toBeGreaterThanOrEqual(3);
+    const modelSpecific = (cat: string) => new Set(GTM_BANK_SUBSET.filter((e) => e.category === cat).flatMap((e) => e.business_models));
+    expect([...modelSpecific("pricing_offers_incentives")].sort()).toEqual(["free_oss", "one_time", "subscription", "usage_based"]);
+    expect(modelSpecific("retention_expansion").size).toBeGreaterThanOrEqual(2);
+    expect(GTM_BANK_SUBSET.filter((e) => e.suggested_workflow).length).toBeGreaterThanOrEqual(5);
+    // Each entry is whole: a summary, why it works, and 2 to 5 tailor questions.
+    for (const e of GTM_BANK_SUBSET) {
+      expect(e.summary && e.why_it_works, e.key).toBeTruthy();
+      expect(e.tailor_questions.length, e.key).toBeGreaterThanOrEqual(2);
+      expect(e.tailor_questions.length, e.key).toBeLessThanOrEqual(5);
+    }
+  });
+
+  it("names all 13 library categories", () => {
     const real = Object.values(GtmStrategyCategory).filter((v): v is number => typeof v === "number" && v !== GtmStrategyCategory.UNSPECIFIED);
     expect(real).toHaveLength(13);
     expect(real.every((c) => GTM_CATEGORY_LABELS[c])).toBe(true);
   });
 
-  it("answers channel filters, channel reads, the audit list and the prune requests", async () => {
+  it("answers channel filters and channel reads", async () => {
     const client = gtmClient();
     expect((await client.listChannels({ ...org, mode: GtmChannelMode.INTEGRATED })).channels).toHaveLength(2);
     expect((await client.listChannels({ ...org, status: 1 })).channels).toHaveLength(10);
     expect((await client.getChannel({ ...org, id: GTM_CHANNEL_IDS.email })).channel?.integrationKind).toBe("gmail");
-    const { imports } = await client.listLibraryImports(org);
-    expect(imports).toHaveLength(3);
-    expect(imports.every((i) => i.credentialKind === GtmCredentialKind.TOKEN)).toBe(true);
-    expect(imports.map((i) => timestampMs(i.createdAt!))).toEqual(imports.map((i) => timestampMs(i.createdAt!)).sort((a, b) => b - a));
-    const pending = (await client.listLibraryPruneRequests({ ...org, status: GtmPruneRequestStatus.PENDING })).requests;
-    expect(pending.map((r) => [r.id, r.removeKeys.length, r.status])).toEqual([[GTM_PRUNE_REQUEST_ID, 2, GtmPruneRequestStatus.PENDING]]);
-    expect(pending[0]!.removeKeys.every((k) => ["sample-annual-nudge", "sample-quote-wall"].includes(k))).toBe(true);
-    expect((await client.listLibraryPruneRequests({ ...org, status: GtmPruneRequestStatus.CONFIRMED })).requests).toHaveLength(0);
   });
 
   it("filters items by campaign, format, channel, status and a half-open scheduled range, soonest first", async () => {
@@ -449,9 +546,19 @@ describe("the writes", () => {
   it("updates positioning by revision", async () => {
     const client = gtmClient();
     const { positioning } = await client.getPositioning(org);
-    const next = (await client.updatePositioning({ ...org, expectedRevision: positioning!.revision, positioningMd: "New statement.", audiences: ["Founders"] })).positioning!;
+    const next = (await client.updatePositioning({
+      ...org, expectedRevision: positioning!.revision, positioningMd: "New statement.", audiences: ["Founders"],
+      businessType: GtmBusinessType.LOCAL_BUSINESS, businessModels: [GtmBusinessModel.SUBSCRIPTION, GtmBusinessModel.ONE_TIME],
+    })).positioning!;
     expect([next.positioningMd, next.audiences, next.revision]).toEqual(["New statement.", ["Founders"], positioning!.revision + 1]);
-    expect((await client.getPositioning(org)).positioning?.positioningMd).toBe("New statement.");
+    // The business profile is written and read back, not dropped.
+    expect([next.businessType, next.businessModels]).toEqual([GtmBusinessType.LOCAL_BUSINESS, [GtmBusinessModel.SUBSCRIPTION, GtmBusinessModel.ONE_TIME]]);
+    const read = (await client.getPositioning(org)).positioning!;
+    expect([read.businessType, read.businessModels]).toEqual([GtmBusinessType.LOCAL_BUSINESS, [GtmBusinessModel.SUBSCRIPTION, GtmBusinessModel.ONE_TIME]]);
+    // An update replaces the whole record: one that sends no profile clears it.
+    const cleared = (await client.updatePositioning({ ...org, expectedRevision: read.revision, positioningMd: read.positioningMd, audiences: read.audiences })).positioning!;
+    expect([cleared.businessType, cleared.businessModels]).toEqual([GtmBusinessType.UNSPECIFIED, []]);
+    expect((await rejection(client.updatePositioning({ ...org, expectedRevision: cleared.revision, businessModels: [GtmBusinessModel.FREEMIUM, GtmBusinessModel.FREEMIUM] }))).code).toBe(Code.InvalidArgument);
     expect((await rejection(client.updatePositioning({ ...org, expectedRevision: positioning!.revision, positioningMd: "Stale." }))).code).toBe(Code.Aborted);
   });
 
@@ -586,64 +693,45 @@ describe("the writes", () => {
 
   it("uses a library strategy: a draft strategy, and optionally a first campaign planning the channels that fit", async () => {
     const client = gtmClient();
-    const plain = await client.useLibraryStrategy({ ...org, libraryKey: "sample-tasting-popup" });
+    const plain = await client.useLibraryStrategy({ ...org, libraryKey: "host-local-meetup-series" });
     expect(plain.campaign).toBeUndefined();
-    expect([plain.strategy?.status, plain.strategy?.libraryKey, plain.strategy?.category]).toEqual([GtmStrategyStatus.DRAFT, "sample-tasting-popup", GtmStrategyCategory.PARTNERSHIPS_DISTRIBUTION]);
-    expect(plain.strategy?.goalMd).toContain("Tasting-event attendees who subscribe");
-    expect(plain.strategy?.targetMetric).toBe("Attendees, New subscribers");
+    expect([plain.strategy?.status, plain.strategy?.libraryKey, plain.strategy?.category, plain.strategy?.name]).toEqual([
+      GtmStrategyStatus.DRAFT, "host-local-meetup-series", GtmStrategyCategory.COMMUNITY_EVENTS, "Host a recurring local meetup",
+    ]);
+    // The goal is the entry's summary and its objective; the target metric its kpis.
+    expect(plain.strategy?.goalMd).toMatch(/^Run a monthly or bimonthly in-person meetup[\s\S]*\n\nObjective: awareness$/);
+    expect(plain.strategy?.targetMetric).toBe("attendees per event, returning attendees, sign-ups from attendees");
 
-    const both = await client.useLibraryStrategy({ ...org, libraryKey: "sample-tasting-popup", createFirstCampaign: true, campaignName: "Our tasting pop-up" });
-    expect([both.campaign?.name, both.campaign?.status, both.campaign?.strategyId]).toEqual(["Our tasting pop-up", GtmCampaignStatus.DRAFT, both.strategy?.id]);
-    // channel_types blog, x, reddit: matched to the org's channels by key or by type.
-    expect(both.campaign?.plannedChannelIds).toEqual([GTM_CHANNEL_IDS.blog, GTM_CHANNEL_IDS.x, GTM_CHANNEL_IDS.reddit]);
-    const unnamed = await client.useLibraryStrategy({ ...org, libraryKey: "sample-cupping-call", createFirstCampaign: true });
-    expect(unnamed.campaign?.name).toBe("Monthly cupping call (placeholder)");
-    expect(unnamed.campaign?.plannedChannelIds).toEqual([GTM_CHANNEL_IDS.email, GTM_CHANNEL_IDS.outreach, GTM_CHANNEL_IDS.linkedin]);
+    const both = await client.useLibraryStrategy({ ...org, libraryKey: "host-local-meetup-series", createFirstCampaign: true, campaignName: "Cupping nights" });
+    expect([both.campaign?.name, both.campaign?.status, both.campaign?.strategyId]).toEqual(["Cupping nights", GtmCampaignStatus.DRAFT, both.strategy?.id]);
+    // channel_types events, community, email: matched to the org's ACTIVE channels by key or by type, in that order.
+    expect(both.campaign?.plannedChannelIds).toEqual([GTM_CHANNEL_IDS.brewingForums, GTM_CHANNEL_IDS.email, GTM_CHANNEL_IDS.outreach]);
+    const unnamed = await client.useLibraryStrategy({ ...org, libraryKey: "annual-prepay-discount", createFirstCampaign: true });
+    expect(unnamed.campaign?.name).toBe("Annual prepay discount");
+    expect(unnamed.campaign?.plannedChannelIds).toEqual([GTM_CHANNEL_IDS.email, GTM_CHANNEL_IDS.outreach]);
     expect((await client.getStrategy({ ...org, id: both.strategy!.id })).campaigns.map((c) => c.id)).toEqual([both.campaign!.id]);
     expect((await rejection(client.useLibraryStrategy({ ...org, libraryKey: "nope" }))).code).toBe(Code.NotFound);
-    expect((await rejection(client.useLibraryStrategy({ ...org, libraryKey: "sample-tasting-popup", campaignName: "x" }))).code).toBe(Code.InvalidArgument);
+    expect((await rejection(client.useLibraryStrategy({ ...org, libraryKey: "host-local-meetup-series", campaignName: "x" }))).code).toBe(Code.InvalidArgument);
   });
 
-  it("confirms or cancels a pending prune request once, removing only the keys not imported since", async () => {
+  it("cites a bank entry on an idea: a key the bank holds, its tailor answers and a suggested workflow", async () => {
     const client = gtmClient();
-    const before = (await client.listStrategyLibrary(org)).entries.length;
-    const confirmed = await client.confirmLibraryPrune({ ...org, requestId: GTM_PRUNE_REQUEST_ID });
-    expect([confirmed.removed, confirmed.request?.status, confirmed.request?.decidedBy]).toEqual([2, GtmPruneRequestStatus.CONFIRMED, "Alex Demo"]);
-    expect((await client.listStrategyLibrary(org)).entries).toHaveLength(before - 2);
-    expect((await client.listLibraryPruneRequests({ ...org, status: GtmPruneRequestStatus.PENDING })).requests).toHaveLength(0);
-    expect((await rejection(client.confirmLibraryPrune({ ...org, requestId: GTM_PRUNE_REQUEST_ID }))).code).toBe(Code.FailedPrecondition);
-    expect((await rejection(client.cancelLibraryPrune({ ...org, requestId: GTM_PRUNE_REQUEST_ID }))).code).toBe(Code.FailedPrecondition);
+    const entry = (await client.getStrategyLibraryEntry({ ...org, key: "founder-hosted-dinners" })).entry!;
+    const tailorAnswers = entry.tailorQuestions.map((question) => ({ question, answer: "Sample answer." }));
+    const made = (await client.createIdea({ ...org, kind: GtmIdeaKind.GTM, title: "Dinner for café owners", libraryKey: entry.key, tailorAnswers, suggestedWorkflowMd: "Draft the invitations." })).idea!;
+    expect([made.libraryKey, made.tailorAnswers.map((a) => a.question), made.suggestedWorkflowMd]).toEqual([entry.key, entry.tailorQuestions, "Draft the invitations."]);
+    expect((await rejection(client.createIdea({ ...org, kind: GtmIdeaKind.GTM, title: "x", libraryKey: "not-in-the-bank" }))).code).toBe(Code.InvalidArgument);
+    const tooMany = [...Array(21)].map(() => ({ question: "q", answer: "a" }));
+    expect((await rejection(client.createIdea({ ...org, kind: GtmIdeaKind.GTM, title: "x", tailorAnswers: tooMany }))).code).toBe(Code.InvalidArgument);
+    expect((await rejection(client.createIdea({ ...org, kind: GtmIdeaKind.GTM, title: "x", tailorAnswers: [{ question: "", answer: "a" }] }))).code).toBe(Code.InvalidArgument);
+    expect((await rejection(client.createIdea({ ...org, kind: GtmIdeaKind.GTM, title: "x", suggestedWorkflowMd: "w".repeat(20001) }))).code).toBe(Code.InvalidArgument);
 
-    // Cancel on a fresh pack: nothing is removed.
-    const fresh = gtmClient();
-    expect((await fresh.cancelLibraryPrune({ ...org, requestId: GTM_PRUNE_REQUEST_ID })).request?.status).toBe(GtmPruneRequestStatus.CANCELLED);
-    expect((await fresh.listStrategyLibrary(org)).entries).toHaveLength(before);
-    expect((await rejection(fresh.confirmLibraryPrune({ ...org, requestId: "nope" }))).code).toBe(Code.NotFound);
-
-    // A key imported again after the request was made stays.
-    const third = gtmClient();
-    const entry = (await third.getStrategyLibraryEntry({ ...org, key: "sample-quote-wall" })).entry!;
-    await third.importStrategyLibrary({ ...org, sourceRevision: "sample-rev-3", entries: [{ ...entry, summaryMd: "Placeholder entry, reworded." }] });
-    const kept = await third.confirmLibraryPrune({ ...org, requestId: GTM_PRUNE_REQUEST_ID });
-    expect(kept.removed).toBe(1);
-    expect((await third.getStrategyLibraryEntry({ ...org, key: "sample-quote-wall" })).entry?.summaryMd).toBe("Placeholder entry, reworded.");
-  });
-
-  it("imports library entries: created, updated and unchanged counts, an audit row, and a prune that removes at once", async () => {
-    const client = gtmClient();
-    const existing = (await client.getStrategyLibraryEntry({ ...org, key: "sample-faq-pages" })).entry!;
-    const fresh = { key: "sample-new-play", name: "New play (placeholder)", category: GtmStrategyCategory.PAID_ACQUISITION, depth: GtmLibraryDepth.PLAY };
-    const res = await client.importStrategyLibrary({ ...org, sourceRevision: "sample-rev-3", entries: [existing, { ...existing, key: "sample-cupping-call", name: "Renamed (placeholder)" }, fresh] });
-    expect([res.created, res.updated, res.unchanged, res.pruned, res.pruneRequestId, res.wouldRemove]).toEqual([1, 1, 1, 0, "", []]);
-    const { imports } = await client.listLibraryImports(org);
-    expect(imports).toHaveLength(4);
-    expect(imports[0]).toMatchObject({ sourceRevision: "sample-rev-3", created: 1, updated: 1, unchanged: 1, credentialKind: GtmCredentialKind.PERSON });
-    expect((await rejection(client.importStrategyLibrary({ ...org, sourceRevision: "x", entries: [] }))).code).toBe(Code.InvalidArgument);
-    expect((await rejection(client.importStrategyLibrary({ ...org, sourceRevision: "x", entries: [{ ...fresh, key: "Bad Key" }] }))).code).toBe(Code.InvalidArgument);
-    expect((await rejection(client.importStrategyLibrary({ ...org, sourceRevision: "x", entries: [fresh], prune: true }))).code).toBe(Code.InvalidArgument);
-    const pruned = await client.importStrategyLibrary({ ...org, sourceRevision: "sample-rev-4", entries: [fresh], prune: true, allKeys: ["sample-new-play", "sample-faq-pages"] });
-    expect([pruned.unchanged, pruned.pruned]).toEqual([1, 5]);
-    expect((await client.listStrategyLibrary(org)).entries.map((e) => e.key).sort()).toEqual(["sample-faq-pages", "sample-new-play"]);
+    // Update: unset leaves the citation alone, set replaces it, empty clears it.
+    const renamed = (await client.updateIdea({ ...org, id: made.id, expectedRevision: made.revision, title: "Dinner for café owners, monthly" })).idea!;
+    expect([renamed.libraryKey, renamed.tailorAnswers.length, renamed.suggestedWorkflowMd]).toEqual([entry.key, entry.tailorQuestions.length, "Draft the invitations."]);
+    const cleared = (await client.updateIdea({ ...org, id: made.id, expectedRevision: renamed.revision, libraryKey: "", tailorAnswers: { answers: [] }, suggestedWorkflowMd: "" })).idea!;
+    expect([cleared.libraryKey, cleared.tailorAnswers, cleared.suggestedWorkflowMd]).toEqual(["", [], ""]);
+    expect((await rejection(client.updateIdea({ ...org, id: made.id, expectedRevision: cleared.revision, libraryKey: "not-in-the-bank" }))).code).toBe(Code.InvalidArgument);
   });
 
   it("has no bucket: an upload is Unavailable, and a READY asset downloads as an inline image", async () => {
@@ -655,7 +743,7 @@ describe("the writes", () => {
     expect(assets[0]).toMatchObject({ id: "gtm-asset-hn-hero", status: GtmAssetStatus.READY, filename: "grind-calculator-hero.png" });
     expect((await client.getAsset({ ...org, id: "gtm-asset-hn-hero" })).asset?.itemId).toBe("gtm-item-show-hn");
     const download = await client.getAssetDownload({ ...org, assetId: "gtm-asset-hn-hero" });
-    expect(download.url.startsWith("data:image/svg+xml")).toBe(true);
+    expect(download.downloadUrl.startsWith("data:image/svg+xml")).toBe(true);
     expect(timestampMs(download.expiresAt!)).toBeGreaterThan(NOW);
     // An asset is on an item or a campaign, never both or neither.
     expect((await rejection(client.listAssets(org))).code).toBe(Code.InvalidArgument);
@@ -672,17 +760,18 @@ describe("the writes", () => {
       listStrategies: () => client.listStrategies(other), getStrategy: () => client.getStrategy({ ...other, id: "x" }), listChannels: () => client.listChannels(other),
       getChannel: () => client.getChannel({ ...other, id: "x" }), listAssets: () => client.listAssets({ ...other, itemId: "x" }), getAsset: () => client.getAsset({ ...other, id: "x" }),
       getAssetDownload: () => client.getAssetDownload({ ...other, assetId: "x" }), listStrategyLibrary: () => client.listStrategyLibrary(other),
-      getStrategyLibraryEntry: () => client.getStrategyLibraryEntry({ ...other, key: "x" }), listLibraryImports: () => client.listLibraryImports(other),
-      listLibraryPruneRequests: () => client.listLibraryPruneRequests(other), listIdeas: () => client.listIdeas(other), getIdea: () => client.getIdea({ ...other, id: "x" }),
+      getStrategyLibraryEntry: () => client.getStrategyLibraryEntry({ ...other, key: "x" }), listIdeas: () => client.listIdeas(other), getIdea: () => client.getIdea({ ...other, id: "x" }),
       listCampaigns: () => client.listCampaigns(other), getCampaign: () => client.getCampaign({ ...other, id: "x" }), listItems: () => client.listItems(other),
       getItem: () => client.getItem({ ...other, id: "x" }), getPositioning: () => client.getPositioning(other), listClaims: () => client.listClaims(other),
       checkClaims: () => client.checkClaims({ ...other, text: "x" }), createStrategy: () => client.createStrategy({ ...other, name: "x" }),
       updateItem: () => client.updateItem({ ...other, id: "x", expectedRevision: 1 }), resolveItemSend: () => client.resolveItemSend({ ...other, id: "x", approvalHash: "x" }),
-      confirmLibraryPrune: () => client.confirmLibraryPrune({ ...other, requestId: GTM_PRUNE_REQUEST_ID }), useLibraryStrategy: () => client.useLibraryStrategy({ ...other, libraryKey: "sample-tasting-popup" }),
+      useLibraryStrategy: () => client.useLibraryStrategy({ ...other, libraryKey: "host-local-meetup-series" }),
+      updatePositioning: () => client.updatePositioning({ ...other, expectedRevision: 0 }),
       createAssetUpload: () => client.createAssetUpload({ ...other, target: { case: "itemId", value: "x" }, filename: "a", contentType: "image/png", sizeBytes: 1n }), deleteAsset: () => client.deleteAsset({ ...other, assetId: "x" }),
     };
     for (const [name, call] of Object.entries(calls)) expect((await rejection(call())).code, name).toBe(Code.NotFound);
-        expect(GtmService.methods.length).toBe(42);
+    // r4 dropped the five import, prune and audit rpcs.
+    expect(GtmService.methods.length).toBe(37);
   });
 
   it("does not bump the revision when SetIdeaStatus names the status the idea already has", async () => {

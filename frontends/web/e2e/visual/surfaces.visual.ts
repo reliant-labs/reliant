@@ -697,11 +697,12 @@ const SURFACES: Surface[] = [
     ready: (page) => page.getByText('Subscriber-led growth this half').first(),
   },
   {
-    // The org's strategy library: placeholder entries, and the pending prune request's banner.
+    // The strategy library: real idea-bank entries that fit the sample org's
+    // business (it opens on "fits my business"); the first of them by category.
     name: 'gtm-strategy-library',
     path: '/gtm/strategy?view=library',
     on: ['desktop', 'mobile'],
-    ready: (page) => page.getByText('Coffee tasting pop-up (placeholder)').first(),
+    ready: (page) => page.getByText('Annual prepay discount').first(),
   },
   {
     name: 'gtm-channels',
