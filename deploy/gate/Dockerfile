@@ -38,8 +38,8 @@
 #                     go1.27 module.
 #   kcl 0.13.2        control-plane KCL_VERSION (ci:full's renders)
 #   yq v4.54.3        control-plane YQ_VERSION
-#   git >= 2.40       bookworm-backports (reliant's gitport needs merge-tree
-#                     --write-tree --merge-base)
+#   git 2.47.1        built from source (reliant's gitport needs >= 2.40 for
+#                     merge-tree --write-tree --merge-base; bookworm has 2.39)
 #   playwright 1.58.0 reliant frontends/web pnpm-lock.yaml (@playwright/test),
 #                     with chromium and webkit plus their system packages
 #                     (task test:web:e2e)
@@ -71,6 +71,18 @@ FROM golang:1.27.4-bookworm AS gotools
 RUN GOBIN=/out GOFLAGS=-trimpath go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0
 
 FROM node:24-bookworm-slim AS node
+
+FROM golang:1.27.4-bookworm AS gitbuild
+ARG GIT_VERSION=2.47.1
+RUN set -eux; apt-get update; \
+  apt-get install -y --no-install-recommends libcurl4-openssl-dev libexpat1-dev libpcre2-dev libssl-dev zlib1g-dev; \
+  cd /tmp; base=https://www.kernel.org/pub/software/scm/git; \
+  curl -fsSLO "$base/git-${GIT_VERSION}.tar.xz"; curl -fsSLO "$base/sha256sums.asc"; \
+  grep " git-${GIT_VERSION}.tar.xz\$" sha256sums.asc | sha256sum -c -; \
+  tar -xJf "git-${GIT_VERSION}.tar.xz"; cd "git-${GIT_VERSION}"; \
+  make -j"$(nproc)" prefix=/opt/git NO_TCLTK=1 NO_GETTEXT=1 USE_LIBPCRE2=1 all; \
+  make prefix=/opt/git NO_TCLTK=1 NO_GETTEXT=1 USE_LIBPCRE2=1 install; \
+  /opt/git/bin/git --version
 
 FROM golang:1.27.4-bookworm
 
@@ -141,15 +153,12 @@ RUN PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright \
   && rm -rf /var/lib/apt/lists/* /root/.npm \
   && chmod -R a+rX /opt/ms-playwright
 
-# git from bookworm-backports: reliant's merge queue (internal/mergequeue/
-# gitport) needs git 2.40 or newer for `merge-tree --write-tree
-# --merge-base`, and bookworm ships 2.39. This is its own layer, after
-# Playwright, so the slow layers above stay cached.
-RUN echo 'deb http://deb.debian.org/debian bookworm-backports main' >/etc/apt/sources.list.d/backports.list \
-  && apt-get update \
-  && apt-get install -y --no-install-recommends -t bookworm-backports git \
-  && rm -rf /var/lib/apt/lists/* \
-  && git --version
+# git 2.47, built from source in the gitbuild stage above: reliant's merge
+# queue (internal/mergequeue/gitport) needs git 2.40 or newer for
+# `merge-tree --write-tree --merge-base`, and bookworm (backports included)
+# ships 2.39. /usr/local/bin comes before /usr/bin on GateEnv's PATH.
+COPY --from=gitbuild /opt/git /opt/git
+RUN ln -s /opt/git/bin/git /usr/local/bin/git && git --version
 
 # The non-root gate user and the writable layout under /gate. The uid is not
 # 1000, so the gate never shares a uid with the machine's first login user.
