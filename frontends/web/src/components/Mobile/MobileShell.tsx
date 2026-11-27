@@ -175,8 +175,10 @@ export function MobileShell() {
           they'd claim the full viewport past the shell's `overflow-hidden`
           edge. `min-h-0` lets it shrink below the virtualized lists' content
           height. No sibling bar takes space below it anymore — the drawer is
-          a portal overlay, not a layout participant. */}
-      <div className="min-h-0 flex-1">
+          a portal overlay, not a layout participant. `isolate`: no z-index
+          inside a screen (the chat composer's is 1001) reaches above the
+          drawer, which sits under the nav column's popovers (MobileNavDrawer). */}
+      <div className="isolate min-h-0 flex-1">
         <Outlet />
       </div>
       <MobileNavDrawer isOpen={isDrawerOpen} onClose={closeDrawer} />

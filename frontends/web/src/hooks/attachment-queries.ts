@@ -9,9 +9,11 @@
  * attachment at once share ONE GetAttachment, and a delete drops the entry.
  */
 
+import { withRpcBudget } from "../api/transport";
 import { AttachmentService } from "../gen/reliant/v1/attachment_pb";
 import type { Attachment as AttachmentMessage } from "../gen/reliant/v1/chat_pb";
 import { connectClient } from "../lib/connect";
+import { UPLOAD_TIMEOUT_MS } from "../lib/constants";
 import type { AttachmentType } from "../lib/filetypes";
 import { queryClient } from "../lib/query-client";
 import { attachmentServiceKeys, attachmentServiceQueries } from "./attachment-service-hooks_gen";
@@ -44,6 +46,30 @@ function attachmentFromProto(proto: AttachmentMessage): Attachment {
 }
 
 /**
+ * The slowest uplink an upload's budget waits for: 128 KiB/s, about 1 Mbps,
+ * a weak mobile link. Below it the upload times out rather than hanging.
+ */
+const UPLOAD_MIN_BYTES_PER_SEC = 128 * 1024;
+
+/**
+ * The client-side budget for uploading `sizeBytes`: UPLOAD_TIMEOUT_MS, or the
+ * time the bytes take at UPLOAD_MIN_BYTES_PER_SEC plus half that again for the
+ * server, whichever is longer. The file rides in ONE unary body, base64 inside
+ * JSON (4/3 of its size on the wire), so the time is the link's, not the
+ * server's: a fixed 60s fit a phone photo on a good link and nothing larger
+ * on a weak one, and the composer accepts files up to 50 MB (about 9 minutes
+ * at the floor). The gateway does not count the upload against its route
+ * timeout (Envoy's runs from the end of the request), nor does the api-server
+ * against its deadline (connect reads the body before the handler's
+ * interceptors start), so only this budget bounds the transfer.
+ */
+export function uploadBudgetMs(sizeBytes: number): number {
+  const wireBytes = Math.ceil((sizeBytes * 4) / 3);
+  const transferMs = Math.ceil((wireBytes / UPLOAD_MIN_BYTES_PER_SEC) * 1000);
+  return Math.max(UPLOAD_TIMEOUT_MS, transferMs + UPLOAD_TIMEOUT_MS / 2);
+}
+
+/**
  * Upload a file's bytes (images, text files and documents alike). `orgId` is
  * the org to stamp on it (the chat's, or the org scope's before a chat
  * exists); the server stamps it once it verifies the caller is a member, which
@@ -51,12 +77,15 @@ function attachmentFromProto(proto: AttachmentMessage): Attachment {
  * reaches an org-scoped read.
  */
 export async function uploadAttachment(file: File, orgId?: string | null): Promise<Attachment> {
-  const response = await client.uploadAttachment({
-    filename: file.name,
-    content: new Uint8Array(await file.arrayBuffer()),
-    mimeType: file.type || "application/octet-stream",
-    ...(orgId ? { orgId } : {}),
-  });
+  const response = await client.uploadAttachment(
+    {
+      filename: file.name,
+      content: new Uint8Array(await file.arrayBuffer()),
+      mimeType: file.type || "application/octet-stream",
+      ...(orgId ? { orgId } : {}),
+    },
+    { contextValues: withRpcBudget(undefined, uploadBudgetMs(file.size)) },
+  );
   if (!response.attachment) {
     throw new Error("Upload failed: no attachment returned");
   }
