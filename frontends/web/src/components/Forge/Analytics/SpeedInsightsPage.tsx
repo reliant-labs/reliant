@@ -116,8 +116,8 @@ export function SpeedInsightsView() {
   const envId = env === ENV_ALL ? undefined : roster.envs.find((candidate) => candidate.name === env)?.live?.id;
   const scope = useSiteInsightsScope(forgeProject, envId);
 
-  const routesPanel = useMemo(() => speedPanel("routes", device, pct, range), [device, pct, range]);
-  const seriesPanel = useMemo(() => speedPanel("series", device, pct, range), [device, pct, range]);
+  const routesPanel = useMemo(() => speedPanel("routes", device, pct, range, forgeProject), [device, pct, range, forgeProject]);
+  const seriesPanel = useMemo(() => speedPanel("series", device, pct, range, forgeProject), [device, pct, range, forgeProject]);
   // Both devices' summaries: the toggle says how much each has, and an empty
   // device is told apart from an app that measured nothing at all.
   const desktop = useSiteSpeedSummary({ project: forgeProject, envId, services, range, device: "desktop", pct }).query;

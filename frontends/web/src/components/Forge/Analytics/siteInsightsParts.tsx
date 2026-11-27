@@ -74,7 +74,8 @@ const ALL_SITES = "";
  */
 export function SitePicker({ scope, range }: { scope: ObsScope | null; range: RangePreset }) {
   const { site, setSite } = useSiteChoice();
-  const panel = useMemo(() => sitesPanel(), []);
+  const project = scope?.projectId ?? "";
+  const panel = useMemo(() => sitesPanel(project), [project]);
   const sites = siteRows(usePanelQuery(scope, range, panel, []).data);
   if (sites.length < 2 && !site) return null;
   const options = [

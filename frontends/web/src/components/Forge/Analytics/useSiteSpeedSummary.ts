@@ -78,7 +78,7 @@ export function useSiteSpeedSummary({
   enabled = true,
 }: SiteSpeedSummaryOptions): SiteSpeedSummary {
   const scope = useSiteInsightsScope(project, envId);
-  const panel = useMemo(() => speedPanel("summary", device, pct, range), [device, pct, range]);
+  const panel = useMemo(() => speedPanel("summary", device, pct, range, project), [device, pct, range, project]);
   // A stable array for the query key: the caller's may be rebuilt every render.
   const serviceKey = services.join("\u0000");
   const serviceList = useMemo(() => (serviceKey ? serviceKey.split("\u0000") : []), [serviceKey]);
