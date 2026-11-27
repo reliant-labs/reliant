@@ -12,7 +12,7 @@
  *
  * Time is relative to the `now` it is built with (the pack clock): the items
  * sit from 10 days before today to 20 days after it, whatever day it is, so
- * the calendar and the phone's "Coming up" list are never empty, and an item
+ * the calendar and the phone's agenda are never empty, and an item
  * is in its past or future state by whether its moment has gone by.
  *
  * The strategy library holds a few made-up PLACEHOLDER entries, written for
@@ -607,7 +607,7 @@ export function gtmSampleData(nowMs: number): GtmSampleData {
     }, at(-30)),
     claim({
       id: "gtm-claim-compostable", text: "The bags are compostable.", category: C.CAPABILITY, status: GtmClaimStatus.VERIFIED,
-      sourceUrl: "https://example.com/sample/packaging", sourceKind: SK.CODE, ...verified(7, 11),
+      sourceUrl: "https://example.com/sample/packaging", sourceKind: SK.DOCS, ...verified(7, 11),
     }, at(-30)),
     claim({
       id: "gtm-claim-delivery-time", text: "Orders usually arrive within 4 days.", category: C.TIMING, status: GtmClaimStatus.VERIFIED,

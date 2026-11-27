@@ -723,15 +723,15 @@ const SURFACES: Surface[] = [
   },
   {
     // The sample's Show HN item is dated today, so it is on the month grid at
-    // desktop width and first in the phone's "Coming up" list, which is the
-    // only place it is legible at 390px (the grid is narrow and scrolls).
+    // desktop width and first in the phone's agenda, which is the only place it
+    // is legible at 390px. The agenda shows below 768px (max-width: 767px).
     name: 'gtm-calendar',
     path: '/gtm/calendar',
     on: ['desktop', 'mobile'],
     ready: (page) =>
-      page.viewportSize()!.width > 768
-        ? page.getByText('Show HN: the grind-size calculator we built for subscribers').first()
-        : page.getByRole('region', { name: 'Coming up' }).getByText('Show HN: the grind-size calculator we built for subscribers'),
+      page.viewportSize()!.width <= 767
+        ? page.getByTestId('gtm-calendar-agenda').getByText('Show HN: the grind-size calculator we built for subscribers')
+        : page.getByText('Show HN: the grind-size calculator we built for subscribers').first(),
   },
   {
     name: 'gtm-positioning',

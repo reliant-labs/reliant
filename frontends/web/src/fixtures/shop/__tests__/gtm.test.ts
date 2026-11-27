@@ -162,7 +162,7 @@ describe("the GTM sample pack", () => {
     }
   });
 
-  it("places items from 10 days ago to 20 days ahead of today, so the calendar and \"Coming up\" are never empty", async () => {
+  it("places items from 10 days ago to 20 days ahead of today, so the calendar and the phone's agenda are never empty", async () => {
     // Month ends, year ends, a leap day, and the day the preview showed nothing on (27 Nov).
     const clocks = [new Date(2026, 10, 27, 9), new Date(2026, 11, 31, 23), new Date(2028, 1, 29, 1), new Date(2026, 1, 3, 9), new Date(2026, 0, 1, 0, 5), new Date(2026, 6, 31, 12)];
     for (const at of clocks) {
@@ -172,12 +172,12 @@ describe("the GTM sample pack", () => {
       const days = dated.map((x) => daysFromToday(at.getTime(), timestampMs(x.scheduledAt!)));
       expect(Math.min(...days), at.toISOString()).toBeGreaterThanOrEqual(-10);
       expect(Math.max(...days), at.toISOString()).toBeLessThanOrEqual(20);
-      // The phone's "Coming up" list is what is dated from the start of today on.
+      // The phone's agenda is what is dated from the start of today on.
       const startOfToday = new Date(at.getFullYear(), at.getMonth(), at.getDate()).getTime();
       const upcoming = dated.filter((x) => timestampMs(x.scheduledAt!) >= startOfToday);
-      expect(upcoming.length, `${at.toISOString()}: coming up`).toBeGreaterThanOrEqual(8);
+      expect(upcoming.length, `${at.toISOString()}: agenda`).toBeGreaterThanOrEqual(8);
       expect(dated.length - upcoming.length, `${at.toISOString()}: already out`).toBeGreaterThanOrEqual(4);
-      // The Show HN item is dated today, so it leads that list.
+      // The Show HN item is dated today, so it leads the agenda.
       expect(upcoming.sort((p, q) => timestampMs(p.scheduledAt!) - timestampMs(q.scheduledAt!))[0]?.id).toBe("gtm-item-show-hn");
     }
   });
