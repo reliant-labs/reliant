@@ -44,7 +44,7 @@ Tools are organized by tags for filtering:
 - [Information Retrieval](#information-retrieval) (6 tools)
 - [Workflow Management](#workflow-management) (28 tools)
 - [System & Execution](#system--execution) (4 tools)
-- [Other Tools](#other-tools) (86 tools)
+- [Other Tools](#other-tools) (100 tools)
 
 ---
 
@@ -2259,6 +2259,20 @@ _Miscellaneous tools and utilities._
 | [`gmail__message_get`](#gmail__message_get) | integration | Read a message by id. format full (the default) decodes the body into text (and html when the mes... |
 | [`gmail__message_list`](#gmail__message_list) | integration | List message ids in the mailbox, newest first, matching q (Gmail's search box syntax: "from:ann i... |
 | [`gmail__message_send`](#gmail__message_send) | integration | Send an email as the connected Google account. Give to (and optionally cc and bcc) as addresses, ... |
+| [`google_calendar__calendar_list`](#google_calendar__calendar_list) | integration | List the calendars the connected account has on its calendar list: its own primary calendar, ones... |
+| [`google_calendar__event_create`](#google_calendar__event_create) | integration | Create an event on a calendar (default the primary one). Give a summary (the title) and start and... |
+| [`google_calendar__event_delete`](#google_calendar__event_delete) | integration | Delete an event from a calendar. send_updates decides who Google emails about the cancellation: n... |
+| [`google_calendar__event_get`](#google_calendar__event_get) | integration | Read one event on a calendar by its id, from List events or Create event: title, description, sta... |
+| [`google_calendar__event_list`](#google_calendar__event_list) | integration | List events on a calendar (default the primary one), soonest first. time_min and time_max bound t... |
+| [`google_calendar__event_update`](#google_calendar__event_update) | integration | Change an event: only the fields you pass are modified, the rest stay as they are (this is a patc... |
+| [`google_sheets__sheet_add`](#google_sheets__sheet_add) | integration | Add a tab to an existing spreadsheet, with the given title (it must not match an existing tab's n... |
+| [`google_sheets__spreadsheet_create`](#google_sheets__spreadsheet_create) | integration | Create a new spreadsheet with the given title, owned by the connected account, with one empty tab... |
+| [`google_sheets__spreadsheet_get`](#google_sheets__spreadsheet_get) | integration | Read a spreadsheet's metadata: title, locale, time zone and its tabs with each tab's name, sheet_... |
+| [`google_sheets__values_append`](#google_sheets__values_append) | integration | Append values (a list of rows) after the last row of the table Google finds in range: pass a tab ... |
+| [`google_sheets__values_batch_get`](#google_sheets__values_batch_get) | integration | Read several ranges of one spreadsheet in a single call, each in A1 notation ("Sheet1!A1:B10", "T... |
+| [`google_sheets__values_clear`](#google_sheets__values_clear) | integration | Clear the values in a range in A1 notation ("Sheet1!A2:D", or a tab name for the whole tab). Only... |
+| [`google_sheets__values_get`](#google_sheets__values_get) | integration | Read the values in a range written in A1 notation: "Sheet1!A1:D20", a whole column "Sheet1!A:A", ... |
+| [`google_sheets__values_update`](#google_sheets__values_update) | integration | Write values (a list of rows, each a list of cells) into a range in A1 notation, overwriting the ... |
 | [`growth__agent_run_create`](#growth__agent_run_create) | integration | Create an agent run record in the tenant: the workflow name, a status, why it ran, a link to the ... |
 | [`growth__agent_run_list`](#growth__agent_run_list) | integration | List the agent runs recorded in the tenant, newest first by default. A run holds the workflow nam... |
 | [`growth__inbox_status`](#growth__inbox_status) | integration | Read the approval inbox, redacted: counts of pending, expired, approved and rejected actions and ... |
@@ -2797,6 +2811,118 @@ List message ids in the mailbox, newest first, matching q (Gmail's search box sy
 **Tags:** `integration`
 
 Send an email as the connected Google account. Give to (and optionally cc and bcc) as addresses, a subject, and a body as plain text, HTML or both. To reply, pass the original message's thread_id and its Message-ID header as in_reply_to (and references when the thread has several), and keep its subject ("Re: " is added if missing): Gmail only threads a reply whose headers and subject match. Returns the sent message's id and thread_id.
+
+---
+
+### google_calendar__calendar_list
+
+**Tags:** `integration`
+
+List the calendars the connected account has on its calendar list: its own primary calendar, ones it created, ones shared with it and ones it subscribed to (holidays, teammates). Each has the calendar_id to pass as calendar_id to List events, Create event and the rest; the primary calendar's id is the account's email address and can also be written "primary". access_role says what the account may do there (owner, writer, reader, freeBusyReader).
+
+---
+
+### google_calendar__event_create
+
+**Tags:** `integration`
+
+Create an event on a calendar (default the primary one). Give a summary (the title) and start and end: a timed event takes date_time (RFC 3339; with a UTC offset, or without one when time_zone is given) and an optional time_zone, an all-day event takes date (YYYY-MM-DD) and its end date is the day AFTER the last day. attendees are email addresses; each is invited. send_updates decides who Google emails about it: none (the default, so a workflow never emails people by surprise), externalOnly (guests outside the organizer's domain) or all. Set add_google_meet to attach a new Meet video link; Google sometimes fills it in a moment after creating the event, so when hangout_link is empty read the event again with Get event. Returns the created event, including its id.
+
+---
+
+### google_calendar__event_delete
+
+**Tags:** `integration`
+
+Delete an event from a calendar. send_updates decides who Google emails about the cancellation: none (the default, so guests are not told), externalOnly or all. Deleting an event that is already gone fails with "gone". Deleting an occurrence of a recurring event removes that occurrence only; deleting the series id removes every occurrence.
+
+---
+
+### google_calendar__event_get
+
+**Tags:** `integration`
+
+Read one event on a calendar by its id, from List events or Create event: title, description, start and end, status, attendees with their responses, organizer, location, its page in Google Calendar and its Google Meet link when it has one.
+
+---
+
+### google_calendar__event_list
+
+**Tags:** `integration`
+
+List events on a calendar (default the primary one), soonest first. time_min and time_max bound the window and must carry a UTC offset (2026-12-01T00:00:00Z or 2026-12-01T09:00:00-05:00): time_min keeps events that END after it, time_max keeps events that START before it. q is free text matched against title, description, location and attendees. Recurring events are expanded into their individual occurrences unless single_events is false (then order_by startTime is unavailable and the series is returned once). Cancelled events are not listed. Follows Google's paging up to five pages; read one event in full with Get event.
+
+---
+
+### google_calendar__event_update
+
+**Tags:** `integration`
+
+Change an event: only the fields you pass are modified, the rest stay as they are (this is a patch, not a replacement). Pass summary, description, location, start, end (same forms as Create event) and/or attendees. attendees REPLACES the whole guest list, so to add someone pass the existing guests (from Get event) plus the new one. To clear description or location pass an empty string. send_updates decides who Google emails about the change: none (the default), externalOnly or all. Returns the updated event.
+
+---
+
+### google_sheets__sheet_add
+
+**Tags:** `integration`
+
+Add a tab to an existing spreadsheet, with the given title (it must not match an existing tab's name, ignoring case). Optionally set its size in rows and columns (Google's default is 1000 by 26). Returns the new tab's sheet_id, title and position.
+
+---
+
+### google_sheets__spreadsheet_create
+
+**Tags:** `integration`
+
+Create a new spreadsheet with the given title, owned by the connected account, with one empty tab (named "Sheet1") or, when sheet_names is given, one tab per name in that order. Returns spreadsheet_id (what every other Sheets action takes), the URL to open it, and its tabs with their sheet_id.
+
+---
+
+### google_sheets__spreadsheet_get
+
+**Tags:** `integration`
+
+Read a spreadsheet's metadata: title, locale, time zone and its tabs with each tab's name, sheet_id and size in rows and columns. Cell data is never included (use Get values for that). Call it to learn the tab names to put in an A1 range, or a tab's sheet_id.
+
+---
+
+### google_sheets__values_append
+
+**Tags:** `integration`
+
+Append values (a list of rows) after the last row of the table Google finds in range: pass a tab name ("Sheet1") or a range inside the table ("Sheet1!A1:C1") and the rows land below the existing data. With insert_data_option INSERT_ROWS (the default) new rows are inserted, so rows below the table shift down; OVERWRITE writes over whatever is below. A cell is a string, number, boolean or null; value_input_option USER_ENTERED (the default) parses cells as if typed (formulas, dates), RAW stores them exactly. Returns the range that was written and how many rows and cells were added. Not idempotent: calling it twice appends twice.
+
+---
+
+### google_sheets__values_batch_get
+
+**Tags:** `integration`
+
+Read several ranges of one spreadsheet in a single call, each in A1 notation ("Sheet1!A1:B10", "Totals!A1:A1"). Returns one entry per requested range, in the order asked, each with the range Google resolved and its values as rows (or columns). Same value_render_option and major_dimension as Get values. Cheaper against Sheets' per-minute quota than one call per range.
+
+---
+
+### google_sheets__values_clear
+
+**Tags:** `integration`
+
+Clear the values in a range in A1 notation ("Sheet1!A2:D", or a tab name for the whole tab). Only values are removed: formatting, data validation, the rows and columns themselves and the tab stay. This cannot be undone from here (Google Sheets' version history can). Returns the range cleared.
+
+---
+
+### google_sheets__values_get
+
+**Tags:** `integration`
+
+Read the values in a range written in A1 notation: "Sheet1!A1:D20", a whole column "Sheet1!A:A", or just a tab name "Sheet1" for everything in it. A tab name with spaces needs single quotes: "'Q4 pipeline'!A1:C5". Returns values as rows (or columns, with major_dimension COLUMNS), each row a list of cells; trailing empty cells and rows are left off, so rows can be of different lengths. value_render_option picks what a cell is: FORMATTED_VALUE (the text as shown, the default), UNFORMATTED_VALUE (the raw number or string) or FORMULA (the formula text).
+
+---
+
+### google_sheets__values_update
+
+**Tags:** `integration`
+
+Write values (a list of rows, each a list of cells) into a range in A1 notation, overwriting the existing cells. Give the top-left cell ("Sheet1!A1") or the whole block ("Sheet1!A1:C3"); the values may be smaller than the range but not larger. A cell is a string, number, boolean or null (null leaves a cell empty). value_input_option USER_ENTERED (the default) parses cells as if typed, so "=SUM(A1:A9)" is a formula, "12/25/2026" a date and "3" a number; RAW stores every value exactly as given. Returns how many rows, columns and cells were updated.
 
 ---
 

@@ -108,6 +108,8 @@
                   "integrations/connectors",
                   "integrations/github",
                   "integrations/gmail",
+                  "integrations/google-calendar",
+                  "integrations/google-sheets",
                   "integrations/slack",
                   "integrations/http",
                   "integrations/twilio"
