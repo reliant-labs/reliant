@@ -17,14 +17,15 @@ import (
 )
 
 // forge:section MockAdoptStore
-// forge:hash=040544c8e54050894ce018c1b7ecee26d386ab6d623e95a26c9a77d4bdae2e3c
+// forge:hash=cd08a72e182cfcdc8aa9545a163cee51131d54059a94bce3218bb2fe3f56d2fa
 
 // MockAdoptStore is a test mock for the AdoptStore interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockAdoptStore.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockAdoptStore.<Method>Func not set" error.
 type MockAdoptStore struct {
 	contractkit.Recorder
 	GetRepoByProjectAndPathFunc func(context.Context, string, string) (*core.Repo, error)
@@ -67,6 +68,90 @@ func (m *MockAdoptStore) UpdateProject(ctx context.Context, project *db.Project,
 		return m.UpdateProjectFunc(ctx, project, userID)
 	}
 	return contractkit.MockNotSet("MockAdoptStore", "UpdateProject")
+}
+
+// MockAdoptStoreGetRepoByProjectAndPathCall is one recorded call of MockAdoptStore.GetRepoByProjectAndPath, one
+// field per parameter.
+type MockAdoptStoreGetRepoByProjectAndPathCall struct {
+	Ctx          context.Context
+	ProjectID    string
+	RelativePath string
+}
+
+// GetRepoByProjectAndPathCalls returns every recorded GetRepoByProjectAndPath call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetRepoByProjectAndPath").
+func (m *MockAdoptStore) GetRepoByProjectAndPathCalls() []MockAdoptStoreGetRepoByProjectAndPathCall {
+	var out []MockAdoptStoreGetRepoByProjectAndPathCall
+	for _, c := range m.Recorder.Calls("GetRepoByProjectAndPath") {
+		var r MockAdoptStoreGetRepoByProjectAndPathCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ProjectID, _ = c.Args[1].(string)
+		r.RelativePath, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockAdoptStoreCreateRepoCall is one recorded call of MockAdoptStore.CreateRepo, one
+// field per parameter.
+type MockAdoptStoreCreateRepoCall struct {
+	Ctx  context.Context
+	Repo *core.Repo
+}
+
+// CreateRepoCalls returns every recorded CreateRepo call, oldest first, with
+// its arguments typed. It reads the same log as Calls("CreateRepo").
+func (m *MockAdoptStore) CreateRepoCalls() []MockAdoptStoreCreateRepoCall {
+	var out []MockAdoptStoreCreateRepoCall
+	for _, c := range m.Recorder.Calls("CreateRepo") {
+		var r MockAdoptStoreCreateRepoCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Repo, _ = c.Args[1].(*core.Repo)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockAdoptStoreListReposByProjectCall is one recorded call of MockAdoptStore.ListReposByProject, one
+// field per parameter.
+type MockAdoptStoreListReposByProjectCall struct {
+	Ctx       context.Context
+	ProjectID string
+}
+
+// ListReposByProjectCalls returns every recorded ListReposByProject call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListReposByProject").
+func (m *MockAdoptStore) ListReposByProjectCalls() []MockAdoptStoreListReposByProjectCall {
+	var out []MockAdoptStoreListReposByProjectCall
+	for _, c := range m.Recorder.Calls("ListReposByProject") {
+		var r MockAdoptStoreListReposByProjectCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ProjectID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockAdoptStoreUpdateProjectCall is one recorded call of MockAdoptStore.UpdateProject, one
+// field per parameter.
+type MockAdoptStoreUpdateProjectCall struct {
+	Ctx     context.Context
+	Project *db.Project
+	UserID  string
+}
+
+// UpdateProjectCalls returns every recorded UpdateProject call, oldest first, with
+// its arguments typed. It reads the same log as Calls("UpdateProject").
+func (m *MockAdoptStore) UpdateProjectCalls() []MockAdoptStoreUpdateProjectCall {
+	var out []MockAdoptStoreUpdateProjectCall
+	for _, c := range m.Recorder.Calls("UpdateProject") {
+		var r MockAdoptStoreUpdateProjectCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Project, _ = c.Args[1].(*db.Project)
+		r.UserID, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
 }
 
 // Compile-time check.

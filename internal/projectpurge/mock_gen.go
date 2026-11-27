@@ -17,14 +17,15 @@ import (
 )
 
 // forge:section MockService
-// forge:hash=254e458c3de6c1744c46b15c7d3fb08f688fe4d1fc1ce115c9d0429108468a4a
+// forge:hash=848aa2f92eeac8270a61ef8f97a55bd1566ce40302231c2912d301bec148a7d7
 
 // MockService is a test mock for the Service interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockService.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockService.<Method>Func not set" error.
 type MockService struct {
 	contractkit.Recorder
 	ScheduleProjectDeletionFunc func(context.Context, string, string, time.Time, core.ProjectDecision) (core.ProjectDeletion, error)
@@ -87,6 +88,146 @@ func (m *MockService) PurgeDueProjects(ctx context.Context, now time.Time, lease
 		return m.PurgeDueProjectsFunc(ctx, now, lease, limit)
 	}
 	return Result{}, contractkit.MockNotSet("MockService", "PurgeDueProjects")
+}
+
+// MockServiceScheduleProjectDeletionCall is one recorded call of MockService.ScheduleProjectDeletion, one
+// field per parameter.
+type MockServiceScheduleProjectDeletionCall struct {
+	Ctx         context.Context
+	ID          string
+	By          string
+	DeleteAfter time.Time
+	Decided     core.ProjectDecision
+}
+
+// ScheduleProjectDeletionCalls returns every recorded ScheduleProjectDeletion call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ScheduleProjectDeletion").
+func (m *MockService) ScheduleProjectDeletionCalls() []MockServiceScheduleProjectDeletionCall {
+	var out []MockServiceScheduleProjectDeletionCall
+	for _, c := range m.Recorder.Calls("ScheduleProjectDeletion") {
+		var r MockServiceScheduleProjectDeletionCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ID, _ = c.Args[1].(string)
+		r.By, _ = c.Args[2].(string)
+		r.DeleteAfter, _ = c.Args[3].(time.Time)
+		r.Decided, _ = c.Args[4].(core.ProjectDecision)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceRestoreProjectCall is one recorded call of MockService.RestoreProject, one
+// field per parameter.
+type MockServiceRestoreProjectCall struct {
+	Ctx     context.Context
+	ID      string
+	Decided core.ProjectDecision
+}
+
+// RestoreProjectCalls returns every recorded RestoreProject call, oldest first, with
+// its arguments typed. It reads the same log as Calls("RestoreProject").
+func (m *MockService) RestoreProjectCalls() []MockServiceRestoreProjectCall {
+	var out []MockServiceRestoreProjectCall
+	for _, c := range m.Recorder.Calls("RestoreProject") {
+		var r MockServiceRestoreProjectCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ID, _ = c.Args[1].(string)
+		r.Decided, _ = c.Args[2].(core.ProjectDecision)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceClaimProjectPurgeNowCall is one recorded call of MockService.ClaimProjectPurgeNow, one
+// field per parameter.
+type MockServiceClaimProjectPurgeNowCall struct {
+	Ctx     context.Context
+	ID      string
+	Decided core.ProjectDecision
+}
+
+// ClaimProjectPurgeNowCalls returns every recorded ClaimProjectPurgeNow call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ClaimProjectPurgeNow").
+func (m *MockService) ClaimProjectPurgeNowCalls() []MockServiceClaimProjectPurgeNowCall {
+	var out []MockServiceClaimProjectPurgeNowCall
+	for _, c := range m.Recorder.Calls("ClaimProjectPurgeNow") {
+		var r MockServiceClaimProjectPurgeNowCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ID, _ = c.Args[1].(string)
+		r.Decided, _ = c.Args[2].(core.ProjectDecision)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServicePurgeClaimedProjectCall is one recorded call of MockService.PurgeClaimedProject, one
+// field per parameter.
+type MockServicePurgeClaimedProjectCall struct {
+	Ctx   context.Context
+	ID    string
+	Owner string
+}
+
+// PurgeClaimedProjectCalls returns every recorded PurgeClaimedProject call, oldest first, with
+// its arguments typed. It reads the same log as Calls("PurgeClaimedProject").
+func (m *MockService) PurgeClaimedProjectCalls() []MockServicePurgeClaimedProjectCall {
+	var out []MockServicePurgeClaimedProjectCall
+	for _, c := range m.Recorder.Calls("PurgeClaimedProject") {
+		var r MockServicePurgeClaimedProjectCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ID, _ = c.Args[1].(string)
+		r.Owner, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceListDeletedProjectsCall is one recorded call of MockService.ListDeletedProjects, one
+// field per parameter.
+type MockServiceListDeletedProjectsCall struct {
+	Ctx            context.Context
+	UserID         string
+	Org            *core.OrgScope
+	IncludePurging bool
+}
+
+// ListDeletedProjectsCalls returns every recorded ListDeletedProjects call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListDeletedProjects").
+func (m *MockService) ListDeletedProjectsCalls() []MockServiceListDeletedProjectsCall {
+	var out []MockServiceListDeletedProjectsCall
+	for _, c := range m.Recorder.Calls("ListDeletedProjects") {
+		var r MockServiceListDeletedProjectsCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.Org, _ = c.Args[2].(*core.OrgScope)
+		r.IncludePurging, _ = c.Args[3].(bool)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServicePurgeDueProjectsCall is one recorded call of MockService.PurgeDueProjects, one
+// field per parameter.
+type MockServicePurgeDueProjectsCall struct {
+	Ctx   context.Context
+	Now   time.Time
+	Lease time.Duration
+	Limit int
+}
+
+// PurgeDueProjectsCalls returns every recorded PurgeDueProjects call, oldest first, with
+// its arguments typed. It reads the same log as Calls("PurgeDueProjects").
+func (m *MockService) PurgeDueProjectsCalls() []MockServicePurgeDueProjectsCall {
+	var out []MockServicePurgeDueProjectsCall
+	for _, c := range m.Recorder.Calls("PurgeDueProjects") {
+		var r MockServicePurgeDueProjectsCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Now, _ = c.Args[1].(time.Time)
+		r.Lease, _ = c.Args[2].(time.Duration)
+		r.Limit, _ = c.Args[3].(int)
+		out = append(out, r)
+	}
+	return out
 }
 
 // Compile-time check.
