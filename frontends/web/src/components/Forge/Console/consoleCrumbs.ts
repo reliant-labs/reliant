@@ -92,6 +92,8 @@ export function consoleCrumbs(project: string, page: ConsolePage, env: string, d
       return [{ label: "Product analytics" }, { label: "Events & metrics" }];
     case "analytics":
       return [{ label: "Analytics", href: href({ kind: "analytics" }) }, { label: ANALYTICS_TAB_LABELS[page.tab ?? "overview"] }];
+    case "speed-insights":
+      return consoleCrumbs(project, { kind: "site-insights" }, env, dashboardTitle);
     case "site-insights":
       return [{ label: "Observability" }, { label: "Site insights", href: href({ kind: "site-insights" }) }, { label: SITE_INSIGHTS_VIEW_LABELS[page.view ?? "speed"] }];
     case "extension":

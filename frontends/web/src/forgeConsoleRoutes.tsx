@@ -145,7 +145,9 @@ export interface ForgeConsoleComponents {
   /** Analytics (U6c): the built-in Product analytics dashboards as tabs, plus Events & metrics. */
   analytics: RouteComponent
   /** Site insights: speed (web vitals per page; it was Speed insights), SEO and accessibility. */
-  siteInsights: RouteComponent
+  siteInsights?: RouteComponent
+  /** @deprecated Use siteInsights. Kept for callers supplying the legacy Speed page. */
+  speedInsights?: RouteComponent
   /** Experiments: the project's Forge Changes, and one change. */
   experiments: RouteComponent
   experiment: RouteComponent
@@ -453,7 +455,7 @@ export function createForgeConsoleRoutes<TParent extends AnyRoute>(
     getParentRoute: () => consoleRoute,
     path: SITE_INSIGHTS_SEGMENT,
     validateSearch: forgeConsoleSiteInsightsSearchSchema,
-    component: components.siteInsights,
+    component: components.siteInsights ?? components.speedInsights,
   })
   // A view that is not one (a hand-edited URL) lands on the first, Speed.
   const siteInsightsViewRoute = createRoute({
@@ -464,7 +466,7 @@ export function createForgeConsoleRoutes<TParent extends AnyRoute>(
       if (isSiteInsightsView(params.view)) return
       throw redirect({ href: `${location.pathname.replace(/\/[^/]*\/?$/, '')}${location.searchStr}`, replace: true })
     }),
-    component: components.siteInsights,
+    component: components.siteInsights ?? components.speedInsights,
   })
   // Speed insights is Site insights' Speed view now: a bookmark, a docs link
   // or an old share keeps working, with its search (device, pct, range).
