@@ -1,0 +1,171 @@
+# Trust and reputation: evidence that the business delivers, so a buyer can
+# say yes with confidence.
+entries:
+  - key: customer-case-studies
+    category: trust_reputation
+    name: Customer case studies with numbers
+    summary: >-
+      Write short case studies for the customers with the clearest results:
+      the situation before, why they chose the business, what changed, and a
+      specific number, in the customer's own words. Ask for one at the moment
+      a customer shares a success.
+    why_it_works: >-
+      Prospects trust peers more than vendors. A concrete story from a
+      similar customer answers "will this work for me" better than any
+      feature list, and sales can use it in every conversation.
+    stages: [early_traction, growth, scale]
+    objective: conversion
+    effort: medium
+    cost: free
+    signal_days: 45
+    tailor_questions:
+      - Which customers have the clearest, measurable results?
+      - What does a customer get in return for a case study?
+      - Which segments have no story yet?
+    suggested_workflow: >-
+      When a customer shares a success in a call, a review or a support
+      thread, log it as a case study candidate; monthly, send the list of
+      candidates to a person with a draft interview request for each.
+    channel_types: [website, blog, outbound]
+    kpis: [case studies published, case study views before purchase, win rate when a case study is shared]
+
+  - key: ask-every-customer-for-a-review
+    category: trust_reputation
+    name: Ask every customer for a review
+    summary: >-
+      Ask every customer for an honest public review on the review sites and
+      directories buyers use in the category, at the same neutral milestone
+      for everyone (for example 30 days after purchase or after the first
+      completed project), with a direct link and a short request. Do not
+      filter who is asked by satisfaction scores or sentiment, do not offer
+      rewards for reviews, and reply publicly to critical reviews.
+    why_it_works: >-
+      Buyers read reviews before shortlisting, and a steady stream of recent
+      reviews signals a living business. Asking everyone at the same moment
+      keeps the reviews representative, which is what makes them credible to
+      buyers. It also keeps the business within review sites' rules, many of
+      which forbid asking only happy customers, and away from selective
+      soliciting that consumer protection regulators can treat as deceptive.
+    fits:
+      business_types: [b2b_saas, local_business, ecommerce, b2c_app, agency_services, hardware]
+    stages: [early_traction, growth, scale]
+    objective: conversion
+    effort: low
+    cost: free
+    signal_days: 30
+    tailor_questions:
+      - Which review sites do buyers in this category check?
+      - Which neutral milestone does every customer reach, regardless of how their experience went?
+      - What do the review sites' rules allow when asking for reviews?
+      - Who will reply to critical reviews, and how quickly?
+    suggested_workflow: >-
+      When any customer reaches the chosen neutral milestone (for example
+      30 days after purchase), send one short review request with a direct
+      link, regardless of satisfaction scores or support history, never more
+      than once per customer per year and never to anyone who has
+      unsubscribed. Report new reviews weekly and flag critical ones for a
+      public reply.
+    channel_types: [review-site, email]
+    kpis: [new reviews per month, average rating, review-site referral traffic]
+
+  - key: security-and-trust-page
+    category: trust_reputation
+    name: A security and trust page
+    summary: >-
+      Publish a page that answers what business buyers' security reviews ask:
+      where data is stored, who can access it, encryption, backups, incident
+      response, sub-processors, and any certifications, with a contact for
+      security questions and ready answers to common questionnaires.
+    why_it_works: >-
+      Security review is where many business deals stall. A clear public page
+      shortens reviews, shows maturity, and lets champions answer their own
+      security team's questions.
+    fits:
+      business_types: [b2b_saas, developer_tools, open_source]
+    stages: [growth, scale]
+    objective: conversion
+    effort: medium
+    cost: low
+    signal_days: 60
+    tailor_questions:
+      - Which security questions come up in most deals?
+      - What does the business actually do today, and what is not yet in place?
+      - Who answers security questionnaires, and how long does it take?
+    channel_types: [website]
+    kpis: [time spent in security review, deals blocked on security, questionnaires answered from the page]
+
+  - key: public-roadmap
+    category: trust_reputation
+    name: A public roadmap and feedback board
+    summary: >-
+      Share what is planned, in progress and recently shipped, and let
+      customers vote and comment on ideas. Close the loop by telling voters
+      when their request ships.
+    why_it_works: >-
+      A visible roadmap tells prospects the product is moving in their
+      direction and shows customers their input matters. Closing the loop
+      turns requesters into advocates.
+    fits:
+      business_types: [b2b_saas, developer_tools, b2c_app, open_source]
+    stages: [launch, early_traction, growth]
+    objective: retention
+    effort: low
+    cost: free
+    signal_days: 45
+    tailor_questions:
+      - How far ahead is the team comfortable committing publicly?
+      - Who will triage new ideas and reply to comments?
+      - How will voters be told when their request ships?
+    channel_types: [website, community]
+    kpis: [ideas submitted, voters notified on release, retention of voting customers]
+
+  - key: testimonial-wall
+    category: trust_reputation
+    name: A wall of real customer praise
+    summary: >-
+      Collect genuine, unprompted praise from customers (public posts, emails,
+      support thanks) with permission, and show it on a dedicated page and in
+      small doses across the site, each with a name, a role and a photo where
+      possible.
+    why_it_works: >-
+      Volume and authenticity of praise work as social proof. Unprompted words
+      read as more credible than polished quotes, and a full page shows the
+      breadth of happy customers.
+    stages: [launch, early_traction, growth, scale]
+    objective: conversion
+    effort: low
+    cost: free
+    signal_days: 21
+    tailor_questions:
+      - Where do customers already praise the product?
+      - Which praise speaks to the doubts new visitors have?
+      - How will permission be asked and recorded?
+    channel_types: [website, social]
+    kpis: [testimonials collected, conversion rate on pages with testimonials, permission rate]
+
+  - key: transparent-status-and-postmortems
+    category: trust_reputation
+    name: Transparent status page and incident write-ups
+    summary: >-
+      Run a public status page with real uptime history, post updates during
+      incidents in plain language, and publish a short write-up after
+      significant incidents explaining what happened, the impact and what
+      changes.
+    why_it_works: >-
+      Every product has incidents; how they are handled decides trust.
+      Openness during and after problems reassures customers and shows
+      prospects the business is dependable.
+    fits:
+      business_types: [b2b_saas, developer_tools, open_source]
+      business_models: [subscription, usage_based, free_oss]
+    stages: [growth, scale]
+    objective: retention
+    effort: low
+    cost: low
+    signal_days: 60
+    tailor_questions:
+      - What uptime history is the business comfortable showing?
+      - Who writes and approves incident updates?
+      - What is the threshold for a public write-up?
+    channel_types: [website, email]
+    kpis: [status page subscribers, incident-related churn, support tickets during incidents]

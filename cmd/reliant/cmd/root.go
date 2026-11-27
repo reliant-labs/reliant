@@ -104,8 +104,8 @@ Reliant server components.`,
 	// Register subcommand groups. The end-user groups carry CLIConfig.
 	daemonCmd, authCmd, projectCmd, workflowCmd, triggerCmd := newDaemonCmd(), newAuthCmd(), newProjectCmd(), newWorkflowCmd(), newTriggerCmd()
 	machineCmd, githubCmd, providersCmd, previewCmd, chatCmd, integrationsCmd := newMachineCmd(), newGitHubCmd(), newProvidersCmd(), newPreviewCmd(), newChatCmd(), newIntegrationsCmd()
-	mcpCmd, modelsCmd, worktreeCmd := newMCPCmd(), newModelsCmd(), newWorktreeCmd(deps)
-	bindCLIConfig(authCmd, daemonCmd, projectCmd, triggerCmd, workflowCmd, machineCmd, githubCmd, providersCmd, previewCmd, chatCmd, mcpCmd, integrationsCmd, modelsCmd, worktreeCmd)
+	mcpCmd, modelsCmd, worktreeCmd, pipelineCmd := newMCPCmd(), newModelsCmd(), newWorktreeCmd(deps), newPipelineCmd()
+	bindCLIConfig(authCmd, daemonCmd, projectCmd, triggerCmd, workflowCmd, machineCmd, githubCmd, providersCmd, previewCmd, chatCmd, mcpCmd, integrationsCmd, modelsCmd, worktreeCmd, pipelineCmd)
 	// `reliant auth` and `reliant update` also carry AuthConfig (RELIANT_DAEMON_TYPE).
 	updateCmd := newUpdateCmd()
 	config.RegisterAuthConfigFlags(authCmd)
@@ -131,6 +131,7 @@ Reliant server components.`,
 	root.AddCommand(previewCmd)
 	root.AddCommand(chatCmd)
 	root.AddCommand(worktreeCmd)
+	root.AddCommand(pipelineCmd)
 	root.AddCommand(newStorageCmd())
 
 	// Commands whose files register themselves (registerCommand): `db`.

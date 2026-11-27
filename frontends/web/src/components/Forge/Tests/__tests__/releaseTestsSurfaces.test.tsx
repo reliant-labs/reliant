@@ -16,7 +16,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 
 import { useReleaseTests } from "@/hooks/test-queries";
 import { createTestQueryClient } from "@/test/renderWithQuery";
-import { ObservabilityApiProvider } from "@/services/controlPlane/observability/ObservabilityApiContext";
+import { ObservabilityFixtures } from "@/test/observabilityFixtures";
 import { TestApiProvider, type TestApi } from "@/services/controlPlane/tests/TestApiContext";
 import { ReleasesApiProvider } from "@/services/forge/ReleasesApiContext";
 
@@ -197,11 +197,11 @@ describe("the Releases list's Tests column", () => {
 function Providers({ api, children }: { api: TestApi; children: ReactNode }) {
   return (
     <QueryClientProvider client={createTestQueryClient()}>
-      <ObservabilityApiProvider api={fixtureObsApi()}>
+      <ObservabilityFixtures api={fixtureObsApi()}>
         <ReleasesApiProvider api={createReleasesFixtureApi()}>
           <TestApiProvider api={api}>{children}</TestApiProvider>
         </ReleasesApiProvider>
-      </ObservabilityApiProvider>
+      </ObservabilityFixtures>
     </QueryClientProvider>
   );
 }

@@ -121,7 +121,7 @@ func TestListRuns_ReportsWaitingForMachine(t *testing.T) {
 	// LastRunPerWorkflow carries its own copy of the display_state CASE.
 	seedListRun(t, repo, listRunSeed{id: "wait-last", workflow: "builtin://only-one", status: Active()})
 	require.NoError(t, repo.SetChatDaemonBlocked(ctx, "wait-last", true))
-	last, err := store.LastRunPerWorkflow(ctx, repo.ORM(), RunListFilters{UserID: "test-user"})
+	last, err := repo.LastRunPerWorkflow(ctx, RunListFilters{UserID: "test-user"})
 	require.NoError(t, err)
 	var found bool
 	for _, it := range last {

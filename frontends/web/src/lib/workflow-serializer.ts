@@ -148,6 +148,8 @@ function cleanStepForYaml(step: Step): Record<string, unknown> {
   if (step.tolerateFailure) result.tolerate_failure = true
   const observe = observeToYaml(step.observe)
   if (observe) result.observe = observe
+  const preflight = preflightToYaml(step.preflight)
+  if (preflight !== undefined) result.preflight = preflight
 
   // Handle project config via accessor
   const project = getStepProject(step)
@@ -197,6 +199,34 @@ type ObserveBlock = Step['observe']
 
 // An `observe:` block (a node's, or the workflow's defaults) as YAML, its
 // optional keys left out when empty. undefined when it declares nothing.
+type PreflightBlock = Step['preflight']
+
+// A node's `preflight:` as the server writes it (internal/workflow/yaml/
+// preflight.go): `true` when it overrides nothing, else its mapping.
+function preflightToYaml(preflight: PreflightBlock): true | Record<string, unknown> | undefined {
+  if (!preflight) return undefined
+  const out: Record<string, unknown> = {}
+  if (preflight.tools && preflight.tools.length > 0) out.tools = [...preflight.tools]
+  if (preflight.minFreeDisk) out.min_free_disk = preflight.minFreeDisk
+  if (preflight.maxLoad) out.max_load = preflight.maxLoad
+  if (preflight.allowRoot) out.allow_root = true
+  if (preflight.maxMachines) out.max_machines = preflight.maxMachines
+  return Object.keys(out).length > 0 ? out : true
+}
+
+function parseRawPreflight(raw: unknown): PreflightBlock {
+  if (raw === true) return {}
+  if (!isRecord(raw)) return undefined
+  const preflight: Exclude<PreflightBlock, undefined> = {}
+  if (Array.isArray(raw.tools)) preflight.tools = raw.tools.filter((t): t is string => typeof t === 'string')
+  const minFreeDisk = parseOptionalString(raw.min_free_disk)
+  if (minFreeDisk) preflight.minFreeDisk = minFreeDisk
+  if (typeof raw.max_load === 'number') preflight.maxLoad = raw.max_load
+  if (raw.allow_root === true) preflight.allowRoot = true
+  if (typeof raw.max_machines === 'number') preflight.maxMachines = raw.max_machines
+  return preflight
+}
+
 function observeToYaml(observe: ObserveBlock): Record<string, unknown> | undefined {
   if (!observe) return undefined
   const out: Record<string, unknown> = {}
@@ -687,6 +717,8 @@ function parseRawStep(raw: Record<string, unknown>): Step {
   if (raw.tolerate_failure === true) step.tolerateFailure = true
   const observe = parseRawObserve(raw.observe)
   if (observe) step.observe = observe
+  const preflight = parseRawPreflight(raw.preflight)
+  if (preflight) step.preflight = preflight
 
   return step
 }

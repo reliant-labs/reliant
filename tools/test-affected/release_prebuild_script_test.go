@@ -46,8 +46,7 @@ func TestReleaseWorkflowUsesPrebuildScript(t *testing.T) {
 		"electron/dist/*-mac.yml",
 		"electron/dist/*-linux.yml",
 		"electron/dist/*-linux-arm64.yml",
-		"electron/dist/latest.yml",
-		"electron/dist/alpha.yml",
+		"electron/dist/latest.yml", // the only channel published: alpha is retired
 		"RELEASE_VERSION: ${{ startsWith(steps.version.outputs.version, 'v') && steps.version.outputs.version || '' }}",
 	} {
 		if !strings.Contains(wf, want) {

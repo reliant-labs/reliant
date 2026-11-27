@@ -1,0 +1,380 @@
+# Community and events: in-person and online gatherings where the people you
+# serve meet you and each other. In-person work is slow to scale but builds
+# trust faster than almost anything else.
+entries:
+  - key: host-local-meetup-series
+    category: community_events
+    name: Host a recurring local meetup
+    summary: >-
+      Run a monthly or bimonthly in-person meetup in one city on the problem
+      space, not the product: two short talks from practitioners, food, and
+      plenty of unstructured time. Partner with a company that has a space,
+      keep the format the same every time, and collect a sign-up list.
+    why_it_works: >-
+      A recurring meetup makes the host the centre of a local scene. People
+      come for the topic and the people, the host earns trust by convening,
+      and the regulars become the first customers, speakers and referrers.
+    fits:
+      business_types: [developer_tools, b2b_saas, open_source, creator_media, local_business]
+    stages: [pre_launch, launch, early_traction, growth]
+    objective: awareness
+    effort: medium
+    cost: low
+    signal_days: 45
+    tailor_questions:
+      - In which city do the most target users live or work?
+      - What problem-space topic would draw practitioners who are not yet customers?
+      - Which local company could host the space in exchange for visibility?
+      - Who are three practitioners who could give the first talks?
+    suggested_workflow: >-
+      Three weeks before each meetup, draft the event page and the
+      call-for-speakers post, send reminders to past attendees a week and a
+      day before, and after the event send a thank-you with the talk links and
+      a short survey, adding new attendees to the community list.
+    channel_types: [events, community, email]
+    kpis: [attendees per event, returning attendees, sign-ups from attendees]
+
+  - key: conference-speaking
+    category: community_events
+    name: Speak at industry conferences
+    summary: >-
+      Submit talks to conferences the target audience attends, built around a
+      useful lesson, a story of a hard problem, or original data, never a
+      product pitch. Keep a list of calls for proposals and their deadlines,
+      and reuse a strong talk across several events.
+    why_it_works: >-
+      A good talk positions the speaker as an expert in front of a room of
+      exactly the right people, and the recording keeps working afterwards.
+      Speakers also get access to organisers, other speakers and attendees
+      that sponsors pay for.
+    fits:
+      business_types: [developer_tools, b2b_saas, open_source, agency_services, hardware]
+    stages: [launch, early_traction, growth, scale]
+    objective: awareness
+    effort: high
+    cost: low
+    signal_days: 120
+    tailor_questions:
+      - Which conferences do the target buyers and practitioners actually attend?
+      - What lesson or data does the team have that nobody else can present?
+      - Who on the team presents well, and how much travel can they take on?
+    suggested_workflow: >-
+      Keep a running list of relevant conferences with their call-for-proposal
+      deadlines; each month, flag the deadlines in the next six weeks and
+      draft a tailored abstract from the team's existing talk ideas for a
+      person to edit and submit.
+    channel_types: [events, video]
+    kpis: [talks accepted, attendees reached, leads mentioning the talk]
+
+  - key: conference-booth-with-demo-hook
+    category: community_events
+    name: Conference booth with a demo hook
+    summary: >-
+      If the business exhibits, design the booth around one hands-on demo or
+      challenge that takes under three minutes and shows the core value, staff
+      it with people who can go deep, and qualify visitors with two questions
+      before scanning a badge. Book follow-up meetings during the event.
+    why_it_works: >-
+      Most booths are forgettable. A short, interactive hook draws the right
+      people in and lets them feel the value, and qualifying on the spot
+      means follow-up goes to real prospects, not swag collectors.
+    fits:
+      business_types: [b2b_saas, developer_tools, hardware, ecommerce]
+    stages: [growth, scale]
+    objective: acquisition
+    effort: high
+    cost: high
+    signal_days: 30
+    tailor_questions:
+      - Which single demo shows the product's value in under three minutes?
+      - What two questions separate a real prospect from a passer-by?
+      - What is the cost per qualified conversation the booth must beat to be worth it?
+      - How will follow-up happen within two days of the event?
+    suggested_workflow: >-
+      After the event, import the scanned leads with the staff's notes, sort
+      them by the qualifying answers, draft a personal follow-up for each
+      qualified lead that mentions what they discussed, and queue the drafts
+      for the booth staff to review.
+    channel_types: [events, email, outbound]
+    kpis: [qualified conversations, meetings booked, pipeline per event cost]
+
+  - key: hallway-track-side-event
+    category: community_events
+    name: Side event next to a big conference
+    summary: >-
+      Instead of sponsoring a large conference, host a small breakfast,
+      happy hour or workshop nearby during the same week, by invitation, for
+      a curated list of attendees who match the target profile. Use the
+      hallway track and the side event to meet people one on one.
+    why_it_works: >-
+      The conference gathers the audience; the side event gets their
+      attention at a fraction of a sponsor's cost. A small invited group means
+      real conversations rather than badge scans.
+    fits:
+      business_types: [b2b_saas, developer_tools, open_source, agency_services]
+    stages: [early_traction, growth, scale]
+    objective: acquisition
+    effort: medium
+    cost: medium
+    signal_days: 30
+    tailor_questions:
+      - Which upcoming conference concentrates the most target buyers?
+      - How many people can the team host and actually talk to?
+      - Who would be on the invitation list, and how will the team reach them?
+    suggested_workflow: >-
+      Six weeks before the conference, build an invitation list from the
+      speaker list, the team's network and existing prospects, draft personal
+      invitations, track replies, and send a reminder with directions the day
+      before.
+    channel_types: [events, email, outbound]
+    kpis: [invited-to-attended rate, meetings set, opportunities created]
+
+  - key: run-or-sponsor-a-hackathon
+    category: community_events
+    name: Run or sponsor a hackathon
+    summary: >-
+      Run a weekend or one-day hackathon around a theme the product enables,
+      or sponsor a prize at an existing one. Provide a starter kit, mentors
+      from the team on site, and a prize for the best project built with the
+      product.
+    why_it_works: >-
+      A hackathon puts the product in builders' hands with a deadline and
+      help nearby, which is the fastest path to a first success. The
+      projects become examples, and the participants become early advocates.
+    fits:
+      business_types: [developer_tools, open_source, b2b_saas, hardware]
+    stages: [launch, early_traction, growth]
+    objective: activation
+    effort: high
+    cost: medium
+    signal_days: 14
+    tailor_questions:
+      - What could a team build with the product in a day that would impress judges?
+      - Is there an existing hackathon whose audience matches, so sponsoring beats hosting?
+      - Who on the team can mentor on site for the whole event?
+    suggested_workflow: >-
+      After the hackathon, collect every submission that used the product,
+      draft a recap post that features the best projects with their authors'
+      permission, and send each participant a follow-up with resources to keep
+      building.
+    channel_types: [events, community, blog]
+    kpis: [projects built with the product, participants activated, participants still active after 30 days]
+
+  - key: founder-hosted-dinners
+    category: community_events
+    name: Founder-hosted dinners for target buyers
+    summary: >-
+      Host small dinners of eight to twelve people who share a role and a
+      problem, such as heads of a function in one city, with a single
+      discussion topic and no pitch. The founder hosts, introduces everyone,
+      and follows up personally.
+    why_it_works: >-
+      Senior buyers value peers more than vendors. A well-curated dinner gives
+      them a valuable evening, positions the host as a connector, and creates
+      relationships that a cold email never could.
+    fits:
+      business_types: [b2b_saas, developer_tools, agency_services]
+    stages: [pre_launch, launch, early_traction, growth]
+    objective: acquisition
+    effort: medium
+    cost: medium
+    signal_days: 30
+    tailor_questions:
+      - Which role and seniority is the ideal guest?
+      - What topic is urgent enough for that role to give up an evening?
+      - Who could co-host to make the invitation more credible?
+    channel_types: [events, outbound]
+    kpis: [acceptance rate, follow-up meetings, opportunities from guests]
+
+  - key: customer-user-groups
+    category: community_events
+    name: Customer user groups
+    summary: >-
+      Help enthusiastic customers start local or role-based user groups that
+      meet regularly in person or online to share how they use the product.
+      Provide a small budget, a starter agenda, and someone from the team for
+      the first sessions.
+    why_it_works: >-
+      Customers learn more from each other than from documentation, and those
+      who present to peers become committed advocates. User groups scale the
+      community beyond what the team can host itself.
+    fits:
+      business_types: [b2b_saas, developer_tools, open_source, hardware]
+    stages: [growth, scale]
+    objective: retention
+    effort: medium
+    cost: low
+    signal_days: 60
+    tailor_questions:
+      - Which customers already help others in forums or support channels?
+      - Where are there clusters of customers by city or by role?
+      - What support does a volunteer organiser need to run the first three sessions?
+    channel_types: [events, community]
+    kpis: [active groups, attendees per session, retention of attending customers]
+
+  - key: industry-networking-with-target-list
+    category: community_events
+    name: Networking events with a target list
+    summary: >-
+      Attend local industry mixers, trade association evenings and
+      professional groups with a short written list of people or company types
+      to meet, a one-sentence description of the problem solved, and a goal of
+      three real conversations, each followed up within a day.
+    why_it_works: >-
+      Networking without a plan produces business cards. A target list and a
+      follow-up rule turn the same evening into a pipeline of warm
+      relationships, especially for local and services businesses.
+    fits:
+      business_types: [agency_services, local_business, b2b_saas, hardware]
+    stages: [pre_launch, launch, early_traction, growth]
+    objective: acquisition
+    effort: low
+    cost: low
+    signal_days: 14
+    tailor_questions:
+      - Which local associations or professional groups do the target buyers belong to?
+      - What one-sentence description of the problem solved makes people ask a follow-up question?
+      - Who are five people the founder most wants to meet this quarter?
+    channel_types: [events, outbound]
+    kpis: [conversations per event, follow-up meetings, referrals received]
+
+  - key: local-pop-ups-and-sponsorships
+    category: community_events
+    name: Local pop-ups and community sponsorships
+    summary: >-
+      Show up where the local community already gathers: a stall at a
+      market or fair, a pop-up in a partner's shop, sponsoring a youth team or
+      a neighbourhood event, or offering a free workshop at the library.
+      Bring a reason to come back, such as a first-visit offer.
+    why_it_works: >-
+      A local business wins on familiarity and trust. Being visibly present
+      at community moments builds both, and an in-person offer turns a nice
+      conversation into a first visit.
+    fits:
+      business_types: [local_business, ecommerce, hardware]
+    stages: [launch, early_traction, growth]
+    objective: awareness
+    effort: medium
+    cost: low
+    signal_days: 14
+    tailor_questions:
+      - Which local events draw the households or businesses the business serves?
+      - What could visitors try, taste or handle on the spot?
+      - What first-visit offer can be tracked back to the event?
+    channel_types: [events]
+    kpis: [first visits from event offers, sign-ups collected, cost per new customer]
+
+  - key: online-community-space
+    category: community_events
+    name: A members community space
+    summary: >-
+      Open a forum or chat community for users with a few focused channels
+      (help, show your work, ideas), a team member present every day for the
+      first months, and regular rituals such as a weekly thread where members
+      share what they built.
+    why_it_works: >-
+      A healthy community answers questions faster than support, surfaces
+      ideas, and gives users a reason to stay that competitors cannot copy.
+      Rituals and daily presence are what keep it from going quiet.
+    fits:
+      business_types: [developer_tools, open_source, b2c_app, creator_media, b2b_saas]
+    stages: [launch, early_traction, growth, scale]
+    objective: retention
+    effort: medium
+    cost: free
+    signal_days: 45
+    tailor_questions:
+      - Where do users already talk about the problem, and should the community live there instead?
+      - Who on the team will be present every day for the first three months?
+      - What weekly ritual would members actually want to join?
+    suggested_workflow: >-
+      Each morning, list community questions with no reply after twelve
+      hours and route each to the right team member, and at the end of each
+      week draft a short roundup of the week's best posts and answers for a
+      person to publish.
+    channel_types: [community, forum]
+    kpis: [weekly active members, median time to first reply, members who answer others]
+
+  - key: live-workshops-and-office-hours
+    category: community_events
+    name: Live workshops and office hours
+    summary: >-
+      Run a recurring live online session, such as a monthly hands-on workshop
+      on one use case or weekly open office hours where anyone can bring a
+      question. Record it, publish the recording, and turn the questions into
+      content.
+    why_it_works: >-
+      Live sessions give prospects and new users direct access to experts,
+      which builds trust and speeds activation. The questions asked live are
+      exactly what the next articles and documentation should answer.
+    fits:
+      business_types: [b2b_saas, developer_tools, open_source, agency_services, creator_media]
+    stages: [launch, early_traction, growth, scale]
+    objective: activation
+    effort: low
+    cost: free
+    signal_days: 21
+    tailor_questions:
+      - Which use case confuses new users the most?
+      - What time works for the largest share of users across time zones?
+      - Who can host consistently every week or month?
+    suggested_workflow: >-
+      After each session, take the recording's transcript, list the questions
+      asked with short answers, and draft a recap article and a frequently
+      asked questions update for a person to edit and publish.
+    channel_types: [events, video, community]
+    kpis: [attendees per session, activation rate of attendees, content pieces produced]
+
+  - key: answer-in-existing-communities
+    category: community_events
+    name: Be genuinely helpful in existing communities
+    summary: >-
+      Find the forums, groups and discussion boards where the target audience
+      already asks questions about the problem, and have the founder or
+      experts answer thoroughly under their own names, mentioning the product
+      only when it is truly the answer and saying they built it.
+    why_it_works: >-
+      Communities reward expertise and punish promotion. Consistent, useful
+      answers build a reputation that sends people to the product without a
+      sales pitch, and the questions reveal how buyers describe their problem.
+    stages: [pre_launch, launch, early_traction, growth]
+    objective: awareness
+    effort: medium
+    cost: free
+    signal_days: 30
+    tailor_questions:
+      - Where does the target audience ask questions about this problem today?
+      - What are the community's rules on self-promotion?
+      - Which team members have expertise worth sharing in public?
+    suggested_workflow: >-
+      Twice a day, search the chosen communities for new questions that match
+      the problem's keywords, and send a short digest of the best matches with
+      links to the person who answers, never posting automatically.
+    channel_types: [forum, community, social]
+    kpis: [helpful answers posted, referral visits from communities, sign-ups mentioning a community]
+
+  - key: annual-customer-day
+    category: community_events
+    name: An annual customer day
+    summary: >-
+      Once the customer base is large enough, host a yearly in-person or
+      hybrid event for customers and prospects: a roadmap keynote, customer
+      talks, hands-on training and a lot of time to meet the team and each
+      other.
+    why_it_works: >-
+      A flagship event concentrates a year of community into one day.
+      Customers who present become champions, prospects see a thriving user
+      base, and the team hears directly what matters next.
+    fits:
+      business_types: [b2b_saas, developer_tools, open_source]
+    stages: [scale]
+    objective: expansion
+    effort: high
+    cost: high
+    signal_days: 90
+    tailor_questions:
+      - How many customers would realistically travel to attend in person?
+      - Which customers have stories strong enough to present on stage?
+      - What announcement or training would make the day worth a customer's time?
+    channel_types: [events, email, video]
+    kpis: [attendees, expansion pipeline from attendees, retention of attending accounts]

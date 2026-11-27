@@ -133,7 +133,7 @@ func TestInboundLaunchPinsTheTriggersDaemonUnderAnUnattendedLaunchEvent(t *testi
 			assert.Equal(t, map[string]any{"kind": "webhook", "id": f.trigger.ID, "display_name": "", "verified": true},
 				root.Trigger.CELValue()["sender"])
 
-			launchEv, err := f.repo.GetTriggerEventByChatID(ctx, out.ChatID)
+			launchEv, err := store.GetTriggerEventByChatID(ctx, f.repo.ORM(), out.ChatID)
 			require.NoError(t, err)
 			assert.Equal(t, kind.EventKind(), launchEv.Kind)
 			assert.True(t, launchEv.Kind.Unattended(), "preflight may wake this run's daemon with the stored token")

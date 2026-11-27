@@ -13,7 +13,8 @@ import { BinaryWriter } from "@bufbuild/protobuf/wire";
 import { Code, ConnectError } from "@connectrpc/connect";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { ObservabilityApiProvider, type ObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
+import { type ObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
+import { ObservabilityFixtures } from "@/test/observabilityFixtures";
 import { ObsQuotaProvider } from "@/services/controlPlane/observability/ObsQuotaContext";
 import type { ObsScope, Panel, PanelResult } from "@/services/controlPlane/observability/types";
 
@@ -77,7 +78,7 @@ function setup(api: ObservabilityApi) {
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={client}>
       <ObsQuotaProvider>
-        <ObservabilityApiProvider api={api}>{children}</ObservabilityApiProvider>
+        <ObservabilityFixtures api={api}>{children}</ObservabilityFixtures>
       </ObsQuotaProvider>
     </QueryClientProvider>
   );

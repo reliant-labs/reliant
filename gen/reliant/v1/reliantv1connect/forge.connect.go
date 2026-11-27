@@ -188,6 +188,7 @@ func NewForgeServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			httpClient,
 			baseURL+ForgeServiceGetTopologyProcedure,
 			connect.WithSchema(forgeServiceMethods.ByName("GetTopology")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		verifyEnv: connect.NewClient[v1.VerifyForgeEnvRequest, v1.VerifyForgeEnvResponse](
@@ -200,18 +201,21 @@ func NewForgeServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			httpClient,
 			baseURL+ForgeServiceListSecretsProcedure,
 			connect.WithSchema(forgeServiceMethods.ByName("ListSecrets")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getEnvStatus: connect.NewClient[v1.GetForgeEnvStatusRequest, v1.GetForgeEnvStatusResponse](
 			httpClient,
 			baseURL+ForgeServiceGetEnvStatusProcedure,
 			connect.WithSchema(forgeServiceMethods.ByName("GetEnvStatus")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getEnvShape: connect.NewClient[v1.GetForgeEnvShapeRequest, v1.GetForgeEnvShapeResponse](
 			httpClient,
 			baseURL+ForgeServiceGetEnvShapeProcedure,
 			connect.WithSchema(forgeServiceMethods.ByName("GetEnvShape")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		planPromote: connect.NewClient[v1.PlanForgePromoteRequest, v1.PlanForgePromoteResponse](
@@ -442,6 +446,7 @@ func NewForgeServiceHandler(svc ForgeServiceHandler, opts ...connect.HandlerOpti
 		ForgeServiceGetTopologyProcedure,
 		svc.GetTopology,
 		connect.WithSchema(forgeServiceMethods.ByName("GetTopology")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	forgeServiceVerifyEnvHandler := connect.NewUnaryHandler(
@@ -454,18 +459,21 @@ func NewForgeServiceHandler(svc ForgeServiceHandler, opts ...connect.HandlerOpti
 		ForgeServiceListSecretsProcedure,
 		svc.ListSecrets,
 		connect.WithSchema(forgeServiceMethods.ByName("ListSecrets")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	forgeServiceGetEnvStatusHandler := connect.NewUnaryHandler(
 		ForgeServiceGetEnvStatusProcedure,
 		svc.GetEnvStatus,
 		connect.WithSchema(forgeServiceMethods.ByName("GetEnvStatus")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	forgeServiceGetEnvShapeHandler := connect.NewUnaryHandler(
 		ForgeServiceGetEnvShapeProcedure,
 		svc.GetEnvShape,
 		connect.WithSchema(forgeServiceMethods.ByName("GetEnvShape")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	forgeServicePlanPromoteHandler := connect.NewUnaryHandler(

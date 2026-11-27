@@ -76,6 +76,9 @@ type mockReconcilerTemporalClient struct {
 	resetErr              error
 	historyEvents         []*historypb.HistoryEvent
 	getWorkflowHistoryCnt int
+	// historyByRun, when it names the run asked for, is that execution's
+	// history instead of historyEvents.
+	historyByRun map[string][]*historypb.HistoryEvent
 
 	// retryingWedge makes every describe report the pending workflow task
 	// one attempt further on: a worker keeps retrying it and it keeps
@@ -135,11 +138,14 @@ func (m *mockReconcilerTemporalClient) ResetWorkflowExecution(
 }
 
 func (m *mockReconcilerTemporalClient) GetWorkflowHistory(
-	_ context.Context, _ string, _ string, _ bool, _ enums.HistoryEventFilterType,
+	_ context.Context, _ string, runID string, _ bool, _ enums.HistoryEventFilterType,
 ) client.HistoryEventIterator {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.getWorkflowHistoryCnt++
+	if events, ok := m.historyByRun[runID]; ok {
+		return &fakeHistoryIterator{events: events}
+	}
 	return &fakeHistoryIterator{events: m.historyEvents}
 }
 

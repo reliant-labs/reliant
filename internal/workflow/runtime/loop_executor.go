@@ -847,6 +847,12 @@ func (e *InlineLoopExecutor) Execute() (*reliantv1.LoopOutput, error) {
 	if err != nil {
 		return nil, err
 	}
+	// A node that sets preflight checks the machine its body runs on first,
+	// and moves off one that fails (node_preflight.go).
+	placed, err = preflightStructural(e.ctx, e.chatID, e.workflowID, e.nodePath(), e.loopStep.Node, resolveNodeDaemonSelector(e.loopStep.Node, e.daemonScope), placed)
+	if err != nil {
+		return nil, err
+	}
 	e.execContext = placed
 
 	out, err := e.execute()

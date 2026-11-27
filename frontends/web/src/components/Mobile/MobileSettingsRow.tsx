@@ -85,9 +85,9 @@ export function MobileToggleRow({
       <div className="flex min-w-0 flex-1 items-start gap-2.5">
         {icon && <div className="mt-0.5 shrink-0 text-muted-foreground">{icon}</div>}
         <div className="min-w-0">
-          <p className="text-sm font-medium text-foreground">{label}</p>
+          <p className="text-ui font-medium text-foreground">{label}</p>
           {description && (
-            <p className="mt-0.5 text-xs text-muted-foreground">{description}</p>
+            <p className="mt-0.5 text-meta text-muted-foreground">{description}</p>
           )}
         </div>
       </div>
@@ -147,12 +147,12 @@ export function MobileSelectRow({
         className="flex min-h-[44px] w-full items-center justify-between gap-3 px-4 py-3 text-left active:bg-foreground/5"
       >
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-medium text-foreground">{label}</p>
+          <p className="text-ui font-medium text-foreground">{label}</p>
           {description && (
-            <p className="mt-0.5 text-xs text-muted-foreground">{description}</p>
+            <p className="mt-0.5 text-meta text-muted-foreground">{description}</p>
           )}
         </div>
-        <div className="flex shrink-0 items-center gap-1 text-sm text-muted-foreground">
+        <div className="flex shrink-0 items-center gap-1 text-ui text-muted-foreground">
           <span className="max-w-[140px] truncate">
             {selected?.label ?? (value || placeholder)}
           </span>
@@ -222,14 +222,14 @@ export function MobileOptionSheet({
                 <div className="min-w-0">
                   <p
                     className={cn(
-                      "text-sm",
+                      "text-ui",
                       isSelected ? "font-medium text-foreground" : "text-foreground",
                     )}
                   >
                     {option.label}
                   </p>
                   {option.description && (
-                    <p className="mt-0.5 text-xs text-muted-foreground">
+                    <p className="mt-0.5 text-meta text-muted-foreground">
                       {option.description}
                     </p>
                   )}
@@ -243,7 +243,7 @@ export function MobileOptionSheet({
               type="button"
               onClick={paging.onLoadMore}
               disabled={paging.isLoadingMore}
-              className="flex min-h-[44px] w-full items-center justify-center border-t border-border px-4 py-3 text-sm text-muted-foreground active:bg-foreground/5 disabled:opacity-60"
+              className="flex min-h-[44px] w-full items-center justify-center border-t border-border px-4 py-3 text-ui text-muted-foreground active:bg-foreground/5 disabled:opacity-60"
             >
               {paging.isLoadingMore ? "Loading…" : "Load more"}
             </button>
@@ -252,7 +252,7 @@ export function MobileOptionSheet({
             <button
               type="button"
               onClick={action.onSelect}
-              className="flex min-h-[44px] w-full items-center gap-2 border-t border-border px-4 py-3 text-left text-sm font-medium text-primary-ink active:bg-primary/10"
+              className="flex min-h-[44px] w-full items-center gap-2 border-t border-border px-4 py-3 text-left text-ui font-medium text-primary-ink active:bg-primary/10"
             >
               {action.icon}
               {action.label}
@@ -278,7 +278,7 @@ export function MobileSegmentedRow({
   return (
     <div className="px-4 py-3">
       {label && (
-        <p className="mb-2 text-sm font-medium text-foreground">{label}</p>
+        <p className="mb-2 text-ui font-medium text-foreground">{label}</p>
       )}
       <div className="flex items-center gap-1 rounded-lg border border-border p-1">
         {options.map((option) => {
@@ -290,7 +290,7 @@ export function MobileSegmentedRow({
               onClick={() => onChange(option.value)}
               aria-pressed={isSelected}
               className={cn(
-                "flex min-h-[44px] flex-1 items-center justify-center gap-1.5 rounded-md px-2 text-sm",
+                "flex min-h-[44px] flex-1 items-center justify-center gap-1.5 rounded-md px-2 text-ui",
                 isSelected
                   ? "bg-muted font-medium text-foreground"
                   : "text-muted-foreground",
@@ -315,11 +315,11 @@ export function MobileSettingsSectionTitle({
 }) {
   return (
     <div className="px-4 pt-4 pb-1">
-      <h3 className="text-xs font-medium text-muted-foreground">
+      <h3 className="text-meta font-medium text-muted-foreground">
         {title}
       </h3>
       {description && (
-        <p className="mt-0.5 text-xs text-muted-foreground">{description}</p>
+        <p className="mt-0.5 text-meta text-muted-foreground">{description}</p>
       )}
     </div>
   );

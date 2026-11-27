@@ -1,0 +1,386 @@
+# Retention and expansion: keeping the customers you have and growing what
+# they buy. Several entries are specific to one business model.
+entries:
+  - key: cancellation-flow-with-pause
+    category: retention_expansion
+    name: Cancellation flow with pause and downgrade
+    summary: >-
+      When a subscriber clicks cancel, ask one question about why, then offer
+      the option that fits the answer: a pause of one to three months for
+      "not using it right now", a cheaper plan for "too expensive", or a call
+      with a person for "missing a feature". Always keep a clear way to
+      finish cancelling.
+    why_it_works: >-
+      Many cancellations are temporary or about price, not value. A matched
+      alternative keeps a share of them, and the reasons collected become the
+      best retention research the business has.
+    fits:
+      business_models: [subscription]
+    stages: [early_traction, growth, scale]
+    objective: retention
+    effort: medium
+    cost: free
+    signal_days: 30
+    tailor_questions:
+      - What are the top three reasons customers give for cancelling today?
+      - Is a pause feasible in billing and in the product?
+      - Which offer could the business make without training customers to threaten cancellation?
+    suggested_workflow: >-
+      Every week, gather the cancellation reasons and free-text comments from
+      the past seven days, group them into themes with counts and example
+      quotes, and post the summary to the team so product and pricing changes
+      follow the data.
+    channel_types: [in-product, email]
+    kpis: [save rate in the cancellation flow, pause-to-return rate, monthly churn rate]
+
+  - key: failed-payment-recovery
+    category: retention_expansion
+    name: Failed-payment recovery
+    summary: >-
+      Recover subscriptions lost to expired or declined cards: retry the
+      charge on a smart schedule, send a short series of plain reminders with
+      a one-click link to update the card, show an in-product banner, and
+      only then pause the account.
+    why_it_works: >-
+      A meaningful share of subscription churn is involuntary; the customer
+      never decided to leave. Recovering it is close to free revenue and is
+      usually the fastest churn win available.
+    fits:
+      business_models: [subscription]
+    stages: [early_traction, growth, scale]
+    objective: retention
+    effort: low
+    cost: free
+    signal_days: 14
+    tailor_questions:
+      - What share of churn last quarter came from failed payments?
+      - How many retries does the payment processor allow, and on what schedule?
+      - Who should a business customer's reminder go to besides the card owner?
+    suggested_workflow: >-
+      When a payment fails, start a sequence that sends a reminder on day 1,
+      day 4 and day 8 with a card-update link, stops as soon as the payment
+      succeeds, and flags high-value accounts for a personal follow-up.
+    channel_types: [email, in-product]
+    kpis: [recovered revenue, involuntary churn rate, card update rate]
+
+  - key: usage-alerts-and-spend-controls
+    category: retention_expansion
+    name: Usage alerts and spend controls
+    summary: >-
+      Let usage-priced customers set budgets and receive alerts at 50, 80 and
+      100 percent of a monthly amount, show a forecast of the month's bill,
+      and explain every line of the invoice in plain terms.
+    why_it_works: >-
+      The biggest churn risk in usage pricing is a surprise bill. Customers
+      who feel in control spend more over time because they trust that growth
+      will not punish them.
+    fits:
+      business_models: [usage_based]
+    stages: [early_traction, growth, scale]
+    objective: retention
+    effort: medium
+    cost: free
+    signal_days: 60
+    tailor_questions:
+      - How often do customers dispute or ask about a bill today?
+      - Can the product forecast a month's usage from the first days?
+      - Should a hard cap stop usage, or only alert?
+    channel_types: [in-product, email]
+    kpis: [billing-related support tickets, accounts with a budget set, net revenue retention]
+
+  - key: usage-milestone-expansion-outreach
+    category: retention_expansion
+    name: Expansion outreach at usage milestones
+    summary: >-
+      Watch for accounts whose usage crosses meaningful thresholds (doubling
+      in a month, a new team starting to use it, nearing a tier boundary) and
+      reach out personally with help, a volume price, or an annual commitment.
+    why_it_works: >-
+      Growing usage is the clearest buying signal a usage-priced business
+      gets. A timely, helpful conversation turns organic growth into a larger
+      committed contract before the customer starts looking at alternatives.
+    fits:
+      business_models: [usage_based, subscription]
+      business_types: [b2b_saas, developer_tools]
+    stages: [growth, scale]
+    objective: expansion
+    effort: medium
+    cost: free
+    signal_days: 30
+    tailor_questions:
+      - Which usage changes have preceded large expansions in the past?
+      - Who should reach out, the founder, an account manager, or support?
+      - What can the business offer at a milestone besides a discount?
+    suggested_workflow: >-
+      Daily, compare each account's usage this week with its four-week average,
+      list accounts that crossed a growth threshold or are within 10 percent
+      of a tier boundary, and send the list with context to the account owner
+      as a to-do, not as an automatic email.
+    channel_types: [email, outbound]
+    kpis: [expansion revenue, committed contracts from milestone outreach, net revenue retention]
+
+  - key: replenishment-and-accessory-offers
+    category: retention_expansion
+    name: Replenishment reminders and accessory offers
+    summary: >-
+      For one-time purchases with consumables or accessories, time a
+      reminder to the typical reorder interval and suggest the accessory that
+      most buyers of that item add later. Offer a reorder in one click.
+    why_it_works: >-
+      A one-time business has to create repeat purchases deliberately. A
+      reminder timed to real usage feels like service, not marketing, and
+      accessories have a high attach rate among happy owners.
+    fits:
+      business_models: [one_time]
+      business_types: [ecommerce, hardware, local_business]
+    stages: [early_traction, growth, scale]
+    objective: retention
+    effort: low
+    cost: low
+    signal_days: 30
+    tailor_questions:
+      - What is the median time between a first and a second order?
+      - Which add-on do most repeat buyers purchase?
+      - How can the reminder be useful even to someone who does not reorder?
+    suggested_workflow: >-
+      Each day, find customers whose last order is nearing the typical reorder
+      interval for what they bought, skipping anyone who has unsubscribed,
+      draft a reminder with their item, a one-click reorder link and an
+      unsubscribe link, and send it after a person approves the batch.
+    channel_types: [email]
+    kpis: [repeat purchase rate, time to second order, accessory attach rate]
+
+  - key: upgrade-prompts-at-limit-moments
+    category: retention_expansion
+    name: Upgrade prompts at limit moments
+    summary: >-
+      Show a short, specific upgrade prompt exactly when a free or lower-tier
+      user hits a limit or tries a paid feature, explaining what they get and
+      letting them finish the current task first where possible.
+    why_it_works: >-
+      The moment of hitting a limit is the moment of highest intent. A prompt
+      tied to the task the user is doing converts far better than a generic
+      banner or a periodic email.
+    fits:
+      business_models: [freemium, subscription]
+    stages: [early_traction, growth, scale]
+    objective: expansion
+    effort: medium
+    cost: free
+    signal_days: 21
+    tailor_questions:
+      - Which limits do free users hit most often?
+      - What does a user lose if the prompt blocks them mid-task?
+      - Which paid feature is the most common reason people upgrade?
+    channel_types: [in-product]
+    kpis: [prompt-to-upgrade conversion, upgrades per limit hit, free-user retention after a prompt]
+
+  - key: oss-contributor-ladder-and-office-hours
+    category: retention_expansion
+    name: Contributor ladder and maintainer office hours
+    summary: >-
+      Keep users and contributors of an open-source project engaged with a
+      visible path from user to contributor to maintainer, labelled
+      good-first issues, a monthly open call with maintainers, and public
+      thanks in every release note.
+    why_it_works: >-
+      Open-source adoption compounds when users stay and some become
+      contributors. A visible ladder and real contact with maintainers turn
+      passive users into a community that keeps the project alive.
+    fits:
+      business_models: [free_oss]
+      business_types: [open_source, developer_tools]
+    stages: [early_traction, growth, scale]
+    objective: retention
+    effort: medium
+    cost: free
+    signal_days: 45
+    tailor_questions:
+      - How many people opened a first pull request in the past quarter, and how many came back?
+      - Which parts of the codebase are approachable for new contributors?
+      - How much maintainer time per month can go to office hours and review?
+    suggested_workflow: >-
+      When someone's first contribution is merged, add them to the release
+      notes draft, send a thank-you with two suggested next issues, and remind
+      a maintainer to check in if they have not returned within a month.
+    channel_types: [community, events]
+    kpis: [returning contributors, time to first review, monthly active contributors]
+
+  - key: marketplace-seller-success
+    category: retention_expansion
+    name: Seller success program
+    summary: >-
+      Give every new seller a health score built on listing quality, response
+      time and early sales, send specific coaching tips when a score drops,
+      and invite top sellers to a small group with early access to features.
+    why_it_works: >-
+      Marketplace supply churns quietly when sellers do not get sales.
+      Coaching on the few things that drive sales keeps supply healthy, and
+      recognising top sellers keeps the best ones from leaving.
+    fits:
+      business_models: [marketplace]
+      business_types: [marketplace]
+    stages: [early_traction, growth, scale]
+    objective: retention
+    effort: medium
+    cost: low
+    signal_days: 45
+    tailor_questions:
+      - Which seller behaviours best predict a seller who is still active after three months?
+      - What does a seller see when sales drop, and what would help them?
+      - What can top sellers be given that costs little but signals status?
+    suggested_workflow: >-
+      Weekly, recompute each seller's health score, list sellers whose score
+      fell sharply with the one factor that fell most, and draft a coaching
+      note for each that a person reviews before it goes out.
+    channel_types: [email, marketplace]
+    kpis: [seller 90-day retention, active listings, sales per active seller]
+
+  - key: repeat-buyer-incentives
+    category: retention_expansion
+    name: Repeat-buyer incentives
+    summary: >-
+      Encourage a second and third purchase with a small credit on the next
+      order that expires in a few weeks, saved favourites and price-drop
+      alerts, and a simple loyalty tier for frequent buyers.
+    why_it_works: >-
+      The second purchase is the hardest; once a buyer has two, repeat rates
+      rise sharply. A credit with a near expiry creates a reason to come back
+      while the first experience is still fresh.
+    fits:
+      business_models: [marketplace, one_time]
+      business_types: [marketplace, ecommerce, local_business]
+    stages: [early_traction, growth, scale]
+    objective: retention
+    effort: low
+    cost: medium
+    signal_days: 30
+    tailor_questions:
+      - What share of first-time buyers come back for a second order within 90 days?
+      - What credit amount moves behaviour without eroding margin?
+      - What can a buyer save or follow that brings them back naturally?
+    channel_types: [email, in-product]
+    kpis: [second-purchase rate, purchase frequency, credit redemption rate]
+
+  - key: services-retainer-conversion
+    category: retention_expansion
+    name: Turn projects into retainers
+    summary: >-
+      Near the end of every project, present a written proposal for ongoing
+      work: monthly maintenance, optimisation, or a fixed number of hours, with
+      results from the project as the reason. Hold a quarterly review with
+      every retainer client showing what was done and what is next.
+    why_it_works: >-
+      Project revenue restarts at zero every month. The end of a successful
+      project is when trust is highest, and a quarterly review keeps the value
+      of a retainer visible so it is not cut in the next budget round.
+    fits:
+      business_models: [services]
+      business_types: [agency_services, local_business]
+    stages: [early_traction, growth, scale]
+    objective: expansion
+    effort: low
+    cost: free
+    signal_days: 30
+    tailor_questions:
+      - What ongoing need do clients usually have after a project ends?
+      - What share of recent projects turned into repeat work?
+      - What metrics can a quarterly review show that the client cares about?
+    suggested_workflow: >-
+      Two weeks before each project's end date, draft a retainer proposal from
+      the project's notes and results and remind the account lead to present
+      it; for every retainer client, prepare the quarterly review deck outline
+      a week before it is due.
+    channel_types: [email, outbound]
+    kpis: [project-to-retainer conversion, retainer revenue share, client lifetime]
+
+  - key: habit-forming-digest
+    category: retention_expansion
+    name: Habit-forming digest and return triggers
+    summary: >-
+      Bring an ad-supported or audience product's users back on a steady
+      rhythm with a personal digest (new items in topics they follow, replies
+      to them, a weekly best-of), sent at the time they usually visit, with an
+      easy way to tune the frequency.
+    why_it_works: >-
+      Ad and audience revenue scales with return visits. A digest built from
+      what the user already cares about creates a habit without feeling like
+      spam, and frequency controls keep unsubscribes low.
+    fits:
+      business_models: [ad_supported, freemium]
+      business_types: [creator_media, b2c_app, marketplace]
+    stages: [early_traction, growth, scale]
+    objective: retention
+    effort: medium
+    cost: low
+    signal_days: 21
+    tailor_questions:
+      - What brings a user back on their own today?
+      - What personal content can the product put in a digest without manual work?
+      - What frequency do the most retained users already visit at?
+    suggested_workflow: >-
+      Each week, build every subscribed user's digest from activity in their
+      followed topics, skip users with nothing relevant, and send at their
+      usual visit hour, tracking opens and return visits per send.
+    channel_types: [newsletter, email, in-product]
+    kpis: [weekly returning users, digest click-through, unsubscribe rate]
+
+  - key: proactive-health-check-ins
+    category: retention_expansion
+    name: Health score and proactive check-ins
+    summary: >-
+      Build a simple customer health score from a few signals (logins, key
+      feature use, support tickets, seats used versus purchased) and have a
+      person check in with accounts trending down before renewal, with a
+      specific suggestion, not a generic "how is it going".
+    why_it_works: >-
+      Most churn is visible weeks before it happens. A human reaching out with
+      a concrete fix, while there is still time, saves accounts that a
+      renewal reminder never would.
+    fits:
+      business_types: [b2b_saas, developer_tools, agency_services]
+      business_models: [subscription, usage_based, services]
+    stages: [growth, scale]
+    objective: retention
+    effort: medium
+    cost: free
+    signal_days: 60
+    tailor_questions:
+      - Which two or three signals best separated churned accounts from retained ones last year?
+      - How far before renewal does a check-in still change the outcome?
+      - Who owns each account relationship today?
+    suggested_workflow: >-
+      Weekly, compute each account's health score, list accounts that dropped
+      a band or renew within 60 days with a weak score, and assign each to its
+      owner with the signals that changed and one suggested next step.
+    channel_types: [email, outbound]
+    kpis: [gross revenue retention, at-risk accounts saved, renewal rate]
+
+  - key: win-back-campaign
+    category: retention_expansion
+    name: Win-back campaign for lapsed customers
+    summary: >-
+      Contact customers who left three to twelve months ago with what has
+      changed since they left, especially anything that addresses the reason
+      they gave, plus an easy way to return with their old data or settings
+      intact.
+    why_it_works: >-
+      Former customers already know the product and often left for a reason
+      that has since been fixed. They convert at a much higher rate than cold
+      prospects when the message speaks to why they left.
+    stages: [growth, scale]
+    objective: retention
+    effort: low
+    cost: free
+    signal_days: 21
+    tailor_questions:
+      - Why did most lapsed customers leave, and has any of it been fixed?
+      - Can a returning customer pick up where they left off?
+      - Is a return offer needed, or is the news enough?
+    suggested_workflow: >-
+      Monthly, list customers who left three to twelve months ago and have
+      not unsubscribed, match each to the improvements shipped since they
+      left that relate to their stated reason, and draft a short personal
+      note with an unsubscribe link for review before sending.
+    channel_types: [email]
+    kpis: [reactivation rate, revenue from returning customers, replies]

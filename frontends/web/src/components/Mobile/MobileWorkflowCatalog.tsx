@@ -164,7 +164,7 @@ export function MobileWorkflowCatalog() {
                   >
                     <MobileRowIcon icon={iconForWorkflow(workflow, icon)} />
                     <div className="min-w-0 flex-1">
-                      <div className="truncate text-sm font-medium text-foreground">
+                      <div className="truncate text-ui font-medium text-foreground">
                         {workflowDisplayName(workflow)}
                       </div>
                       {/* Description leads — it's the one line that actually
@@ -173,18 +173,18 @@ export function MobileWorkflowCatalog() {
                           line, so the row stays honest instead of padding
                           itself with a placeholder. */}
                       {workflow.description ? (
-                        <div className="truncate text-xs text-muted-foreground">
+                        <div className="truncate text-meta text-muted-foreground">
                           {workflow.description}
                         </div>
                       ) : workflow.step_count > 0 ? (
-                        <div className="truncate text-xs text-muted-foreground">
+                        <div className="truncate text-meta text-muted-foreground">
                           {workflow.step_count} step
                           {workflow.step_count === 1 ? "" : "s"}
                         </div>
                       ) : null}
                     </div>
                     {workflow.step_count > 0 && workflow.description && (
-                      <span className="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary-ink">
+                      <span className="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-meta font-medium text-primary-ink">
                         {workflow.step_count}
                       </span>
                     )}

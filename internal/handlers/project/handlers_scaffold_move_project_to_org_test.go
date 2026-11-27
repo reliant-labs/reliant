@@ -27,6 +27,9 @@ type moveFixture struct {
 	projects map[string]*db.Project
 	moves    map[string]*core.ProjectOrgMove
 	blockers core.ProjectOrgMoveBlockers
+	// pipeline is whether a repository of the project is enrolled in the
+	// pipeline with a mode other than off.
+	pipeline bool
 	started  []string
 	stamped  []string
 	// settle is the state a started move reads back as.
@@ -65,6 +68,7 @@ func (f *moveFixture) service(t *testing.T, gateOn bool) *project.Service {
 			b := f.blockers
 			return &b, nil
 		},
+		ProjectPipelineEnrolledFunc: func(context.Context, string) (bool, error) { return f.pipeline, nil },
 		FindProjectOrgMoveByRequestFunc: func(_ context.Context, actor, key string) (*core.ProjectOrgMove, error) {
 			for _, m := range f.moves {
 				if m.ActorUserID == actor && m.RequestKey == key {
@@ -183,6 +187,16 @@ func TestMoveProjectToOrg(t *testing.T) {
 		_, err := f.service(t, true).MoveProjectToOrg(ctx, moveReq("p-mine", "globex", "acme", "k"))
 		require.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
 		assert.Equal(t, project.ReasonProjectBusy, reasonOf(err))
+		assert.Empty(t, f.moves)
+	})
+
+	t.Run("a repository enrolled in the pipeline (G1)", func(t *testing.T) {
+		f := newMoveFixture()
+		f.pipeline = true
+		_, err := f.service(t, true).MoveProjectToOrg(ctx, moveReq("p-mine", "globex", "acme", "k"))
+		require.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
+		assert.Equal(t, core.ReasonProjectPipelineEnrolled, reasonOf(err))
+		assert.Contains(t, err.Error(), "unenroll first")
 		assert.Empty(t, f.moves)
 	})
 
