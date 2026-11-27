@@ -1,5 +1,6 @@
 // Copyright (c) 2025 Reliant Labs
 
+import type { ParsedLocation } from "@tanstack/react-router";
 import { create } from "zustand";
 
 import { chooseActiveOrg, learnOrgSegments, useActiveOrgStore } from "@/store/activeOrgStore";
@@ -223,6 +224,17 @@ export function whenRouteOrgSettled(): Promise<RouteOrgScope> {
 const memberOnlyBeforeLoads = new WeakSet<object>();
 
 /**
+ * What a memberOnly `beforeLoad` reads of the router's options. `params` is
+ * there only when the route names them: createRoute infers the route's own
+ * params from its `beforeLoad` too, so a `params: unknown` here would make
+ * every route's params `unknown`.
+ */
+export type MemberOnlyOptions<TParams = never> = {
+  context?: unknown;
+  location: ParsedLocation;
+} & ([TParams] extends [never] ? unknown : { params: TParams });
+
+/**
  * A route's `beforeLoad` that runs only outside the org tree or in a member
  * org. A redirect under `/o/$org` (a retired path's, a bare area's) must never
  * run for an org that is not the person's: the layout renders the one "no
@@ -231,11 +243,18 @@ const memberOnlyBeforeLoads = new WeakSet<object>();
  * access, so every one under the org tree goes through this
  * (`orgTreeBeforeLoads.guard.test.ts` holds the production trees to it).
  */
-// The beforeLoad's own type passes through (F), so the route's params and
-// location stay typed at the call site; skipping returns no context.
-export function memberOnly<F extends (options: any) => unknown>(beforeLoad: F): F {
-  const wrapped = ((options: { context?: unknown }) =>
-    inMemberOrLegacyContext(options.context) ? beforeLoad(options) : undefined) as unknown as F;
+// The options are typed here, not inferred through createRoute: TypeScript 7
+// infers a `beforeLoad` passed through a generic wrapper with the route's type
+// parameters still unresolved (`never`). A route whose redirect reads params
+// names ALL of its own path's params (`memberOnly<{ kind: string; key: string }>`
+// for `…/$kind/$key`): createRoute infers the route's params from its
+// `beforeLoad`, so a subset would drop the rest from the route's type
+// (routeOrg.memberOnly.test.ts pins both). Skipping returns no context.
+export function memberOnly<TParams = never>(
+  beforeLoad: (options: MemberOnlyOptions<NoInfer<TParams>>) => void,
+): (options: MemberOnlyOptions<NoInfer<TParams>>) => void {
+  const wrapped = (options: MemberOnlyOptions<NoInfer<TParams>>) =>
+    inMemberOrLegacyContext(options.context) ? beforeLoad(options) : undefined;
   memberOnlyBeforeLoads.add(wrapped);
   return wrapped;
 }

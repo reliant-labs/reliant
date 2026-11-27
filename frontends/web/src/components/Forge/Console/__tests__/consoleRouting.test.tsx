@@ -568,6 +568,25 @@ describe("the environment scope", () => {
     await landsOn(redirected, "/forge/p/alpha/auth", { env: "e2e", user: "u-1" });
   });
 
+  // The redirects that read the route's params (memberOnly<{ … }>, forgeConsoleRoutes.tsx).
+  it.each([
+    ["/forge/p/alpha/auth/passwords?env=e2e", "/forge/p/alpha/auth"],
+    ["/forge/p/alpha/analytics/funnels?env=e2e", "/forge/p/alpha/analytics"],
+    ["/forge/p/alpha/observability/dashboards/team/k-1?env=e2e", "/forge/p/alpha/observability/dashboards"],
+  ])("sends %s, a tab or kind the page does not have, to %s with its search", async (url, lands) => {
+    const router = renderAt(url);
+    await landsOn(router, lands, { env: "e2e" });
+  });
+
+  it.each([
+    ["/forge/p/alpha/analytics/acquisition?env=e2e", "analytics"],
+    ["/forge/p/alpha/observability/dashboards/release/v1.4.0?env=e2e", "dashboard"],
+  ])("keeps %s, a tab or kind the page has, in place", async (url, page) => {
+    const router = renderAt(url);
+    expect(await screen.findByTestId("page")).toHaveAttribute("data-page", page);
+    await landsOn(router, url.split("?")[0], { env: "e2e" });
+  });
+
   it("routes Security › Vulnerabilities with its filters in the URL", async () => {
     const router = renderAt("/forge/p/alpha/security/vulnerabilities?env=e2e&severity=high&fixable=yes&kev=1&exempt=1&release=v1.4.0");
     expect(await screen.findByTestId("page")).toHaveAttribute("data-page", "vulnerabilities");
