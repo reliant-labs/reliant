@@ -66,6 +66,14 @@ var unattendedWithheld = []struct {
 		reason:    "unattended runs can't launch, ramp or roll out Forge Changes",
 	},
 	{
+		// A GTM email goes out under the user's name to people outside
+		// Reliant, and every send needs the owner's approval card, which an
+		// unattended run cannot show; the tool refuses an unattended call
+		// even when a step names it (internal/gtm/email).
+		withholds: toolNamed(ToolSendGtmEmail),
+		reason:    "unattended runs can't send GTM emails",
+	},
+	{
 		// A connection proposal is a card a person completes in the
 		// connection dialog; with nobody attending it could only wait.
 		withholds: toolNamed(ToolProposeConnection),

@@ -166,8 +166,10 @@ var shippedTools = sync.OnceValue(func() map[string]bool {
 // toolUsageKind is what kind of tool name is, and the name the ledger may
 // record: only a tool Reliant ships is named. An MCP tool's name and a
 // response tool's are the user's own, and a name outside the registry is
-// whatever a model wrote.
-func toolUsageKind(name string, response bool) (kind, recordedName string) {
+// whatever a model wrote. A feature-gated tool the call's capability set
+// (caps; nil entitles nothing) does not entitle is recorded as a name outside
+// the registry: to that caller it does not exist.
+func toolUsageKind(name string, response bool, caps *tools.Capabilities) (kind, recordedName string) {
 	switch {
 	case response:
 		return store.ToolKindResponse, ""
@@ -176,7 +178,7 @@ func toolUsageKind(name string, response bool) (kind, recordedName string) {
 	}
 	integration, ok := shippedTools()[name]
 	switch {
-	case !ok:
+	case !ok || caps.HidesTool(name):
 		return store.ToolKindUnknown, ""
 	case integration:
 		return store.ToolKindIntegration, name
@@ -283,7 +285,7 @@ func (m *toolUsageMeter) record(ctx context.Context, call meteredToolCall, note 
 	if run.ThreadID == "" {
 		run.ThreadID = m.thread
 	}
-	kind, name := toolUsageKind(call.name, call.response)
+	kind, name := toolUsageKind(call.name, call.response, tools.CapabilitiesFrom(ctx))
 	rec := store.ToolCallUsageRecord{
 		ID:           toolUsageID(info.WorkflowExecution.ID, info.WorkflowExecution.RunID, info.ActivityID, call.callID),
 		Attempt:      info.Attempt,

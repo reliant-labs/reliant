@@ -686,6 +686,29 @@ func GetToolRegistry() []ToolDefinition {
 		{ToolGetChange, (*ToolsFactory).GetChange, []ToolTag{TagReadOnly}, PlacementServer, false},
 		{ToolManageChange, (*ToolsFactory).ManageChange, nil, PlacementServer, false},
 		{ToolChangeResults, (*ToolsFactory).ChangeResults, []ToolTag{TagReadOnly}, PlacementServer, false},
+		// GTM: an org's go-to-market workspace through internal/gtm, as an
+		// agent for the chat's user (gtm_tools.go). Every one is
+		// feature-gated (feature_gated.go): to a caller not entitled to GTM
+		// it does not exist. Server-placed, so they work in no-machine runs.
+		// No GTM tag: the reads carry TagReadOnly only, and the saves write
+		// drafts that never leave Reliant. send_gtm_email needs the owner's
+		// card for every send and is withheld unattended (unattended.go).
+		{ToolListGtmIdeas, (*ToolsFactory).ListGtmIdeas, []ToolTag{TagReadOnly}, PlacementServer, false},
+		{ToolSaveGtmIdea, (*ToolsFactory).SaveGtmIdea, nil, PlacementServer, false},
+		{ToolListGtmStrategies, (*ToolsFactory).ListGtmStrategies, []ToolTag{TagReadOnly}, PlacementServer, false},
+		{ToolSaveGtmStrategy, (*ToolsFactory).SaveGtmStrategy, nil, PlacementServer, false},
+		{ToolListGtmStrategyLibrary, (*ToolsFactory).ListGtmStrategyLibrary, []ToolTag{TagReadOnly}, PlacementServer, false},
+		{ToolListGtmCampaigns, (*ToolsFactory).ListGtmCampaigns, []ToolTag{TagReadOnly}, PlacementServer, false},
+		{ToolSaveGtmCampaign, (*ToolsFactory).SaveGtmCampaign, nil, PlacementServer, false},
+		{ToolListGtmCalendar, (*ToolsFactory).ListGtmCalendar, []ToolTag{TagReadOnly}, PlacementServer, false},
+		{ToolSaveGtmItem, (*ToolsFactory).SaveGtmItem, nil, PlacementServer, false},
+		{ToolListGtmChannels, (*ToolsFactory).ListGtmChannels, []ToolTag{TagReadOnly}, PlacementServer, false},
+		{ToolSaveGtmChannel, (*ToolsFactory).SaveGtmChannel, nil, PlacementServer, false},
+		{ToolGetGtmPositioning, (*ToolsFactory).GetGtmPositioning, []ToolTag{TagReadOnly}, PlacementServer, false},
+		{ToolCheckGtmClaims, (*ToolsFactory).CheckGtmClaims, []ToolTag{TagReadOnly}, PlacementServer, false},
+		{ToolReadProductAnalytics, (*ToolsFactory).ReadProductAnalytics, []ToolTag{TagReadOnly}, PlacementServer, false},
+		{ToolAttachGtmAsset, (*ToolsFactory).AttachGtmAsset, nil, PlacementServer, false},
+		{ToolSendGtmEmail, (*ToolsFactory).SendGtmEmail, nil, PlacementServer, false},
 		// Asks a person, on an approval card, to connect an integration in
 		// the connection dialog (connection_proposal_tool.go). Loaded on
 		// demand; the agent never sees the credential.
