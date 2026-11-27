@@ -11,6 +11,7 @@ import { Bot, UserRound } from "lucide-react";
 import type { ReactNode } from "react";
 
 import Badge from "@/components/forge-ui/badge";
+import Link from "@/components/forge-ui/link";
 import Tag from "@/components/forge-ui/tag";
 import {
   GtmCampaignStatus,
@@ -140,7 +141,7 @@ export function isItemOut(status: GtmItemStatus): boolean {
   return status === GtmItemStatus.SENT || status === GtmItemStatus.PUBLISHED;
 }
 
-/** Each default channel's colour, by key (the calendar's categorical palette); any other channel a neutral violet. */
+/** Each default channel's colour, by key (the calendar's categorical palette). */
 const CHANNEL_COLORS: Record<string, string> = {
   blog: "#6366f1",
   email: "#0ea5e9",
@@ -151,9 +152,46 @@ const CHANNEL_COLORS: Record<string, string> = {
   youtube: "#ef4444",
 };
 
-export const channelColor = (channel: Pick<GtmChannel, "key">) => CHANNEL_COLORS[channel.key] ?? "#8b5cf6";
+/** The colours for every other channel: none of the defaults' hues. */
+const EXTRA_CHANNEL_COLORS = ["#8b5cf6", "#ec4899", "#14b8a6", "#84cc16", "#a16207", "#06b6d4", "#d946ef", "#78716c", "#e11d48", "#22c55e"];
+
+/**
+ * A channel's colour. A default channel keeps its own; any other takes the
+ * next extra colour in the order of its key among the org's other channels
+ * (`channels`), so the same channels always get the same colours and no two
+ * share one until the palette runs out. Without the org's channels, the key
+ * picks one.
+ */
+export function channelColor(channel: Pick<GtmChannel, "key">, channels?: readonly Pick<GtmChannel, "key">[]): string {
+  const fixed = CHANNEL_COLORS[channel.key];
+  if (fixed) return fixed;
+  const others = channels ? [...new Set(channels.map((c) => c.key).filter((k) => !CHANNEL_COLORS[k]))].sort() : [];
+  let index = others.indexOf(channel.key);
+  if (index < 0) index = [...channel.key].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) >>> 0, 7);
+  return EXTRA_CHANNEL_COLORS[index % EXTRA_CHANNEL_COLORS.length] ?? "#8b5cf6";
+}
 
 export const isManualChannel = (channel: GtmChannel | undefined) => channel?.mode === GtmChannelMode.MANUAL;
+
+/**
+ * A URL an agent or a person wrote (where an item went out, evidence, a
+ * fact's source), as a link target: only http(s). Anything else is shown as
+ * text, never followed.
+ */
+export function externalHref(url: string): string | null {
+  return /^https?:\/\/\S+$/i.test(url.trim()) ? url.trim() : null;
+}
+
+/** A link to a URL someone wrote: a new tab, no opener, no referrer; plain text when it is not http(s). */
+export function OutboundLink({ url, children, className }: { url: string; children?: ReactNode; className?: string }) {
+  const href = externalHref(url);
+  if (!href) return <span className={className}>{children ?? url}</span>;
+  return (
+    <Link href={href} target="_blank" rel="noopener noreferrer" className={className}>
+      {children ?? url}
+    </Link>
+  );
+}
 
 /** "Email", or "Long post · Blog": the format, and its channel when that says more. */
 export function formatAndChannel(format: GtmItemFormat, channel: GtmChannel | undefined): string {
