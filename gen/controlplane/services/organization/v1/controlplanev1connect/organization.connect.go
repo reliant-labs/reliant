@@ -100,6 +100,12 @@ const (
 	// OrganizationServiceUnlinkGitHubAppInstallationProcedure is the fully-qualified name of the
 	// OrganizationService's UnlinkGitHubAppInstallation RPC.
 	OrganizationServiceUnlinkGitHubAppInstallationProcedure = "/controlplane.v1.OrganizationService/UnlinkGitHubAppInstallation"
+	// OrganizationServiceGetMyOrgEntitlementsProcedure is the fully-qualified name of the
+	// OrganizationService's GetMyOrgEntitlements RPC.
+	OrganizationServiceGetMyOrgEntitlementsProcedure = "/controlplane.v1.OrganizationService/GetMyOrgEntitlements"
+	// OrganizationServiceRequestOrgEntitlementProcedure is the fully-qualified name of the
+	// OrganizationService's RequestOrgEntitlement RPC.
+	OrganizationServiceRequestOrgEntitlementProcedure = "/controlplane.v1.OrganizationService/RequestOrgEntitlement"
 )
 
 // OrganizationServiceClient is a client for the controlplane.v1.OrganizationService service.
@@ -229,6 +235,18 @@ type OrganizationServiceClient interface {
 	// GitHub. Admin or owner. Unlinking one that is not linked to the org is
 	// NOT_FOUND.
 	UnlinkGitHubAppInstallation(context.Context, *connect.Request[v1.UnlinkGitHubAppInstallationRequest]) (*connect.Response[v1.UnlinkGitHubAppInstallationResponse], error)
+	// GetMyOrgEntitlements reports, for every feature that is granted by
+	// request, whether the org has it and whether someone in it asked for it.
+	// Any member may call it; a machine credential is refused (human_only).
+	GetMyOrgEntitlements(context.Context, *connect.Request[v1.GetMyOrgEntitlementsRequest]) (*connect.Response[v1.GetMyOrgEntitlementsResponse], error)
+	// RequestOrgEntitlement asks Reliant to grant a feature to the org. It
+	// records who asked and when, once per (org, feature): a repeat answers
+	// already_requested=true and changes nothing, and asking for a feature the
+	// org already has answers already_enabled=true. Reliant staff are told, and
+	// reach out; nothing is granted by this call. Any member may call it; a
+	// machine credential is refused (human_only). An unknown feature is
+	// INVALID_ARGUMENT.
+	RequestOrgEntitlement(context.Context, *connect.Request[v1.RequestOrgEntitlementRequest]) (*connect.Response[v1.RequestOrgEntitlementResponse], error)
 }
 
 // NewOrganizationServiceClient constructs a client for the controlplane.v1.OrganizationService
@@ -355,6 +373,19 @@ func NewOrganizationServiceClient(httpClient connect.HTTPClient, baseURL string,
 			connect.WithSchema(organizationServiceMethods.ByName("UnlinkGitHubAppInstallation")),
 			connect.WithClientOptions(opts...),
 		),
+		getMyOrgEntitlements: connect.NewClient[v1.GetMyOrgEntitlementsRequest, v1.GetMyOrgEntitlementsResponse](
+			httpClient,
+			baseURL+OrganizationServiceGetMyOrgEntitlementsProcedure,
+			connect.WithSchema(organizationServiceMethods.ByName("GetMyOrgEntitlements")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+			connect.WithClientOptions(opts...),
+		),
+		requestOrgEntitlement: connect.NewClient[v1.RequestOrgEntitlementRequest, v1.RequestOrgEntitlementResponse](
+			httpClient,
+			baseURL+OrganizationServiceRequestOrgEntitlementProcedure,
+			connect.WithSchema(organizationServiceMethods.ByName("RequestOrgEntitlement")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -378,6 +409,8 @@ type organizationServiceClient struct {
 	listGitHubAppInstallations         *connect.Client[v1.ListGitHubAppInstallationsRequest, v1.ListGitHubAppInstallationsResponse]
 	listLinkableGitHubAppInstallations *connect.Client[v1.ListLinkableGitHubAppInstallationsRequest, v1.ListLinkableGitHubAppInstallationsResponse]
 	unlinkGitHubAppInstallation        *connect.Client[v1.UnlinkGitHubAppInstallationRequest, v1.UnlinkGitHubAppInstallationResponse]
+	getMyOrgEntitlements               *connect.Client[v1.GetMyOrgEntitlementsRequest, v1.GetMyOrgEntitlementsResponse]
+	requestOrgEntitlement              *connect.Client[v1.RequestOrgEntitlementRequest, v1.RequestOrgEntitlementResponse]
 }
 
 // ListMyOrganizations calls controlplane.v1.OrganizationService.ListMyOrganizations.
@@ -470,6 +503,16 @@ func (c *organizationServiceClient) ListLinkableGitHubAppInstallations(ctx conte
 // controlplane.v1.OrganizationService.UnlinkGitHubAppInstallation.
 func (c *organizationServiceClient) UnlinkGitHubAppInstallation(ctx context.Context, req *connect.Request[v1.UnlinkGitHubAppInstallationRequest]) (*connect.Response[v1.UnlinkGitHubAppInstallationResponse], error) {
 	return c.unlinkGitHubAppInstallation.CallUnary(ctx, req)
+}
+
+// GetMyOrgEntitlements calls controlplane.v1.OrganizationService.GetMyOrgEntitlements.
+func (c *organizationServiceClient) GetMyOrgEntitlements(ctx context.Context, req *connect.Request[v1.GetMyOrgEntitlementsRequest]) (*connect.Response[v1.GetMyOrgEntitlementsResponse], error) {
+	return c.getMyOrgEntitlements.CallUnary(ctx, req)
+}
+
+// RequestOrgEntitlement calls controlplane.v1.OrganizationService.RequestOrgEntitlement.
+func (c *organizationServiceClient) RequestOrgEntitlement(ctx context.Context, req *connect.Request[v1.RequestOrgEntitlementRequest]) (*connect.Response[v1.RequestOrgEntitlementResponse], error) {
+	return c.requestOrgEntitlement.CallUnary(ctx, req)
 }
 
 // OrganizationServiceHandler is an implementation of the controlplane.v1.OrganizationService
@@ -600,6 +643,18 @@ type OrganizationServiceHandler interface {
 	// GitHub. Admin or owner. Unlinking one that is not linked to the org is
 	// NOT_FOUND.
 	UnlinkGitHubAppInstallation(context.Context, *connect.Request[v1.UnlinkGitHubAppInstallationRequest]) (*connect.Response[v1.UnlinkGitHubAppInstallationResponse], error)
+	// GetMyOrgEntitlements reports, for every feature that is granted by
+	// request, whether the org has it and whether someone in it asked for it.
+	// Any member may call it; a machine credential is refused (human_only).
+	GetMyOrgEntitlements(context.Context, *connect.Request[v1.GetMyOrgEntitlementsRequest]) (*connect.Response[v1.GetMyOrgEntitlementsResponse], error)
+	// RequestOrgEntitlement asks Reliant to grant a feature to the org. It
+	// records who asked and when, once per (org, feature): a repeat answers
+	// already_requested=true and changes nothing, and asking for a feature the
+	// org already has answers already_enabled=true. Reliant staff are told, and
+	// reach out; nothing is granted by this call. Any member may call it; a
+	// machine credential is refused (human_only). An unknown feature is
+	// INVALID_ARGUMENT.
+	RequestOrgEntitlement(context.Context, *connect.Request[v1.RequestOrgEntitlementRequest]) (*connect.Response[v1.RequestOrgEntitlementResponse], error)
 }
 
 // NewOrganizationServiceHandler builds an HTTP handler from the service implementation. It returns
@@ -722,6 +777,19 @@ func NewOrganizationServiceHandler(svc OrganizationServiceHandler, opts ...conne
 		connect.WithSchema(organizationServiceMethods.ByName("UnlinkGitHubAppInstallation")),
 		connect.WithHandlerOptions(opts...),
 	)
+	organizationServiceGetMyOrgEntitlementsHandler := connect.NewUnaryHandler(
+		OrganizationServiceGetMyOrgEntitlementsProcedure,
+		svc.GetMyOrgEntitlements,
+		connect.WithSchema(organizationServiceMethods.ByName("GetMyOrgEntitlements")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+		connect.WithHandlerOptions(opts...),
+	)
+	organizationServiceRequestOrgEntitlementHandler := connect.NewUnaryHandler(
+		OrganizationServiceRequestOrgEntitlementProcedure,
+		svc.RequestOrgEntitlement,
+		connect.WithSchema(organizationServiceMethods.ByName("RequestOrgEntitlement")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/controlplane.v1.OrganizationService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case OrganizationServiceListMyOrganizationsProcedure:
@@ -760,6 +828,10 @@ func NewOrganizationServiceHandler(svc OrganizationServiceHandler, opts ...conne
 			organizationServiceListLinkableGitHubAppInstallationsHandler.ServeHTTP(w, r)
 		case OrganizationServiceUnlinkGitHubAppInstallationProcedure:
 			organizationServiceUnlinkGitHubAppInstallationHandler.ServeHTTP(w, r)
+		case OrganizationServiceGetMyOrgEntitlementsProcedure:
+			organizationServiceGetMyOrgEntitlementsHandler.ServeHTTP(w, r)
+		case OrganizationServiceRequestOrgEntitlementProcedure:
+			organizationServiceRequestOrgEntitlementHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -839,4 +911,12 @@ func (UnimplementedOrganizationServiceHandler) ListLinkableGitHubAppInstallation
 
 func (UnimplementedOrganizationServiceHandler) UnlinkGitHubAppInstallation(context.Context, *connect.Request[v1.UnlinkGitHubAppInstallationRequest]) (*connect.Response[v1.UnlinkGitHubAppInstallationResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.OrganizationService.UnlinkGitHubAppInstallation is not implemented"))
+}
+
+func (UnimplementedOrganizationServiceHandler) GetMyOrgEntitlements(context.Context, *connect.Request[v1.GetMyOrgEntitlementsRequest]) (*connect.Response[v1.GetMyOrgEntitlementsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.OrganizationService.GetMyOrgEntitlements is not implemented"))
+}
+
+func (UnimplementedOrganizationServiceHandler) RequestOrgEntitlement(context.Context, *connect.Request[v1.RequestOrgEntitlementRequest]) (*connect.Response[v1.RequestOrgEntitlementResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.OrganizationService.RequestOrgEntitlement is not implemented"))
 }

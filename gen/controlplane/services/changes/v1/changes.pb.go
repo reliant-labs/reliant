@@ -22,8 +22,14 @@
 // WHO MAY DO WHAT. Every rpc names its environment or change; a caller who is
 // not a member of the environment's org, or a credential of another org,
 // gets NotFound, so ids are no existence oracle.
-//   - reads (List/Get/ListChangeEvents/GetChangesSnapshot): any org member;
-//     a token carrying changes:write, changes:launch or obs:read.
+//   - reads (List/Get/ListChangeEvents/GetChangesDeliveryStatus): any org
+//     member; a token carrying changes:write, changes:launch or obs:read.
+//   - GetChangesSnapshot: a read, and also a token carrying changes:read
+//     (org-wide, or bound to that environment): the credential of an app
+//     not on Reliant hosting, which fetches the snapshot it evaluates. That
+//     scope reads the snapshot and NOTHING ELSE: every other rpc, the reads
+//     included, refuses a token whose only Changes authority is changes:read
+//     (PermissionDenied, reason "scope_missing").
 //   - GetChangeReadout: a read, and obs:read (every member holds it; a token
 //     must carry it).
 //   - CreateChange, UpdateChangeDraft, SetChangePreview, StopChange,

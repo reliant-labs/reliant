@@ -16,11 +16,12 @@
  * the URL names (`?site=`, siteInsightsParts.tsx), so a project with a static
  * site and an app frontend reads them apart.
  *
- * SEO and Accessibility say "coming soon" until their audit data ships:
- * SITE_AUDIT_VIEWS_READY is the flag their cards flip.
+ * An audit view says "coming soon" until its page ships:
+ * SITE_AUDIT_VIEWS_READY is the flag each card flips (SEO: R4,
+ * SeoInsightsView.tsx).
  */
 
-import type { ReactNode } from "react";
+import type { ComponentType, ReactNode } from "react";
 import { Accessibility, SearchCheck } from "lucide-react";
 
 import Card from "@/components/forge-ui/card";
@@ -28,6 +29,7 @@ import Card from "@/components/forge-ui/card";
 import { useForgeConsole } from "../Console/consoleContext";
 import { Page } from "../Console/consolePageFrame";
 import type { ConsolePage, SiteInsightsView } from "../Console/paths";
+import { SeoInsightsView } from "./SeoInsightsView";
 import { SiteInsightsHeader } from "./siteInsightsParts";
 import { SpeedInsightsView } from "./SpeedInsightsPage";
 
@@ -39,7 +41,10 @@ export type SiteAuditView = Exclude<SiteInsightsView, "speed">;
  * what is coming. The SEO (R4) and Accessibility (R5) cards flip theirs when
  * the page they render ships.
  */
-export const SITE_AUDIT_VIEWS_READY: Readonly<Record<SiteAuditView, boolean>> = { seo: false, accessibility: false };
+export const SITE_AUDIT_VIEWS_READY: Readonly<Record<SiteAuditView, boolean>> = { seo: true, accessibility: false };
+
+/** Each audit view's page, once its flag is set. */
+const AUDIT_VIEWS: Partial<Record<SiteAuditView, ComponentType>> = { seo: SeoInsightsView };
 
 /** The view a Site insights page shows: its path's, or Speed. */
 export function siteInsightsViewOf(page: ConsolePage): SiteInsightsView {
@@ -49,9 +54,10 @@ export function siteInsightsViewOf(page: ConsolePage): SiteInsightsView {
 export function SiteInsightsPage() {
   const { page } = useForgeConsole();
   const view = siteInsightsViewOf(page);
+  const AuditView = view === "speed" || !SITE_AUDIT_VIEWS_READY[view] ? undefined : AUDIT_VIEWS[view];
   return (
     <Page testId="console-site-insights">
-      {view === "speed" ? <SpeedInsightsView /> : SITE_AUDIT_VIEWS_READY[view] ? null : <SiteAuditComingSoon view={view} />}
+      {view === "speed" ? <SpeedInsightsView /> : AuditView ? <AuditView /> : <SiteAuditComingSoon view={view} />}
     </Page>
   );
 }

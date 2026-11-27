@@ -4,7 +4,7 @@ sidebarTitle: "Site insights"
 description: "Site insights shows how fast each page of your frontend loads and responds for real visitors: LCP, INP, CLS and TTFB at p75, per page and per site, from the browser telemetry forge already sends. It was called Speed insights."
 ---
 
-{/* verified: 2026-11-26 · sources: frontends/web Forge/Analytics/SiteInsightsPage.tsx, SpeedInsightsPage.tsx and siteInsightsParts.tsx, forge web-runtime/src/telemetry.ts, docs/hosting/observability/{signals,where-it-goes,dashboards-and-alerts}.mdx */}
+{/* verified: 2026-11-26 · sources: frontends/web Forge/Analytics/SiteInsightsPage.tsx, SpeedInsightsPage.tsx, siteInsightsParts.tsx, SeoInsightsView.tsx and seoInsightsModel.ts, control-plane proto/services/siteaudit/v1/siteaudit.proto, forge web-runtime/src/telemetry.ts, docs/hosting/observability/{signals,where-it-goes,dashboards-and-alerts}.mdx */}
 
 Site insights answers "is my site fast for the people using it?" It reports the web vitals your visitors' browsers measured, per page, so you can see which route is slow rather than only that the site feels slow. These are real-user measurements, not a lab test, so they include slow phones and bad networks.
 
@@ -12,7 +12,7 @@ Site insights was called Speed insights. Its old address, `/speed-insights`, sti
 
 ## Where to find it
 
-In the project sidebar, open **Observability** and then **Performance & issues**, where **Site insights** sits beside Errors, Alerts, Traces and Sessions. The page has three tabs: **Speed**, described here, then **SEO** and **Accessibility**, which say what they will show until those checks are available. The time control defaults to the last 7 days and offers 15 minutes, 1 hour, 6 hours, 24 hours, 7 days and 30 days. The environment control in the top bar scopes it to one environment or all of them. When more than one of your frontends sends measurements, a **site** control picks one of them, so a marketing site and an app frontend are read apart; it lists each frontend by its telemetry service name (`<project>-<frontend>`), busiest first.
+In the project sidebar, open **Observability** and then **Performance & issues**, where **Site insights** sits beside Errors, Alerts, Traces and Sessions. The page has three tabs: **Speed**, described here, **SEO** (below), and **Accessibility**, which says what it will show until its checks are available. The time control defaults to the last 7 days and offers 15 minutes, 1 hour, 6 hours, 24 hours, 7 days and 30 days. The environment control in the top bar scopes it to one environment or all of them. When more than one of your frontends sends measurements, a **site** control picks one of them, so a marketing site and an app frontend are read apart; it lists each frontend by its telemetry service name (`<project>-<frontend>`), busiest first.
 
 ## What you see
 
@@ -54,3 +54,14 @@ When a vital turns poor, the next step is usually the trace or the session behin
 - [Hosted dashboards, alerts and issues](/hosting/observability/dashboards-and-alerts): the generated frontend dashboard also charts web vitals by route
 - [Session timelines and replay](/hosting/observability/session-timelines)
 - [Product analytics](/forge/observability/product-analytics): who your visitors are and what they do
+
+## SEO
+
+The **SEO** tab shows how each page of a static site you host on Reliant reads to search engines and to link previews. After every release, the control plane's site auditor crawls the site the way a crawler does: the HTML as served, the response headers, `robots.txt`, the sitemap, and every link. It renders some pages in a headless browser too, because a single-page app often sets its title in JavaScript. A site is audited by environment, so pick the environment in the top bar; with every environment in scope, prod is shown.
+
+- **The score** is 0 to 100, with its change since the previous release's audit, the release audited and when. Scoring is Lighthouse-compatible: it uses the same audits and weights as Lighthouse's SEO category, without running Lighthouse. **Re-run** queues a new audit now, and shows how many of your organization's re-runs are left today.
+- **Site checks** judge the whole site: `robots.txt`, `sitemap.xml`, indexing, the canonical host, hreflang and structured data (JSON-LD). Indexing compares what the host is meant to be with what it is. A preview host is meant to stay out of search, so its noindex shows as "Not indexed (preview)" and costs nothing.
+- **Routes** lists every page the audit read, worst score first, with its title and description and their lengths, canonical link, Open Graph tags, whether it is indexable, and its JSON-LD types. Open a route to see each finding with its evidence and the fix, and a **link preview**: how the page looks when shared in Slack, X and LinkedIn. The preview's image is the auditor's own stored copy of your `og:image`, so the console never loads your page's image URL.
+- **Broken links** lists each link that answered an error, the page it is on, and whether it points inside the site or outside it.
+
+Before a site's first audit, the tab says **Your first audit runs after the next release**.
