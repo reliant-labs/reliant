@@ -57,8 +57,8 @@ function describe(page: ConsolePage): { title: string; shows: string } {
       return { title: "Events & metrics", shows: PAGE_SUBTITLES.events };
     case "analytics":
       return { title: "Analytics", shows: PAGE_SUBTITLES.analytics };
-    case "speed-insights":
-      return { title: "Speed insights", shows: PAGE_SUBTITLES["speed-insights"] };
+    case "site-insights":
+      return { title: "Site insights", shows: PAGE_SUBTITLES["site-insights"] };
     case "vulnerabilities":
     case "vulnerability":
       return { title: "Vulnerabilities", shows: "The known vulnerabilities in what your app's releases ship" };

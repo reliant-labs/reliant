@@ -24,6 +24,7 @@ IDs, hosts or local infrastructure belong here, not in `docs/`.
 - `backlog.md` — product proposals and deferred designs moved out of the issue tracker (2026-11-04), each under its original issue number.
 - `human-only-approvals-verification.md` — post-deploy check that real app sessions and OAuth-client tokens classify correctly for human-only approvals.
 - `sdk-approval-decisions-rollout.md` — post-deploy check of the Go SDK's approval decisions against a real server, and their rollback.
+- [Forge identity cutover](forge-identity-cutover.md) — operator evidence checklist for switching sign-in and, separately, retiring Supabase for the managed app.
 - `desktop-sourcemaps.md` — how a desktop release files its renderer's source maps, the `release` environment's `RELIANT_SOURCEMAPS_TOKEN`, and how to set it up and check it.
 - `preview-env.md` — the hosted preview: the production web build on the shop fixture pack (forge.Fixtures), hosted as a control-plane prod frontend; the tests that prove its sign-in code is inert, and its noindex.
 - `forge-shell-rollout.md` — activating the forge shell host (forge.reliantlabs.io): external configuration, post-deploy checks, rollback.

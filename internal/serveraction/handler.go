@@ -127,6 +127,14 @@ type Principal struct {
 	// Automation is the trigger the run belongs to, by name, "" for a run a
 	// person started.
 	Automation string
+	// TriggerID is the activation (the triggers row) whose firing launched
+	// the run's chat, by id, from its launch event: "" for a run a person
+	// started, a sub-agent's run, or a run whose chat predates launch
+	// events. Capability grants are made to it (internal/pipeline/grants).
+	TriggerID string
+	// DaemonID is the machine the run's chat executes on
+	// (chats.active_daemon_id), "" for a run on no machine.
+	DaemonID string
 }
 
 // Source is where a run's workflow definition was resolved from.

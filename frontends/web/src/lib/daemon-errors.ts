@@ -1,4 +1,4 @@
-import { ConnectError } from "@connectrpc/connect";
+import { Code, ConnectError } from "@connectrpc/connect";
 
 import { DaemonWakingSchema } from "@/gen/reliant/v1/daemon_registry_pb";
 import {
@@ -100,4 +100,19 @@ export function projectCheckoutMissing(error: unknown): ProjectCheckoutMissing |
     return detail;
   }
   return null;
+}
+
+/**
+ * StartChat (or a machine switch) refused the chosen machine because the
+ * project is installed elsewhere and not there: daemonchoice.Validate's
+ * FailedPrecondition. It carries no detail, only this message, so the message
+ * is the signal; the new-chat view checks its own placement first and sees
+ * this only when its record of the project's machines was stale.
+ */
+export function isProjectNotOnChosenMachine(error: unknown): boolean {
+  return (
+    error instanceof ConnectError &&
+    error.code === Code.FailedPrecondition &&
+    error.rawMessage.includes("project is not installed on that daemon")
+  );
 }
