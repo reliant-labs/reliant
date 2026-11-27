@@ -14,6 +14,7 @@
  * timeline and, when recorded, its masked replay — at the trace's start.
  */
 
+import { useState } from "react";
 import { ArrowLeft, Flame, FileText, LineChart, MonitorPlay } from "lucide-react";
 
 import Card, { CardHeader } from "@/components/forge-ui/card";
@@ -43,6 +44,8 @@ import { hasClient } from "@/services/controlPlane/observability/client";
 import { ClientSummary } from "./Client";
 import { traceBuildsOf, type TraceBuilds } from "./traceBuilds";
 import { Foldable } from "./detailDensity";
+import { GenAISteps } from "./genai/GenAISteps";
+import { hasGenAI } from "./genai/genaiSteps";
 
 export function TraceDetail({
   scope,
@@ -76,6 +79,11 @@ export function TraceDetail({
   const signals = useSignalsIndex(scope, "7d");
   const profilesOf = (service: string | undefined): SignalState => signalState(signals, service, "profiles");
   const rootProfiles = profilesOf(root?.service);
+  // A trace with GenAI spans opens on its AI steps; the waterfall is one
+  // click away. The choice is this view's, not the URL's.
+  const genai = hasGenAI(spans);
+  const [lens, setLens] = useState<"steps" | "waterfall">("steps");
+  const showSteps = genai && lens === "steps";
 
   const back = (
     <Button
@@ -216,12 +224,33 @@ export function TraceDetail({
 
       <div className="grid grid-cols-[minmax(0,1fr)] gap-4 xl:grid-cols-[minmax(0,3fr)_minmax(20rem,1fr)]">
         <Card padding="md">
-          <TraceWaterfall
-            spans={spans}
-            truncated={trace.data?.truncated ?? false}
-            selectedSpanId={selected?.spanId}
-            onSelect={(next) => navigate({ span: next }, { replace: true })}
-          />
+          {genai && (
+            <div role="tablist" aria-label="Trace view" className="mb-3 flex gap-1" data-testid="trace-lens">
+              {(["steps", "waterfall"] as const).map((l) => (
+                <Button
+                  key={l}
+                  role="tab"
+                  aria-selected={lens === l}
+                  variant={lens === l ? "secondary" : "ghost"}
+                  size="xs"
+                  onClick={() => setLens(l)}
+                  data-testid={`trace-lens-${l}`}
+                >
+                  {l === "steps" ? "AI steps" : "Waterfall"}
+                </Button>
+              ))}
+            </div>
+          )}
+          {showSteps ? (
+            <GenAISteps spans={spans} selectedSpanId={selected?.spanId} onSelect={(next) => navigate({ span: next }, { replace: true })} />
+          ) : (
+            <TraceWaterfall
+              spans={spans}
+              truncated={trace.data?.truncated ?? false}
+              selectedSpanId={selected?.spanId}
+              onSelect={(next) => navigate({ span: next }, { replace: true })}
+            />
+          )}
         </Card>
         {selected ? (
           <SpanDetails
