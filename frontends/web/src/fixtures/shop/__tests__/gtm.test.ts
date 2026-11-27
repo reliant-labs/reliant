@@ -52,6 +52,15 @@ function gtmClient() {
 
 const org = { orgId: DEMO_ORG };
 
+/** Whole calendar days from the day `now` falls on to the day `at` falls on (negative: before). */
+function daysFromToday(now: number, at: number): number {
+  const day = (ms: number) => {
+    const d = new Date(ms);
+    return Date.UTC(d.getFullYear(), d.getMonth(), d.getDate());
+  };
+  return Math.round((day(at) - day(now)) / 86_400_000);
+}
+
 async function rejection(promise: Promise<unknown>): Promise<ConnectError> {
   try {
     await promise;
@@ -76,7 +85,7 @@ describe("the GTM sample pack", () => {
     expect((await rejection(client.listIdeas({ orgId: "org-someone-else" }))).code).toBe(Code.NotFound);
   });
 
-  it("holds the sample volumes: 12 ideas, 2 strategies, 2 campaigns, 9 channels, about 15 items this month, 2 assets, 6 library entries, 8 claims", async () => {
+  it("holds the sample volumes: 12 ideas, 2 strategies, 2 campaigns, 9 channels, about 15 items around today, 2 assets, 6 library entries, 8 claims", async () => {
     const client = gtmClient();
     const { ideas } = await client.listIdeas(org);
     expect(ideas.length).toBeGreaterThanOrEqual(12);
@@ -96,10 +105,9 @@ describe("the GTM sample pack", () => {
     expect(items.length).toBeLessThanOrEqual(16);
     const scheduled = items.filter((i) => i.scheduledAt);
     expect(scheduled.length).toBeGreaterThanOrEqual(13);
-    for (const i of scheduled) {
-      const d = new Date(timestampMs(i.scheduledAt!));
-      expect([d.getFullYear(), d.getMonth()]).toEqual([2026, 6]);
-    }
+    // From 10 days before today to 20 days after it.
+    for (const i of scheduled) expect(daysFromToday(NOW, timestampMs(i.scheduledAt!))).toBeGreaterThanOrEqual(-10);
+    for (const i of scheduled) expect(daysFromToday(NOW, timestampMs(i.scheduledAt!))).toBeLessThanOrEqual(20);
     expect(new Set(items.map((i) => i.format))).toContain(GtmItemFormat.EMAIL);
 
     expect((await client.listAssets({ ...org, itemId: "gtm-item-show-hn" })).assets).toHaveLength(1);
@@ -154,14 +162,23 @@ describe("the GTM sample pack", () => {
     }
   });
 
-  it("puts items on the current month wherever the clock is, and never past the 28th", async () => {
-    for (const at of [new Date(2026, 1, 3, 9), new Date(2026, 11, 31, 23), new Date(2028, 1, 29, 1)]) {
+  it("places items from 10 days ago to 20 days ahead of today, so the calendar and \"Coming up\" are never empty", async () => {
+    // Month ends, year ends, a leap day, and the day the preview showed nothing on (27 Nov).
+    const clocks = [new Date(2026, 10, 27, 9), new Date(2026, 11, 31, 23), new Date(2028, 1, 29, 1), new Date(2026, 1, 3, 9), new Date(2026, 0, 1, 0, 5), new Date(2026, 6, 31, 12)];
+    for (const at of clocks) {
       resetDemoNowForTests(at.getTime());
       const { items } = await createFixtureClient(at.getTime()).listItems(org);
-      for (const i of items.filter((x) => x.scheduledAt)) {
-        const d = new Date(timestampMs(i.scheduledAt!));
-        expect([d.getFullYear(), d.getMonth()]).toEqual([at.getFullYear(), at.getMonth()]);
-      }
+      const dated = items.filter((x) => x.scheduledAt);
+      const days = dated.map((x) => daysFromToday(at.getTime(), timestampMs(x.scheduledAt!)));
+      expect(Math.min(...days), at.toISOString()).toBeGreaterThanOrEqual(-10);
+      expect(Math.max(...days), at.toISOString()).toBeLessThanOrEqual(20);
+      // The phone's "Coming up" list is what is dated from the start of today on.
+      const startOfToday = new Date(at.getFullYear(), at.getMonth(), at.getDate()).getTime();
+      const upcoming = dated.filter((x) => timestampMs(x.scheduledAt!) >= startOfToday);
+      expect(upcoming.length, `${at.toISOString()}: coming up`).toBeGreaterThanOrEqual(8);
+      expect(dated.length - upcoming.length, `${at.toISOString()}: already out`).toBeGreaterThanOrEqual(4);
+      // The Show HN item is dated today, so it leads that list.
+      expect(upcoming.sort((p, q) => timestampMs(p.scheduledAt!) - timestampMs(q.scheduledAt!))[0]?.id).toBe("gtm-item-show-hn");
     }
   });
 

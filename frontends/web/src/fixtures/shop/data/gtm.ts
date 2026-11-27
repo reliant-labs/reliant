@@ -11,8 +11,9 @@
  * (gtm.test.ts keeps a denylist of the phrases that must never appear).
  *
  * Time is relative to the `now` it is built with (the pack clock): the items
- * sit on fixed days of the CURRENT month, so the calendar is never empty, and
- * an item is in its past or future state by whether its day has gone by.
+ * sit from 10 days before today to 20 days after it, whatever day it is, so
+ * the calendar and the phone's "Coming up" list are never empty, and an item
+ * is in its past or future state by whether its moment has gone by.
  *
  * The strategy library holds a few made-up PLACEHOLDER entries, written for
  * this pack: a real org imports its own library, and none of that lives here.
@@ -148,9 +149,6 @@ const ASSET_IMAGES: Record<string, string> = {
 /** A sample asset's inline image: what GetAssetDownload answers (no bucket in the preview). */
 export const gtmAssetImageUrl = (assetId: string): string => ASSET_IMAGES[assetId] ?? ASSET_IMAGES["gtm-asset-brand-sheet"]!;
 
-/** The day of the month an item with no real date falls on, when the month is short. */
-const LAST_SAFE_DAY = 28;
-
 export function gtmSampleData(nowMs: number): GtmSampleData {
   const now = new Date(nowMs);
   const at = (dayOffset: number, hours = 9, minutes = 0): Date => {
@@ -158,7 +156,6 @@ export function gtmSampleData(nowMs: number): GtmSampleData {
     d.setHours(hours, minutes, 0, 0);
     return d;
   };
-  const onDay = (day: number, hours: number): Date => new Date(now.getFullYear(), now.getMonth(), Math.min(day, LAST_SAFE_DAY), hours, 0, 0, 0);
   const ts = (d: Date): Timestamp => timestampFromDate(d);
   const dateOnly = (dayOffset: number): string => {
     const d = at(dayOffset);
@@ -372,11 +369,12 @@ export function gtmSampleData(nowMs: number): GtmSampleData {
     }, at(-60, 9), at(-32, 9)),
   ];
 
-  // ── Items: fixed days of the current month ────────────────────────────────
+  // ── Items: from 10 days ago to 20 days ahead ──────────────────────────────
   const S = GtmItemStatus;
   interface ItemSpec {
     id: string;
-    day: number; // 0: not on the calendar
+    /** Days from today (negative: past); null: not on the calendar. */
+    day: number | null;
     hours: number;
     format: GtmItemFormat;
     channelId?: string;
@@ -393,89 +391,89 @@ export function gtmSampleData(nowMs: number): GtmSampleData {
   }
   const specs: ItemSpec[] = [
     {
-      id: "gtm-item-launch-blog", day: 2, hours: 10, format: F.LONG_POST, channelId: CH.blog, title: "The Weekly Box is here: beans roasted to order",
+      id: "gtm-item-launch-blog", day: -10, hours: 10, format: F.LONG_POST, channelId: CH.blog, title: "The Weekly Box is here: beans roasted to order",
       bodyMd: "# The Weekly Box is here\n\nPick a size and a day. Each bag is roasted to order and sent to your door.\n\nShipping on every Weekly Box is free.",
       campaignId: GTM_CAMPAIGN_IDS.weeklyBox, ideaId: "gtm-idea-weekly-box-launch", past: S.PUBLISHED, future: S.APPROVED,
     },
     {
-      id: "gtm-item-launch-thread", day: 4, hours: 16, format: F.SHORT_POST, channelId: CH.x, title: "Thread: what a box looks like when it lands",
+      id: "gtm-item-launch-thread", day: -8, hours: 16, format: F.SHORT_POST, channelId: CH.x, title: "Thread: what a box looks like when it lands",
       bodyMd: "1/ The Weekly Box is open. Here is what is inside.\n2/ A bag roasted to order, a brewing card, and a note from the roaster.",
       campaignId: GTM_CAMPAIGN_IDS.weeklyBox, ideaId: "gtm-idea-weekly-box-launch", past: S.PUBLISHED, future: S.SCHEDULED,
     },
     {
-      id: "gtm-item-launch-email", day: 6, hours: 14, format: F.EMAIL, channelId: CH.email, title: "Your first box can ship this week",
+      id: "gtm-item-launch-email", day: -7, hours: 14, format: F.EMAIL, channelId: CH.email, title: "Your first box can ship this week",
       bodyMd: "Hi {first_name},\n\nThe Weekly Box is open. Pick a size and a day, and your first bag is roasted to order.",
       campaignId: GTM_CAMPAIGN_IDS.weeklyBox, ideaId: "gtm-idea-weekly-box-launch", past: S.SENT, future: S.APPROVED,
       email: { to: ["pre-launch-list@lists.example.com"], subject: "Your first box can ship this week" },
     },
     {
-      id: "gtm-item-launch-linkedin", day: 8, hours: 11, format: F.SHORT_POST, channelId: CH.linkedin, title: "The Weekly Box is live",
+      id: "gtm-item-launch-linkedin", day: -5, hours: 11, format: F.SHORT_POST, channelId: CH.linkedin, title: "The Weekly Box is live",
       bodyMd: "The Weekly Box is live: beans roasted to order, a delivery day you choose, and free shipping on every box.",
       campaignId: GTM_CAMPAIGN_IDS.weeklyBox, past: S.PUBLISHED, future: S.SCHEDULED,
     },
     {
       // A manual channel: approved, posted by hand, and waiting for the person to paste the URL and mark it published.
-      id: "gtm-item-show-hn", day: 10, hours: 16, format: F.SHORT_POST, channelId: CH.hackerNews, title: "Show HN: the grind-size calculator we built for subscribers",
+      id: "gtm-item-show-hn", day: 0, hours: 16, format: F.SHORT_POST, channelId: CH.hackerNews, title: "Show HN: the grind-size calculator we built for subscribers",
       bodyMd: "Show HN: A grind-size calculator for home espresso and pour-over\n\nWe built a small tool that suggests a starting grind from your grinder, method and beans. Here is how it works and what we got wrong at first.",
       campaignId: GTM_CAMPAIGN_IDS.weeklyBox, ideaId: "gtm-idea-grind-calculator", past: S.APPROVED, future: S.APPROVED,
     },
     {
-      id: "gtm-item-roastery-post", day: 12, hours: 9, format: F.LONG_POST, channelId: CH.blog, title: "Behind the scenes: a day at the roastery",
+      id: "gtm-item-roastery-post", day: 1, hours: 9, format: F.LONG_POST, channelId: CH.blog, title: "Behind the scenes: a day at the roastery",
       bodyMd: "# A day at the Brightwell roastery\n\nGreen beans arrive in sacks, get weighed, and go into the drum in small batches.\n\nEvery batch is cupped before it ships.\n\nEvery batch is roasted in under 12 minutes.",
       campaignId: GTM_CAMPAIGN_IDS.weeklyBox, ideaId: "gtm-idea-roastery-visit", past: S.PAUSED, future: S.REVIEW,
     },
     {
       // Held: the send started and its outcome is unknown. Frozen until a person resolves it.
-      id: "gtm-item-grind-guide-email", day: 14, hours: 15, format: F.EMAIL, channelId: CH.email, title: "Follow-up: a grind guide for your first box",
+      id: "gtm-item-grind-guide-email", day: -1, hours: 8, format: F.EMAIL, channelId: CH.email, title: "Follow-up: a grind guide for your first box",
       bodyMd: "Hi {first_name},\n\nYour first bag is on its way. Here is a starting grind for the way you brew, and what to change if the cup tastes thin.",
       campaignId: GTM_CAMPAIGN_IDS.weeklyBox, past: S.APPROVED, future: S.APPROVED, held: true,
       email: { to: ["new-subscribers@lists.example.com"], subject: "A grind guide for your first box" },
     },
     {
-      id: "gtm-item-tasting-club-post", day: 16, hours: 9, format: F.LONG_POST, channelId: CH.blog, title: "The Tasting Club: a new origin every month",
+      id: "gtm-item-tasting-club-post", day: 3, hours: 9, format: F.LONG_POST, channelId: CH.blog, title: "The Tasting Club: a new origin every month",
       bodyMd: "# A new origin on your doorstep every month\n\nEach month we pick one small lot, roast a little of it, and send it with tasting notes. You brew it, tell us what you think, and we pick the next one.",
       campaignId: GTM_CAMPAIGN_IDS.tastingClub, ideaId: "gtm-idea-roast-date-post", past: S.PUBLISHED, future: S.DRAFT,
     },
     {
-      id: "gtm-item-club-email", day: 18, hours: 14, format: F.EMAIL, channelId: CH.email, title: "Meet the Tasting Club",
+      id: "gtm-item-club-email", day: 5, hours: 14, format: F.EMAIL, channelId: CH.email, title: "Meet the Tasting Club",
       bodyMd: "Hi {first_name},\n\nThis month's origin is a washed lot with notes of stone fruit. Members get a small bag and tasting notes on the 18th.",
       campaignId: GTM_CAMPAIGN_IDS.tastingClub, ideaId: "gtm-idea-pause-email", past: S.SENT, future: S.DRAFT,
       email: { to: ["weekly-box-subscribers@lists.example.com"], subject: "Meet the Tasting Club" },
     },
     {
-      id: "gtm-item-club-thread", day: 20, hours: 12, format: F.SHORT_POST, channelId: CH.x, title: "A new origin on your doorstep every month",
+      id: "gtm-item-club-thread", day: 7, hours: 12, format: F.SHORT_POST, channelId: CH.x, title: "A new origin on your doorstep every month",
       bodyMd: "The Tasting Club sends one small-lot origin a month, with notes on what to look for in the cup.",
       campaignId: GTM_CAMPAIGN_IDS.tastingClub, past: S.PUBLISHED, future: S.REVIEW,
     },
     {
       // Cold outreach on an integrated channel whose Gmail connection is missing: it cannot be sent until a person connects it.
-      id: "gtm-item-outreach", day: 21, hours: 10, format: F.COLD_OUTREACH, channelId: CH.outreach, title: "Intro to office managers",
+      id: "gtm-item-outreach", day: 9, hours: 10, format: F.COLD_OUTREACH, channelId: CH.outreach, title: "Intro to office managers",
       bodyMd: "Hi {first_name},\n\nWe deliver freshly roasted beans to offices on a schedule you pick. Would a short call be useful?",
       campaignId: GTM_CAMPAIGN_IDS.weeklyBox, past: S.DRAFT, future: S.DRAFT,
       email: { to: ["office-managers@lists.example.com"], subject: "Fresh beans for your office" },
     },
     {
-      id: "gtm-item-changelog", day: 22, hours: 10, format: F.OTHER, channelId: CH.blog, title: "What's new: skip a week from the app",
+      id: "gtm-item-changelog", day: -3, hours: 10, format: F.OTHER, channelId: CH.blog, title: "What's new: skip a week from the app",
       bodyMd: "Subscribers can now skip a single week from the app without pausing the whole subscription.",
       campaignId: GTM_CAMPAIGN_IDS.tastingClub, past: S.PUBLISHED, future: S.DRAFT,
     },
     {
-      id: "gtm-item-live-tasting", day: 24, hours: 17, format: F.VIDEO, channelId: CH.youtube, title: "Live tasting: three origins in thirty minutes",
+      id: "gtm-item-live-tasting", day: 12, hours: 17, format: F.VIDEO, channelId: CH.youtube, title: "Live tasting: three origins in thirty minutes",
       bodyMd: "A 30-minute live session: brew three origins side by side, then questions.",
       campaignId: GTM_CAMPAIGN_IDS.tastingClub, ideaId: "gtm-idea-live-tasting", past: S.PAUSED, future: S.DRAFT,
     },
     {
-      id: "gtm-item-customer-quote", day: 25, hours: 11, format: F.SHORT_POST, channelId: CH.linkedin, title: "Customer quote: from supermarket beans to the Weekly Box",
+      id: "gtm-item-customer-quote", day: 15, hours: 11, format: F.SHORT_POST, channelId: CH.linkedin, title: "Customer quote: from supermarket beans to the Weekly Box",
       bodyMd: "\"I did not know coffee could taste like this.\" (sample quote, not a real customer)",
       campaignId: GTM_CAMPAIGN_IDS.tastingClub, past: S.PUBLISHED, future: S.DRAFT,
     },
     {
-      id: "gtm-item-pricing-explained", day: 26, hours: 9, format: F.LONG_POST, channelId: CH.blog, title: "Pricing explained: what the Sipper plan costs",
+      id: "gtm-item-pricing-explained", day: 20, hours: 9, format: F.LONG_POST, channelId: CH.blog, title: "Pricing explained: what the Sipper plan costs",
       bodyMd: "# Pricing explained\n\nThe Sipper plan is $19 per month, billed monthly. It used to be $15 per month, but that price is retired.\n\nShipping on every Weekly Box is free.",
       ideaId: "gtm-idea-pricing-faq", past: S.PAUSED, future: S.REVIEW,
     },
     {
-      id: "gtm-item-backlog-page", day: 0, hours: 9, format: F.LONG_POST, channelId: CH.blog, title: "Backlog: a page on storing beans at home",
+      id: "gtm-item-backlog-page", day: null, hours: 9, format: F.LONG_POST, channelId: CH.blog, title: "Backlog: a page on storing beans at home",
       bodyMd: "Not scheduled yet. Outline: where to keep beans, what a valve bag does, and how to tell when a bag has gone flat.",
       past: S.DRAFT, future: S.DRAFT,
     },
@@ -483,7 +481,7 @@ export function gtmSampleData(nowMs: number): GtmSampleData {
 
   const channelKey = (id?: string) => channels.find((c) => c.id === id)?.key ?? "site";
   const items: GtmItem[] = specs.map((spec) => {
-    const scheduled = spec.day > 0 ? onDay(spec.day, spec.hours) : null;
+    const scheduled = spec.day === null ? null : at(spec.day, spec.hours);
     const status = spec.held ? S.APPROVED : scheduled && scheduled.getTime() < nowMs ? spec.past : spec.future;
     const created = scheduled ? new Date(scheduled.getTime() - 6 * 24 * 3600 * 1000) : at(-5, 11);
     const sent = status === S.SENT;

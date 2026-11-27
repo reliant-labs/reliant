@@ -722,10 +722,16 @@ const SURFACES: Surface[] = [
     ready: (page) => page.getByText('Weekly Box launch').first(),
   },
   {
+    // The sample's Show HN item is dated today, so it is on the month grid at
+    // desktop width and first in the phone's "Coming up" list, which is the
+    // only place it is legible at 390px (the grid is narrow and scrolls).
     name: 'gtm-calendar',
     path: '/gtm/calendar',
     on: ['desktop', 'mobile'],
-    ready: (page) => page.getByText('Show HN: the grind-size calculator we built for subscribers').first(),
+    ready: (page) =>
+      page.viewportSize()!.width > 768
+        ? page.getByText('Show HN: the grind-size calculator we built for subscribers').first()
+        : page.getByRole('region', { name: 'Coming up' }).getByText('Show HN: the grind-size calculator we built for subscribers'),
   },
   {
     name: 'gtm-positioning',
