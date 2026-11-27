@@ -354,18 +354,19 @@ function pageRequest<R extends { scope?: object; pageToken?: string }>(first: R,
 
 /**
  * The window the first page was read over: the server's (effective_time_range),
- * else, from a server that names none, the preset as of the answer.
+ * else, from a server that names none, the absolute bounds sent with the request.
  */
-function firstPageWindow(res: { effectiveTimeRange?: { start?: Timestamp; end?: Timestamp } }, page: PageParam | null, lastMs: number): TimeWindow {
-  return page?.window ?? effectiveWindowOf(res) ?? windowAsOfNow(lastMs);
+function firstPageWindow(res: { effectiveTimeRange?: { start?: Timestamp; end?: Timestamp } }, page: PageParam | null, pinned: TimeWindow): TimeWindow {
+  return page?.window ?? effectiveWindowOf(res) ?? pinned;
 }
 
 /**
  * The logs, newest first, a page at a time. Hand-written over the generated
  * client rather than useSearchLogsInfinite: a generated paged read sends the
  * first page's request again with only the page token changed, and a later
- * page must also carry the first page's resolved window (the first sends the
- * relative preset). Keyed like the generated read of the first page, so
+ * page must also carry the first page's resolved window. Page one pins absolute
+ * bounds at fetch time; the key keeps the relative preset so refetches read anew.
+ * Keyed like the generated read of the first page, so
  * ObservabilityService's invalidations reach it.
  */
 export function useSearchLogs(scope: ObsScope | null, filters: LogFilters, live: boolean) {
@@ -385,14 +386,17 @@ export function useSearchLogs(scope: ObsScope | null, filters: LogFilters, live:
     queryKey,
     queryFn: async (context): Promise<SearchLogsResult & { window: TimeWindow }> => {
       const page = context.pageParam;
-      const res = await observabilityClient(context).searchLogs(pageRequest(request, page), obsCall({ signal: context.signal }));
-      return { ...toSearchLogs(res, page?.cursor), window: firstPageWindow(res, page, window.lastMs) };
+      // A refetch starts at the null first-page param; React Query derives each
+      // subsequent param from the freshly fetched page, not the retained data.
+      const pinned = page ?? { cursor: "", window: windowAsOfNow(window.lastMs) };
+      const res = await observabilityClient(context).searchLogs(pageRequest(request, pinned), obsCall({ signal: context.signal }));
+      return { ...toSearchLogs(res, page?.cursor), window: firstPageWindow(res, page, pinned.window) };
     },
     initialPageParam: null as PageParam | null,
     getNextPageParam: (last) => (last.nextCursor ? { cursor: last.nextCursor, window: last.window } : undefined),
     enabled: !!scope,
-    // While tailing, older pages would be re-fetched on every tick; keep just the newest.
-    maxPages: live ? 1 : undefined,
+    // Retain page one (and its null param) so a full refetch always starts a
+    // fresh interval, including when live tail follows a paged read.
     staleTime: 10_000,
     retry: obsRetry, retryDelay: obsRetryDelay,
   });
