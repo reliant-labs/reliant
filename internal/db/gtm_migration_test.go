@@ -142,6 +142,11 @@ func TestMigrate_GtmTablesHoldTheirInvariants(t *testing.T) {
 		refused(t, "gtm_channels_connection_id_not_empty", `UPDATE gtm_channels SET connection_id = '' WHERE id = 'h1'`)
 		require.NoError(t, exec(`UPDATE gtm_channels SET connection_id = 'conn-1', channel_types = '{inbox,newsletter}' WHERE id = 'h1'`))
 		refused(t, "gtm_channels_channel_types_not_empty", `UPDATE gtm_channels SET channel_types = '{forum,""}' WHERE id = 'h2'`)
+		refused(t, "gtm_channels_channel_types_not_empty", `UPDATE gtm_channels SET channel_types = ARRAY['forum', NULL]::TEXT[] WHERE id = 'h2'`)
+		refused(t, "gtm_channels_channel_types_slugs", `UPDATE gtm_channels SET channel_types = '{Forum}' WHERE id = 'h2'`)
+		refused(t, "gtm_channels_channel_types_slugs", `UPDATE gtm_channels SET channel_types = '{"a b"}' WHERE id = 'h2'`)
+		refused(t, "gtm_channels_channel_types_slugs", `UPDATE gtm_channels SET channel_types = ARRAY[repeat('a', 33)] WHERE id = 'h2'`)
+		require.NoError(t, exec(`UPDATE gtm_channels SET channel_types = '{forum,community-post}' WHERE id = 'h2'`))
 		// A key may be renamed, never onto another channel's.
 		require.NoError(t, exec(`UPDATE gtm_channels SET key = 'hn' WHERE id = 'h2'`))
 		refused(t, "gtm_channels_org_id_key_key", `UPDATE gtm_channels SET key = 'email' WHERE id = 'h2'`)
@@ -197,6 +202,30 @@ func TestMigrate_GtmTablesHoldTheirInvariants(t *testing.T) {
 		require.NoError(t, raw.QueryRow(`SELECT id, name FROM gtm_strategy_library WHERE org_id = 'org-a' AND key = 'sample-play'`).Scan(&id, &name))
 		require.Equal(t, "l1", id)
 		require.Equal(t, "Sample play v2", name)
+	})
+
+	t.Run("a token's import never prunes; its prune waits for a person", func(t *testing.T) {
+		const req = `(id, org_id, requested_by, credential_kind, source_revision, remove_keys)`
+		require.NoError(t, exec(`INSERT INTO gtm_library_prune_requests `+req+` VALUES ('r1', 'org-a', 'u1', 'GTM_CREDENTIAL_KIND_TOKEN', 'rev2', '{sample-tactic}')`))
+		require.NoError(t, exec(`INSERT INTO gtm_library_prune_requests `+req+` VALUES ('r9', 'org-b', 'u1', 'GTM_CREDENTIAL_KIND_TOKEN', 'rev2', '{x}')`))
+		refused(t, "gtm_library_prune_requests_remove_keys_check", `INSERT INTO gtm_library_prune_requests `+req+` VALUES ('r2', 'org-a', 'u1', 'GTM_CREDENTIAL_KIND_TOKEN', 'rev2', '{}')`)
+		refused(t, "gtm_library_prune_requests_credential_kind_check", `INSERT INTO gtm_library_prune_requests `+req+` VALUES ('r2', 'org-a', 'u1', 'GTM_CREDENTIAL_KIND_UNSPECIFIED', 'rev2', '{x}')`)
+		// A decision is a person's, with its time; PENDING and EXPIRED carry none.
+		refused(t, "gtm_library_prune_requests_decision", `UPDATE gtm_library_prune_requests SET status = 'GTM_PRUNE_REQUEST_STATUS_CONFIRMED' WHERE id = 'r1'`)
+		refused(t, "gtm_library_prune_requests_decided_together", `UPDATE gtm_library_prune_requests SET status = 'GTM_PRUNE_REQUEST_STATUS_CONFIRMED', decided_by = 'u2' WHERE id = 'r1'`)
+		refused(t, "gtm_library_prune_requests_decision", `UPDATE gtm_library_prune_requests SET decided_by = 'u2', decided_at = now() WHERE id = 'r1'`)
+		require.NoError(t, exec(`UPDATE gtm_library_prune_requests SET status = 'GTM_PRUNE_REQUEST_STATUS_EXPIRED' WHERE id = 'r9'`))
+		refused(t, "gtm_library_prune_requests_decision", `UPDATE gtm_library_prune_requests SET decided_by = 'u2', decided_at = now() WHERE id = 'r9'`)
+
+		const imp = `(id, org_id, actor_user_id, credential_kind, source_revision, created, updated, unchanged, pruned, prune_request_id)`
+		require.NoError(t, exec(`INSERT INTO gtm_library_imports `+imp+` VALUES ('m1', 'org-a', 'u1', 'GTM_CREDENTIAL_KIND_TOKEN', 'rev2', 0, 1, 1, 0, 'r1')`))
+		refused(t, "gtm_library_imports_token_never_prunes", `INSERT INTO gtm_library_imports `+imp+` VALUES ('m2', 'org-a', 'u1', 'GTM_CREDENTIAL_KIND_TOKEN', 'rev2', 0, 0, 0, 1, NULL)`)
+		refused(t, "gtm_library_imports_request_is_token", `INSERT INTO gtm_library_imports `+imp+` VALUES ('m2', 'org-a', 'u1', 'GTM_CREDENTIAL_KIND_PERSON', 'rev2', 0, 0, 0, 0, 'r1')`)
+		refused(t, "gtm_library_imports_prune_request_same_org_fkey", `INSERT INTO gtm_library_imports `+imp+` VALUES ('m2', 'org-a', 'u1', 'GTM_CREDENTIAL_KIND_TOKEN', 'rev2', 0, 0, 0, 0, 'r9')`)
+		refused(t, "gtm_library_imports_created_check", `INSERT INTO gtm_library_imports `+imp+` VALUES ('m2', 'org-a', 'u1', 'GTM_CREDENTIAL_KIND_PERSON', 'rev2', -1, 0, 0, 0, NULL)`)
+		// A person-class import prunes at once.
+		require.NoError(t, exec(`INSERT INTO gtm_library_imports `+imp+` VALUES ('m3', 'org-a', 'u2', 'GTM_CREDENTIAL_KIND_PERSON', 'rev3', 0, 0, 2, 1, NULL)`))
+		require.NoError(t, exec(`UPDATE gtm_library_prune_requests SET status = 'GTM_PRUNE_REQUEST_STATUS_CONFIRMED', decided_by = 'u2', decided_at = now() WHERE id = 'r1'`))
 	})
 
 	t.Run("a verified claim carries its evidence", func(t *testing.T) {

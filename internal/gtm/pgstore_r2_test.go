@@ -185,6 +185,82 @@ func TestPGStoreR2(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, "alpha", kept.Strategy.LibraryKey)
 	})
+
+	t.Run("a token's prune is staged, audited and confirmed key by key", func(t *testing.T) {
+		pb := Actor{UserID: "u-b", OrgID: orgB, Kind: ActorPerson}
+		tok := pb
+		tok.ViaToken = true
+		entries := []LibraryEntry{libEntry("alpha", CategoryLaunchesPR), libEntry("beta", CategoryLaunchesPR), libEntry("gamma", CategoryLaunchesPR)}
+		_, err := svc.ImportStrategyLibrary(ctx, pb, ImportStrategyLibraryInput{SourceRevision: "r1", Entries: entries})
+		require.NoError(t, err)
+		staged, err := svc.ImportStrategyLibrary(ctx, tok, ImportStrategyLibraryInput{SourceRevision: "ci-1", Entries: entries[:1], Prune: true, AllKeys: []string{"alpha"}})
+		require.NoError(t, err)
+		assert.Zero(t, staged.Pruned)
+		assert.Equal(t, []string{"beta", "gamma"}, staged.WouldRemove)
+		require.NotEmpty(t, staged.PruneRequestID)
+		keys, err := st.LibraryKeysNotIn(ctx, orgB, []string{"alpha"})
+		require.NoError(t, err)
+		assert.Equal(t, []string{"beta", "gamma"}, keys, "nothing removed")
+
+		time.Sleep(2 * time.Millisecond)
+		again, err := svc.ImportStrategyLibrary(ctx, tok, ImportStrategyLibraryInput{SourceRevision: "ci-2", Entries: entries[2:]})
+		require.NoError(t, err)
+		assert.Equal(t, 1, again.Unchanged)
+		gamma, err := st.GetLibraryEntry(ctx, orgB, "gamma")
+		require.NoError(t, err)
+		assert.Equal(t, "ci-2", gamma.SourceRevision, "an unchanged entry's stamps move")
+
+		pending, err := svc.ListLibraryPruneRequests(ctx, pb, ListLibraryPruneRequestsInput{Status: PruneRequestPending})
+		require.NoError(t, err)
+		require.Len(t, pending.Requests, 1)
+		assert.True(t, gamma.ImportedAt.After(pending.Requests[0].CreatedAt))
+		res, err := svc.ConfirmLibraryPrune(ctx, pb, ConfirmLibraryPruneInput{RequestID: staged.PruneRequestID})
+		require.NoError(t, err)
+		assert.Equal(t, 1, res.Removed, "beta; gamma was imported again since")
+		assert.Equal(t, PruneRequestConfirmed, res.Request.Status)
+		keys, err = st.LibraryKeysNotIn(ctx, orgB, nil)
+		require.NoError(t, err)
+		assert.Equal(t, []string{"alpha", "gamma"}, keys)
+		require.ErrorIs(t, st.DecidePruneRequest(ctx, orgB, staged.PruneRequestID, PruneRequestCancelled, "u", now), ErrPruneRequestNotPending)
+
+		audit, err := svc.ListLibraryImports(ctx, pb, ListLibraryImportsInput{})
+		require.NoError(t, err)
+		require.Len(t, audit.Imports, 3)
+		assert.Equal(t, []CredentialKind{CredentialToken, CredentialToken, CredentialPerson},
+			[]CredentialKind{audit.Imports[0].CredentialKind, audit.Imports[1].CredentialKind, audit.Imports[2].CredentialKind}, "newest first")
+		assert.Equal(t, staged.PruneRequestID, audit.Imports[1].PruneRequestID)
+
+		var ve *ValidationError
+		require.ErrorAs(t, st.CreateLibraryImport(ctx, &store.GtmLibraryImport{ID: "imp-x", OrgID: orgB, ActorUserID: "u", CredentialKind: string(CredentialToken),
+			SourceRevision: "r", Pruned: 1, CreatedAt: now}), &ve, "a token never prunes, at the table too")
+
+		old := &store.GtmLibraryPruneRequest{ID: "pr-old", OrgID: orgB, RequestedBy: "u", CredentialKind: string(CredentialToken), SourceRevision: "r",
+			RemoveKeys: []string{"alpha"}, Status: string(PruneRequestPending), CreatedAt: now.Add(-8 * 24 * time.Hour)}
+		require.NoError(t, st.CreatePruneRequest(ctx, old))
+		cutoff := now.Add(-LibraryPruneRequestTTL)
+		for status, want := range map[PruneRequestStatus][]string{
+			PruneRequestPending:   nil,
+			PruneRequestExpired:   {"pr-old"},
+			PruneRequestConfirmed: {staged.PruneRequestID},
+			"":                    {staged.PruneRequestID, "pr-old"},
+		} {
+			rows, err := st.ListPruneRequests(ctx, PruneRequestFilter{OrgID: orgB, Status: status, ExpiredAtOrBefore: cutoff})
+			require.NoError(t, err, status)
+			var ids []string
+			for _, r := range rows {
+				ids = append(ids, r.ID)
+			}
+			assert.Equal(t, want, ids, status)
+		}
+		_, err = svc.ConfirmLibraryPrune(ctx, pb, ConfirmLibraryPruneInput{RequestID: "pr-old"})
+		require.ErrorIs(t, err, ErrPruneRequestExpired)
+		got, err := st.GetPruneRequest(ctx, orgB, "pr-old")
+		require.NoError(t, err)
+		assert.Equal(t, string(PruneRequestExpired), got.Status)
+		assert.Nil(t, got.DecidedAt)
+		_, err = st.GetLibraryEntry(ctx, orgB, "alpha")
+		require.NoError(t, err, "an expired request removes nothing")
+	})
 }
 
 func channelByKey(t *testing.T, chs []Channel, key string) Channel {

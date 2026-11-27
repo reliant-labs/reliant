@@ -170,10 +170,11 @@ type Service interface {
 	// row. An expired PENDING asset is ErrAssetUploadExpired, and deleted.
 	ConfirmAssetUpload(ctx context.Context, actor Actor, in ConfirmAssetUploadInput) (Asset, error)
 	// GetAssetDownload returns a short-lived URL for a READY asset: inline
-	// for raster images and mp4/webm, an attachment otherwise.
+	// for raster images and mp4/webm, an attachment otherwise. A READY row
+	// whose object is missing is ErrAssetNotReady.
 	GetAssetDownload(ctx context.Context, actor Actor, in GetAssetDownloadInput) (AssetDownload, error)
-	// DeleteAsset deletes an asset, in any status: its objects, then its
-	// row. A person's call.
+	// DeleteAsset deletes an asset, in any status: its row, then its
+	// objects (final and staging). A person's call.
 	DeleteAsset(ctx context.Context, actor Actor, in DeleteAssetInput) error
 	// AttachFromAttachment copies one of the actor's chat attachments into
 	// a READY asset of an item or a campaign (MaxCopiedAssetBytes), with the
@@ -185,9 +186,29 @@ type Service interface {
 	ListStrategyLibrary(ctx context.Context, actor Actor, in ListStrategyLibraryInput) (ListStrategyLibraryResult, error)
 	// GetStrategyLibraryEntry returns one library entry by key.
 	GetStrategyLibraryEntry(ctx context.Context, actor Actor, in GetStrategyLibraryEntryInput) (LibraryEntry, error)
-	// ImportStrategyLibrary upserts a batch of entries by key (a person's
-	// act), optionally pruning the keys not in it.
+	// ImportStrategyLibrary upserts a batch of entries by key, optionally
+	// pruning the org's keys not in AllKeys, and records the call
+	// (ListLibraryImports). A person's act, the one a token may make
+	// (Actor.ViaToken): a token only upserts, and its prune stages a
+	// request (PruneRequestID, WouldRemove) that a person confirms or
+	// cancels; a person-class prune removes at once. Every key named has its
+	// imported_at moved, changed or not.
 	ImportStrategyLibrary(ctx context.Context, actor Actor, in ImportStrategyLibraryInput) (ImportStrategyLibraryResult, error)
+	// ListLibraryImports lists the org's import audit, newest first.
+	ListLibraryImports(ctx context.Context, actor Actor, in ListLibraryImportsInput) (ListLibraryImportsResult, error)
+	// ListLibraryPruneRequests lists the org's prune requests, newest
+	// first; a PENDING one past LibraryPruneRequestTTL is EXPIRED.
+	ListLibraryPruneRequests(ctx context.Context, actor Actor, in ListLibraryPruneRequestsInput) (ListLibraryPruneRequestsResult, error)
+	// ConfirmLibraryPrune carries out a PENDING prune request: a person
+	// through a person-class credential only. It removes only the request's
+	// keys still in the library and not imported again since the request
+	// was made, and records it CONFIRMED. A request already decided is
+	// ErrPruneRequestNotPending; an expired one ErrPruneRequestExpired
+	// (recorded EXPIRED).
+	ConfirmLibraryPrune(ctx context.Context, actor Actor, in ConfirmLibraryPruneInput) (ConfirmLibraryPruneResult, error)
+	// CancelLibraryPrune records a PENDING prune request CANCELLED, removing
+	// nothing; refused as ConfirmLibraryPrune is.
+	CancelLibraryPrune(ctx context.Context, actor Actor, in CancelLibraryPruneInput) (LibraryPruneRequest, error)
 	// UseLibraryStrategy makes a DRAFT strategy from a library entry, and
 	// optionally a first DRAFT campaign planning the matching channels.
 	UseLibraryStrategy(ctx context.Context, actor Actor, in UseLibraryStrategyInput) (UseLibraryStrategyResult, error)
@@ -222,6 +243,10 @@ type AssetStore interface {
 	Put(ctx context.Context, key string, r io.Reader, opts PutOptions) error
 	// Delete removes key; a missing object is not an error.
 	Delete(ctx context.Context, key string) error
+	// Stat reports key's size, without reading it (a HEAD); a missing
+	// object is ErrObjectNotFound. GetAssetDownload asks it before
+	// presigning, so a READY row whose bytes are gone is not served.
+	Stat(ctx context.Context, key string) (size int64, err error)
 	// PresignGet returns a presigned GET of key, shaped by opts. Every
 	// response it signs MUST carry X-Content-Type-Options: nosniff,
 	// Content-Type opts.ContentType, and a Content-Disposition (inline or
@@ -438,6 +463,30 @@ type Store interface {
 	// PruneLibrary removes orgID's entries whose key is not in keep, and
 	// says how many.
 	PruneLibrary(ctx context.Context, orgID string, keep []string) (int64, error)
+	// TouchLibraryEntries stamps orgID's entries keys as imported again:
+	// source_revision, imported_by and imported_at, nothing else.
+	TouchLibraryEntries(ctx context.Context, orgID string, keys []string, sourceRevision, importedBy string, at time.Time) error
+	// LibraryKeysNotIn returns orgID's entry keys that are not in keep,
+	// sorted.
+	LibraryKeysNotIn(ctx context.Context, orgID string, keep []string) ([]string, error)
+	// PruneLibraryKeys removes orgID's entries keys whose imported_at is at
+	// or before importedAtOrBefore, and says how many.
+	PruneLibraryKeys(ctx context.Context, orgID string, keys []string, importedAtOrBefore time.Time) (int64, error)
+
+	// CreateLibraryImport inserts an import audit row.
+	CreateLibraryImport(ctx context.Context, row *store.GtmLibraryImport) error
+	// ListLibraryImports returns the audit rows f matches, newest first.
+	ListLibraryImports(ctx context.Context, f LibraryImportFilter) ([]*store.GtmLibraryImport, error)
+	// CreatePruneRequest inserts a PENDING prune request.
+	CreatePruneRequest(ctx context.Context, row *store.GtmLibraryPruneRequest) error
+	// GetPruneRequest returns orgID's prune request id.
+	GetPruneRequest(ctx context.Context, orgID, id string) (*store.GtmLibraryPruneRequest, error)
+	// ListPruneRequests returns the prune requests f matches, newest first.
+	ListPruneRequests(ctx context.Context, f PruneRequestFilter) ([]*store.GtmLibraryPruneRequest, error)
+	// DecidePruneRequest moves orgID's PENDING request id to status:
+	// CONFIRMED and CANCELLED record decidedBy and at, EXPIRED neither. A
+	// request that is not PENDING is ErrPruneRequestNotPending.
+	DecidePruneRequest(ctx context.Context, orgID, id string, status PruneRequestStatus, decidedBy string, at time.Time) error
 }
 
 // Deps are the service's collaborators.

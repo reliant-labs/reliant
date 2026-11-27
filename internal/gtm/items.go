@@ -90,7 +90,7 @@ func (s *service) CreateItem(ctx context.Context, actor Actor, in CreateItemInpu
 	if err := firstErr(
 		checkLen("title", in.Title, 1, MaxTitleLen),
 		checkLen("body_md", in.BodyMD, 0, MaxBodyLen),
-		checkLen("email_subject", in.EmailSubject, 0, maxEmailSubjectLen),
+		checkSubject(in.EmailSubject),
 		checkRecipients(in.EmailTo),
 		checkEmailFields(in.Format, in.EmailTo, in.EmailSubject),
 	); err != nil {
@@ -232,7 +232,7 @@ func checkItemUpdate(in UpdateItemInput) error {
 		checks = append(checks, checkURL("published_url", *in.PublishedURL))
 	}
 	if in.EmailSubject != nil {
-		checks = append(checks, checkLen("email_subject", *in.EmailSubject, 0, maxEmailSubjectLen))
+		checks = append(checks, checkSubject(*in.EmailSubject))
 	}
 	if in.EmailTo != nil {
 		checks = append(checks, checkRecipients(*in.EmailTo))
