@@ -10,6 +10,7 @@
  */
 
 import { create } from "@bufbuild/protobuf";
+import { Code, ConnectError } from "@connectrpc/connect";
 import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -31,7 +32,7 @@ import {
 
 import { renderGtm, TEST_ORG } from "../../shared/__tests__/gtmHarness";
 import { CampaignsView, columnsOf, countsOf } from "../CampaignsPage";
-import { coverageLabel, coverageSummary } from "../Coverage";
+import { coverageLabel, coverageSummary, gapGroups } from "../Coverage";
 
 const toasts = vi.hoisted(() => ({ info: vi.fn(), warning: vi.fn(), error: vi.fn() }));
 vi.mock("@/lib/toast-manager", () => ({ toast: toasts }));
@@ -114,7 +115,9 @@ describe("CampaignsView", () => {
   it("shows the org's campaigns with their counts", async () => {
     renderGtm(<CampaignsView />, reads(), { path: "/gtm/campaigns" });
     expect(await screen.findByText("Sites launch")).toBeInTheDocument();
-    expect(screen.getByRole("radio", { name: /Sites launch/ })).toHaveAttribute("aria-checked", "true");
+    // Toggle buttons, one pressed: each is a tab stop, with no radio semantics to half-implement.
+    expect(screen.getByRole("button", { name: /Sites launch/, pressed: true })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Newsletter/, pressed: false })).toBeInTheDocument();
     expect(await screen.findByText("1 idea")).toBeInTheDocument();
     expect(screen.getByText("2 emails")).toBeInTheDocument();
   });
@@ -135,6 +138,21 @@ describe("CampaignsView", () => {
     expect(update).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "Approve" }));
     await waitFor(() => expect(update).toHaveBeenCalledWith(expect.objectContaining({ id: "item-2", expectedRevision: 2, status: GtmItemStatus.APPROVED })));
+  });
+
+  it("shows the claim check in the approval dialog, as the item's drawer does", async () => {
+    const withBody = create(GtmItemSchema, { ...email, bodyMd: "We are SOC 2 certified." });
+    const check = vi.fn(() => ({ findings: [{ mention: "SOC 2", blocking: true, reason: "no verified fact" }], blocking: true }));
+    renderGtm(
+      <CampaignsView />,
+      { ...reads(), "GtmService.ListItems": { response: { items: [withBody] } }, "GtmService.CheckClaims": check },
+      { path: "/gtm/campaigns" },
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "move Invite email to approved" }));
+    const dialog = await screen.findByTestId("person-action-dialog-approve");
+    expect(await within(dialog).findByText("· 1 blocking")).toBeInTheDocument();
+    expect(within(dialog).getByText("SOC 2")).toBeInTheDocument();
+    expect(check).toHaveBeenCalledWith(expect.objectContaining({ orgId: TEST_ORG, text: "We are SOC 2 certified." }));
   });
 
   it("sends and publishes nothing: a move into Out only explains", async () => {
@@ -193,10 +211,27 @@ describe("coverage", () => {
     const get = vi.fn(() => ({ campaign, coverage }));
     renderGtm(<CampaignsView />, { ...reads(), "GtmService.GetCampaign": get }, { path: "/gtm/campaigns" });
     const panel = await screen.findByTestId("gtm-campaign-coverage");
-    expect(await within(panel).findByText("Reddit · Long post")).toBeInTheDocument();
-    expect(within(panel).getByText("planned, nothing drafted")).toBeInTheDocument();
+    expect(await within(panel).findByText("Blog · Long post")).toBeInTheDocument();
     expect(within(panel).getByText("Not planned")).toBeInTheDocument();
+    // The gaps read one line per channel, and expand to each pair.
+    const gaps = within(panel).getByTestId("gtm-coverage-gaps");
+    expect(within(gaps).getByText("Reddit:")).toBeInTheDocument();
+    expect(within(gaps).getByText("Long post")).toBeInTheDocument();
+    fireEvent.click(within(gaps).getByRole("button", { name: "Show each pair" }));
+    expect(within(gaps).getByText("planned, nothing drafted")).toBeInTheDocument();
     expect(get).toHaveBeenCalledWith(expect.objectContaining({ orgId: TEST_ORG, id: "cmp-1" }));
+  });
+});
+
+describe("gapGroups", () => {
+  it("gathers a campaign's planned pairs with nothing drafted per channel, in coverage order", () => {
+    const rows = [
+      create(GtmCoverageRowSchema, { channelId: "ch-reddit", format: GtmItemFormat.VIDEO, planned: true }),
+      create(GtmCoverageRowSchema, { channelId: "ch-blog", format: GtmItemFormat.LONG_POST, planned: true, total: 1, counts: [{ status: GtmItemStatus.DRAFT, count: 1 }] }),
+      create(GtmCoverageRowSchema, { channelId: "ch-reddit", format: GtmItemFormat.EMAIL, planned: true }),
+      create(GtmCoverageRowSchema, { channelId: "", format: GtmItemFormat.SHORT_POST, planned: true }),
+    ];
+    expect(gapGroups(rows, [blog, reddit]).map((g) => `${g.channel}: ${g.formats.join(", ")}`)).toEqual(["Reddit: Video, Email", "Any channel: Short post"]);
   });
 });
 
@@ -229,5 +264,29 @@ describe("creating and editing a campaign", () => {
     expect(req).toEqual(expect.objectContaining({ orgId: TEST_ORG, id: "cmp-1", expectedRevision: 1, strategyId: "str-1" }));
     expect(req.plannedChannelIds?.ids).toEqual(["ch-blog"]);
     expect(req.plannedFormats?.formats).toEqual([GtmItemFormat.LONG_POST]);
+  });
+
+  it("after a conflict, edits the campaign as it is now, on its current revision", async () => {
+    let server = campaign;
+    const updateC = vi.fn((req: unknown) => {
+      if ((req as UpdateCampaignRequest).expectedRevision === 1) {
+        server = create(GtmCampaignSchema, { ...campaign, goal: "300 sites", revision: 2 });
+        throw new ConnectError("revision moved", Code.Aborted);
+      }
+      return { campaign: server };
+    });
+    renderGtm(
+      <CampaignsView />,
+      { ...reads(), "GtmService.ListCampaigns": () => ({ campaigns: [server, other] }), "GtmService.UpdateCampaign": updateC },
+      { path: "/gtm/campaigns" },
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "Edit Sites launch" }));
+    fireEvent.click(within(await screen.findByTestId("gtm-campaign-form")).getByLabelText("Reddit"));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(toasts.warning).toHaveBeenCalled());
+    await waitFor(() => expect(within(screen.getByTestId("gtm-campaign-form")).getByLabelText("Goal")).toHaveValue("300 sites"));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(updateC).toHaveBeenCalledTimes(2));
+    expect(updateC).toHaveBeenLastCalledWith(expect.objectContaining({ expectedRevision: 2, goal: "300 sites" }));
   });
 });
