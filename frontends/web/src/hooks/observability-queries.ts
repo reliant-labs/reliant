@@ -453,7 +453,11 @@ export function assertTraceFiltersApplied(filters: TraceFilters, traces: TraceSu
   ignored(filters.backendVersion, (t) => t.backendBuilds.map((b) => b.version), "backend version");
 }
 
-/** The traces, a page at a time; hand-written over the generated client, as useSearchLogs is and for its reason. */
+/**
+ * The traces, a page at a time. The key carries the relative preset, but page
+ * one sends absolute bounds pinned at fetch time, so even a server without
+ * effective_time_range can paginate over exactly the same interval.
+ */
 export function useListTraces(scope: ObsScope | null, filters: TraceFilters) {
   const window = lastOf(filters.range, "traces");
   const request = listTracesRequest({
@@ -476,10 +480,13 @@ export function useListTraces(scope: ObsScope | null, filters: TraceFilters) {
     queryKey: observabilityServiceKeys.listTracesInfinite(request),
     queryFn: async (context): Promise<ListTracesResult & { window: TimeWindow }> => {
       const page = context.pageParam;
-      const res = await observabilityClient(context).listTraces(pageRequest(request, page), obsCall({ signal: context.signal }));
+      // Pin BEFORE page one, including on servers that do not echo the effective
+      // range. Keep the relative preset in the cache key so refetches read anew.
+      const pinned = page ?? { cursor: "", window: windowAsOfNow(window.lastMs) };
+      const res = await observabilityClient(context).listTraces(pageRequest(request, pinned), obsCall({ signal: context.signal }));
       const result = toListTraces(res);
       assertTraceFiltersApplied(filters, result.traces, filters.services.length > 0 || (scope?.filters.length ?? 0) > 0);
-      return { ...result, window: firstPageWindow(res, page, window.lastMs) };
+      return { ...result, window: page?.window ?? effectiveWindowOf(res) ?? pinned.window };
     },
     initialPageParam: null as PageParam | null,
     getNextPageParam: (last) => (last.nextCursor ? { cursor: last.nextCursor, window: last.window } : undefined),
