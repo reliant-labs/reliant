@@ -35,13 +35,22 @@ import (
 
 // ExecuteRunStepInput is the input for ExecuteRunStep activity
 type ExecuteRunStepInput struct {
-	WorkflowID     string                        `json:"workflow_id"`
-	ChatID         string                        `json:"chat_id" reliant:"-"`
-	StepID         string                        `json:"step_id"`
-	Command        string                        `json:"command"`
-	Timeout        int                           `json:"timeout"`                   // in milliseconds, default 5 minutes
-	LoopNodeID     string                        `json:"loop_node_id,omitempty"`    // Loop context: which loop node spawned this
-	LoopIteration  int                           `json:"loop_iteration"`            // Loop context: iteration index (0-indexed)
+	WorkflowID    string `json:"workflow_id"`
+	ChatID        string `json:"chat_id" reliant:"-"`
+	StepID        string `json:"step_id"`
+	Command       string `json:"command"`
+	Timeout       int    `json:"timeout"`                // in milliseconds, default 5 minutes
+	LoopNodeID    string `json:"loop_node_id,omitempty"` // Loop context: which loop node spawned this
+	LoopIteration int    `json:"loop_iteration"`         // Loop context: iteration index (0-indexed)
+	// NodePath is the node's fully-qualified dotted graph position
+	// ("gate.run" for a run node in loop gate's body), and Telemetry the run
+	// it works for. The handler never reads either: the ActivityWrapper reads
+	// them off this typed input for the step's row (step_executions.node_path
+	// and run_id). Without the fields, decoding the workflow's input map into
+	// this struct dropped both, so every run node inside a loop or a child
+	// workflow was recorded under its bare id ("run") and with no run id.
+	NodePath       string                        `json:"node_path,omitempty" reliant:"-"`
+	Telemetry      *activitytypes.RunTelemetry   `json:"telemetry,omitempty" reliant:"-"`
 	DaemonSelector *activitytypes.DaemonSelector `json:"daemon_selector,omitempty"` // Target daemon for execution
 	LogFile        string                        `json:"log_file,omitempty"`        // Redirect stdout+stderr to this file (daemon-side)
 	// Credentials is the node's `credentials` setting: "none" runs the command
