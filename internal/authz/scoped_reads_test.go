@@ -51,6 +51,11 @@ var userScopedReads = map[string]string{
 	// Deprecated forwarders still decide visibility through workflowdrafts.
 	"ListWorkflowDraftsByUser": readRepoChecks,
 
+	// Deprecated chat read forwarders retain the store's owner scope; callers
+	// must decide each row's org visibility before showing or acting on it.
+	"ListArchivedChats":       readCallersFilter,
+	"ListChats":               readCallersFilter,
+	"SearchChats":             readCallersFilter,
 	"ListMainWorktreesForUser": readCallersFilter,
 	"ListProjects":             readCallersFilter,
 	"ListRuns":                 readCallersFilter,

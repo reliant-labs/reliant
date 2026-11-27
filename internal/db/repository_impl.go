@@ -27,6 +27,36 @@ import (
 
 // ==================== Chats ====================
 
+// Deprecated: use store.ChatsWithActivityExtStore.ListChats.
+func (r *Repo) ListChats(ctx context.Context, filters core.ChatFilters) ([]*core.Chat, error) {
+	return store.ListChats(ctx, r.ORM(), filters)
+}
+
+// Deprecated: use store.ChatsWithActivityExtStore.SearchChats.
+func (r *Repo) SearchChats(ctx context.Context, filters core.ChatSearchFilters) ([]*core.Chat, error) {
+	return store.SearchChats(ctx, r.ORM(), filters)
+}
+
+// Deprecated: use store.ChatsWithActivityExtStore.ListArchivedChats.
+func (r *Repo) ListArchivedChats(ctx context.Context, userID string, org *core.OrgScope, page core.ArchivedChatPage) ([]*core.ArchivedChatInfo, bool, error) {
+	return store.ListArchivedChats(ctx, r.ORM(), userID, org, page)
+}
+
+// Deprecated: use store.MessageContentBlockExtStore.ListContentBlocksByIDs.
+func (r *Repo) ListContentBlocksByIDs(ctx context.Context, ids []string) ([]*core.MessageContentBlock, error) {
+	return store.ListContentBlocksByIDs(ctx, r.ORM(), ids)
+}
+
+// Deprecated: use store.MessageExtStore.ListMessagesByIDs.
+func (r *Repo) ListMessagesByIDs(ctx context.Context, ids []string) ([]*core.Message, error) {
+	return store.ListMessagesByIDs(ctx, r.ORM(), ids)
+}
+
+// Deprecated: use store.StepExecutionExtStore.ListStepExecutionRecordsForChat.
+func (r *Repo) ListStepExecutionRecordsForChat(ctx context.Context, chatID, nodePath string, limit int) ([]*core.StepExecution, error) {
+	return store.ListStepExecutionRecordsForChat(ctx, r.ORM(), chatID, nodePath, limit)
+}
+
 func (r *Repo) CreateChat(ctx context.Context, chat *Chat) error {
 	if chat == nil {
 		return fmt.Errorf("chat cannot be nil")
