@@ -82,6 +82,18 @@
 // set its own GOMAXPROCS), so past the slots' total the machine queues work
 // instead of running it all slower until it times out.
 //
+// The cap bounds a build; it does not make it yield. While the command runs
+// the wrapper also lowers its daemon command cgroup's cpu.weight (to
+// DefaultCPUWeight, 25 against every other command's 100), so the agents'
+// shells and dev servers beside it win the CPU they contend for, and its
+// memory.high (to DefaultMemoryHigh, 1.5x one slot's part of the memory), so
+// one build linking a dozen multi-GiB test binaries reclaims and slows
+// instead of taking the machine's memory — memory.high, never memory.max:
+// nothing is OOM-killed half way through (cgroup_bounds_linux.go). The knobs
+// are the daemon's RELIANT_HEAVY_CPU_WEIGHT (100 switches the weight off) and
+// RELIANT_HEAVY_MEMORY_HIGH (off, or a size), passed to the wrapper in its
+// environment.
+//
 //forge:exclude-contract: one concrete policy over exec.Cmd values (classify, rewrite) plus the slot wrapper this binary runs as; the slots themselves are forge/pkg/hostslot, and there is no second implementation to substitute
 package heavyjob
 
@@ -155,6 +167,14 @@ type Config struct {
 	// Share is the CPUs each slotted command runs on (see the package
 	// doc); zero derives it, DefaultShare, from the pool's capacity.
 	Share int
+	// CPUWeight is the cpu.weight each slotted command's cgroup is lowered
+	// to while it runs (cgroup_bounds_linux.go); zero is DefaultCPUWeight,
+	// and 100 (the kernel's default) or more lowers nothing.
+	CPUWeight int
+	// MemoryHigh is the memory.high, in bytes, each slotted command's cgroup
+	// is lowered to while it runs; zero derives it, DefaultMemoryHigh of the
+	// pool's capacity, and MemoryHighOff (any negative) bounds nothing.
+	MemoryHigh int64
 	// Admission, when set, may refuse a heavy command before it starts
 	// (internal/diskguard refuses them on a nearly full disk). It is asked
 	// whether or not the slots are on.
@@ -209,6 +229,9 @@ type Gate struct {
 	// share is Config.Share passed to the wrapper ("" when it derives the
 	// share itself).
 	share string
+	// boundsEnv is Config.CPUWeight and Config.MemoryHigh as the wrapper's
+	// environment (nothing for what it derives itself).
+	boundsEnv []string
 }
 
 // New builds a Gate. When heavy commands cannot be queued here — the limit is
@@ -231,6 +254,7 @@ func New(cfg Config) (*Gate, error) {
 		bgAdmission: cfg.BackgroundAdmission,
 		dir:         hostslot.Options{Env: cfg.Env}.BaseDir(),
 		capacity:    capy,
+		boundsEnv:   boundsEnv(cfg.CPUWeight, cfg.MemoryHigh),
 	}
 	if _, ok := lookup(cfg.Env, hostslot.SlotsEnv(hostslot.Heavy)); ok {
 		g.slots = strconv.Itoa(capy.Slots)
@@ -382,6 +406,9 @@ func (g *Gate) Prepare(cmd *exec.Cmd, job Job) (heavy bool, err error) {
 	if _, set := lookup(env, laneEnv); !set && g.Express(job) {
 		cmd.Env = append(cmd.Env, laneEnv+"="+laneExpress)
 	}
+	// The weight and memory bound ride in it too, for the same reason; the
+	// wrapper does not pass them on to the command.
+	cmd.Env = append(cmd.Env, g.boundsEnv...)
 	return true, nil
 }
 

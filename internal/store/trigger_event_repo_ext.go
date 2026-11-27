@@ -121,6 +121,9 @@ func GetTriggerEventByChatID(ctx context.Context, db orm.Context, chatID string)
 // once, and a later row naming it can only be a replay. Served by
 // idx_trigger_events_chat.
 func GetTriggerEventByChat(ctx context.Context, db orm.Context, kind core.TriggerEventKind, chatID string) (*core.TriggerEvent, error) {
+	if chatID == "" {
+		return nil, errors.New("chat ID cannot be empty")
+	}
 	return firstTriggerEvent(ctx, db, "get trigger event by chat",
 		orm.WhereEq(TriggerEventFieldKind, kind),
 		orm.WhereEq(TriggerEventFieldChatID, chatID),
@@ -848,6 +851,9 @@ func FiringsSinceLastUnmanagedSuccess(ctx context.Context, db orm.Context, userI
 // firings, so the events carry no body: Payload is empty, Sender and Origin
 // nil (triggerOutcomeColumns).
 func FiringsSinceLastSuccess(ctx context.Context, db orm.Context, userID string, triggerIDs []string, perTrigger int) (map[string][]*core.TriggerEventWithRun, error) {
+	if userID == "" {
+		return nil, fmt.Errorf("user ID cannot be empty")
+	}
 	return triggerFiringsByTrigger(ctx, db, "list firings since last success", firingsSinceLastSuccessSQL, userID, triggerIDs, perTrigger)
 }
 

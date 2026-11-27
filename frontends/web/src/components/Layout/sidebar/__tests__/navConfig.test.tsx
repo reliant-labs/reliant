@@ -378,7 +378,7 @@ describe("the nav's tour anchors", () => {
       const console = { project: "shopfront", page: { kind: "secrets" as const }, env: "prod", envs: [] };
       const { container } = render(<NavRenderer config={hybridNav} ctx={ctxAt(href, { console })} slots={{}} onNavigate={vi.fn()} />);
       const anchors = [...container.querySelectorAll("[data-tour]")].map((el) => el.getAttribute("data-tour"));
-      for (const id of ["forge-console-nav", "nav-overview", "nav-observability", "nav-deployments", "nav-tests", "nav-security", "nav-configure"]) {
+      for (const id of ["forge-console-nav", "nav-overview", "nav-observability", "nav-analytics", "nav-deployments", "nav-tests", "nav-data", "nav-security", "nav-configure"]) {
         expect(anchors, id).toContain(id);
       }
       // A group's anchor holds the group: its row, and its rows while open (Configure, on Secrets).

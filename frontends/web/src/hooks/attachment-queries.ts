@@ -84,5 +84,6 @@ export async function fetchAttachmentBlob(attachmentId: string): Promise<Blob> {
   if (!response.attachment) {
     throw new Error("Attachment not found");
   }
-  return new Blob([response.content], { type: response.attachment.mimeType });
+  // Decoded protobuf bytes are never SharedArrayBuffer-backed, which is all Blob refuses.
+  return new Blob([response.content as Uint8Array<ArrayBuffer>], { type: response.attachment.mimeType });
 }

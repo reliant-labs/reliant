@@ -140,6 +140,10 @@ const (
 	PipelineAttemptFix     PipelineAttemptStage = "fix"
 	PipelineAttemptGate    PipelineAttemptStage = "gate"
 	PipelineAttemptRespond PipelineAttemptStage = "respond"
+	// PipelineAttemptClose is a close of the PR, with its evidence's
+	// signature: a PR a person reopened is never closed again for the same
+	// evidence.
+	PipelineAttemptClose PipelineAttemptStage = "close"
 )
 
 // AllPipelineAttemptStages is every PipelineAttemptStage
@@ -149,6 +153,7 @@ var AllPipelineAttemptStages = []PipelineAttemptStage{
 	PipelineAttemptFix,
 	PipelineAttemptGate,
 	PipelineAttemptRespond,
+	PipelineAttemptClose,
 }
 
 // PipelineAttemptOutcome is how a finished attempt ended. A running attempt

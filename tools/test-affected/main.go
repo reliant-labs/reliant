@@ -146,7 +146,7 @@ func main() {
 	}
 	if cmd == "run" {
 		r := &runner{root: mustAbs(*root), out: os.Stdout, errOut: os.Stderr, dry: *dry, goP: *gotestP, jobs: *jobs, webFull: *webFullFlag, webShard: *webShardFlag,
-			slot: strings.Fields(os.Getenv("TEST_AFFECTED_SLOT")), capture: *captureFlag}
+			slot: strings.Fields(os.Getenv("TEST_AFFECTED_SLOT")), goVet: strings.Fields(os.Getenv("GO_TEST_VET")), capture: *captureFlag}
 		if err := r.setBudget(ctx, *budgetFlag, pl.Base); err != nil {
 			fmt.Fprintln(os.Stderr, "test-affected:", err)
 			os.Exit(2)
@@ -623,6 +623,11 @@ type runner struct {
 	// webShard is -web-shard: "i/n" runs vitest's shard i of n over the
 	// web step's files; empty runs them all.
 	webShard string
+	// goVet is GO_TEST_VET (Taskfile.yml says what it is): the root module's
+	// Go step carries it, so the merge gate, whose vet phase vets every
+	// package that step tests, runs it with -vet=off. The SDK module's step
+	// never does: no gate vets sdk/go, so go test's own vet is its only one.
+	goVet []string
 	// capture is -capture: the root module's Go step and the web step run
 	// through scripts/test-capture.sh, which records them with `forge test
 	// capture` (lanes captureLaneGo and captureLaneWeb) and exits with the
@@ -852,7 +857,7 @@ func (r *runner) rootGoSteps(pl *Plan) []step {
 func (r *runner) rootGoStepsOf(pl *Plan) []step {
 	// -timeout is per package binary and matches task test:short's (5m): the
 	// DB-backed packages run under -short too (sized in Taskfile.yml).
-	base := []string{"-buildvcs=false", "-short", "-timeout", "5m"}
+	base := append(append([]string{}, r.goVet...), "-buildvcs=false", "-short", "-timeout", "5m")
 	if r.goP > 0 {
 		base = append(base, "-p", fmt.Sprint(r.goP))
 	}

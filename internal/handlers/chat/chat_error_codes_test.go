@@ -46,7 +46,7 @@ func newChatService(t *testing.T, repo *chat.MockRepository, chats ...chataccess
 	if len(chats) > 0 {
 		access = chats[0]
 	}
-	return chat.NewTestChat(t, chat.WithChatDeps(chat.Deps{Repo: repo, Chats: access, Questions: &chat.MockQuestions{}, Spawns: &chat.MockSpawns{}, Selections: &chatselection.MockStore{}, Mailbox: &chat.MockMailbox{}, AgentMessages: &chat.MockAgentMessages{}, Messages: &chat.MockMessages{}, ToolBlocks: &chat.MockToolBlocks{}, Senders: &chat.MockSenders{}}))
+	return chat.NewTestChat(t, chat.WithChatDeps(chat.Deps{TriggerReads: &chat.MockTriggerReads{}, Repo: repo, Chats: access, Questions: &chat.MockQuestions{}, Spawns: &chat.MockSpawns{}, Selections: &chatselection.MockStore{}, Mailbox: &chat.MockMailbox{}, AgentMessages: &chat.MockAgentMessages{}, Messages: &chat.MockMessages{}, ToolBlocks: &chat.MockToolBlocks{}, Senders: &chat.MockSenders{}}))
 }
 
 func ownedChat(_ context.Context, id string) (*db.Chat, error) {

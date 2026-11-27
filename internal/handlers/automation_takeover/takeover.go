@@ -39,7 +39,7 @@ func dbError(op string, err error) error {
 // live member of are all NotFound (no telling an outsider what exists); a
 // member who is not an admin is PermissionDenied (org_admin_required).
 func (s *Service) adminTrigger(ctx context.Context, callerID, id string) (*core.Trigger, error) {
-	t, err := s.deps.Repo.GetTrigger(ctx, id)
+	t, err := s.deps.TriggerReads.GetTrigger(ctx, id)
 	if errors.Is(err, core.ErrTriggerNotFound) {
 		return nil, svcerr.NotFound("trigger")
 	}
