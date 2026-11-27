@@ -128,6 +128,14 @@ describe('shouldRedirectToMobile', () => {
     // The chat home filtered to a project is still the chat surface.
     expect(shouldRedirectToMobile(phone({ pathname: '/project/p-1' }))).toBe(true)
   })
+
+  it('leaves GTM on a phone: its pages fit one and have no /m twin', () => {
+    // Handing them off landed a phone on the chat list, with GTM out of reach.
+    for (const pathname of ['/gtm', '/gtm/ideas', '/gtm/ideas/idea-1', '/gtm/calendar', '/o/acme/gtm/strategy']) {
+      expect(shouldRedirectToMobile(phone({ pathname, search: '?view=week' })), pathname).toBe(false)
+    }
+    expect(shouldRedirectToMobile(phone({ pathname: '/gtmx' }))).toBe(true)
+  })
 })
 
 describe('mobilePathFor', () => {
