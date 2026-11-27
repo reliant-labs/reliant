@@ -179,8 +179,10 @@ CREATE TABLE gtm_ideas (
     library_key TEXT CONSTRAINT gtm_ideas_library_key_slug CHECK (library_key ~ '^[a-z0-9][a-z0-9_-]{0,127}$'),
     -- A JSON array of GtmTailorAnswer ({"question", "answer"}): the entry's
     -- tailor_questions answered for this business, at most 20.
+    -- Every element is an object whose question and answer are strings.
     tailor_answers JSONB NOT NULL DEFAULT '[]'
-        CONSTRAINT gtm_ideas_tailor_answers_array CHECK (jsonb_typeof(tailor_answers) = 'array' AND jsonb_array_length(tailor_answers) <= 20),
+        CONSTRAINT gtm_ideas_tailor_answers_array CHECK (jsonb_typeof(tailor_answers) = 'array' AND jsonb_array_length(tailor_answers) <= 20)
+        CONSTRAINT gtm_ideas_tailor_answers_shape CHECK (NOT jsonb_path_exists(tailor_answers, '$[*] ? (@.type() != "object" || !exists(@.question) || !exists(@.answer) || @.question.type() != "string" || @.answer.type() != "string")')),
     -- A tool-agnostic automation that carries it out (markdown); '' for none.
     suggested_workflow_md TEXT NOT NULL DEFAULT '',
     CONSTRAINT gtm_ideas_campaign_same_org_fkey FOREIGN KEY (org_id, campaign_id)
@@ -310,6 +312,8 @@ CREATE TABLE gtm_positioning (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     business_type TEXT NOT NULL DEFAULT ''
         CONSTRAINT gtm_positioning_business_type_known CHECK (business_type = '' OR business_type IN ('GTM_BUSINESS_TYPE_B2B_SAAS', 'GTM_BUSINESS_TYPE_B2C_APP', 'GTM_BUSINESS_TYPE_DEVELOPER_TOOLS', 'GTM_BUSINESS_TYPE_ECOMMERCE', 'GTM_BUSINESS_TYPE_MARKETPLACE', 'GTM_BUSINESS_TYPE_AGENCY_SERVICES', 'GTM_BUSINESS_TYPE_CREATOR_MEDIA', 'GTM_BUSINESS_TYPE_LOCAL_BUSINESS', 'GTM_BUSINESS_TYPE_OPEN_SOURCE', 'GTM_BUSINESS_TYPE_HARDWARE')),
+    -- Each model at most once: the service enforces it (a CHECK cannot
+    -- compare an array's elements with each other cheaply).
     business_models TEXT[] NOT NULL DEFAULT '{}'
         CONSTRAINT gtm_positioning_business_models_known CHECK (business_models <@ ARRAY['GTM_BUSINESS_MODEL_SUBSCRIPTION', 'GTM_BUSINESS_MODEL_USAGE_BASED', 'GTM_BUSINESS_MODEL_ONE_TIME', 'GTM_BUSINESS_MODEL_FREEMIUM', 'GTM_BUSINESS_MODEL_FREE_OSS', 'GTM_BUSINESS_MODEL_MARKETPLACE', 'GTM_BUSINESS_MODEL_SERVICES', 'GTM_BUSINESS_MODEL_AD_SUPPORTED']::TEXT[])
 );

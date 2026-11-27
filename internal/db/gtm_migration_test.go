@@ -189,6 +189,11 @@ func TestMigrate_GtmTablesHoldTheirInvariants(t *testing.T) {
 		refused(t, "gtm_ideas_library_key_slug", `UPDATE gtm_ideas SET library_key = 'Not A Key' WHERE id = 'i1'`)
 		refused(t, "gtm_ideas_library_key_slug", `UPDATE gtm_ideas SET library_key = '' WHERE id = 'i1'`)
 		refused(t, "gtm_ideas_tailor_answers_array", `UPDATE gtm_ideas SET tailor_answers = '{"question": "q"}' WHERE id = 'i1'`)
+		// Every element is an object with a string question and answer.
+		refused(t, "gtm_ideas_tailor_answers_shape", `UPDATE gtm_ideas SET tailor_answers = '["just text"]' WHERE id = 'i1'`)
+		refused(t, "gtm_ideas_tailor_answers_shape", `UPDATE gtm_ideas SET tailor_answers = '[{"question": "q"}]' WHERE id = 'i1'`)
+		refused(t, "gtm_ideas_tailor_answers_shape", `UPDATE gtm_ideas SET tailor_answers = '[{"question": "q", "answer": 3}]' WHERE id = 'i1'`)
+		refused(t, "gtm_ideas_tailor_answers_shape", `UPDATE gtm_ideas SET tailor_answers = '[{"question": "q", "answer": "a"}, {"answer": "a"}]' WHERE id = 'i1'`)
 		refused(t, "gtm_ideas_tailor_answers_array", `UPDATE gtm_ideas SET tailor_answers = (SELECT jsonb_agg(jsonb_build_object('question', 'q', 'answer', 'a')) FROM generate_series(1, 21)) WHERE id = 'i1'`)
 		require.NoError(t, exec(`UPDATE gtm_ideas SET tailor_answers = (SELECT jsonb_agg(jsonb_build_object('question', 'q', 'answer', 'a')) FROM generate_series(1, 20)) WHERE id = 'i1'`))
 		var answers int
