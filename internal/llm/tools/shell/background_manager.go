@@ -1358,6 +1358,7 @@ func (m *BackgroundManager) KillProcess(processID string) error {
 		// Its own cgroup is unambiguous (named per daemon and command, never
 		// reused), so what is still in it is the command's.
 		if process.cmd != nil && (w.alive() || process.tree.Populated()) {
+			process.stopping.Store(true)
 			logging.Info("Killing what an exited background command left running in its process group",
 				"id", processID, "pgid", pid, "status", status)
 			if !stopTree(w, process.tree, process.done, nil) {
