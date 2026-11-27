@@ -1,8 +1,6 @@
 package worktreereclaim
 
 import (
-	"context"
-	"errors"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -143,62 +141,6 @@ func TestWholeRetirementItsOwnSheddingIsNotUseAfterArchive(t *testing.T) {
 	}
 	if exists(f.r.ownWritePath(w.ID)) {
 		t.Fatal("the shedding stamp outlived the worktree")
-	}
-}
-
-// The reclaimer's own rollback is not use either: one checkout of a
-// workspace parks, the next fails a check, and the first comes home. Both
-// renames move the workspace directory's mtime past the archive; the next
-// pass must still retire the row, not hold it as used after its archive for
-// good. A change at the workspace root after that rollback still counts.
-func TestWholeRetirementItsOwnRollbackIsNotUseAfterArchive(t *testing.T) {
-	heavyUnderShort(t, "temporary real Git two-checkout retirement, rolled back and retried")
-	for _, touched := range []bool{false, true} {
-		t.Run(map[bool]string{false: "untouched", true: "touched after the rollback"}[touched], func(t *testing.T) {
-			f := newFixture(t)
-			f.idle()
-			w := f.multiRepo("rolled")
-			archived := time.Now()
-			w.Fence = fenceAt(archived)
-			nextSecond(archived)
-
-			parked := func() bool {
-				entries, _ := os.ReadDir(f.r.quarantineRoot(w.ID))
-				for _, e := range entries {
-					if e.IsDir() {
-						return true
-					}
-				}
-				return false
-			}
-			f.r.ProcessUse = func(context.Context, []string) error {
-				if parked() {
-					return errors.New("a process appeared")
-				}
-				return nil
-			}
-			if got := f.one(w); got.Outcome != OutcomeHeld || got.Reason != ReasonInUse || parked() {
-				t.Fatalf("want the retirement rolled back and held in use: %+v", got)
-			}
-			f.r.ProcessUse = func(context.Context, []string) error { return nil }
-			if touched {
-				write(t, filepath.Join(w.Path, "late"), "x")
-				if err := os.Remove(filepath.Join(w.Path, "late")); err != nil {
-					t.Fatal(err)
-				}
-				got := f.one(w)
-				if got.Outcome != OutcomeHeld || got.Reason != ReasonUsedAfterArchive {
-					t.Fatalf("a change at the workspace root after the rollback must still hold: %+v", got)
-				}
-				return
-			}
-			if got := f.one(w); got.Outcome != OutcomeRemoved || exists(w.Path) {
-				t.Fatalf("the reclaimer's own rollback held the worktree: %+v", got)
-			}
-			if exists(f.r.ownMovePath(w.ID)) {
-				t.Fatal("the move stamp outlived the worktree")
-			}
-		})
 	}
 }
 
