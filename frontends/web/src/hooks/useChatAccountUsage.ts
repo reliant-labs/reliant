@@ -7,7 +7,7 @@ import {
   usageLimitFallbackOf,
   type UsageLimitFallback,
 } from "../lib/usageLimitFallback";
-import { useAuthStore } from "../store/authStore";
+import { useSignedIn } from "../lib/session";
 import { useModels } from "../store/globalDataStore";
 import { useChatSelection } from "./chat-queries";
 import { useProviderAccounts } from "./provider-account-queries";
@@ -31,7 +31,7 @@ export interface ChatAccountUsage {
  * user with no accounts, nor against a server that does not serve them.
  */
 export function useChatAccountUsage(chatId: string | undefined): ChatAccountUsage {
-  const hasSession = useAuthStore((state) => !!state.session);
+  const hasSession = useSignedIn();
   const list = useProviderAccounts();
   const accounts = list?.kind === "ready" ? list.accounts : NO_ACCOUNTS;
 

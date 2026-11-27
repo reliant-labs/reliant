@@ -17,7 +17,7 @@ import { TriggerHealthStatus, TriggerOverlapPolicy, TriggerService, type Trigger
 import { WorkflowDraftStatus, WorkflowService } from "@/gen/reliant/v1/workflow_pb";
 
 import { DAY, HOUR, MINUTE, demoNow } from "../../shopStory";
-import { DAEMON_IDS, DAEMON_NAMES, PROJECT_IDS, WORKTREE_IDS, isoAgo, isoAhead } from "../../workspace";
+import { CHAT_IDS, DAEMON_IDS, DAEMON_NAMES, PROJECT_IDS, WORKTREE_IDS, isoAgo, isoAhead } from "../../workspace";
 import { serve } from "../serve";
 
 export const TRIGGER_IDS = { nightly: "shop-trg-nightly", weekly: "shop-trg-weekly" } as const;
@@ -75,13 +75,15 @@ interface RunInit {
   trigger?: string;
   state?: WorkflowState;
   failure?: string;
+  /** The chat the run writes to (its session; the Runs list opens a run by it). None for a headless run. */
+  chat?: string;
 }
 
 type RunMessageInit = MessageInitShape<typeof RunSchema>;
 function run(r: RunInit): RunMessageInit {
   const startedMs = demoNow() - r.ago;
   return {
-    id: r.id, sessionId: r.id, workflowName: r.workflow, thread: r.id, parentId: "", spawnedByNodeId: "", loopIteration: 0n,
+    id: r.id, sessionId: r.chat ?? "", workflowName: r.workflow, thread: r.chat ?? r.id, parentId: "", spawnedByNodeId: "", loopIteration: 0n,
     state: r.state ?? WorkflowState.STOPPED, stopReason: WorkflowStopReason.COMPLETED, outcome: "",
     createdAtMs: BigInt(startedMs), completedAtMs: r.took ? BigInt(startedMs + r.took) : 0n,
     title: r.title, projectId: PROJECT_IDS.shop, launchKind: r.launch ?? "chat.start", triggerId: r.trigger ?? "",
@@ -92,14 +94,14 @@ function run(r: RunInit): RunMessageInit {
 }
 
 const runs = () => [
-  run({ id: "shop-run-0001", title: "Refactor cart totals and fix multi-quantity discounts", workflow: "builtin://get-it-right", ago: 18 * MINUTE, display: RunDisplayState.RUNNING, state: WorkflowState.ACTIVE, outcome: RunOutcome.UNSPECIFIED }),
-  run({ id: "shop-run-0002", title: "Add rate limiting to /checkout", workflow: "builtin://agent", ago: 52 * MINUTE, display: RunDisplayState.NEEDS_INPUT, state: WorkflowState.ACTIVE, outcome: RunOutcome.UNSPECIFIED }),
+  run({ id: "shop-run-0001", chat: CHAT_IDS.cartTotals, title: "Refactor cart totals and fix multi-quantity discounts", workflow: "builtin://get-it-right", ago: 18 * MINUTE, display: RunDisplayState.RUNNING, state: WorkflowState.ACTIVE, outcome: RunOutcome.UNSPECIFIED }),
+  run({ id: "shop-run-0002", chat: CHAT_IDS.rateLimit, title: "Add rate limiting to /checkout", workflow: "builtin://agent", ago: 52 * MINUTE, display: RunDisplayState.NEEDS_INPUT, state: WorkflowState.ACTIVE, outcome: RunOutcome.UNSPECIFIED }),
   run({ id: "shop-run-0003", title: "Draft release notes for v1.8.4", workflow: "release-notes", ago: 2 * HOUR, took: 7 * MINUTE, display: RunDisplayState.COMPLETED }),
-  run({ id: "shop-run-0004", title: "Retry Stripe webhooks with idempotency keys", workflow: "builtin://agent", ago: 3 * HOUR, took: 21 * MINUTE, display: RunDisplayState.FAILED, outcome: RunOutcome.FAILED }),
-  run({ id: "shop-run-0005", title: "Nightly: triage failing CI", workflow: "nightly-ci-triage", ago: 9 * HOUR, took: 4 * MINUTE, display: RunDisplayState.FAILED, outcome: RunOutcome.FAILED, launch: "schedule", trigger: TRIGGER_IDS.nightly, failure: NIGHTLY_FAILURE }),
-  run({ id: "shop-run-0006", title: "Load-test the limiter", workflow: "builtin://parallel-compete", ago: 11 * HOUR, took: 13 * MINUTE, display: RunDisplayState.COMPLETED }),
+  run({ id: "shop-run-0004", chat: CHAT_IDS.stripeWebhooks, title: "Retry Stripe webhooks with idempotency keys", workflow: "builtin://agent", ago: 3 * HOUR, took: 21 * MINUTE, display: RunDisplayState.FAILED, outcome: RunOutcome.FAILED }),
+  run({ id: "shop-run-0005", chat: CHAT_IDS.nightlyCi, title: "Nightly: triage failing CI", workflow: "nightly-ci-triage", ago: 9 * HOUR, took: 4 * MINUTE, display: RunDisplayState.FAILED, outcome: RunOutcome.FAILED, launch: "schedule", trigger: TRIGGER_IDS.nightly, failure: NIGHTLY_FAILURE }),
+  run({ id: "shop-run-0006", chat: CHAT_IDS.loadTest, title: "Load-test the limiter", workflow: "builtin://parallel-compete", ago: 11 * HOUR, took: 13 * MINUTE, display: RunDisplayState.COMPLETED }),
   run({ id: "shop-run-0007", title: "Weekly dependency bump", workflow: "dependency-bump", ago: 15 * HOUR, took: 9 * MINUTE, display: RunDisplayState.COMPLETED, launch: "schedule", trigger: TRIGGER_IDS.weekly }),
-  run({ id: "shop-run-0008", title: "Migrate order emails to MJML templates", workflow: "builtin://get-it-right", ago: 20 * HOUR, took: 38 * MINUTE, display: RunDisplayState.COMPLETED }),
+  run({ id: "shop-run-0008", chat: CHAT_IDS.mjmlEmails, title: "Migrate order emails to MJML templates", workflow: "builtin://get-it-right", ago: 20 * HOUR, took: 38 * MINUTE, display: RunDisplayState.COMPLETED }),
 ];
 
 export function workflowHandlers() {

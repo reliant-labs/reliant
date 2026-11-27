@@ -94,7 +94,16 @@ tests cannot see. The post-merge check of #3453 covers it.
 
 The longer-term answer is a bundle with no sign-in code at all, built for the
 preview after phase 3's session port:
-https://github.com/reliant-labs/reliant/issues/3459.
+https://github.com/reliant-labs/reliant/issues/3459. The public demo
+(demo.reliantlabs.io, `WEB_BUILD_TARGET=demo`) is that kind of bundle, and it now
+shows the same app surfaces on the same shop data (chats, Inbox, Workflows,
+Connectors, Sandboxes, the app's nav, "Acme · Starter"), as a fixed signed-in visitor
+with no token. Its build guard (`vite-plugin-demo-bundle.ts` `DEMO_FORBIDDEN`) fails the
+build if Supabase, `lib/auth`, the auth store, billing or the Settings page's account
+sections reach it, so unlike this env its inertness is a property of the bundle, not
+of a config. It serves the app layer (`fixtures/shop/app.ts`) without fixture mode's
+install or fake Supabase. See `demo-inventory.md`, "The bundle guard". This env stays
+as the check that prod's own build, sign-in code included, is inert on fixtures.
 
 ## Not indexed
 

@@ -1,8 +1,11 @@
 # Public demo inventory fixtures
 
 The public demo (`demo.reliantlabs.io`) is the standalone `WEB_BUILD_TARGET=demo`
-bundle. It has no signed-in user, daemon, Supabase client or application backend.
-Its default Connect transport answers from browser-local mock scenarios.
+bundle. It has no sign-in, no daemon, no Supabase client and no application
+backend. Its visitor is a fixed, signed-in sample person (Alex Demo) with no
+credential, so the app's own pages (chats, Inbox, Workflows, Connectors,
+Sandboxes) render as they do for a signed-in user. Its one Connect transport
+answers every RPC from browser-local mock scenarios, and refuses writes.
 
 ## One synthetic shop, one story
 
@@ -79,24 +82,34 @@ config and release history.
 
 ## One shell, one nav
 
-The demo has no frame of its own. Every page, the demo's own (`/forge/demo?section=…`)
-and the console's (`/forge/p/shop/…`), renders in the signed-in app's shell
-(`Layout/shell/AppShell.tsx` `AppShellFrame`, since #3519):
+The demo has no frame of its own. Every page, the demo's own (`/forge/demo?section=…`),
+the console's (`/forge/p/shop/…`) and the app's Agents pages, renders in the signed-in
+app's shell (`Layout/shell/AppShell.tsx` `AppShellFrame`, since #3519):
 
 - **The frame** is drawn for a public, read-only host (`AppShellFrame publicPreview`)
-  under a signed-out session (`demoShellRoutes.tsx` `DEMO_SESSION`, through the
-  session port `lib/session`, never the auth store): it grants no session or keyboard
-  capabilities. It loads as its own lazy chunk (`Forge/Demo/DemoShellFrame.tsx`), so
-  it stays out of the entry chunk.
-- **The nav** is the shell's one nav column (`Layout/sidebar/ShellNavColumn.tsx`) with
-  the demo's config, `Forge/Demo/demoNavConfig.ts`: the app's own items
-  (`navConfig/items.tsx`) in the app's order, less the app's Inbox, Agents, Settings
-  and billing, plus Home and "How it was built". `demoNavConfig.test.ts` pins it as a subset
-  of `hybridNav`, in order. The pages the demo does not serve (`DEMO_HIDDEN_PAGES`)
-  are pruned from it (`navConfig/prune.ts`).
-- **The app-only parts** come in through seams the demo leaves empty: the nav body
-  (`AppShellFrame nav`), the Setup Guide (`guide`) and the keyboard host's overlays
-  (`ShortcutHost overlays`). Nothing app-only is twinned for the demo.
+  under a fixed session (`demoShellRoutes.tsx` `DEMO_SESSION`, through the session port
+  `lib/session`, never the auth store): the shop story's Alex Demo
+  (`fixtures/shop/user.ts` `APP_USER`), signed in, with no token (`getToken` resolves
+  null). It is a name to show, never a credential: no sign-in code is in the bundle.
+  The frame loads as its own lazy chunk (`Forge/Demo/DemoShellFrame.tsx`), so it stays
+  out of the entry chunk.
+- **The nav** is the app's nav column with its live chat slots
+  (`Layout/ChatShellNav.tsx`, the code the app's `Layout/Sidebar.tsx` also draws) and the
+  demo's config, `Forge/Demo/demoNavConfig.ts`: the app's own items (`navConfig/items.tsx`)
+  in the app's order, less the items named in `DEMO_EXCLUDED_IDS` (`usage-billing`,
+  `slot-help`, `settings`: account-only), plus Home and "How it was built".
+  `demoNavConfig.test.ts` pins it as `hybridNav` minus exactly that list, the same item
+  objects in the same order, so an item the app adds shows up in the demo or the test
+  fails. The pages the demo does not serve (`DEMO_HIDDEN_PAGES`) are pruned from it
+  (`navConfig/prune.ts`). Inbox and Agents are in it: the chat list, New chat, the Inbox
+  count and the Workflows pill read the shop's data.
+- **The workspace switcher** names the sample org, "Acme · Starter"
+  (`hooks/useOrgs.demo.ts`, `components/Orgs/orgPlan.demo.ts`). There is one org and
+  nothing to switch to.
+- **Find** opens the demo's command palette (`Forge/Demo/DemoCommandPalette.tsx`): the
+  app's palette less the commands for Usage & billing and Settings.
+- **The app-only parts** the demo leaves empty are the Setup Guide (`guide`) and the
+  app's modal layer.
 - **The console's chrome** is `Forge/Console/ConsoleFrame.tsx` (the breadcrumb and the
   environment scope over the page), the same as in the app. The demo's own additions
   (its agent cards, plain issue copy, section crumbs) are a `LedConsoleHost`
@@ -108,19 +121,68 @@ After #3574 the console has no second frame: `ConsoleShell`, its grouped nav and
 led console's nav half are deleted (until it merges they are unreachable code), and
 the dev `__preview__` pages wear the same shell (`Forge/__preview__/PreviewShellFrame.tsx`).
 
+## The app's Agents pages in the demo
+
+`src/demoAgentsRoutes.tsx` mounts the app's own pages under the demo's unguarded layout,
+at the paths `routes.tsx` serves them at (each a lazy chunk, so the first page never
+downloads the chat client):
+
+| Path | Page |
+|---|---|
+| `/project/$projectId`, `/c/$chatId`, `/c/$chatId/t/$threadId`, `/new` | the chat pages (`App.tsx`): a project's chats, a transcript, one thread, the new-chat view |
+| `/inbox` | the Inbox |
+| the Workflows area (`workflowsAreaRoutes.tsx`) | the library, a workflow, runs, a run |
+| `/connectors` | integrations and MCP servers |
+| `/settings/machines[/$machineId]`, `/machines` | Sandboxes: `Settings/cloud/machines.tsx`'s `MachinesSection` mounted alone; the rest of Settings is the account's and is not in the demo |
+
+`/` stays the demo's landing. Agents in the nav goes to `/project/<shop project id>`.
+There is no `/o/$org` tree. The pages are the app's own, so they are the app's code
+running against sample data: any module they reach that needs sign-in, a token or
+billing has a demo twin (`x.demo.ts(x)` beside `x.ts`, `demoSubstitutes()` in
+`vite-plugin-demo-bundle.ts`) answering what the demo needs: nobody signed in, no
+funding prompt, no billing, writes impossible. Examples are `api/transport.demo.ts` (no
+interceptor chain; every RPC goes to the demo's one transport), `useCloudBillingQueries.demo.ts`
+and the `Billing/*.demo.ts(x)` pieces.
+
+## The shop's app layer, read-only
+
+The demo's data is the shop pack plus its **app layer** (`fixtures/shop/app.ts`
+`shopAppPack`): the reliant services' answers (projects, worktrees, chats and their
+transcripts, the open streams, workflows and runs, connectors, settings, machines),
+billing and the account. `Forge/Demo/demoTransport.ts` serves it through
+`createShopAppTransport`, read-only: only an RPC whose proto declares
+`NO_SIDE_EFFECTS`, plus the packs' named `answers` (`APP_LAYER_ANSWERS`), is answered.
+Every other RPC is refused with the read-only message, which the read-only layer
+(`ObsReadOnlyProvider`) shows as a toast. `window.__demoRpcs` records what was refused
+and what had no sample answer.
+
+With `DEMO_DATA_SOURCE=remote` and a `DEMO_DATA_URL`, an RPC the app layer answers
+(`appLayerMethods()`) is still answered in the page. Every other RPC goes to the
+gateway, which is asked only for `NO_SIDE_EFFECTS` reads, and falls back to the sample
+data after `REMOTE_TIMEOUT_MS`.
+
+`fixtures/shop/__tests__/appLayer.test.ts` pins the boundary: the demo **pack**
+(`fixtures/shop/index.ts`) never imports the app layer, and the app layer never reaches
+fixture mode's install or its fake Supabase and session (`fixtures/install.ts`,
+`outside.ts`).
+
 ## The same pack in the production build
 
 The shop pack also serves the **production** build, through fixture mode
-(`FIXTURES_SCENARIO` in config.js, `src/lib/fixturesConfig.ts`). Fixture mode
-adds `shop/app.ts`, the reliant services' layer, on top of `shopPack`, so chat,
-projects and settings render too. It serves two surfaces:
+(`FIXTURES_SCENARIO` in config.js, `src/lib/fixturesConfig.ts`). Fixture mode adds
+`shop/app.ts` on top of `shopPack` too (the same app layer the demo serves), but installs
+it with `src/fixtures/install.ts` and a fake Supabase (`outside.ts`) so the real sign-in
+code accepts a fixed session. It serves two surfaces:
 
 - the visual harness, `e2e/visual`;
 - the hosted preview env, `deploy/kcl/preview`. See `preview-env.md` for what it
   declares, where it is hosted (a control-plane prod frontend), and the tests
   that prove its sign-in code is inert.
 
-The demo bundle never loads that layer, and its bundle guard fails if it does.
+The demo bundle never loads fixture mode's install, its fake Supabase or its session,
+and its bundle guard fails if it does. The difference between the two is the guard's
+line: the preview is prod's bundle (sign-in code present, provably inert); the demo is
+a bundle with no sign-in code at all.
 
 ## Verify the real target
 
@@ -128,17 +190,19 @@ From `frontends/web`:
 
 ```sh
 pnpm install --frozen-lockfile
-pnpm exec vitest run src/components/Forge/Demo src/lib/__tests__/chatMachine.demo.test.ts src/__tests__/demoShellRoutes.test.tsx
+pnpm exec vitest run src/components/Forge/Demo src/__tests__/demoShellRoutes.test.tsx src/fixtures/shop/__tests__/appLayer.test.ts vite-plugin-demo-bundle.test.ts
 WEB_BUILD_TARGET=demo DEMO_BUNDLE_REPORT=/tmp/demo-bundle.json pnpm build
 WEB_BUILD_TARGET=demo pnpm exec vite preview --port 4173
 # Another terminal; screenshots stay outside the repository:
 SCREENSHOT_DIR=/tmp/demo-inventory node scripts/demo/smoke-demo-inventory.mjs http://localhost:4173
 ```
 
-The build's existing bundle guard is authoritative; never disable it to admit an
-authenticated client import. The browser smoke loads an actual release detail,
-opens config values and compares history, rejecting external/authenticated RPC
-requests and uncaught errors. The demo twin export-parity test covers the Vite
+The build's bundle guard is authoritative (see "The bundle guard" below); never
+disable it to admit a sign-in or account module. The browser smoke loads an actual
+release detail, opens config values and compares history, rejecting external/authenticated
+RPC requests and uncaught errors. `scripts/demo/smoke-demo-site.mjs` (the site smoke,
+`forge-demo-cutover.md`) also walks the Inbox and the Agents pages and opens a chat
+transcript. The demo twin export-parity test covers the Vite
 development linker too: Rollup dead-code elimination can hide missing transitive
 exports that break development route loading.
 
@@ -146,6 +210,40 @@ Working deep links (once the reviewed demo release is deployed):
 
 - `/forge/p/shop/releases/v1.8.3?env=prod`
 - `/forge/p/shop/workloads/dev/api?env=dev&tab=config`
+
+## The bundle guard
+
+`frontends/web/vite-plugin-demo-bundle.ts` fails `WEB_BUILD_TARGET=demo` when a module
+the demo must not contain reaches any chunk. The line it draws is **no sign-in or account
+code**, not "no Reliant app code": chat, Inbox, Workflows, runs, Projects and the Machines
+views are allowed, because the demo mounts them. The forbidden list is `DEMO_FORBIDDEN`
+(one `demoForbiddenRule` per module id):
+
+- Supabase (`node_modules/@supabase/`, `src/lib/supabase.ts`) and `src/lib/auth/`
+  (except the import-free `apiKeyUser.ts`), the auth store and provider
+  (`store/authStore.ts`, `api/authProvider.ts`), and the sign-in screens and guards
+  (`components/Auth/`, `AuthGuard`, `AuthInitializer`, `AuthLayout`, `AuthScreen`);
+- the app's roots and route tree (`routes.tsx`, `components/App.tsx`, `components/Root.tsx`),
+  which mount sign-in; the demo has its own tree;
+- the claim flow (`components/Claim/`) and all of `components/Billing/`;
+- the Settings page (`components/Settings/`) and its route files
+  (`settingsSectionRoutes.tsx`, `settingsConnectorRoutes.tsx`), except a named list
+  of files: chat display preferences, the provider usage chip's display pieces,
+  Connectors' integrations and MCP tab, the project panel's details card and
+  Sandboxes' machine list and cards (`Settings/cloud/machines.tsx` and its pieces);
+- Reliant's onboarding (`components/OnboardingFlow/`, the wizard and the checklist),
+  except three chat-setup decision modules (`onboardingGatePolicy.ts`, `usableDaemon.ts`,
+  `useChatSetup.ts`).
+
+A module with a demo twin (`x.demo.ts(x)`) is the demo's own code and never matches.
+When an allowed module imports a forbidden one, the build names each crossing
+(`importer → banned module (why)`); `DEMO_BUNDLE_REPORT=<file>` has the importer chain.
+Cut a crossing in this order: (1) a module that only needs "is someone signed in, and who"
+reads the session port, `@/lib/session`; (2) otherwise add a twin of the highest module
+that keeps the rest of the UI intact. Never widen an `except` list to get past one. The
+guard's own header says why the line is where it is: a public page carrying credential
+handling is one config mistake from using it, and can no longer be proved inert by
+reading the bundle.
 
 ## Bundle size
 
@@ -172,8 +270,34 @@ It builds the demo as forge ships it (`WEB_BUILD_TARGET=demo`) into a temporary
 directory, so `dist-demo/` is left alone. **It gates the release gate only**
 (its `demo-size` step). It never runs in the merge gate or the merge queue. A
 PR that moves the demo pastes its before/after table into the body. The bundle
-guard (`vite-plugin-demo-bundle.ts`) is separate and unchanged: it decides which
+guard (`vite-plugin-demo-bundle.ts`, above) is separate: it decides which
 modules may be in the bundle, and this script measures only its size.
+
+**The widened demo (chat, Inbox, Workflows, Connectors, Sandboxes).** The app's chat
+client is far larger than the console, so the ceilings were re-derived on purpose, not
+nudged. The rule is what held the line: every Agents page is a lazy chunk
+(`demoAgentsRoutes.tsx`), so the *initial* ceiling stays near the console-only
+baseline, and the chat client moves only the *total* ceiling. The table below is the
+budget file's new baseline.
+
+This branch (on main 9098331dd2), 2026-11-27, `task demo:bundle-size -- --report-only --before <main's --json-out>`:
+
+| Demo bundle | Initial raw | Initial gzip | Initial brotli | Total JS+CSS raw | Total gzip |
+|---|---|---|---|---|---|
+| before (main 9098331dd2) | 1,783.8 KiB (32 files) | **486.1 KiB** | 416.6 KiB | 20,154.3 KiB (290 files) | **5,105.2 KiB** |
+| after | 1,850.8 KiB (81 files) | **519.8 KiB** | 449.5 KiB | 23,044.9 KiB (445 files) | **5,987.1 KiB** |
+| change | +66.9 KiB | +33.7 KiB | +32.9 KiB | +2,890.6 KiB | +881.9 KiB |
+| new budget | | ≤ 550 KiB | | | ≤ 6,050 KiB |
+
+The initial load grew 7%, not 0: the Agents route definitions
+(`demoAgentsRoutes.tsx`, `workflowsAreaRoutes.tsx`, `sandboxesAliasRoute.tsx`) and
+the fixed visitor are in the entry, the `vendor-ui` group carries every lucide
+icon the whole graph imports (about 90 more, used only by the lazy Agents pages),
+and rolldown re-split the shared chunks into more, smaller files (gzip is counted
+per file). Taking lucide out of `vendor-ui` for the demo saved only ~8 KiB of
+initial gzip and doubled the file count (556), so it was not kept.
+
+The console-only baseline, before the Agents pages (kept for the comparison):
 
 Main 355d77cbc, 2026-11-24 (clean `pnpm install --frozen-lockfile`):
 
@@ -192,7 +316,8 @@ measure main, apply the rule, update the baseline and both ceilings together,
 and give the reason in the PR. Do not raise a ceiling just to let one change
 through. The phase-3 plan (reliant#3462) first proposed 645 / 5,080 KiB from
 main 49556b0ba (621.3 / 5,026.7 KiB). On 2026-11-24 the ceilings were
-re-derived from 355d77cbc under the same rule.
+re-derived from 355d77cbc under the same rule. They were re-derived again when the
+demo gained the Agents pages (the budget file's `baseline` is the current one).
 
 ## Follow-up integration dependencies
 

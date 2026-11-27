@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { reliantOnlyRule, twinOf } from "./vite-plugin-demo-bundle";
+import { DEMO_FORBIDDEN, demoForbiddenRule, twinOf } from "./vite-plugin-demo-bundle";
 
 const root = __dirname;
 const at = (rel: string) => path.join(root, rel);
@@ -18,28 +18,63 @@ function twins(dir = at("src")): string[] {
   });
 }
 
-describe("reliantOnlyRule", () => {
-  it("names Reliant-only modules, pnpm's package layout included", () => {
-    expect(reliantOnlyRule(at("node_modules/.pnpm/@supabase+auth-js@2.90.1/node_modules/@supabase/auth-js/dist/module/GoTrueClient.js"), root)?.why).toBe("Supabase sign-in");
-    expect(reliantOnlyRule(at("src/store/chatStore.ts"), root)?.why).toBe("Reliant chat");
-    expect(reliantOnlyRule(at("src/store/authStore.ts"), root)?.why).toBe("Reliant auth");
-    expect(reliantOnlyRule(at("src/components/Onboarding/journeys/catalog.ts"), root)).toBeDefined();
-    expect(reliantOnlyRule(at("src/components/Settings/AISettings.tsx"), root)).toBeDefined();
+describe("demoForbiddenRule", () => {
+  it("names sign-in and account modules, pnpm's package layout included", () => {
+    expect(demoForbiddenRule(at("node_modules/.pnpm/@supabase+auth-js@2.90.1/node_modules/@supabase/auth-js/dist/module/GoTrueClient.js"), root)?.why).toBe("Supabase sign-in");
+    expect(demoForbiddenRule(at("src/store/authStore.ts"), root)?.why).toBe("Reliant auth");
+    expect(demoForbiddenRule(at("src/lib/supabase.ts"), root)?.why).toBe("Supabase sign-in");
+    expect(demoForbiddenRule(at("src/routes.tsx"), root)?.why).toBe("the app's route tree");
+    expect(demoForbiddenRule(at("src/components/Billing/LinkIdentityModal.tsx"), root)?.why).toBe("billing");
+    expect(demoForbiddenRule(at("src/settingsSectionRoutes.tsx"), root)?.why).toBe("Reliant settings");
+    expect(demoForbiddenRule(at("src/components/Settings/AISettings.tsx"), root)?.why).toBe("Reliant settings");
+    expect(demoForbiddenRule(at("src/components/OnboardingFlow/OnboardingPage.tsx"), root)?.why).toBe("Reliant onboarding");
+    expect(demoForbiddenRule(at("src/components/Onboarding/journeys/catalog.ts"), root)).toBeDefined();
+  });
+
+  it("passes the app's own pages: chat, inbox, workflows, projects, machines", () => {
+    for (const file of [
+      "src/store/chatStore.ts",
+      "src/lib/chatMachine.ts",
+      "src/components/Chat/ChatInput.tsx",
+      "src/components/inbox/InboxPage.tsx",
+      "src/components/workflows/list/WorkflowsListPage.tsx",
+      "src/workflowsAreaRoutes.tsx",
+      "src/components/Projects/ProjectPanel.tsx",
+      "src/components/Machines/PairMachinePanel.tsx",
+      "src/components/Terminal/TerminalPanel.tsx",
+    ]) {
+      expect(demoForbiddenRule(at(file), root), file).toBeUndefined();
+    }
   });
 
   it("passes the forge console, the demo's own code and the listed exceptions", () => {
-    expect(reliantOnlyRule(at("src/components/Forge/Console/ConsoleLayout.tsx"), root)).toBeUndefined();
-    expect(reliantOnlyRule(at("src/components/Onboarding/JourneyTour.tsx"), root)).toBeUndefined();
-    expect(reliantOnlyRule(at("src/lib/chatMachine.demo.ts"), root)).toBeUndefined();
-    expect(reliantOnlyRule(at("src/components/Settings/providers/accountFormat.ts"), root)).toBeUndefined();
-    expect(reliantOnlyRule("\0vite/preload-helper.js", root)).toBeUndefined();
+    expect(demoForbiddenRule(at("src/components/Forge/Console/ConsoleLayout.tsx"), root)).toBeUndefined();
+    expect(demoForbiddenRule(at("src/components/Onboarding/JourneyTour.tsx"), root)).toBeUndefined();
+    expect(demoForbiddenRule(at("src/lib/auth/accountScopedState.demo.ts"), root)).toBeUndefined();
+    expect(demoForbiddenRule(at("src/components/Settings/providers/accountFormat.ts"), root)).toBeUndefined();
+    expect(demoForbiddenRule(at("src/components/Settings/ToolCallSettings.tsx"), root)).toBeUndefined();
+    expect(demoForbiddenRule(at("src/components/OnboardingFlow/onboardingGatePolicy.ts"), root)).toBeUndefined();
+    expect(demoForbiddenRule(at("src/lib/auth/apiKeyUser.ts"), root)).toBeUndefined();
+    // A directory exception covers its files, and nothing beside it.
+    expect(demoForbiddenRule(at("src/components/Settings/cloud/ui/card.tsx"), root)).toBeUndefined();
+    expect(demoForbiddenRule(at("src/components/Settings/cloud/billing.tsx"), root)?.why).toBe("Reliant settings");
+    expect(demoForbiddenRule("\0vite/preload-helper.js", root)).toBeUndefined();
+  });
+
+  it("lists only exceptions that exist, each under its own rule", () => {
+    for (const rule of DEMO_FORBIDDEN) {
+      for (const file of rule.except ?? []) {
+        expect(file.startsWith(rule.match), `${file} is not under ${rule.match}`).toBe(true);
+        expect(fs.existsSync(at(file)), `${file} (an exception) does not exist`).toBe(true);
+      }
+    }
   });
 
   it("passes the session port and forbids the app's auth-store session behind it", () => {
     for (const file of ["port.ts", "fixed.ts", "index.ts"]) {
-      expect(reliantOnlyRule(at(`src/lib/session/${file}`), root)).toBeUndefined();
+      expect(demoForbiddenRule(at(`src/lib/session/${file}`), root)).toBeUndefined();
     }
-    expect(reliantOnlyRule(at("src/lib/auth/authStoreSession.tsx"), root)?.why).toBe("Reliant auth");
+    expect(demoForbiddenRule(at("src/lib/auth/authStoreSession.tsx"), root)?.why).toBe("Reliant auth");
   });
 });
 
@@ -53,9 +88,9 @@ describe("demo twins", () => {
   it("gives demo routes a stable anonymous epoch, without exporting real auth operations", async () => {
     const real = at("src/lib/auth/sessionOwner.ts");
     const twin = at("src/lib/auth/sessionOwner.demo.ts");
-    expect(reliantOnlyRule(real, root)?.why).toBe("Reliant auth");
+    expect(demoForbiddenRule(real, root)?.why).toBe("Reliant auth");
     expect(twinOf(real)).toBe(twin);
-    expect(reliantOnlyRule(twin, root)).toBeUndefined();
+    expect(demoForbiddenRule(twin, root)).toBeUndefined();
 
     const demo = await import("./src/lib/auth/sessionOwner.demo");
     expect(Object.keys(demo)).toEqual(["currentSessionOwner"]);

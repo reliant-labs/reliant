@@ -4,7 +4,7 @@
  * The reliant services' answers: what the signed-in app reads beside the
  * forge console (projects, worktrees, chats and their transcripts, the
  * Inbox, the three open streams, workflows and runs, settings and models,
- * provider accounts, machines, the server's version, and forge's reports
+ * connections, provider accounts, machines, the server's version, and forge's reports
  * about shop's checkout).
  *
  * Imported only by ../../app.ts. The demo pack (../../index.ts) must never
@@ -14,6 +14,7 @@
 import type { MockHandlers } from "@reliantlabs/forge-web-runtime/mock-transport";
 
 import { chatHandlers } from "./chats";
+import { connectionHandlers } from "./connections";
 import { daemonHandlers } from "./daemons";
 import { forgeHandlers } from "./forge";
 import { inboxHandlers } from "./inbox";
@@ -34,6 +35,7 @@ export function reliantScenarioHandlers(): MockHandlers {
     ...forgeHandlers(),
     ...settingsHandlers(),
     ...mcpHandlers(),
+    ...connectionHandlers(),
     ...chatHandlers(),
     ...streamingHandlers(),
     ...workflowHandlers(),

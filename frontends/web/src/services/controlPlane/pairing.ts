@@ -22,6 +22,7 @@
 import { supabase } from "@/lib/supabase";
 import { getControlPlaneURL } from "@/lib/constants";
 import { controlPlaneForgeBase, credentialedFetch, isForgeAuth } from "@/lib/auth/forge-api";
+import { PairingError, formatPairingCode, normalizePairingCode } from "./pairingCode";
 
 /**
  * What a pending request is for. The control plane derives it from the
@@ -42,27 +43,7 @@ export interface PendingMachine {
   expiresAt: string;
 }
 
-export class PairingError extends Error {
-  /** 404: nothing is waiting with that code. */
-  readonly notFound: boolean;
-
-  constructor(message: string, notFound = false) {
-    super(message);
-    this.name = "PairingError";
-    this.notFound = notFound;
-  }
-}
-
-/** The 8 letters of a code, whatever the person typed around them. */
-export function normalizePairingCode(typed: string): string {
-  return typed.toUpperCase().replace(/[^A-Z]/g, "");
-}
-
-/** "bdfghjkl" → "BDFG-HJKL"; shorter input is returned normalized. */
-export function formatPairingCode(typed: string): string {
-  const code = normalizePairingCode(typed);
-  return code.length === 8 ? `${code.slice(0, 4)}-${code.slice(4)}` : code;
-}
+export { PairingError, normalizePairingCode, formatPairingCode };
 
 const SESSION_ENDED = "Your session ended. Sign in again to approve.";
 

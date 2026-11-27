@@ -21,6 +21,7 @@ const mocks = vi.hoisted(() => ({
   getChatAccount: vi.fn(),
 }));
 
+vi.mock("../../../lib/session", async (importOriginal) => ({ ...(await importOriginal<typeof import("../../../lib/session")>()), useSignedIn: () => true }));
 vi.mock("../../../lib/settingsPersistence", () => ({ readSetting: vi.fn(), upsertStringSetting: vi.fn() }));
 
 import { AccountUsageChip } from "../AccountUsageChip";

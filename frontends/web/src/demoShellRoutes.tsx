@@ -28,18 +28,24 @@
  * THE APP'S SHELL. Every page under that layout is a page of the app's one
  * shell (Layout/shell/AppShell.tsx): the same frame, nav column, drill-ins and
  * phone drawer as the signed-in app, with the demo's nav (Forge/Demo/DemoNav,
- * demoNavConfig.ts) in it. The frame opts into public-preview presentation under
- * an app layout without claiming authentication. The root explicitly mounts
- * a signed-out session, also for the deprecated app-bundle mount (`?shell=demo`,
- * App.tsx). The keyboard host stays signed out and has no overlays (no palette,
- * no chat search, no project switcher: they are the app's).
+ * demoNavConfig.ts) in it. The frame opts into public-preview presentation.
+ *
+ * THE VISITOR. The root mounts a fixed session (DEMO_SESSION), also for the
+ * deprecated app-bundle mount (`?shell=demo`, App.tsx): the shop story's
+ * signed-in person, Alex Demo (fixtures/shop/user.ts), with NO token. The
+ * Agents pages (demoAgentsRoutes.tsx) read the chats, projects and machines
+ * of whoever is signed in, and the shop app layer answers them for Alex, so
+ * the nav's account row and the pages agree. It is a name to show, never a
+ * credential: nothing on this host can sign in, and the demo's transport sends
+ * nothing anywhere.
  */
 
 import { createRootRoute, createRoute, createRouter, Link, Navigate, Outlet, redirect, useRouterState } from '@tanstack/react-router'
 
 import { Suspense } from 'react'
 
-import { SessionProvider, type SessionAuth } from './lib/session'
+import { fixedSession, SessionProvider, type SessionAuth } from './lib/session'
+import { APP_USER } from './fixtures/shop/user'
 import { lazyRoute } from './lib/lazyRoute'
 
 import { captureForgeEntry } from './components/ForgeShell/forgeEntry'
@@ -52,6 +58,7 @@ import { consolePageOf, consolePath, isObsNavView, withSearch, type ConsolePage 
 import { DEMO_HIDDEN_PAGES, FORGE_DEMO_PATH } from './components/Forge/Demo/demoPath'
 import { FIXTURE_PROJECT } from './components/Forge/Observability/__fixtures__/fixtureApi'
 import { createForgeConsoleRoutes } from './forgeConsoleRoutes'
+import { createDemoAgentsRoutes } from './demoAgentsRoutes'
 import { forgeConsolePages, preloadForgeConsole } from './forgeConsolePages'
 import { DemoConsoleProviders } from './demoBundle/DemoConsoleProviders'
 import { retainTourParam } from './components/Onboarding/tourParam'
@@ -61,6 +68,7 @@ import { ObsReadOnlyProvider } from './components/Forge/Observability/obsReadOnl
 import { NewBuildPrompt } from './components/NewBuildPrompt'
 import { reportCaughtError, RouteErrorFallback } from './components/ErrorBoundary'
 import { SurfaceProvider } from './lib/surfaceContext'
+import { EventBusProvider } from './lib/event-context'
 import { Toaster } from './lib/toast'
 
 // Before the router replaces the URL: the landing handoff (`rid`, `utm_*`) it arrived with.
@@ -76,13 +84,11 @@ export const DEMO_HOME = consolePath(FIXTURE_PROJECT, { kind: 'overview' })
 
 const READ_ONLY = { readOnly: true, reason: 'Read-only demo' } as const
 
-/** Public visitors have no credentials, including in the legacy app-bundle mount. */
-export const DEMO_SESSION: SessionAuth = {
-  user: null,
-  isAuthenticated: false,
-  isLoading: false,
-  getToken: async () => null,
-}
+/**
+ * The demo's visitor, including in the legacy app-bundle mount: the shop's
+ * Alex Demo, signed in, with no credential (getToken resolves null).
+ */
+export const DEMO_SESSION: SessionAuth = fixedSession(APP_USER)
 
 /**
  * The app's shell with the demo's nav (Forge/Demo/DemoShellFrame): its own
@@ -94,27 +100,30 @@ function DemoRootShell() {
   const pathname = useRouterState({ select: (s) => s.location.pathname })
   return (
     <SurfaceProvider surface="desktop">
-      {/* Every page's write controls disabled, with this reason (obsReadOnly.tsx). */}
-      <ObsReadOnlyProvider value={READ_ONLY}>
-        <SessionProvider auth={DEMO_SESSION}>
-          <div data-shell="demo" data-pathname={pathname} className="contents">
-            <PageVisitTracker firstVisitProps={entry} />
-            {/* The app's keyboard host with none of the app's overlays, around the app's frame;
-                the residents below render meanwhile. */}
-            <Suspense fallback={null}>
-              <DemoShellFrame>
-                <Outlet />
-              </DemoShellFrame>
-            </Suspense>
-            {/* No ModalLayer: its modals are Reliant's (API key, upgrade, out of date). */}
-            <Toaster />
-            <NewBuildPrompt />
-            <JourneyTour />
-            <DemoTips />
-            <DemoTourToast />
-          </div>
-        </SessionProvider>
-      </ObsReadOnlyProvider>
+      {/* The app's in-page event bus (App.tsx mounts it too): the Agents pages publish and listen on it. */}
+      <EventBusProvider>
+        {/* Every page's write controls disabled, with this reason (obsReadOnly.tsx). */}
+        <ObsReadOnlyProvider value={READ_ONLY}>
+          <SessionProvider auth={DEMO_SESSION}>
+            <div data-shell="demo" data-pathname={pathname} className="contents">
+              <PageVisitTracker firstVisitProps={entry} />
+              {/* The app's keyboard host with the demo's overlays (Find, chat search, project
+                  switcher: DemoShellFrame), around the app's frame; the residents below render meanwhile. */}
+              <Suspense fallback={null}>
+                <DemoShellFrame>
+                  <Outlet />
+                </DemoShellFrame>
+              </Suspense>
+              {/* No ModalLayer: its modals are Reliant's (API key, upgrade, out of date). */}
+              <Toaster />
+              <NewBuildPrompt />
+              <JourneyTour />
+              <DemoTips />
+              <DemoTourToast />
+            </div>
+          </SessionProvider>
+        </ObsReadOnlyProvider>
+      </EventBusProvider>
     </SurfaceProvider>
   )
 }
@@ -232,6 +241,7 @@ export function buildDemoShellTree() {
     consoleLayoutRoute.addChildren([
       createForgeDemoRoute(() => consoleLayoutRoute),
       createForgeConsoleRoutes(() => consoleLayoutRoute, forgeConsolePages),
+      ...createDemoAgentsRoutes(() => consoleLayoutRoute),
     ]),
   ])
 }

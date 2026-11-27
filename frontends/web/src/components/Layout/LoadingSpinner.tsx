@@ -5,7 +5,7 @@ import Tooltip from '../forge-ui/tooltip';
 import { isDev } from '../../lib/constants';
 import { openExternalLink } from '../../lib/open-link';
 import { BrandMark } from '../icons/BrandMark';
-import { authPath } from '@/lib/paths';
+import { stuckLoadEscape } from './stuckLoadEscape';
 
 const STUCK_THRESHOLD_MS = 5000;
 
@@ -19,18 +19,12 @@ export function LoadingSpinner() {
     return () => clearTimeout(t);
   }, []);
 
-  // Escape hatch when initialization stalls (e.g. backend 401s on a stale token).
-  // Imports authStore lazily to keep this component decoupled from auth.
+  // Escape hatch when initialization stalls (e.g. backend 401s on a stale token):
+  // sign out, in its own module to keep this component decoupled from auth.
   const handleSignOut = async () => {
     if (signingOut) return;
     setSigningOut(true);
-    try {
-      const { useAuthStore } = await import('../../store/authStore');
-      await useAuthStore.getState().signOut();
-    } catch {
-      // ignore — we'll force-redirect below either way
-    }
-    window.location.href = authPath();
+    await stuckLoadEscape.run();
   };
 
   return (
@@ -114,7 +108,7 @@ export function LoadingSpinner() {
               disabled={signingOut}
               className="text-foreground underline underline-offset-4 hover:no-underline disabled:opacity-50"
             >
-              {signingOut ? 'Signing out…' : 'Sign out'}
+              {signingOut ? stuckLoadEscape.busyLabel : stuckLoadEscape.label}
             </button>
           </div>
         )}

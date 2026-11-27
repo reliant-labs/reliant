@@ -5,6 +5,7 @@ import Tooltip from "../forge-ui/tooltip";
 import { McpIcon } from "../icons/McpIcon";
 import { hasControlPlane } from "../../services/controlPlane/config";
 import { appBuild } from "../../lib/appBuild";
+import { showDeveloperSettings } from "../../lib/developerSettings";
 import { formatVersion } from "../../lib/releaseIdentity";
 import { resolveAISettingsTab, type AISettingsTab, type SettingsSection, type SettingsTab } from "../../routeSchemas";
 
@@ -175,11 +176,10 @@ const sectionGroups: SectionGroup[] = [
  * that says it is a dev build (an unpackaged Electron app sets isDev). A
  * production web build is neither, so its users never see the section —
  * SettingsViewerTab sends a deep link to /settings/developer to the first
- * visible section instead.
+ * visible section instead. The rule is lib/developerSettings.ts's, which the
+ * command palette reads too.
  */
-export function showDeveloperSettings(): boolean {
-  return import.meta.env.DEV || Boolean(window.RELIANT_CONFIG?.isDev);
-}
+export { showDeveloperSettings };
 
 /**
  * Settings sections whose page belongs to another area of the shell's nav.

@@ -52,7 +52,6 @@ import { nestedRepoInstalls, type NestedRepoInstall } from "../lib/projectPlacem
 import { queryClient } from "../lib/query-client";
 import { toast } from "../lib/toast-manager";
 import { getOrgScope, orgQueryEnabled, orgRequest, useOrgScope, whenOrgScopeReady, withOrgFailure } from "../lib/orgScope";
-import { useAuthStore } from "../store/authStore";
 import {
   projectServiceKeys,
   projectServiceQueries,
@@ -61,6 +60,7 @@ import {
   useListProjectDaemons,
   useSaveProjectPrompts as useSaveProjectPromptsRpc,
 } from "./project-service-hooks_gen";
+import { useHasAuthSession } from "./useHasAuthSession";
 
 export { ProjectInstallState };
 
@@ -243,9 +243,7 @@ export function sameProject(a: Project, b: Project): boolean {
  * shell's pickers render before a session lands) wait for the session rather
  * than going out without a credential and coming back 401.
  */
-function useHasSession(): boolean {
-  return useAuthStore((state) => !!state.session);
-}
+const useHasSession = useHasAuthSession;
 
 // ── The project list ────────────────────────────────────────────────────────
 

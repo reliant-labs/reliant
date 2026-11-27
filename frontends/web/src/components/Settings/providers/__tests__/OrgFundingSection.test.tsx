@@ -25,6 +25,7 @@ vi.mock("@/services/controlPlane/config", () => ({ hasControlPlane: true }));
 vi.mock("@/store/authStore", () => ({
   useAuthStore: (sel: (s: unknown) => unknown) => sel({ user: { id: "u-me" }, session: {} }),
 }));
+vi.mock("@/lib/session", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/session")>()), useSignedIn: () => true }));
 vi.mock("@/hooks/useOrgs", () => ({
   useActiveOrg: () => ({
     active: { id: "org-a", name: "Acme", slug: "acme", role: "member", isOwner: false, isDefault: true },

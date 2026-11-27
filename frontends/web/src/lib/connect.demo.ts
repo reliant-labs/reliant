@@ -24,6 +24,14 @@ export const SAMPLE_DATA_UNAVAILABLE = "Sample data isn't available for this in 
 let _override: Transport | null = null;
 let _shell: Transport | Promise<Transport> | null = null;
 
+/**
+ * No backend base URL: the demo reaches nothing but its own transport. A URL
+ * built from it (an attachment's, Chat/MessageGeneratedVideos.tsx) is relative
+ * to the page's own origin, which serves no attachments, so it fails to load
+ * there and never leaves the origin.
+ */
+export const reliantApiBaseUrl: typeof Real.reliantApiBaseUrl = () => null;
+
 export const installShellTransport: typeof Real.installShellTransport = (t) => {
   _shell = t;
 };

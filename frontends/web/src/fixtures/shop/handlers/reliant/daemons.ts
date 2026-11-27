@@ -3,12 +3,13 @@
 /**
  * DaemonRegistryService: Alex's cloud machine (up, on the v1.31.0 build) and
  * laptop (asleep). The control plane's DaemonService adds the cloud machine's
- * spec (size M, 50 GiB persistent disk, as billing.ts bills it); the laptop
- * is self-hosted, so the control plane has no spec for it.
+ * spec (size M, 50 GiB persistent disk, as billing.ts bills it) and its
+ * port access (no rule beyond the default); the laptop is self-hosted, so the
+ * control plane has no spec for it.
  */
 import { Code, ConnectError } from "@connectrpc/connect";
 
-import { DaemonDiskMode, DaemonLifecyclePhase, DaemonSize, DaemonStatus, DaemonType, OwnerType, PortAccessMode } from "@/gen/controlplane/controlplane/v1/shared_pb";
+import { DaemonDiskMode, DaemonDiskState, DaemonLifecyclePhase, DaemonSize, DaemonStatus, DaemonType, OwnerType, PortAccessMode } from "@/gen/controlplane/controlplane/v1/shared_pb";
 import { DaemonService } from "@/gen/controlplane/services/daemon/v1/daemon_pb";
 import { DaemonRegistryService } from "@/gen/reliant/v1/daemon_registry_pb";
 
@@ -22,6 +23,8 @@ const cloudSpec = () => ({
   status: DaemonStatus.ACTIVE, storageSize: "50Gi", hostname: DAEMON_NAMES.cloud, platform: "linux/amd64",
   connectedAt: tsAgo(3 * HOUR), createdAt: tsAgo(12 * DAY), updatedAt: tsAgo(3 * HOUR), size: DaemonSize.DAEMON_SIZE_M, idleTimeout: "30m",
   lifecyclePhase: DaemonLifecyclePhase.READY, defaultPortAccess: PortAccessMode.AUTHENTICATED, diskMode: DaemonDiskMode.PERSISTENT, orgId: DEMO_ORG,
+  // Size M's standard disk, never grown: the guest uses all of it.
+  disk: { requestedGib: 50, capacityGib: 50, includedGib: 50, state: DaemonDiskState.STABLE, message: "", usableGib: 50 },
 });
 
 export function daemonHandlers() {
@@ -33,6 +36,11 @@ export function daemonHandlers() {
       getDaemon: (req) => {
         if (req.daemonId !== DAEMON_IDS.cloud) throw new ConnectError("daemon not found", Code.NotFound);
         return { daemon: cloudSpec(), workspaceBaseDomain: "" };
+      },
+      // No port is opened beyond the machine's default (the sandbox page's Access card): no public URL to show.
+      listPortAccessRules: (req) => {
+        if (req.daemonId !== DAEMON_IDS.cloud) throw new ConnectError("daemon not found", Code.NotFound);
+        return { rules: [] };
       },
     }),
   };

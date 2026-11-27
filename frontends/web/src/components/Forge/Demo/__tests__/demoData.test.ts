@@ -9,7 +9,9 @@
  *  - the transport refuses every write before a handler or the gateway sees it;
  *  - DEMO_DATA_SOURCE=remote asks the gateway first and falls back to the
  *    sample data, saying so, when it fails, for every observability read
- *    (fixtures/shop/__tests__/realClient.test.ts holds each read's encoding).
+ *    (fixtures/shop/__tests__/realClient.test.ts holds each read's encoding);
+ *  - the Agents pages' reads (projects, chats, …) are the shop app layer's
+ *    (fixtures/shop/app.ts), with either source, and never reach the gateway.
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -19,6 +21,10 @@ import { create } from "@bufbuild/protobuf";
 vi.mock("@/services/controlPlane/config", () => ({ CONTROL_PLANE_API_URL: "https://cp.test", hasControlPlane: true }));
 
 import { IssuesService } from "@/gen/controlplane/services/issues/v1/issues_pb";
+import { ChatService } from "@/gen/reliant/v1/chat_pb";
+import { ProjectService } from "@/gen/reliant/v1/project_pb";
+import { SHOP_READ_ONLY_MESSAGE } from "@/fixtures/shop";
+import { CHAT_IDS, PROJECT_IDS } from "@/fixtures/shop/workspace";
 import { ListTracesResponseSchema, ObservabilityService } from "@/gen/controlplane/services/observability/v1/observability_pb";
 import { installShellTransport } from "@/lib/connect";
 import { resetShellForTests } from "@/lib/shell";
@@ -201,6 +207,7 @@ describe("the demo transport", () => {
       (err: unknown) => err instanceof ConnectError && err.code === Code.Unimplemented,
     );
     expect(gateway.unary).not.toHaveBeenCalled();
+    expect(globalThis.window.__demoRpcs?.unknown).toContain("unknown.Service/ListIssues");
   });
 
   it("falls back to the sample data for every observability read, not only the telemetry ones", async () => {
@@ -214,6 +221,37 @@ describe("the demo transport", () => {
     const issues = await controlPlaneObservabilityApi.listIssues({ ...scope, window: { startMs: END_MS - 86_400_000, endMs: END_MS }, statuses: [], sort: "last" });
     expect(issues.issues.length).toBeGreaterThan(0);
     expect(gateway.unary).toHaveBeenCalled();
+    expect(getDemoDataStatus()).toBe("fallback");
+  });
+
+  it("answers the Agents pages' reads from the shop app layer, and refuses their writes with the demo's message", async () => {
+    const transport = createDemoTransport({ source: "fixtures", url: "" });
+    const projects = createClient(ProjectService, transport);
+    expect((await projects.listProjects({})).projects.map((p) => p.id)).toContain(PROJECT_IDS.shop);
+    // One of the app layer's named exceptions (APP_LAYER_ANSWERS): a write on read on the server, a read here.
+    expect((await projects.getProject({ projectId: PROJECT_IDS.shop })).project?.id).toBe(PROJECT_IDS.shop);
+    expect((await createClient(ChatService, transport).listChats({ projectId: PROJECT_IDS.shop })).chats.map((c) => c.id)).toContain(CHAT_IDS.cartTotals);
+    await expect(projects.deleteProject({ projectId: PROJECT_IDS.shop } as never)).rejects.toSatisfy(
+      (err: unknown) => err instanceof ConnectError && err.code === Code.PermissionDenied && err.rawMessage === SHOP_READ_ONLY_MESSAGE,
+    );
+    // The page's probe names the refusal, for the smoke check and for whoever adds sample data.
+    expect(globalThis.window.__demoRpcs?.refused).toContain("reliant.v1.ProjectService/DeleteProject");
+  });
+
+  it("keeps the Agents pages' reads off the gateway: the app layer answers them, and only console reads go out", async () => {
+    const gateway = {
+      unary: vi.fn(async () => {
+        throw new ConnectError("gateway down", Code.Unavailable);
+      }),
+      stream: vi.fn(),
+    } as unknown as Transport;
+    const transport = createDemoTransport({ source: "remote", url: "https://gw.test" }, gateway);
+    const projects = createClient(ProjectService, transport);
+    expect((await projects.listProjects({})).projects.map((p) => p.id)).toContain(PROJECT_IDS.shop);
+    expect((await projects.getProject({ projectId: PROJECT_IDS.shop })).project?.id).toBe(PROJECT_IDS.shop);
+    expect(gateway.unary).not.toHaveBeenCalled();
+    await createClient(ObservabilityService, transport).getTrace({ traceId: TRACE });
+    expect(gateway.unary).toHaveBeenCalledTimes(1);
     expect(getDemoDataStatus()).toBe("fallback");
   });
 

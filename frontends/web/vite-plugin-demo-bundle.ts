@@ -5,48 +5,58 @@ import type { Plugin } from "vite";
 /**
  * The forge demo bundle's guard (`vite build --mode demo`, vite.config.ts).
  *
- * demo.reliantlabs.io serves ONLY the forge demo: the console views, the mock
- * transport and its fixtures, the journey engine and "How this app was built".
- * Reliant's chat, onboarding, sign-in, Supabase, daemon and settings code must
- * not be in it: not because the demo would call it (the demo shell's routes
- * never mount it), but because one stray import pulls a whole Reliant subtree
- * into a public bundle that is meant to be small and to reach no backend.
+ * demo.reliantlabs.io is the app as a visitor sees it with nobody signed in:
+ * the app's one shell (frame, nav, keyboard host), the forge console views,
+ * and the app's own Agents pages — chats and their transcripts, the new-chat
+ * home, Inbox, Workflows, Connectors, Sandboxes — mounted under the demo's
+ * route tree (demoShellRoutes.tsx, demoAgentsRoutes.tsx). Every RPC they make
+ * goes to the demo's one transport (lib/connect.demo.ts), answered from the
+ * shop sample data (fixtures/shop: the demo pack and its app layer); writes
+ * are refused there, and no request leaves the page's origin.
+ *
+ * What the demo bundle must NEVER contain is sign-in and account code:
+ * Supabase, lib/auth, the auth store and provider, the app's own roots and
+ * route tree (they mount sign-in), the claim flow, billing (Stripe checkout,
+ * identity linking), the Settings page's account sections and its route
+ * files, and onboarding's sign-up flow. Not because the demo would call it —
+ * its routes never mount it — but because a public page that carries
+ * credential handling is one config mistake from using it, and it cannot
+ * then be proved inert by reading the bundle. App code is welcome; account
+ * code is not. That line is DEMO_FORBIDDEN.
  *
  * So the build itself is the test. At generateBundle every module rollup put
- * in any chunk is checked against RELIANT_ONLY; one match FAILS the build,
- * naming the module and the chunk, and the importer chain is one
- * `vite build --mode demo` + DEMO_BUNDLE_REPORT away. A demo bundle that
+ * in any chunk is checked against DEMO_FORBIDDEN; one match FAILS the build,
+ * naming each import that crosses from allowed code into forbidden code, and
+ * the full importer chain is one DEMO_BUNDLE_REPORT away. A demo bundle that
  * builds is one with none of them in it.
+ *
+ * Cutting a crossing, in order of preference: (1) a module that only needs
+ * "is someone signed in, and who" reads the session port (`@/lib/session`),
+ * which the app backs with the auth store and the demo with a fixed visitor;
+ * (2) otherwise a demo twin (below) of the HIGHEST module that keeps the rest
+ * of the UI intact, answering what the demo needs: nobody signed in, no
+ * token, no funding prompt, no billing, writes impossible.
  *
  * DEMO_BUNDLE_REPORT=<file> also writes every chunk's modules and sizes as
  * JSON (outside the published tree), for size comparisons and for finding
  * who imported what.
- *
- * THE SHELL IS IN THE DEMO GRAPH (since #3519). The demo renders in the app's
- * one shell: the frame (Layout/shell/AppShell.tsx), the nav column and its
- * renderer (Layout/sidebar/ShellNavColumn.tsx, NavRenderer.tsx), the nav
- * config's items (Layout/sidebar/navConfig/items.tsx, with the demo's own
- * config, Forge/Demo/demoNavConfig.ts) and the keyboard host
- * (Shortcuts/ShortcutHost.tsx). They are shared UI, not Reliant-only, so no
- * rule names them. What is app-only comes in through seams the demo leaves
- * empty: the nav body and the Setup Guide (AppShellFrame `nav`, `guide`), the
- * keyboard host's overlays (`overlays`), and Settings' nav sections, which
- * only the app's config imports (navConfig/settings.tsx via hybrid.ts). The
- * rules below are unchanged by it: a shell import that reaches past a seam
- * into a module they name still fails the build, which is the point.
  */
 
 /** A module the demo bundle must not contain, and why. Paths are relative to frontends/web, `/`-separated. */
-export interface ReliantOnlyRule {
+export interface DemoForbiddenRule {
   /** An exact file (it has an extension), or else a path prefix (`src/components/Chat/`, `src/lib/daemon-`). */
   match: string;
   why: string;
-  /** Files under `match` that are plain UI or constants, used by the forge pages too. */
+  /**
+   * Files under `match` that are plain UI, preferences or constants, and reach
+   * no sign-in or account code. An entry ending in `/` excepts a directory.
+   */
   except?: string[];
 }
 
-export const RELIANT_ONLY: readonly ReliantOnlyRule[] = [
-  // Sign-in and sessions.
+export const DEMO_FORBIDDEN: readonly DemoForbiddenRule[] = [
+  // Sign-in and sessions. Never weakened: the session port (lib/session) is
+  // how shared code asks who is signed in without importing any of these.
   { match: "node_modules/@supabase/", why: "Supabase sign-in" },
   {
     match: "src/lib/auth/",
@@ -60,74 +70,84 @@ export const RELIANT_ONLY: readonly ReliantOnlyRule[] = [
   { match: "src/components/AuthInitializer.tsx", why: "Reliant authenticated startup" },
   { match: "src/components/AuthLayout.tsx", why: "Reliant sign-in" },
   { match: "src/components/AuthScreen.tsx", why: "Reliant sign-in" },
-  // The app's route tree (both app hosts: Reliant and the forge brand).
-  { match: "src/routes.tsx", why: "the app's route tree" },
-  { match: "src/settingsSectionRoutes.tsx", why: "Reliant settings" },
-  { match: "src/settingsConnectorRoutes.tsx", why: "Reliant settings" },
-  { match: "src/workflowsAreaRoutes.tsx", why: "Reliant workflows" },
-  { match: "src/components/App.tsx", why: "Reliant's app root" },
-  { match: "src/components/Root.tsx", why: "Reliant's app root" },
-  // Chat, workflows, the daemon and what runs on it.
-  { match: "src/components/Chat/", why: "Reliant chat" },
-  { match: "src/components/workflow/", why: "Reliant workflows" },
-  { match: "src/components/workflows/", why: "Reliant workflows" },
-  { match: "src/components/Automations/", why: "Reliant automations" },
-  { match: "src/components/runs/", why: "Reliant runs" },
-  { match: "src/components/inbox/", why: "Reliant inbox" },
-  { match: "src/components/Machines/", why: "Reliant machines (daemon)" },
-  { match: "src/components/MachineDisk/", why: "Reliant machines (daemon)" },
-  { match: "src/components/Terminal/", why: "Reliant terminal (daemon)" },
-  { match: "src/components/Worktrees/", why: "Reliant worktrees (daemon)" },
-  { match: "src/components/FileBrowser/", why: "Reliant files (daemon)" },
-  { match: "src/components/Git/", why: "Reliant git (daemon)" },
-  { match: "src/components/SourceControl/", why: "Reliant source control (daemon)" },
-  { match: "src/components/DaemonWaitState.tsx", why: "Reliant daemon" },
-  { match: "src/lib/daemon-wait.ts", why: "Reliant daemon" },
-  { match: "src/lib/daemon-retry.ts", why: "Reliant daemon" },
-  { match: "src/lib/daemon-resume.ts", why: "Reliant daemon" },
-  {
-    match: "src/lib/chat",
-    why: "Reliant chat",
-    // Pure: which page names a chat (the one shell's project scope reads it),
-    // and the chat list's project filter as URL/ids.
-    except: ["src/lib/chatRoute.ts", "src/lib/chatProjectFilter.ts"],
-  },
-  { match: "src/store/chat", why: "Reliant chat" },
   { match: "src/store/authStore.ts", why: "Reliant auth" },
   { match: "src/api/authProvider.ts", why: "Reliant auth" },
-  // Reliant's onboarding (the journey ENGINE and the forge journey are the demo's; these are not).
-  { match: "src/components/OnboardingFlow/", why: "Reliant onboarding" },
-  { match: "src/components/Onboarding/OnboardingWizard.tsx", why: "Reliant onboarding" },
-  { match: "src/components/Onboarding/OnboardingChecklist.tsx", why: "Reliant onboarding" },
-  { match: "src/components/Onboarding/ContextualTip", why: "Reliant onboarding" },
-  { match: "src/components/Onboarding/journeys/workflows", why: "Reliant's workflows journey" },
-  { match: "src/components/Onboarding/journeys/fixMyPr", why: "Reliant's workflows journey" },
-  { match: "src/components/Onboarding/journeys/catalog.ts", why: "Reliant's journeys and end-of-tour hooks" },
-  // Settings, billing, orgs, projects: account pages.
-  { match: "src/components/Settings/", why: "Reliant settings", except: ["src/components/Settings/providers/accountFormat.ts"] },
+  // The app's roots and route tree (both app hosts: Reliant and the forge
+  // brand): they mount sign-in, the auth guard and every account page. The
+  // demo has its own tree (demoShellRoutes.tsx) and mounts the app's pages
+  // one by one (demoAgentsRoutes.tsx, workflowsAreaRoutes.tsx).
+  { match: "src/routes.tsx", why: "the app's route tree" },
+  { match: "src/components/App.tsx", why: "Reliant's app root" },
+  { match: "src/components/Root.tsx", why: "Reliant's app root" },
+  { match: "src/components/Claim/", why: "the forge shell's claim flow" },
+  // Account pages: billing (Stripe checkout, identity linking), and the
+  // Settings page's account sections and its route files.
   { match: "src/components/Billing/", why: "billing" },
+  { match: "src/settingsSectionRoutes.tsx", why: "Reliant settings" },
+  { match: "src/settingsConnectorRoutes.tsx", why: "Reliant settings" },
   {
-    match: "src/components/Projects/",
-    why: "Reliant projects",
-    // The one project selector (U7) is the forge console's app switcher too.
-    // Its data hooks have demo twins (hooks/project-catalog-queries.demo.ts,
-    // hooks/sidebar-project-queries.demo.ts, Apps/startBuilding.demo.ts), so
-    // in the demo it lists the demo's apps and reaches no Reliant code.
+    match: "src/components/Settings/",
+    why: "Reliant settings",
+    // UI preferences the chat page reads, and the sections the Agents pages
+    // (Connectors, Sandboxes) and the project panel render. Whatever they
+    // reach in auth or billing is cut by a twin, never by widening this list.
     except: [
-      "src/components/Projects/cloneTargets.ts",
-      "src/components/Projects/ProjectSelector.tsx",
-      "src/components/Projects/AppChip.tsx",
-      "src/components/Projects/ProjectRowSummary.tsx",
-      // The console Overview's form for an app with nothing deployed (U6c);
-      // its chats are twinned (ProjectChats.demo.tsx).
-      "src/components/Projects/NoAppLanding.tsx",
+      // Chat display preferences and the model picker's local models.
+      "src/components/Settings/ToolCallSettings.tsx",
+      "src/components/Settings/SpawnDisplaySettings.ts",
+      "src/components/Settings/localModels.ts",
+      // The provider usage chip's display pieces (no account reads).
+      "src/components/Settings/providers/PlanBadge.tsx",
+      "src/components/Settings/providers/UsageBars.tsx",
+      "src/components/Settings/providers/useNow.ts",
+      "src/components/Settings/providers/accountFormat.ts",
+      "src/components/Settings/SettingsPageHeader.tsx",
+      // Connectors: integrations, and the MCP tab with its pieces.
+      "src/components/Settings/IntegrationsSettings.tsx",
+      "src/components/Settings/MCPSettings.tsx",
+      "src/components/Settings/MCPTabs.tsx",
+      "src/components/Settings/MCPInstalledTab.tsx",
+      "src/components/Settings/MCPDiscoverTab.tsx",
+      "src/components/Settings/MCPServerListItem.tsx",
+      "src/components/Settings/MCPCustomServerModal.tsx",
+      "src/components/Settings/MCPSetupWizard.tsx",
+      "src/components/Settings/mcpAvatar.tsx",
+      "src/components/Settings/ConfigScopeSelector.tsx",
+      "src/components/Settings/SettingsProjectScope.tsx",
+      // The project panel's details card.
+      "src/components/Settings/projects/CurrentProjectDetails.tsx",
+      "src/components/Settings/projects/projectSource.ts",
+      // Sandboxes: the machine list and its machine cards. Its billing
+      // (costs, growing a disk, compute checkout) stays forbidden.
+      "src/components/Settings/cloud/machines.tsx",
+      "src/components/Settings/cloud/ui/",
+      "src/components/Settings/cloud/machineLifecycle.ts",
+      "src/components/Settings/cloud/machineAccess.tsx",
+      "src/components/Settings/cloud/MachineDiskCard.tsx",
+      "src/components/Settings/cloud/MachineResourcesCard.tsx",
+      "src/components/Settings/cloud/RenameMachine.tsx",
     ],
   },
-  { match: "src/components/Claim/", why: "the forge shell's claim flow" },
+  // Onboarding's sign-up flow (the journey ENGINE and the forge journey are
+  // the demo's; these read the signed-in account).
+  {
+    match: "src/components/OnboardingFlow/",
+    why: "Reliant onboarding",
+    // The chat routes' setup policy: pure decisions over the machine list
+    // and the current user, and the hook that applies them (ModernApp).
+    except: [
+      "src/components/OnboardingFlow/onboardingGatePolicy.ts",
+      "src/components/OnboardingFlow/usableDaemon.ts",
+      "src/components/OnboardingFlow/useChatSetup.ts",
+    ],
+  },
+  { match: "src/components/Onboarding/OnboardingWizard.tsx", why: "Reliant onboarding" },
+  { match: "src/components/Onboarding/OnboardingChecklist.tsx", why: "Reliant onboarding" },
+  { match: "src/components/Onboarding/journeys/catalog.ts", why: "Reliant's journeys and end-of-tour hooks" },
 ];
 
 /** The rule `moduleId` breaks, if any. `root` is frontends/web. Virtual and non-file ids never match. */
-export function reliantOnlyRule(moduleId: string, root: string, rules: readonly ReliantOnlyRule[] = RELIANT_ONLY): ReliantOnlyRule | undefined {
+export function demoForbiddenRule(moduleId: string, root: string, rules: readonly DemoForbiddenRule[] = DEMO_FORBIDDEN): DemoForbiddenRule | undefined {
   const id = moduleId.replace(/^\0/, "").split("?")[0];
   // A demo twin is the demo's own code, wherever it sits.
   if (!path.isAbsolute(id) || /\.demo\.[cm]?[jt]sx?$/.test(id)) return undefined;
@@ -136,7 +156,8 @@ export function reliantOnlyRule(moduleId: string, root: string, rules: readonly 
   // match on the LAST node_modules segment, which names the package.
   const nm = rel.lastIndexOf("node_modules/");
   const key = nm >= 0 ? rel.slice(nm) : rel;
-  return rules.find((r) => (/\.[a-z]+$/.test(r.match) ? key === r.match : key.startsWith(r.match) && !r.except?.includes(key)));
+  const excepted = (r: DemoForbiddenRule) => r.except?.some((e) => (e.endsWith("/") ? key.startsWith(e) : key === e)) ?? false;
+  return rules.find((r) => (/\.[a-z]+$/.test(r.match) ? key === r.match : key.startsWith(r.match) && !excepted(r)));
 }
 
 /**
@@ -198,7 +219,7 @@ export function demoBundleGuard(): Plugin {
         const info = this.getModuleInfo(id);
         if (info) report.importers[rel(id)] = [...info.importers, ...info.dynamicImporters].map(rel);
       }
-      const banned = new Map<string, ReliantOnlyRule>();
+      const banned = new Map<string, DemoForbiddenRule>();
       for (const item of Object.values(bundle)) {
         if (item.type === "asset") {
           report.assets.push({ fileName: item.fileName, bytes: typeof item.source === "string" ? Buffer.byteLength(item.source) : item.source.byteLength });
@@ -206,7 +227,7 @@ export function demoBundleGuard(): Plugin {
         }
         report.chunks.push({ fileName: item.fileName, bytes: Buffer.byteLength(item.code), modules: item.moduleIds.map(rel) });
         for (const id of item.moduleIds) {
-          const rule = reliantOnlyRule(id, root);
+          const rule = demoForbiddenRule(id, root);
           if (rule) banned.set(id, rule);
         }
       }
@@ -214,7 +235,7 @@ export function demoBundleGuard(): Plugin {
       if (out) fs.writeFileSync(path.resolve(out), JSON.stringify(report, null, 2));
       if (banned.size === 0) return;
 
-      // Where the demo's graph crosses into Reliant-only code: each import
+      // Where the demo's graph crosses into forbidden code: each import
       // from an allowed module to a banned one, found by a walk from the
       // entries. Cutting those imports is the fix; everything behind them
       // goes with them.
@@ -236,8 +257,10 @@ export function demoBundleGuard(): Plugin {
         }
       }
       this.error(
-        `the forge demo bundle contains ${banned.size} Reliant-only modules (vite-plugin-demo-bundle.ts RELIANT_ONLY). ` +
-          `They arrive through these imports; cut each from the demo's graph:\n${[...crossings.keys()].map((c) => `  ${c}`).join("\n")}\n` +
+        `the forge demo bundle contains ${banned.size} sign-in or account modules (vite-plugin-demo-bundle.ts DEMO_FORBIDDEN). ` +
+          `They arrive through these imports; cut each from the demo's graph (read the session port, @/lib/session, ` +
+          `if the importer only needs who is signed in; else give the importer, or a module above it, a .demo twin):\n` +
+          `${[...crossings.keys()].map((c) => `  ${c}`).join("\n")}\n` +
           `Every banned module: ${[...banned.keys()].map(rel).join(", ")}`,
       );
     },

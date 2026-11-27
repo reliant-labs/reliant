@@ -19,9 +19,9 @@ import { useQuery } from "@tanstack/react-query";
 import type { ListProjectsWithAppsResponse } from "@/gen/reliant/v1/project_pb";
 import { orgQueryEnabled, orgRequest, useOrgScope, withOrgFailure } from "@/lib/orgScope";
 import { catalogFromResponse, type ProjectCatalog } from "@/services/projects/catalog";
-import { useAuthStore } from "@/store/authStore";
 
 import { projectServiceQueries } from "./project-service-hooks_gen";
+import { useHasAuthSession } from "./useHasAuthSession";
 
 /** How long a catalog is fresh: an app deployed elsewhere shows within this. */
 export const PROJECT_CATALOG_STALE_TIME_MS = 30_000;
@@ -58,13 +58,13 @@ export interface ProjectCatalogView {
  * plane).
  */
 export function useProjectCatalog(orgId?: string | null): ProjectCatalogView {
-  const hasSession = useAuthStore((s) => !!s.session);
+  const hasSession = useHasAuthSession();
   const scope = useOrgScope();
   const explicit = orgId !== undefined;
   const org = explicit ? orgId : scope.orgId;
   // On both brands, like useProjects: the forge host mounts the one route
-  // tree (U6), projects included. The public demo is signed out, so it never
-  // asks.
+  // tree (U6), projects included. The public demo's fixed visitor asks its
+  // transport (useHasAuthSession.demo.ts), which answers the sample projects.
   const wanted = hasSession;
   const enabled = wanted && (explicit || orgQueryEnabled(scope));
   const options = projectServiceQueries.listProjectsWithApps(projectCatalogRequest(org), {
