@@ -54,6 +54,9 @@ type Runner struct {
 	Image string
 	// VulnDBDir is the machine's grype database, mounted read-only.
 	VulnDBDir string
+	// TrustedGoCacheDir is the machine's trusted Go build cache, mounted
+	// read-only into every gate (Spec.TrustedGoCacheDir); "" mounts none.
+	TrustedGoCacheDir string
 	// Limits are the per-gate limits; the request's timeout sets Wall.
 	Limits Limits
 	// Log receives the gates' own output; nil discards it.
@@ -154,7 +157,8 @@ func (r *Runner) Run(ctx context.Context, b Backend, req gaterun.StartRequest) g
 	limits.Wall = req.Timeout()
 	res, err := b.Run(ctx, Spec{
 		RunID: req.GateID, Image: r.Image, Command: []string{"/bin/sh", "-c", Script(plan)},
-		SourceDir: src, Env: env, VulnDBDir: r.VulnDBDir, CacheVolume: cacheVolume(b, req), Limits: limits,
+		SourceDir: src, Env: env, VulnDBDir: r.VulnDBDir, CacheVolume: cacheVolume(b, req),
+		TrustedGoCacheDir: r.TrustedGoCacheDir, Limits: limits,
 		Stdout: r.Log, Stderr: r.Log,
 	})
 	if err != nil {

@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
@@ -285,6 +287,121 @@ func TestRunWithoutACacheVolumeCreatesNone(t *testing.T) {
 	// The tree is copied owned by the image's (non-root) user.
 	if !d.called("cp -a /tmp/src/. reliant-gate-gate-b1-1:/gate/src") {
 		t.Fatalf("the tree was not copied with -a: %v", d.calls)
+	}
+}
+
+// createdMounts runs s through Run against a fake engine and returns the
+// --mount values of its `docker create`, and what the gate logged.
+func createdMounts(t *testing.T, s gatehost.Spec) (mounts []string, log string) {
+	t.Helper()
+	d := &fakeDocker{state: containerState{Status: "exited"}}
+	var out strings.Builder
+	s.Stdout = &out
+	if _, err := (&Backend{run: d.run}).Run(context.Background(), s); err != nil {
+		t.Fatalf("a trusted cache problem must never fail the gate: %v", err)
+	}
+	for _, c := range d.calls {
+		if len(c) > 1 && c[0] == "create" {
+			for i, a := range c {
+				if a == "--mount" {
+					mounts = append(mounts, c[i+1])
+				}
+			}
+		}
+	}
+	return mounts, out.String()
+}
+
+func trustedMount(dir string) string {
+	return "type=bind,source=" + dir + ",target=/gate/trusted-go-build,readonly"
+}
+
+func TestTheTrustedGoCacheIsMountedReadOnlyWhenValid(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.Chmod(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	s := spec()
+	s.TrustedGoCacheDir = dir
+	mounts, log := createdMounts(t, s)
+	want := []string{
+		"type=volume,source=reliant-gate-gate-b1-1-work,target=/gate",
+		"type=bind,source=/var/lib/forge/vulndb,target=/vulndb,readonly",
+		trustedMount(dir),
+	}
+	if !slices.Equal(mounts, want) {
+		t.Fatalf("mounts %v, want %v", mounts, want)
+	}
+	if !strings.Contains(log, "trusted Go cache "+dir+" read-only at /gate/trusted-go-build") {
+		t.Fatalf("the mount was not logged:\n%s", log)
+	}
+}
+
+func TestAnUnusableTrustedGoCacheIsNotMounted(t *testing.T) {
+	root := t.TempDir()
+	worldWritable := filepath.Join(root, "world")
+	groupWritable := filepath.Join(root, "group")
+	for _, d := range []struct {
+		path string
+		mode os.FileMode
+	}{{worldWritable, 0o777}, {groupWritable, 0o775}} {
+		if err := os.Mkdir(d.path, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		// Chmod, not Mkdir's mode: the umask would clear the bits under test.
+		if err := os.Chmod(d.path, d.mode); err != nil {
+			t.Fatal(err)
+		}
+	}
+	target := filepath.Join(root, "real")
+	if err := os.Mkdir(target, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(root, "link")
+	if err := os.Symlink(target, link); err != nil {
+		t.Fatal(err)
+	}
+	file := filepath.Join(root, "file")
+	if err := os.WriteFile(file, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct{ name, dir, why string }{
+		{"missing", filepath.Join(root, "missing"), "does not exist"},
+		{"world-writable", worldWritable, "group- or world-writable"},
+		{"group-writable", groupWritable, "group- or world-writable"},
+		{"symlink", link, "is a symlink"},
+		{"file", file, "is not a directory"},
+		{"relative", "go-build-trusted", "not a clean absolute path"},
+		{"unclean", target + "/../real", "not a clean absolute path"},
+		{"comma", root + "/a,readonly=false", "mount option"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := spec()
+			s.TrustedGoCacheDir = tc.dir
+			mounts, log := createdMounts(t, s)
+			for _, m := range mounts {
+				if strings.Contains(m, gaterun.TrustedGoCacheMount) {
+					t.Fatalf("mounted %q: %v", tc.dir, mounts)
+				}
+			}
+			if strings.Count(log, "trusted Go cache not mounted") != 1 || !strings.Contains(log, tc.why) {
+				t.Fatalf("want one line saying %q, got:\n%s", tc.why, log)
+			}
+		})
+	}
+}
+
+func TestTheTrustedGoCacheSettingOffMountsNothing(t *testing.T) {
+	s := spec()
+	s.TrustedGoCacheDir = gatehost.TrustedGoCacheDir("off")
+	mounts, log := createdMounts(t, s)
+	for _, m := range mounts {
+		if strings.Contains(m, gaterun.TrustedGoCacheMount) {
+			t.Fatalf("off mounted a trusted cache: %v", mounts)
+		}
+	}
+	if strings.Contains(log, "trusted Go cache") {
+		t.Fatalf("off logged a trusted cache:\n%s", log)
 	}
 }
 

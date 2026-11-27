@@ -10,8 +10,9 @@
 // shadow.
 //
 // It is as contained as runc allows without root on the host:
-//   - no host path is mounted except the grype database, read-only; the tree
-//     is copied into a per-gate volume, and the output is copied back out;
+//   - no host path is mounted except the grype database and the machine's
+//     trusted Go build cache, both read-only; the tree is copied into a
+//     per-gate volume, and the output is copied back out;
 //   - no host engine socket, no privileges, every capability dropped,
 //     no-new-privileges, a read-only root filesystem;
 //   - the environment is exactly the gate's (gaterun.GateEnv), checked after
@@ -41,6 +42,16 @@
 // missing docker engine together is a dedicated gate machine with sysbox,
 // where each gate gets isolation and a nested engine of its own.
 //
+// The trusted Go build cache (Spec.TrustedGoCacheDir) is a different kind of
+// sharing. It is the machine's GOCACHE that only main's seeding writes,
+// bind-mounted read-only at gaterun.TrustedGoCacheMount; the gate image's
+// GOCACHEPROG (`forge cache prog --trusted`) reads it before the gate's own
+// GOCACHE and writes only to GOCACHE. A candidate cannot write the trusted
+// tier, so it can poison only its own overlay: unlike the warm cache volume,
+// this mount adds no cross-gate poisoning vector. It is mounted only when the
+// directory is absolute, a real directory (not a symlink) and neither group-
+// nor world-writable; otherwise the gate logs one line and runs without it.
+//
 //forge:exclude-contract: a per-machine gate backend implementing gatehost.Backend (the consumer's interface), driven through the docker CLI; its tests fake the CLI, so a generated mock buys nothing
 package runcgate
 
@@ -51,7 +62,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -198,8 +212,8 @@ func names(runID string) (container, volume string) {
 }
 
 // createArgs is the `docker create` of one gate. Every value is explicit: no
-// host path but the read-only database, no inherited variable, no
-// privilege.
+// host path but the read-only database and trusted Go cache (Run checks the
+// cache first), no inherited variable, no privilege.
 func createArgs(s gatehost.Spec) []string {
 	ctr, vol := names(s.RunID)
 	args := []string{
@@ -222,6 +236,9 @@ func createArgs(s gatehost.Spec) []string {
 	}
 	if s.VulnDBDir != "" {
 		args = append(args, "--mount", "type=bind,source="+s.VulnDBDir+",target="+gaterun.VulnDBMount+",readonly")
+	}
+	if s.TrustedGoCacheDir != "" {
+		args = append(args, "--mount", "type=bind,source="+s.TrustedGoCacheDir+",target="+gaterun.TrustedGoCacheMount+",readonly")
 	}
 	for _, kv := range s.Env {
 		args = append(args, "--env", kv)
@@ -249,6 +266,14 @@ func (b *Backend) Run(ctx context.Context, s gatehost.Spec) (gatehost.Result, er
 		defer func() {
 			_, _ = fmt.Fprintf(stdout, "reliant-gate: %s: warm cache volume %s is %s after the gate\n", s.RunID, s.CacheVolume, b.volumeSize(context.WithoutCancel(ctx), s.CacheVolume))
 		}()
+	}
+	if s.TrustedGoCacheDir != "" {
+		if err := checkTrustedGoCache(s.TrustedGoCacheDir); err != nil {
+			_, _ = fmt.Fprintf(stdout, "reliant-gate: %s: trusted Go cache not mounted, the gate builds on its own cache: %v\n", s.RunID, err)
+			s.TrustedGoCacheDir = ""
+		} else {
+			_, _ = fmt.Fprintf(stdout, "reliant-gate: %s: trusted Go cache %s read-only at %s\n", s.RunID, s.TrustedGoCacheDir, gaterun.TrustedGoCacheMount)
+		}
 	}
 	if _, err := b.docker(ctx, createArgs(s)...); err != nil {
 		return gatehost.Result{}, err
@@ -293,6 +318,34 @@ func (b *Backend) Run(ctx context.Context, s gatehost.Spec) (gatehost.Result, er
 		res.Class, res.ExitCode = gaterun.ClassifyExit(state.ExitCode), state.ExitCode
 	}
 	return res, nil
+}
+
+// checkTrustedGoCache says why dir must not be mounted as the trusted Go
+// cache, or nil. It must be an absolute, clean path that `--mount` cannot
+// misread (no comma), name a real directory rather than a symlink to one,
+// and be writable by its owner alone: a directory another user can write is
+// not a cache only main's seeding fills.
+func checkTrustedGoCache(dir string) error {
+	switch {
+	case !filepath.IsAbs(dir) || filepath.Clean(dir) != dir:
+		return fmt.Errorf("%q is not a clean absolute path", dir)
+	case strings.ContainsAny(dir, ",\"\n"):
+		return fmt.Errorf("%q holds a character a mount option cannot carry", dir)
+	}
+	fi, err := os.Lstat(dir)
+	switch {
+	case errors.Is(err, fs.ErrNotExist):
+		return fmt.Errorf("%s does not exist", dir)
+	case err != nil:
+		return err
+	case fi.Mode()&fs.ModeSymlink != 0:
+		return fmt.Errorf("%s is a symlink", dir)
+	case !fi.IsDir():
+		return fmt.Errorf("%s is not a directory", dir)
+	case fi.Mode().Perm()&0o022 != 0:
+		return fmt.Errorf("%s is group- or world-writable (%s)", dir, fi.Mode().Perm())
+	}
+	return nil
 }
 
 type containerState struct {

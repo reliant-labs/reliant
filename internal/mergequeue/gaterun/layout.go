@@ -20,4 +20,10 @@ const (
 	// it). With Spec.CacheVolume it is the repository's warm cache volume;
 	// without, a directory on the per-gate work volume.
 	CacheMount = WorkMount + "/cache"
+	// TrustedGoCacheMount is where the machine's trusted Go build cache is
+	// mounted, read-only. The gate image's GOCACHEPROG
+	// (`forge cache prog --trusted /gate/trusted-go-build`) reads it before
+	// GOCACHE and writes only to GOCACHE; with nothing mounted there it runs
+	// on GOCACHE alone.
+	TrustedGoCacheMount = WorkMount + "/trusted-go-build"
 )

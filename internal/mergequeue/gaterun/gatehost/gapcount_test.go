@@ -94,6 +94,38 @@ func TestTheRunnerPassesTheCacheVolumeToTheBackend(t *testing.T) {
 	}
 }
 
+// The trusted Go cache is read-only, so every gate gets it, isolated or not,
+// with or without the warm cache.
+func TestTheRunnerPassesTheTrustedGoCacheToEveryBackend(t *testing.T) {
+	for _, iso := range []gaterun.Isolation{gaterun.IsolationRunc, gaterun.IsolationSysbox} {
+		f := newFake(t, iso)
+		r := newRunner(t, f, nil)
+		r.TrustedGoCacheDir = "/var/cache/workspace/go-build-trusted"
+		req := startReq(cmdStage(config.StageLint, "true"), cmdStage(config.StageTest, "true"),
+			cmdStage(config.StageBuild, "true"), offStage(config.StageSBOMScan))
+		req.AllowNotIsolated = true
+		runGate(t, f, r, req)
+		if len(f.specs) != 1 || f.specs[0].TrustedGoCacheDir != r.TrustedGoCacheDir {
+			t.Fatalf("%s: specs %+v", iso, f.specs)
+		}
+	}
+}
+
+func TestTrustedGoCacheDirSetting(t *testing.T) {
+	for setting, want := range map[string]string{
+		"":                 DefaultTrustedGoCacheDir,
+		"  ":               DefaultTrustedGoCacheDir,
+		"off":              "",
+		"OFF":              "",
+		"/srv/go-trusted":  "/srv/go-trusted",
+		" /srv/go-trusted": "/srv/go-trusted",
+	} {
+		if got := TrustedGoCacheDir(setting); got != want {
+			t.Errorf("TrustedGoCacheDir(%q) = %q, want %q", setting, got, want)
+		}
+	}
+}
+
 func TestCacheVolumeName(t *testing.T) {
 	for repo, want := range map[string]string{
 		"reliant-labs/reliant":       "reliant-gate-cache-reliant-labs-reliant-7bf4989553b3",
