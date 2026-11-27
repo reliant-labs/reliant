@@ -55,7 +55,7 @@ const KNOWN_REFUSALS: Record<string, { why: string; surfaces?: string[]; except?
     why: 'projectStore touches the selected project on every selection, fire-and-forget (hooks/project-queries touchProject; reliant#3458)',
     except: [
       'projects', 'projects-project-page', 'billing', 'usage', 'hosting', 'shell-usage-billing', 'shell-settings (desktop)',
-      'shell-inbox (desktop)', 'shell-apps', 'shell-connectors', 'shell-empty-cta', 'shell-daemonless-home (desktop)',
+      'shell-inbox (desktop)', 'gtm-strategy', 'gtm-strategy-library', 'gtm-channels', 'gtm-ideas', 'gtm-campaigns', 'gtm-calendar', 'gtm-positioning', 'shell-apps', 'shell-connectors', 'shell-empty-cta', 'shell-daemonless-home (desktop)',
       'observability-overview', 'settings-appearance',
     ],
     // The desktop daemonless home sends Alex to Projects; a project selected
@@ -687,6 +687,51 @@ const SURFACES: Surface[] = [
     path: '/inbox',
     on: ['desktop', 'mobile'],
     ready: (page) => page.getByRole('heading', { name: 'Inbox' }).first(),
+  },
+  {
+    // The GTM area (components/Gtm, sample pack in src/fixtures/shop/handlers/reliant/gtm.ts):
+    // each page waits on a sample record that only its own read can supply.
+    name: 'gtm-strategy',
+    path: '/gtm/strategy',
+    on: ['desktop', 'mobile'],
+    ready: (page) => page.getByText('Developer-led growth this half').first(),
+  },
+  {
+    // The org's strategy library: placeholder entries, and the pending prune request's banner.
+    name: 'gtm-strategy-library',
+    path: '/gtm/strategy?view=library',
+    on: ['desktop', 'mobile'],
+    ready: (page) => page.getByText('Launch week (placeholder)').first(),
+  },
+  {
+    name: 'gtm-channels',
+    path: '/gtm/channels',
+    on: ['desktop', 'mobile'],
+    ready: (page) => page.getByText('Podcast guest spots').first(),
+  },
+  {
+    name: 'gtm-ideas',
+    path: '/gtm/ideas',
+    on: ['desktop', 'mobile'],
+    ready: (page) => page.getByText('Explain machine-free flows in one post').first(),
+  },
+  {
+    name: 'gtm-campaigns',
+    path: '/gtm/campaigns',
+    on: ['desktop', 'mobile'],
+    ready: (page) => page.getByText('Sites launch').first(),
+  },
+  {
+    name: 'gtm-calendar',
+    path: '/gtm/calendar',
+    on: ['desktop', 'mobile'],
+    ready: (page) => page.getByText('Show HN: deploy a static site with one command').first(),
+  },
+  {
+    name: 'gtm-positioning',
+    path: '/gtm/positioning',
+    on: ['desktop', 'mobile'],
+    ready: (page) => page.getByText('Solo founders').first(),
   },
   {
     name: 'shell-workflows',
