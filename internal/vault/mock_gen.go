@@ -14,14 +14,15 @@ import (
 )
 
 // forge:section MockService
-// forge:hash=f518a8661cd27e15c8a4ef661c09a97010e87ac18e2303550745a0937fb40791
+// forge:hash=5f0fa07d9214d5d04ef101ace8f6590a95cf437b7aa9cf028a2838ae8130a151
 
 // MockService is a test mock for the Service interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockService.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockService.<Method>Func not set" error.
 type MockService struct {
 	contractkit.Recorder
 	SealFunc       func(context.Context, Tenant, []byte, []byte) ([]byte, error)
@@ -56,18 +57,91 @@ func (m *MockService) OpenSecret(ctx context.Context, tenant Tenant, ciphertext 
 	return Secret{}, contractkit.MockNotSet("MockService", "OpenSecret")
 }
 
+// MockServiceSealCall is one recorded call of MockService.Seal, one
+// field per parameter.
+type MockServiceSealCall struct {
+	Ctx       context.Context
+	Tenant    Tenant
+	Plaintext []byte
+	Aad       []byte
+}
+
+// SealCalls returns every recorded Seal call, oldest first, with
+// its arguments typed. It reads the same log as Calls("Seal").
+func (m *MockService) SealCalls() []MockServiceSealCall {
+	var out []MockServiceSealCall
+	for _, c := range m.Recorder.Calls("Seal") {
+		var r MockServiceSealCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Tenant, _ = c.Args[1].(Tenant)
+		r.Plaintext, _ = c.Args[2].([]byte)
+		r.Aad, _ = c.Args[3].([]byte)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceOpenCall is one recorded call of MockService.Open, one
+// field per parameter.
+type MockServiceOpenCall struct {
+	Ctx        context.Context
+	Tenant     Tenant
+	Ciphertext []byte
+	Aad        []byte
+}
+
+// OpenCalls returns every recorded Open call, oldest first, with
+// its arguments typed. It reads the same log as Calls("Open").
+func (m *MockService) OpenCalls() []MockServiceOpenCall {
+	var out []MockServiceOpenCall
+	for _, c := range m.Recorder.Calls("Open") {
+		var r MockServiceOpenCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Tenant, _ = c.Args[1].(Tenant)
+		r.Ciphertext, _ = c.Args[2].([]byte)
+		r.Aad, _ = c.Args[3].([]byte)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceOpenSecretCall is one recorded call of MockService.OpenSecret, one
+// field per parameter.
+type MockServiceOpenSecretCall struct {
+	Ctx        context.Context
+	Tenant     Tenant
+	Ciphertext []byte
+	Aad        []byte
+}
+
+// OpenSecretCalls returns every recorded OpenSecret call, oldest first, with
+// its arguments typed. It reads the same log as Calls("OpenSecret").
+func (m *MockService) OpenSecretCalls() []MockServiceOpenSecretCall {
+	var out []MockServiceOpenSecretCall
+	for _, c := range m.Recorder.Calls("OpenSecret") {
+		var r MockServiceOpenSecretCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Tenant, _ = c.Args[1].(Tenant)
+		r.Ciphertext, _ = c.Args[2].([]byte)
+		r.Aad, _ = c.Args[3].([]byte)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ Service = (*MockService)(nil)
 
 // forge:section MockKeyWrapper
-// forge:hash=748dbf892f0824ef1161d7c35dd9836be92f5e22419ba5fdd0c962db089c0629
+// forge:hash=1c01ffc91bebb97ce03be6b593cba57119cea46b5a898198f3934a61b47c49ee
 
 // MockKeyWrapper is a test mock for the KeyWrapper interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockKeyWrapper.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockKeyWrapper.<Method>Func not set" error.
 type MockKeyWrapper struct {
 	contractkit.Recorder
 	WrapFunc   func([]byte, []byte) ([]byte, string, error)
@@ -90,6 +164,46 @@ func (m *MockKeyWrapper) Unwrap(wrapped []byte, aad []byte) ([]byte, error) {
 		return m.UnwrapFunc(wrapped, aad)
 	}
 	return nil, contractkit.MockNotSet("MockKeyWrapper", "Unwrap")
+}
+
+// MockKeyWrapperWrapCall is one recorded call of MockKeyWrapper.Wrap, one
+// field per parameter.
+type MockKeyWrapperWrapCall struct {
+	Dek []byte
+	Aad []byte
+}
+
+// WrapCalls returns every recorded Wrap call, oldest first, with
+// its arguments typed. It reads the same log as Calls("Wrap").
+func (m *MockKeyWrapper) WrapCalls() []MockKeyWrapperWrapCall {
+	var out []MockKeyWrapperWrapCall
+	for _, c := range m.Recorder.Calls("Wrap") {
+		var r MockKeyWrapperWrapCall
+		r.Dek, _ = c.Args[0].([]byte)
+		r.Aad, _ = c.Args[1].([]byte)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockKeyWrapperUnwrapCall is one recorded call of MockKeyWrapper.Unwrap, one
+// field per parameter.
+type MockKeyWrapperUnwrapCall struct {
+	Wrapped []byte
+	Aad     []byte
+}
+
+// UnwrapCalls returns every recorded Unwrap call, oldest first, with
+// its arguments typed. It reads the same log as Calls("Unwrap").
+func (m *MockKeyWrapper) UnwrapCalls() []MockKeyWrapperUnwrapCall {
+	var out []MockKeyWrapperUnwrapCall
+	for _, c := range m.Recorder.Calls("Unwrap") {
+		var r MockKeyWrapperUnwrapCall
+		r.Wrapped, _ = c.Args[0].([]byte)
+		r.Aad, _ = c.Args[1].([]byte)
+		out = append(out, r)
+	}
+	return out
 }
 
 // Compile-time check.

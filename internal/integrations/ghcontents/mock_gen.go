@@ -16,14 +16,15 @@ import (
 )
 
 // forge:section MockService
-// forge:hash=9ccf808ba750f20345e9032e372a29c4eca2232814a4fa0053a522e89ad43d8e
+// forge:hash=d313e7e974f1a0df862b04965927f38e5727ecea1d43c7547131d2ddde9cc557
 
 // MockService is a test mock for the Service interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockService.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockService.<Method>Func not set" error.
 type MockService struct {
 	contractkit.Recorder
 	ReadFunc func(context.Context, Request) ([]byte, error)
@@ -38,18 +39,39 @@ func (m *MockService) Read(ctx context.Context, req Request) ([]byte, error) {
 	return nil, contractkit.MockNotSet("MockService", "Read")
 }
 
+// MockServiceReadCall is one recorded call of MockService.Read, one
+// field per parameter.
+type MockServiceReadCall struct {
+	Ctx context.Context
+	Req Request
+}
+
+// ReadCalls returns every recorded Read call, oldest first, with
+// its arguments typed. It reads the same log as Calls("Read").
+func (m *MockService) ReadCalls() []MockServiceReadCall {
+	var out []MockServiceReadCall
+	for _, c := range m.Recorder.Calls("Read") {
+		var r MockServiceReadCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Req, _ = c.Args[1].(Request)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ Service = (*MockService)(nil)
 
 // forge:section MockTokens
-// forge:hash=64fbec6594cff62c67f96ad066df543f1e37a21d8477c65af580c6d48a93ec55
+// forge:hash=d7af0d17dd266089aa0eeccda0e800c0502f833b47d24536f8aab5f608b4badd
 
 // MockTokens is a test mock for the Tokens interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockTokens.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockTokens.<Method>Func not set" error.
 type MockTokens struct {
 	contractkit.Recorder
 	MintInstallationTokenFunc func(context.Context, gitcredentialclient.InstallationRequest) (gitcredentialclient.InstallationToken, error)
@@ -62,6 +84,26 @@ func (m *MockTokens) MintInstallationToken(ctx context.Context, req gitcredentia
 		return m.MintInstallationTokenFunc(ctx, req)
 	}
 	return *new(gitcredentialclient.InstallationToken), contractkit.MockNotSet("MockTokens", "MintInstallationToken")
+}
+
+// MockTokensMintInstallationTokenCall is one recorded call of MockTokens.MintInstallationToken, one
+// field per parameter.
+type MockTokensMintInstallationTokenCall struct {
+	Ctx context.Context
+	Req gitcredentialclient.InstallationRequest
+}
+
+// MintInstallationTokenCalls returns every recorded MintInstallationToken call, oldest first, with
+// its arguments typed. It reads the same log as Calls("MintInstallationToken").
+func (m *MockTokens) MintInstallationTokenCalls() []MockTokensMintInstallationTokenCall {
+	var out []MockTokensMintInstallationTokenCall
+	for _, c := range m.Recorder.Calls("MintInstallationToken") {
+		var r MockTokensMintInstallationTokenCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Req, _ = c.Args[1].(gitcredentialclient.InstallationRequest)
+		out = append(out, r)
+	}
+	return out
 }
 
 // Compile-time check.

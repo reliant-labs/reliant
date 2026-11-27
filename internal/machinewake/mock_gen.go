@@ -17,14 +17,15 @@ import (
 )
 
 // forge:section MockService
-// forge:hash=d484bbc5f45dee443f1232249e58ffad39f4d4aaa7e11b4ac33aa17d7c711556
+// forge:hash=d9cbaac3239a54b0199068fae9992525cf0de07bb3df68eb9144e5e2b1de6de1
 
 // MockService is a test mock for the Service interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockService.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockService.<Method>Func not set" error.
 type MockService struct {
 	contractkit.Recorder
 	AfterFailureFunc func(context.Context, string, Target, error) error
@@ -39,18 +40,43 @@ func (m *MockService) AfterFailure(ctx context.Context, userID string, target Ta
 	return contractkit.MockNotSet("MockService", "AfterFailure")
 }
 
+// MockServiceAfterFailureCall is one recorded call of MockService.AfterFailure, one
+// field per parameter.
+type MockServiceAfterFailureCall struct {
+	Ctx    context.Context
+	UserID string
+	Target Target
+	Err    error
+}
+
+// AfterFailureCalls returns every recorded AfterFailure call, oldest first, with
+// its arguments typed. It reads the same log as Calls("AfterFailure").
+func (m *MockService) AfterFailureCalls() []MockServiceAfterFailureCall {
+	var out []MockServiceAfterFailureCall
+	for _, c := range m.Recorder.Calls("AfterFailure") {
+		var r MockServiceAfterFailureCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.Target, _ = c.Args[2].(Target)
+		r.Err, _ = c.Args[3].(error)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ Service = (*MockService)(nil)
 
 // forge:section MockOwners
-// forge:hash=f36b1d8462d2664846d31f2f5d944e1e955d58f9b74a63267cd7eb75abd840f7
+// forge:hash=646b9d2a60654fbb7aa7ea1a29bb10f6a3e09b071a387ecbb83801cccb4e6805
 
 // MockOwners is a test mock for the Owners interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockOwners.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockOwners.<Method>Func not set" error.
 type MockOwners struct {
 	contractkit.Recorder
 	GetDaemonFunc func(context.Context, string) (*db.Daemon, error)
@@ -65,18 +91,39 @@ func (m *MockOwners) GetDaemon(ctx context.Context, id string) (*db.Daemon, erro
 	return nil, contractkit.MockNotSet("MockOwners", "GetDaemon")
 }
 
+// MockOwnersGetDaemonCall is one recorded call of MockOwners.GetDaemon, one
+// field per parameter.
+type MockOwnersGetDaemonCall struct {
+	Ctx context.Context
+	ID  string
+}
+
+// GetDaemonCalls returns every recorded GetDaemon call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetDaemon").
+func (m *MockOwners) GetDaemonCalls() []MockOwnersGetDaemonCall {
+	var out []MockOwnersGetDaemonCall
+	for _, c := range m.Recorder.Calls("GetDaemon") {
+		var r MockOwnersGetDaemonCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ Owners = (*MockOwners)(nil)
 
 // forge:section MockResumer
-// forge:hash=ea71cedba1591e37d441670eabe2bbbee238f8a6c4f9fd30bf0fd7dce8a9acb4
+// forge:hash=db80d618f67f47b6643cf50854c82c083d9238d1b7f2501a1e21e9ec8970db72
 
 // MockResumer is a test mock for the Resumer interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockResumer.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockResumer.<Method>Func not set" error.
 type MockResumer struct {
 	contractkit.Recorder
 	WakeFunc func(context.Context, string, *toolexec.DaemonSelector) (toolexec.WakeResult, error)
@@ -89,6 +136,28 @@ func (m *MockResumer) Wake(ctx context.Context, userID string, selector *toolexe
 		return m.WakeFunc(ctx, userID, selector)
 	}
 	return *new(toolexec.WakeResult), contractkit.MockNotSet("MockResumer", "Wake")
+}
+
+// MockResumerWakeCall is one recorded call of MockResumer.Wake, one
+// field per parameter.
+type MockResumerWakeCall struct {
+	Ctx      context.Context
+	UserID   string
+	Selector *toolexec.DaemonSelector
+}
+
+// WakeCalls returns every recorded Wake call, oldest first, with
+// its arguments typed. It reads the same log as Calls("Wake").
+func (m *MockResumer) WakeCalls() []MockResumerWakeCall {
+	var out []MockResumerWakeCall
+	for _, c := range m.Recorder.Calls("Wake") {
+		var r MockResumerWakeCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.Selector, _ = c.Args[2].(*toolexec.DaemonSelector)
+		out = append(out, r)
+	}
+	return out
 }
 
 // Compile-time check.
