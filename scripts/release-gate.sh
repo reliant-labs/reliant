@@ -73,7 +73,7 @@
 #   demo-size    task demo:bundle-size (the forge demo bundle against
 #                frontends/web/scripts/demo/bundle-budget.json; it gates here
 #                only, a pull request pastes its --report-only table)
-#   typecheck    frontends/web's `npm run typecheck` (tsgo -b, tests included)
+#   typecheck    frontends/web's `npm run typecheck` (tsc -b, tests included)
 #   vet          go vet ./...
 #   test-go      task test -- <packages>  (Go -race -count=1 without -short:
 #                every slow test; ./..., or this shard's packages)
