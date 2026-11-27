@@ -94,6 +94,9 @@ vi.mock("sonner", () => ({
   },
 }));
 
+const downloadMocks = vi.hoisted(() => ({ downloadWorkspaceFile: vi.fn(async () => undefined) }));
+vi.mock("./downloadWorkspaceFile", () => downloadMocks);
+
 vi.mock("./AddToChatPopup", () => ({
   AddToChatPopup: () => null,
 }));
@@ -365,6 +368,29 @@ describe("FileViewerTab", () => {
     expect(screen.queryByRole("button", { name: /^reload$/i })).not.toBeInTheDocument();
     expect(fileSystemMocks.getFileContent).not.toHaveBeenCalled();
     expect(fileSystemMocks.getFilePreviewBlob).not.toHaveBeenCalled();
+  });
+
+  it("downloads the open file from the header, in its workspace", async () => {
+    fileSystemMocks.getFilePreviewInfo.mockResolvedValue({
+      name: "report.xlsx",
+      path: "/workspace/report.xlsx",
+      size: 4096,
+      modified: "2024-01-01T00:00:00Z",
+      viewerKind: "binary",
+      mimeType: "application/octet-stream",
+      isBinary: true,
+      isEditable: false,
+    });
+
+    render(
+      <FileViewerTab file={createFile({ name: "report.xlsx", path: "/workspace/report.xlsx" })} isActive />
+    );
+
+    expect(await screen.findByText("Download it to open it on this device.")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Download report.xlsx" }));
+    await waitFor(() => expect(downloadMocks.downloadWorkspaceFile).toHaveBeenCalledWith(
+      "/workspace/report.xlsx", "report.xlsx", "wt-1",
+    ));
   });
 
   it("renders PDFs in Monaco using raw file content instead of the fallback card", async () => {

@@ -44,7 +44,7 @@ export function DaemonStatusPill({ daemon }: { daemon: Daemon }) {
   return (
     <span
       className={cn(
-        "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset",
+        "inline-flex items-center rounded-full px-2 py-0.5 text-meta font-medium ring-1 ring-inset",
         pillClassName,
       )}
     >
@@ -59,7 +59,7 @@ function NewMachineButton({ onCreate }: { onCreate: () => void }) {
       type="button"
       onClick={onCreate}
       aria-label="Add sandbox"
-      className="flex min-h-[44px] items-center gap-1 rounded-lg px-3 text-sm font-medium text-primary-ink active:bg-primary/10"
+      className="flex min-h-[44px] items-center gap-1 rounded-lg px-3 text-ui font-medium text-primary-ink active:bg-primary/10"
     >
       <Plus className="h-4 w-4" />
       <span>Add</span>
@@ -90,17 +90,17 @@ function DaemonRow({ daemon, orgName }: { daemon: Daemon; orgName?: string }) {
         <MobileRowIcon icon={Server} />
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <span className="truncate text-sm font-medium text-foreground">
+            <span className="truncate text-ui font-medium text-foreground">
               {machineDisplayName(daemon)}
             </span>
             {size && (
-              <span className="shrink-0 rounded-md bg-primary/10 px-1.5 py-0.5 text-xs font-medium text-primary-ink">
+              <span className="shrink-0 rounded-md bg-primary/10 px-1.5 py-0.5 text-meta font-medium text-primary-ink">
                 {size}
               </span>
             )}
           </div>
 
-          <div className="mt-1.5 flex items-center gap-2 text-xs text-muted-foreground">
+          <div className="mt-1.5 flex items-center gap-2 text-meta text-muted-foreground">
             <DaemonStatusPill daemon={daemon} />
             {lastSeen !== null && <span>{relativeTimeFromMs(lastSeen)}</span>}
             {orgName && <span className="truncate">{orgName}</span>}

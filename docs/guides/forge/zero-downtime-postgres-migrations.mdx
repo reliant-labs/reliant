@@ -131,17 +131,7 @@ A deploy runs its migrations first and then rolls out the new code, so for a whi
 
 ## Next steps
 
-<CardGroup cols={2}>
-  <Card title="Measure migration locks" icon="lock" href="/guides/forge/measure-migration-locks">
-    Run pending migrations on a disposable Postgres and see the locks and rewrites.
-  </Card>
-  <Card title="Migration lint rules" icon="list-check" href="/forge/linting/rules-migrations">
-    Every rule, a bad example and its fix, and the `forge.yaml` severity dials.
-  </Card>
-  <Card title="Rollback floors" icon="shield" href="/forge/deploy/release-gates#rollback-floors">
-    How a `forge:breaks-rollback` migration blocks deploys of older releases.
-  </Card>
-  <Card title="Managed Postgres" icon="database" href="/hosting/managed-postgres">
-    How hosted migrations run in the deploy, with lock and statement timeouts.
-  </Card>
-</CardGroup>
+- [Measure migration locks](/guides/forge/measure-migration-locks): run pending migrations on a disposable Postgres and see the locks and rewrites
+- [Migration lint rules](/forge/linting/rules-migrations): every rule, a bad example and its fix, and the `forge.yaml` severity dials
+- [Rollback floors](/forge/deploy/release-gates#rollback-floors): how a `forge:breaks-rollback` migration blocks deploys of older releases
+- [Managed Postgres](/hosting/managed-postgres): how hosted migrations run in the deploy, with lock and statement timeouts

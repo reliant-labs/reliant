@@ -133,6 +133,7 @@ For failed model calls, claim first, sign in with `forge cloud login`, keep the 
 | Lifetime | Live for 72 hours, then suspended (offline, data kept), then deleted 7 days later unless claimed |
 | Outbound internet | **None for an unclaimed service.** It answers requests and uses its own database, but every call out of it fails: payments, webhooks, email, model APIs, package downloads, and DNS for any name outside the cluster. A static site isn't affected, because its requests come from the browser. The block ends when the deploy is claimed |
 | Rate limits | A few starts per hour per network, a few live deploys per device, and a platform-wide cap |
+| What we record | The app's template kind (`vite`, `nextjs-static`, `dockerfile-app`, `forge-native` or `other`), its auth mode (`managed` or `none`) and, while forge telemetry is on, forge's random install ID, with the deploy's funnel events. [Privacy & security](/help/privacy#the-forge-command-line-tool) lists what forge sends and how to turn it off |
 
 The no-outbound-internet rule is the platform, not a bug in your app, so don't debug it or work around it. An app that calls an outside API at startup won't come up until the deploy is claimed.
 

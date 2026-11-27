@@ -14,7 +14,9 @@
 # another breaking fixtures in packages more than one import away. Compiling
 # every test package catches each that stops compiling, in seconds on a warm
 # build cache. It does not catch a fixture that compiles and fails at run
-# time ("Deps.Projects is required" in a slow test, #3448/#3507).
+# time ("Deps.Projects is required" in a slow test, #3448/#3507); one that
+# leaves a Deps field unset is internal/architecture's
+# TestEveryConstructionSetsEveryRequiredDepsField.
 #
 # Not `go test -run '^$'`: that links every test binary (~2.7 GB RSS each) and
 # runs each TestMain, which for the DB-backed packages boots pgtest. `go list

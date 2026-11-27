@@ -127,6 +127,10 @@ type PauseService struct {
 	// reset request must name it explicitly (resetNamespace); empty means
 	// TemporalNamespace.
 	namespace string
+
+	// updates announces a run's change to its chat's clients; nil announces
+	// nothing.
+	updates ChatRefetcher
 }
 
 // PauseServiceDeps is what a PauseService is built from.
@@ -137,6 +141,15 @@ type PauseServiceDeps struct {
 	Store PauseStore
 	// Workflows reads a run's workflow row.
 	Workflows WorkflowLoader
+	// Updates tells the chat's clients to re-read its workflow executions
+	// (chatupdates.Service). Nil announces nothing.
+	Updates ChatRefetcher
+}
+
+// ChatRefetcher tells the clients watching a chat to re-read data of a given
+// type. chatupdates.Service satisfies it.
+type ChatRefetcher interface {
+	EmitChatRefetch(ctx context.Context, chatID string, refetchType db.RefetchType) error
 }
 
 // NewPauseService creates a PauseService with a Temporal client for signaling
@@ -146,6 +159,7 @@ func NewPauseService(deps PauseServiceDeps) *PauseService {
 		temporalClient: deps.Temporal,
 		database:       deps.Store,
 		workflows:      deps.Workflows,
+		updates:        deps.Updates,
 	}
 }
 
@@ -458,7 +472,10 @@ func (ps *PauseService) reviveResumedSubtree(ctx context.Context, workflowID, ch
 	if chatID == "" {
 		return
 	}
-	if err := ps.database.EmitChatRefetch(ctx, chatID, db.RefetchWorkflowExecutions); err != nil {
+	if ps.updates == nil {
+		return
+	}
+	if err := ps.updates.EmitChatRefetch(ctx, chatID, db.RefetchWorkflowExecutions); err != nil {
 		logging.WarnContext(ctx, "[PauseService] Failed to emit refetch after subtree revival",
 			"workflowID", workflowID, "chatID", chatID, "error", err)
 	}

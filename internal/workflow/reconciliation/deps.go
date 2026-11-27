@@ -15,6 +15,7 @@ import (
 
 	"github.com/reliant-labs/forge/pkg/orm"
 	"go.temporal.io/sdk/client"
+	"go.temporal.io/sdk/converter"
 
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/store"
@@ -76,9 +77,49 @@ type Deps struct {
 	// Chats reads a chat's owner, activity, main thread and run, with no
 	// owner check. store.ChatsWithActivityExtStore satisfies it.
 	Chats Chats
+	// ToolCalls lists the stranded spawns and backgrounded processes the
+	// sweeps repair. store.ToolCallExtStore satisfies it.
+	ToolCalls ToolCallLists
 	// RunEvents records a repaired run's terminal event, inside the repair's
 	// transaction (runevents.NewStore).
 	RunEvents runevents.Store
+	// Runs stops one exact execution of a chat's run: the stall watchdog's
+	// enforce mode (runs.Service.TerminateExecution). nil: enforce reports.
+	// forge:optional-dep
+	Runs RunTerminator
+	// Observations is where the stall watchdog records each stalled run
+	// (node_observations, source "reconciler"). nil: logs and metrics only.
+	// forge:optional-dep
+	Observations StallRecorder
+	// DataConverter decodes a run's start input, from which the stall
+	// watchdog learns the run id its record counts under: the Temporal
+	// client's own converter, claim-check store included. nil: a converter
+	// with no store, which decodes every input below the claim-check
+	// threshold and fails (the record then names no run) on one above it.
+	// forge:optional-dep
+	DataConverter converter.DataConverter
+}
+
+// RunTerminator stops exactly one execution of a chat's run through the run
+// lifecycle's cancel path (its finally: runs), refusing with
+// runs.ErrExecutionNotCurrent when runID is no longer the chat's current,
+// running execution. runs.Service satisfies it.
+type RunTerminator interface {
+	TerminateExecution(ctx context.Context, chatID, workflowID, runID string) error
+}
+
+// StallRecorder writes the stall watchdog's durable record of a stalled
+// run, one row per run, streak and outcome. *db.Repo satisfies it.
+type StallRecorder interface {
+	RecordNodeObservation(ctx context.Context, obs *db.NodeObservation, maxPerRun int) (db.NodeObservationWrite, error)
+}
+
+// ToolCallLists lists the tool-call rows the stranded-spawn and
+// backgrounded-process sweeps act on.
+type ToolCallLists interface {
+	ListStrandedSpawnToolCalls(ctx context.Context) ([]*db.ToolCall, error)
+	ListStrandedBackgroundSpawnToolCalls(ctx context.Context) ([]*db.StrandedBackgroundSpawn, error)
+	ListBackgroundedProcessToolCalls(ctx context.Context) ([]*db.BackgroundedProcessCall, error)
 }
 
 // Chats reads a chat with its computed state.
@@ -122,11 +163,7 @@ type ReconcilerStore interface {
 	GetThread(ctx context.Context, id string) (*db.Thread, error)
 	ListPendingApprovalsByChat(ctx context.Context, chatID string) ([]*db.Approval, error)
 
-	// Stranded spawns, backgrounded processes and the tool-call rows they
-	// close.
-	ListStrandedSpawnToolCalls(ctx context.Context) ([]*db.ToolCall, error)
-	ListStrandedBackgroundSpawnToolCalls(ctx context.Context) ([]*db.StrandedBackgroundSpawn, error)
-	ListBackgroundedProcessToolCalls(ctx context.Context) ([]*db.BackgroundedProcessCall, error)
+	// The tool-call rows stranded spawns and backgrounded processes close.
 	UpsertToolCallResult(ctx context.Context, chatID string, result *db.ToolCallResult) error
 	EmitToolCallUpdate(ctx context.Context, chatID string, update db.ToolCallUpdate) error
 

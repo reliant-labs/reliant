@@ -12,6 +12,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/integrations/catalog"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
+	"github.com/reliant-labs/reliant/internal/serveraction"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 	runtime "github.com/reliant-labs/reliant/internal/workflow/runtime"
 	"google.golang.org/protobuf/types/known/structpb"
@@ -119,6 +120,15 @@ func nodePrivilegeDisclosure(node *pb.Node, values map[string]any, identity stri
 	}
 	if a := node.GetAction(); a != nil {
 		uses := resolveName(model.CelStringValue(a.GetUses()))
+		if serveraction.IsRef(uses) {
+			mode := "READS Reliant state"
+			if spec, err := serveraction.Builtin().Resolve(uses); err != nil {
+				uses, mode = unknownScope, "unknown"
+			} else if spec.Mutates {
+				mode = "MUTATES Reliant state"
+			}
+			return []string{fmt.Sprintf("Reliant server action: %s [%s]; runs as the run's owner, no connection; %s", uses, mode, targetDisclosure(a.GetWith(), values, identity, tainted))}
+		}
 		action, err := catalog.MustBuiltin().Resolve(uses)
 		if err != nil {
 			return []string{"Integration action: " + unknownScope + "; " + targetDisclosure(a.GetWith(), values, identity, tainted)}

@@ -42,7 +42,7 @@ import {
 import { obsRetry, obsRetryDelay, releaseHealthErrorKind } from "@/services/controlPlane/observability/errors";
 import { keepsLastResult } from "@/services/controlPlane/observability/quota";
 import type { Issue } from "@/services/controlPlane/observability/issuesTypes";
-import { useObsReadApi } from "@/hooks/observability-queries";
+import { useObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
 import type { ObsScope, Panel, PanelResult, TimeWindow } from "@/services/controlPlane/observability/types";
 import { cn } from "@/lib/utils";
 
@@ -92,7 +92,7 @@ export function compareWorkloads(before: PanelResult | undefined, after: PanelRe
 }
 
 function useResources(scope: ObsScope, side: "before" | "after", window: TimeWindow | null) {
-  const api = useObsReadApi();
+  const api = useObservabilityApi();
   const usable = !!window && window.endMs > window.startMs;
   return useQuery({
     queryKey: [...obsKeys.all(scope), "compare", RESOURCES_PANEL.id, side, window?.startMs ?? 0, window?.endMs ?? 0] as const,

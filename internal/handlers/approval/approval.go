@@ -44,6 +44,10 @@ func (s *Service) chatBelongsToUser(ctx context.Context, chatID string) error {
 // the message, which says what happened.
 const ReasonApprovalNotPending = "approval_not_pending"
 
+// ReasonGrantApprovedAlone is the error reason for approving a pipeline
+// capability-grant card in a batch: it is approved only on its own.
+const ReasonGrantApprovedAlone = "grant_approved_alone"
+
 // notActionable is the error for acting on a, which is no longer pending.
 func notActionable(a *db.Approval) error {
 	return svcerr.WithReason(svcerr.FailedPrecondition(resolvedMessage(a)), ReasonApprovalNotPending)
@@ -159,8 +163,11 @@ func (s *Service) resolveApprovals(ctx context.Context, ids []string, d decision
 	// A connection proposal is approved only by making its connection, one
 	// at a time: a batch leaves it pending, and approving it alone needs the
 	// connection, checked against the proposal (connection_proposal.go).
+	//
+	// A capability-grant card gives an automation standing power, so it is
+	// approved only on its own too: a batch leaves it pending.
 	if d.approved {
-		var held *db.Approval
+		var held, heldGrant *db.Approval
 		kept := ids[:0:0]
 		for _, id := range ids {
 			approval, err := s.deps.Repo.GetApproval(ctx, id)
@@ -169,6 +176,12 @@ func (s *Service) resolveApprovals(ctx context.Context, ids []string, d decision
 			}
 			p := approval.ConnectionProposal()
 			switch {
+			case approval.CapabilityGrantRequest() != nil:
+				if len(ids) > 1 {
+					heldGrant = approval
+					continue
+				}
+				kept = append(kept, id)
 			case p == nil:
 				kept = append(kept, id)
 			case len(ids) > 1 || d.connectionID == "":
@@ -187,6 +200,13 @@ func (s *Service) resolveApprovals(ctx context.Context, ids []string, d decision
 				return "", 0, 0, notActionable(held)
 			}
 			return "", 0, 0, connectionRequired(held.ConnectionProposal())
+		}
+		if len(kept) == 0 && heldGrant != nil {
+			if heldGrant.Status != int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_PENDING) {
+				return "", 0, 0, notActionable(heldGrant)
+			}
+			return "", 0, 0, svcerr.WithReason(svcerr.FailedPrecondition(
+				"A pipeline capability grant gives an automation standing power: approve it on its own, not with others."), ReasonGrantApprovedAlone)
 		}
 		ids = kept
 	}
@@ -227,6 +247,18 @@ func (s *Service) resolveApprovals(ctx context.Context, ids []string, d decision
 			}
 			if err := s.deps.Repo.UpdateApprovalStatus(txCtx, approval.ID, int32(status), denialReason, actionTaken, metadata); err != nil {
 				return fmt.Errorf("failed to update approval status: %w", err)
+			}
+			// Approving a capability-grant card is what makes the grant,
+			// recorded with the approver: the card and its grants commit
+			// together, and a grant refused (the approver does not own the
+			// activation and the pool) leaves the card pending.
+			if d.approved && approval.CapabilityGrantRequest() != nil {
+				if s.deps.Grants == nil {
+					return svcerr.FailedPrecondition("pipeline capability grants cannot be made on this server; nothing was granted")
+				}
+				if _, err := s.deps.Grants.GrantApproved(txCtx, userID, approval); err != nil {
+					return err
+				}
 			}
 			updateData := map[string]interface{}{
 				"update_type":   "approval",
@@ -288,6 +320,9 @@ func (s *Service) resolveApprovals(ctx context.Context, ids []string, d decision
 		signal["denial_reason"] = *denialReason
 	}
 	for _, approval := range resolved {
+		if approval.CapabilityGrantRequest() != nil && approval.TemporalWorkflowID == "" {
+			continue // no run waits on a capability-grant card
+		}
 		if d.approved && approval.ConnectionProposal() != nil {
 			proposal := make(map[string]interface{}, len(signal)+1)
 			for k, v := range signal {

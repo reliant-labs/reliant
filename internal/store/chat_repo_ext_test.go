@@ -466,7 +466,7 @@ FROM chats WHERE id = 'm-3'`).Scan(ctx, &markersLeft); err != nil || markersLeft
 		if err != nil {
 			t.Fatalf("ListChatsQueuedForMachine(%q): %v", user, err)
 		}
-		twin, err := env.Repo.ListChatsQueuedForMachine(ctx, user, 10)
+		twin, err := store.ListChatsQueuedForMachine(ctx, env.Repo.ORM(), user, 10)
 		if err != nil {
 			t.Fatalf("Repo.ListChatsQueuedForMachine(%q): %v", user, err)
 		}
@@ -484,7 +484,7 @@ FROM chats WHERE id = 'm-3'`).Scan(ctx, &markersLeft); err != nil || markersLeft
 	if err != nil {
 		t.Fatalf("ListChatsPausedForMachine: %v", err)
 	}
-	paused, err := env.Repo.ListChatsPausedForMachine(ctx, "", 10)
+	paused, err := store.ListChatsPausedForMachine(ctx, env.Repo.ORM(), "", 10)
 	if err != nil {
 		t.Fatalf("Repo.ListChatsPausedForMachine: %v", err)
 	}
@@ -506,7 +506,7 @@ FROM chats WHERE id = 'm-3'`).Scan(ctx, &markersLeft); err != nil || markersLeft
 	if err != nil {
 		t.Fatalf("ListChatsWaitingForMachine: %v", err)
 	}
-	twinWaiting, err := env.Repo.ListChatsWaitingForMachine(ctx, storetest.SeedUserID)
+	twinWaiting, err := store.ListChatsWaitingForMachine(ctx, env.Repo.ORM(), storetest.SeedUserID)
 	if err != nil {
 		t.Fatalf("Repo.ListChatsWaitingForMachine: %v", err)
 	}

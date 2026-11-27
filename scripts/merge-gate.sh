@@ -65,7 +65,8 @@
 #              electron tests when electron/ changed; deeper dependents of a
 #              hub run in the release gate (MG_REACH=all for all). A change the rules cannot
 #              scope (go.mod, package.json, config) runs its whole Go and
-#              electron lane; a full web fallback runs tsc here, the vitest
+#              electron lane (a forge pin move alone selects by the forge
+#              packages it changes: dev-docs/testing-affected.md); a full web fallback runs tsc here, the vitest
 #              files the diff's own web modules reach (-web-full reached), and
 #              the whole vitest suite in the release gate. A Go
 #              test this change adds or edits that runs over the per-test budget
@@ -154,6 +155,15 @@ done
 # golangci (changed) job beside the gate runs the changed packages' linters.
 skip_vet=0; { [ "$skip_lint" = 1 ] || [ "$queue" = 1 ]; } && skip_vet=1
 [ "$queue" = 1 ] && skip_golangci=1
+# GO_TEST_VET (Taskfile.yml): where the vet phase runs, it vets every package
+# the test phase tests (go.build + go.packages, test files included; ./... on
+# a full lane), so the test phase's go test skips its own vet subset of the
+# same analyzers. Where vet is the release gate's (the queue, --skip-lint),
+# go test's vet is the only vet this tier runs, and stays on. The flag is not
+# in Go's test-result cache key: either way the results are task
+# test:short's. An exported GO_TEST_VET (empty included) wins.
+test_vet=""; [ "$skip_vet" = 1 ] || test_vet=-vet=off
+test_vet=${GO_TEST_VET-$test_vet}
 
 export GOFLAGS="${GOFLAGS:+$GOFLAGS }-trimpath" GOPRIVATE="${GOPRIVATE:-github.com/reliant-labs/*}"
 # A gate must not rewrite the clone's git config (forge's merge driver).
@@ -180,7 +190,20 @@ slot_wait=$(( t0 - ${MG_SLOT_T0:-$t0} ))
 # all its lanes uncapped, on a host where every other job takes all 32), and
 # each concurrent phase a part of that: the test phase (the longest) half for
 # Go and half for vitest, the others a quarter. MG_CPUS=<n> overrides it.
+#
+# Inside a CPU quota — a container's, or the reliant daemon's heavy-command
+# cgroup when an agent's command line wraps the gate (cpu.max at the slot's
+# share, internal/heavyjob) — the machine is that quota, not nproc: sized to
+# nproc, a gate under a 4-CPU cap ran half=24 Go processes on 4 CPUs.
 cpus=$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)
+cg=$(sed -n 's/^0:://p' /proc/self/cgroup 2>/dev/null)
+while [ -n "$cg" ]; do
+  # cpu.max is "<quota> <period>", or "max <period>" for none.
+  read -r q p 2>/dev/null <"/sys/fs/cgroup$cg/cpu.max" || q=max
+  case "$q" in ''|max|*[!0-9]*) ;; *) [ "${p:-0}" -gt 0 ] && [ $(( q / p )) -lt "$cpus" ] && cpus=$(( q / p > 0 ? q / p : 1 )) ;; esac
+  [ "$cg" = / ] && break
+  cg=$(dirname "$cg")
+done
 load=$(cut -d' ' -f1 /proc/loadavg 2>/dev/null | cut -d. -f1); load=${load:-0}
 share=$(( cpus / 2 )); [ "$share" -ge 4 ] || share=4
 free=$(( cpus - load ))
@@ -529,7 +552,9 @@ fi
 # change. `go build ./...` also linked every main package of the module (the
 # server, the CLI, a dozen generators): 41s with every package already
 # compiled, against 6s for this; the link check runs in the release gate's
-# build. A full Go lane (a pin moved) compiles ./... . go list -export compiles
+# build. A full Go lane (a pin moved) compiles ./... ; a forge pin move alone
+# is in go.build as every package whose build contains a changed forge
+# package (tools/test-affected/forgepin.go). go list -export compiles
 # each package for its export data and exits non-zero naming any that does not
 # compile, main packages included.
 build_check() {
@@ -594,7 +619,7 @@ if [ "$fail" = 0 ]; then
   { phase build build_check; rc=$?
     phase testbuild env GOMAXPROCS="$quarter" scripts/test-build.sh -p "$quarter" --exclude "$L/tested.txt" || rc=1
     exit "$rc"; } & pids+=($!)
-  phase test env GOMAXPROCS="$half" VITEST_MAX_WORKERS="$half" \
+  phase test env GOMAXPROCS="$half" VITEST_MAX_WORKERS="$half" GO_TEST_VET="$test_vet" \
     go run ./tools/test-affected run -plan "$run_plan" -base "$base" -lanes "$test_lanes" -web-full reached -p "$half" -test-budget "${MG_TEST_BUDGET:-auto}" -capture & pids+=($!)
   if [ "$typecheck" = true ]; then
     phase typecheck scripts/web-typecheck.sh & pids+=($!)

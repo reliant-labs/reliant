@@ -194,7 +194,7 @@ export type ScenarioRpcHandlers =
   }
 
   // forge:section reliant.v1.FileSystemService
-  // forge:hash=bb5441f5842f30555c005ee100c1170d90f6cbad2c3a1cd5dd21a9805b4703e6
+  // forge:hash=5b1c3442260477ac73abf7430ee1db97928f53fd6ac986f45001c34deb3e0eec
   & {
     "reliant.v1.FileSystemService/GetFileTree"?: (req: import("@/gen/reliant/v1/filesystem_pb").GetFileTreeRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/filesystem_pb").GetFileTreeResponseSchema>>;
     "reliant.v1.FileSystemService/GetFileContent"?: (req: import("@/gen/reliant/v1/filesystem_pb").GetFileContentRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/filesystem_pb").GetFileContentResponseSchema>>;
@@ -209,6 +209,7 @@ export type ScenarioRpcHandlers =
     "reliant.v1.FileSystemService/ReplaceInFiles"?: (req: import("@/gen/reliant/v1/filesystem_pb").ReplaceInFilesRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/filesystem_pb").ReplaceInFilesResponseSchema>>;
     "reliant.v1.FileSystemService/ListDirectory"?: (req: import("@/gen/reliant/v1/filesystem_pb").ListDirectoryRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/filesystem_pb").ListDirectoryResponseSchema>>;
     "reliant.v1.FileSystemService/CreateDirectory"?: (req: import("@/gen/reliant/v1/filesystem_pb").CreateDirectoryRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/filesystem_pb").CreateDirectoryResponseSchema>>;
+    "reliant.v1.FileSystemService/DownloadFile"?: (req: import("@/gen/reliant/v1/filesystem_pb").DownloadFileRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/filesystem_pb").DownloadFileResponseSchema>>;
   }
 
   // forge:section reliant.v1.ForgeService
@@ -309,6 +310,17 @@ export type ScenarioRpcHandlers =
     "reliant.v1.PackageCommandsService/KillProcess"?: (req: import("@/gen/reliant/v1/package_commands_pb").KillPackageProcessRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/package_commands_pb").KillPackageProcessResponseSchema>>;
     "reliant.v1.PackageCommandsService/GetCommandFavorites"?: (req: import("@/gen/reliant/v1/package_commands_pb").GetCommandFavoritesRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/package_commands_pb").GetCommandFavoritesResponseSchema>>;
     "reliant.v1.PackageCommandsService/SetCommandFavorite"?: (req: import("@/gen/reliant/v1/package_commands_pb").SetCommandFavoriteRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/package_commands_pb").SetCommandFavoriteResponseSchema>>;
+  }
+
+  // forge:section reliant.v1.PipelineService
+  // forge:hash=dded8be9f53bcc5ce9954d8c67a198db62cacfa0389f73eea34bece4f183b2bb
+  & {
+    "reliant.v1.PipelineService/EnrolRepository"?: (req: import("@/gen/reliant/v1/pipeline_pb").EnrolRepositoryRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/pipeline_pb").EnrolRepositoryResponseSchema>>;
+    "reliant.v1.PipelineService/SetPipelineMode"?: (req: import("@/gen/reliant/v1/pipeline_pb").SetPipelineModeRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/pipeline_pb").SetPipelineModeResponseSchema>>;
+    "reliant.v1.PipelineService/GetPipelineState"?: (req: import("@/gen/reliant/v1/pipeline_pb").GetPipelineStateRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/pipeline_pb").GetPipelineStateResponseSchema>>;
+    "reliant.v1.PipelineService/ListQueue"?: (req: import("@/gen/reliant/v1/pipeline_pb").ListQueueRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/pipeline_pb").ListQueueResponseSchema>>;
+    "reliant.v1.PipelineService/ListCapabilityGrants"?: (req: import("@/gen/reliant/v1/pipeline_pb").ListCapabilityGrantsRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/pipeline_pb").ListCapabilityGrantsResponseSchema>>;
+    "reliant.v1.PipelineService/RevokeCapabilityGrant"?: (req: import("@/gen/reliant/v1/pipeline_pb").RevokeCapabilityGrantRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/pipeline_pb").RevokeCapabilityGrantResponseSchema>>;
   }
 
   // forge:section reliant.v1.PlanService

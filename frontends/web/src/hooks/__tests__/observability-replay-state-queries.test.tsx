@@ -5,7 +5,8 @@
  * useFrontendReplay asks ListFrontendReplay for the scope and is not retried
  * on a control plane without it; useReplayEvidence looks for replays over the
  * last 7 days in only the environments it is given, following the page token
- * up to 10 pages, and asks nothing when it is given none. Both keys sit under sessionKeys.root(), so Refresh re-reads them.
+ * up to 10 pages, and asks nothing when it is given none. The evidence sits under sessionKeys.root() and the frontends'
+ * read is a generated one (listFrontendReplay), so Refresh re-reads both.
  */
 
 import { renderHook, waitFor } from "@testing-library/react";
@@ -14,7 +15,8 @@ import type { ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
 
 import { createFixtureApi } from "@/components/Forge/Observability/__fixtures__/fixtureApi";
-import { ObservabilityApiProvider, type ObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
+import { type ObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
+import { ObservabilityFixtures } from "@/test/observabilityFixtures";
 import type { RumScope } from "@/services/controlPlane/observability/rumTypes";
 import { createTestQueryClient } from "@/test/renderWithQuery";
 
@@ -26,19 +28,16 @@ function setup(api: ObservabilityApi) {
   const client = createTestQueryClient();
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={client}>
-      <ObservabilityApiProvider api={api}>{children}</ObservabilityApiProvider>
+      <ObservabilityFixtures api={api}>{children}</ObservabilityFixtures>
     </QueryClientProvider>
   );
   return { client, wrapper };
 }
 
 describe("sessionKeys", () => {
-  it("put the replay-state reads under the sessions root, keyed by the scope", () => {
+  it("put the replay evidence under the sessions root, keyed by the scope", () => {
     const root = sessionKeys.root();
-    for (const key of [sessionKeys.frontendReplay(scope), sessionKeys.replayEvidence(scope, ["env-prod"])]) {
-      expect(key.slice(0, root.length)).toEqual([...root]);
-    }
-    expect(sessionKeys.frontendReplay(scope)).not.toEqual(sessionKeys.frontendReplay({ ...scope, envIds: ["env-prod"] }));
+    expect(sessionKeys.replayEvidence(scope, ["env-prod"]).slice(0, root.length)).toEqual([...root]);
     expect(sessionKeys.replayEvidence(scope, ["env-prod"])).not.toEqual(sessionKeys.replayEvidence(scope, ["env-staging"]));
   });
 });

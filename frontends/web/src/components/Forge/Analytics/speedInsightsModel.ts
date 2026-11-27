@@ -161,11 +161,22 @@ function vitalColumns(percentile: Percentile): string[] {
  */
 export const SERVICE_WHERE = "(empty({services:Array(String)}) OR has({services:Array(String)}, ResourceAttributes['service.name']))";
 
-const WHERE = (device: Device | "any") => [
+// SQL panels have no project parameter: only time, environment and service
+// parameters are supported. Encode the trusted console project as a SQL string
+// literal (escaping backslashes before quotes), never the URL's site choice.
+// An omitted project fails closed rather than reading the whole organization.
+const projectWhere = (project: string) =>
+  project ? `ResourceAttributes['service.namespace'] = '${project.replace(/\\/g, "\\\\").replace(/'/g, "\\'")}'` : "0";
+
+const WHERE = (device: Device | "any", project: string) => [
   "FROM otel_traces",
   "WHERE ScopeName = 'webvitals'",
+  `  AND ${projectWhere(project)}`,
   "  AND Timestamp >= {from:DateTime64(9)} AND Timestamp < {to:DateTime64(9)}",
-  "  AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, ResourceAttributes['reliant.env.id']))",
+  // QueryScope.project_id resolves to authorized environment ids server-side.
+  // Require that trusted stamp even when the resolved list is empty: namespace
+  // and service names are producer-controlled and can collide across projects.
+  "  AND has({env_ids:Array(String)}, ResourceAttributes['reliant.env.id'])",
   `  AND ${SERVICE_WHERE}`,
   // The site list counts every device but bots, which no toggle ever shows.
   `  AND ${device === "any" ? "ResourceAttributes['reliant.device.type'] != 'bot'" : deviceWhere(device)}`,
@@ -186,7 +197,7 @@ export function bucketSeconds(range: RangePreset): number {
   return { "15m": 60, "1h": 120, "6h": 600, "24h": 3600, "7d": 6 * 3600, "30d": 24 * 3600 }[range];
 }
 
-export function speedPanel(kind: SpeedPanelKind, device: Device, percentile: Percentile, range: RangePreset): Panel {
+export function speedPanel(kind: SpeedPanelKind, device: Device, percentile: Percentile, range: RangePreset, project = ""): Panel {
   const key =
     kind === "summary"
       ? "'all' AS scope"
@@ -194,13 +205,13 @@ export function speedPanel(kind: SpeedPanelKind, device: Device, percentile: Per
         ? "path(SpanAttributes['location.href']) AS page"
         : `toUnixTimestamp(toStartOfInterval(Timestamp, INTERVAL ${bucketSeconds(range)} SECOND)) AS t`;
   const tail = kind === "routes" ? ["GROUP BY page", "ORDER BY views DESC", "LIMIT 100"] : kind === "series" ? ["GROUP BY t", "ORDER BY t"] : [];
-  const sql = [`SELECT ${[key, ...vitalColumns(percentile), VIEWS].join(",\n       ")}`, ...WHERE(device), ...tail].join("\n");
+  const sql = [`SELECT ${[key, ...vitalColumns(percentile), VIEWS].join(",\n       ")}`, ...WHERE(device, project), ...tail].join("\n");
   return { id: speedPanelId(kind), title: `Web vitals: ${kind}`, kind: "sql", signal: "", series: [], sql };
 }
 
 /** The sites that sent web vitals in the window, busiest first: the site picker's choices (header). */
-export function sitesPanel(): Panel {
-  const sql = ["SELECT ResourceAttributes['service.name'] AS service,\n       " + VIEWS, ...WHERE("any"), "GROUP BY service", "ORDER BY views DESC", "LIMIT 50"].join("\n");
+export function sitesPanel(project = ""): Panel {
+  const sql = ["SELECT ResourceAttributes['service.name'] AS service,\n       " + VIEWS, ...WHERE("any", project), "GROUP BY service", "ORDER BY views DESC", "LIMIT 50"].join("\n");
   return { id: speedPanelId("sites"), title: "Web vitals: sites", kind: "sql", signal: "", series: [], sql };
 }
 

@@ -1213,7 +1213,7 @@ func (s *Service) SendMessage(
 		WorkflowName: workflowName,
 		Inputs:       initialData,
 		ExecContext:  execContext,
-		Trigger:      launch.LoadChatTrigger(ctx, s.deps.Repo, req.Msg.ChatId),
+		Trigger:      launch.LoadChatTrigger(ctx, s.triggerReads(), req.Msg.ChatId),
 		Resume:       resumeWholeChatInput(resumeInput),
 
 		GreenfieldProbe: greenfieldProbe,

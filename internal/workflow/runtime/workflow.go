@@ -510,6 +510,9 @@ type ChildWorkflowTracker struct {
 	// own attempts (run_outcome.go). A continue-as-new successor keeps it
 	// through its execution context's telemetry.
 	runID string
+	// reviewExecutions counts this execution's runs of each review node, by
+	// where it ran (reviewSession): the ordinal in its session's thread id.
+	reviewExecutions map[string]int
 }
 
 // detachedSpawnRecord is one live background spawn, tracked from the moment
@@ -1109,6 +1112,9 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 	// handlerDone stops the input-update handler (STEP 5.55) when the run
 	// exits; nil until that handler starts.
 	var handlerDone workflow.Channel
+	// The run's timeout (workflow_timeout.go), armed once the definition
+	// loads; nil when it declares none.
+	var timeout *runTimeout
 	var caught capturedPanic
 	defer func() {
 		// A panic anywhere on this coroutine was stopped by caught.capture,
@@ -1118,8 +1124,9 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 			result, retErr = nil, recoveredPanic(ctx, caught)
 		}
 		// From here the run ends by itself; a cancel waiting on it must not
-		// terminate it (runs.Service.Terminate).
+		// terminate it (runs.Service.Terminate), and neither may its timeout.
 		runStop.Ending = true
+		timeout.disarm()
 		// From here a message to a stopped sub-agent is its successor's to
 		// act on, not this run's (subagent_resume.go).
 		childTracker.runEnding = true
@@ -1127,6 +1134,16 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 		// exits on its own via ctx.Err() check to avoid blocking on Send
 		if handlerDone != nil && ctx.Err() == nil {
 			handlerDone.Send(ctx, true)
+		}
+		// A run its timeout cancelled ends FAILED, not cancelled: the rest of
+		// this defer reads it as a run that failed with the timeout's error,
+		// on a context the timeout no longer cancels. A panic keeps its own
+		// failure.
+		var panicked *WorkflowPanicError
+		timedOut := timeout.expired() && !errors.As(retErr, &panicked)
+		if timedOut {
+			ctx, _ = workflow.NewDisconnectedContext(ctx)
+			result, retErr = nil, timeout.err()
 		}
 		// A run that gave up on its self-pause is ending, not paused, but its
 		// rows still read paused: the ladder released the pause in memory
@@ -1171,6 +1188,10 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 		lateWake := func() error { return continueAsNewForLateWake(ctx, input, thread, childTracker) }
 		if handoff := handleWorkflowCompletion(ctx, workflowID, input.ChatID, input.WorkflowName, parentWorkflowID, thread, forkedFromThread, retErr, runOutcome, runOutcomeNode, launchRun, childTracker, lateWake); handoff != nil {
 			result, retErr = nil, handoff
+		} else if timedOut {
+			// The execution fails, non-retryably, with the same message:
+			// FAILED in Temporal is what frees the run's trigger-capacity slot.
+			retErr = timeout.temporalErr()
 		}
 	}()
 	// Deferred after the completion handler above, so it runs FIRST when this
@@ -1221,6 +1242,10 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 	if reportsCheck(wfWithPlaceholders, input, parentWorkflowID) {
 		checkDecl = wfWithPlaceholders.GetCheck()
 	}
+	// The run's timeout starts counting from here (workflow_timeout.go);
+	// everything the run does from now on derives from the context it
+	// cancels.
+	ctx, timeout = armRunTimeout(ctx, wfWithPlaceholders, input.Resume, parentWorkflowID == "")
 
 	// STEP 5.5: Validate and apply defaults from workflow input schemas
 	// This ensures all inputs with defaults are available for CEL evaluation
@@ -2510,7 +2535,7 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 				// Derive child context for the inline workflow (before launching so it's available for tracking)
 				var childExecCtx *ExecutionContext
 				inlineExecutor = inlineExecutor.WithInvocationContract(contract)
-				childExecCtx = execCtx.ForChild(step.Node.GetId(), model.NodeThreadMode(evalResult), contract.WorkflowIdentity, true)
+				childExecCtx = workflowNodeContext(ctx, childTracker, execCtx, step.Node, step.Node.GetId(), model.NodeThreadMode(evalResult), contract.WorkflowIdentity, true)
 
 				// Create child thread and optionally save inject message
 				// For non-inherit modes, this creates the thread with proper fork metadata

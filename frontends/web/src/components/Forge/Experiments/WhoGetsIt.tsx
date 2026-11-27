@@ -26,6 +26,7 @@ import { launchChangeRequest, rampChangeRequest, rollOutChangeRequest, updateCha
 import type { Change, ChangeAudience, ChangeDraftEdit, ChangeMetric, ChangeSplitArm, ChangeUnit } from "@/services/controlPlane/changes/changesTypes";
 
 import { FIELD, segmentTone, SEGMENTED } from "../controlStyles";
+import { useObsReadOnly } from "../Observability/obsReadOnly";
 import { evenSplit, formatBp, parsePercent, splitTotal, UNIT_LABELS, WHO_GETS_IT, whoGetsItOf, type WhoGetsIt as Who } from "./changeModel";
 
 /** One write: a label for the approval and busy states, and the call (a step-up code when retried after approval). */
@@ -112,6 +113,8 @@ export function draftEdit(change: Change, d: Draft, who: Who): ChangeDraftEdit |
 export function WhoGetsIt({ change, initialWho, busy, onWrite }: WhoGetsItProps) {
   const writes = useChangeWrites();
   const id = useId();
+  // The demo console: every write is off, and the action row says why (obsReadOnly.tsx).
+  const lock = useObsReadOnly();
   const variants = useMemo(() => change.declaration?.variants.map((v) => v.name) ?? [], [change.declaration]);
   const defaultVariant = change.declaration?.defaultVariant ?? "";
   const newVariant = variants.find((v) => v !== defaultVariant) ?? variants[0] ?? "";
@@ -139,7 +142,7 @@ export function WhoGetsIt({ change, initialWho, busy, onWrite }: WhoGetsItProps)
   const audienceInvalid = !!audience && (!audience.attribute || audience.in.length === 0);
   const splitInvalid = who === "compare" && splitTotal(draft.split) !== 10000;
   const metricMissing = who === "compare" && !draft.metricEvent.trim();
-  const isBusy = busy !== null;
+  const isBusy = busy !== null || lock.readOnly;
   // A running rollout's percentage moves by a ramp, which names no version;
   // another version is a new roll-out of it (and is approved as one).
   const rampsRollout = change.mode === "rollout" && running && variant === change.rolloutVariant;
@@ -371,8 +374,12 @@ export function WhoGetsIt({ change, initialWho, busy, onWrite }: WhoGetsItProps)
             )}
           </>
         )}
-        {actionReason && <span className="text-meta text-ink-muted">{actionReason}</span>}
-        {change.approvalRequired && !actionReason && <span className="text-meta text-ink-muted">This environment needs a person's approval to give this to more people.</span>}
+        {lock.readOnly ? (
+          <span className="text-meta text-ink-muted" data-testid="who-read-only">{lock.reason}</span>
+        ) : (
+          actionReason && <span className="text-meta text-ink-muted">{actionReason}</span>
+        )}
+        {change.approvalRequired && !actionReason && !lock.readOnly && <span className="text-meta text-ink-muted">This environment needs a person's approval to give this to more people.</span>}
       </div>
     </Card>
   );

@@ -63,6 +63,14 @@ type ExecutionContext struct {
 	// nil if not in a loop
 	Loop *ExecLoopContext
 
+	// LoopPath is the iteration of every loop enclosing this context,
+	// outermost first ("rounds#1/fixes#0"); empty outside any loop. Loop is
+	// only the innermost one, so two iterations of an outer loop look alike
+	// there. Identity only: a review node's session is derived from it
+	// (reviewSession), so no two executions of one review node share a
+	// thread, however deeply its loops nest.
+	LoopPath string `json:",omitempty"`
+
 	// Spawn depth - tracks how deep in the spawn chain this workflow is.
 	// 0 = top-level (not spawned), 1 = spawned child, 2 = grandchild, etc.
 	SpawnDepth int
@@ -97,6 +105,14 @@ type ExecutionContext struct {
 	// root's context across continue-as-new, which is how the run id
 	// survives the boundary.
 	Telemetry *types.RunTelemetry `json:",omitempty"`
+
+	// Reviewer marks a review node's session (model.IsLoweredReviewNode):
+	// every call_llm in it, at any depth, is narrowed to the reviewer's tool
+	// allowlist (model.ClampReviewerTools), whatever the definition it runs
+	// declares. Set where the review node's context is derived
+	// (reviewSession), before its thread exists or its body is built, and
+	// inherited by every context derived from it; never cleared below it.
+	Reviewer bool `json:",omitempty"`
 }
 
 // DaemonSelectorValue holds a resolved daemon selector for runtime routing.
@@ -114,6 +130,10 @@ type DaemonSelectorValue struct {
 	// rebuilt from the placement on replay, and a context serialized without
 	// it routes to the same machine.
 	Placed bool `json:"-"`
+	// PlacedPool is the pool a Placed machine is a member of, "" when it is
+	// not known. In-memory only, as Placed: a node's preflight reads it to
+	// move a node off an unhealthy member (node_preflight.go).
+	PlacedPool string `json:"-"`
 	// Session marks the chat's pin (session_daemon_id) rather than a
 	// selector the workflow or node configures. A pin can go stale while the
 	// run lives (its chat moves to the workspace's machine); configured
@@ -172,11 +192,19 @@ func (ctx *ExecutionContext) WithParent(parentWorkflowID, stepPath string) *Exec
 	return ctx
 }
 
-// WithLoop sets the loop context.
+// WithLoop enters iteration of loop nodeID: it sets the loop context and
+// extends LoopPath. Called once, on the context ForIteration derived from the
+// loop node's own (which carries the enclosing loops' path).
 func (ctx *ExecutionContext) WithLoop(nodeID string, iteration int) *ExecutionContext {
 	ctx.Loop = &ExecLoopContext{
 		NodeID:    nodeID,
 		Iteration: iteration,
+	}
+	step := fmt.Sprintf("%s#%d", nodeID, iteration)
+	if ctx.LoopPath == "" {
+		ctx.LoopPath = step
+	} else {
+		ctx.LoopPath += "/" + step
 	}
 	return ctx
 }
@@ -322,6 +350,8 @@ func (ctx *ExecutionContext) ForIteration(iteration int, reuseThread bool) *Exec
 		ExcludeAmbientMemory: ctx.ExcludeAmbientMemory,
 		UserJWT:              ctx.UserJWT, // Reliant provider is JWT-gated; dropping it here would exclude it from availableProviders inside the loop.
 		Telemetry:            ctx.Telemetry,
+		Reviewer:             ctx.Reviewer, // A loop inside a reviewer session is still the reviewer's.
+		LoopPath:             ctx.LoopPath, // The enclosing loops; WithLoop adds this one.
 	}
 
 	if reuseThread {
@@ -361,6 +391,8 @@ func (ctx *ExecutionContext) ForChild(stepID string, mode string, workflowName s
 		ExcludeAmbientMemory: ctx.ExcludeAmbientMemory,
 		UserJWT:              ctx.UserJWT,   // Reliant provider is JWT-gated; child contexts must carry it.
 		Telemetry:            ctx.Telemetry, // An inline child is part of the same run.
+		Reviewer:             ctx.Reviewer,  // Nothing below a reviewer session can widen its tools.
+		LoopPath:             ctx.LoopPath,  // An inline child runs in its parent's iteration.
 		Parent: &ParentContext{
 			WorkflowID: ctx.WorkflowID,
 			StepPath:   stepID,
@@ -437,6 +469,8 @@ func (ctx *ExecutionContext) Clone() *ExecutionContext {
 		CatalogPin:           ctx.CatalogPin,
 		ExcludeAmbientMemory: ctx.ExcludeAmbientMemory,
 		Telemetry:            ctx.Telemetry,
+		Reviewer:             ctx.Reviewer,
+		LoopPath:             ctx.LoopPath,
 	}
 
 	if ctx.Loop != nil {

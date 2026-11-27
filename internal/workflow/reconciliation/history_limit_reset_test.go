@@ -28,7 +28,7 @@ func TestReconciler_StuckActivity_AtHistorySizeLimit_DoesNotReset(t *testing.T) 
 	}
 	tempClient.setPollersActive(true)
 
-	reconciler := New(Deps{Store: repo, RunEvents: repo, Chats: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: tempClient, Config: stuckTestConfig(2), Mailbox: repo, Orphans: repo})
+	reconciler := New(Deps{Store: repo, RunEvents: repo, Chats: repo, ToolCalls: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: tempClient, Config: stuckTestConfig(2), Mailbox: repo, Orphans: repo})
 	wf := runningWorkflow()
 
 	reconciler.ReconcileWorkflow(context.Background(), wf)
@@ -51,7 +51,7 @@ func TestReconciler_StuckActivity_AtHistoryCountLimit_DoesNotReset(t *testing.T)
 	}
 	tempClient.setPollersActive(true)
 
-	reconciler := New(Deps{Store: repo, RunEvents: repo, Chats: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: tempClient, Config: stuckTestConfig(2), Mailbox: repo, Orphans: repo})
+	reconciler := New(Deps{Store: repo, RunEvents: repo, Chats: repo, ToolCalls: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: tempClient, Config: stuckTestConfig(2), Mailbox: repo, Orphans: repo})
 	wf := runningWorkflow()
 
 	reconciler.ReconcileWorkflow(context.Background(), wf)
@@ -101,7 +101,7 @@ func TestRepairStrandedBackgroundSpawns_SkipsSpawnsOfResumableRoot(t *testing.T)
 		root:       &db.Workflow{ID: root, ChatID: "chat-1", Status: db.Failed()},
 		checkpoint: &db.WorkflowCheckpoint{WorkflowID: root, ChatID: "chat-1", NodeID: "agent_loop", LoopIteration: 96},
 	}
-	reconciler := New(Deps{Store: repo, RunEvents: repo, Chats: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: &mockReconcilerTemporalClient{}, Config: DefaultConfig(), Mailbox: repo, Orphans: repo})
+	reconciler := New(Deps{Store: repo, RunEvents: repo, Chats: repo, ToolCalls: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: &mockReconcilerTemporalClient{}, Config: DefaultConfig(), Mailbox: repo, Orphans: repo})
 
 	n, err := reconciler.repairStrandedBackgroundSpawns(context.Background(), &passStats{})
 	require.NoError(t, err)
@@ -123,7 +123,7 @@ func TestRepairStrandedBackgroundSpawns_RepairsWhenRootNotResumable(t *testing.T
 		mockRepo: base,
 		root:     &db.Workflow{ID: root, ChatID: "chat-1", Status: db.Failed()},
 	}
-	reconciler := New(Deps{Store: repo, RunEvents: repo, Chats: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: &mockReconcilerTemporalClient{}, Config: DefaultConfig(), Mailbox: repo, Orphans: repo})
+	reconciler := New(Deps{Store: repo, RunEvents: repo, Chats: repo, ToolCalls: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: &mockReconcilerTemporalClient{}, Config: DefaultConfig(), Mailbox: repo, Orphans: repo})
 
 	_, err := reconciler.repairStrandedBackgroundSpawns(context.Background(), &passStats{})
 	require.NoError(t, err)

@@ -41,6 +41,8 @@ type OrgResolver interface {
 // store.TriggerExtStore satisfies it.
 type Triggers interface {
 	RemoveTrigger(ctx context.Context, id string) error
+	// ListTriggersForUser is the caller's own triggers (UserID is required).
+	ListTriggersForUser(ctx context.Context, f core.TriggerFilters) ([]*core.Trigger, error)
 }
 
 type Repository interface {
@@ -49,7 +51,6 @@ type Repository interface {
 	AssignUnassignedOrg(ctx context.Context, userID, orgID string) error
 
 	// What deleting a workflow does to the automations that run it.
-	ListTriggers(ctx context.Context, f core.TriggerFilters) ([]*core.Trigger, error)
 	RunTx(ctx context.Context, policy orm.TxPolicy, f func(ctx context.Context) error) error
 
 	ListVisibilityOverrides(ctx context.Context, userID string, itemType int32) (map[string]bool, error)

@@ -16,8 +16,13 @@
 //     bound to them) and have been idle for WorktreeNodeModulesIdle. Nothing
 //     else in such a worktree is touched.
 //
+// A sub-agent's directory in a chat's (<chat>/<agent id>/) has the same
+// lifecycle on its own clock, and inside a directory still in use each
+// checkout is stripped once it alone has gone unused (scratch.go).
+//
 // It runs in the daemon, the only process that sees the filesystem, on its
-// own schedule (Reclaimer.Run). Every removal is logged and recorded in a
+// own schedule (Reclaimer.Run), and sooner, with a day as the strip floor,
+// while the disk is under pressure (pressure.go). Every removal is logged and recorded in a
 // report (ReportFile); dry-run computes the same decisions and removes
 // nothing. The safety rules are the worktree reclaim's: an age floor, no
 // live process with its cwd, executable, open or mapped files inside, the

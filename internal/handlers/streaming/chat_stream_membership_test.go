@@ -45,7 +45,7 @@ func (m *switchableMembership) IsMember(context.Context, string, string) (bool, 
 // removed from it: the open's decision is re-asked while the stream lives,
 // not only when it opens.
 func TestStreamChatUpdates_RemovedMemberStreamEnds(t *testing.T) {
-	svc := NewTestStreaming(t, WithStreamingDeps(withRoles(Deps{Repo: orgChatRepo{newCatchupChatRepo(42)}, Deltas: noopHub{}})))
+	svc := NewTestStreaming(t, WithStreamingDeps(withRoles(Deps{TriggerReads: &MockTriggerReads{}, Repo: orgChatRepo{newCatchupChatRepo(42)}, Deltas: noopHub{}})))
 	svc.heartbeatInterval = time.Hour // only the re-authorization ticks
 	svc.reauthorizeInterval = 10 * time.Millisecond
 	membership := &switchableMembership{}
@@ -123,7 +123,7 @@ func TestStreamChatUpdates_AnUnassignedChatStampedWhileOpenIsReauthorized(t *tes
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			repo := &stampableChatRepo{catchupChatRepo: newCatchupChatRepo(42)}
-			svc := NewTestStreaming(t, WithStreamingDeps(withRoles(Deps{Repo: repo, Deltas: noopHub{}})))
+			svc := NewTestStreaming(t, WithStreamingDeps(withRoles(Deps{TriggerReads: fixtureTriggerReads(repo), Repo: repo, Deltas: noopHub{}})))
 			svc.heartbeatInterval = time.Hour // only the re-authorization ticks
 			svc.reauthorizeInterval = 10 * time.Millisecond
 			membership := &orgMembers{orgs: tc.members, def: "home"}
@@ -181,7 +181,7 @@ func TestStreamChatUpdates_ForwardsNoUpdateOfALeftOrg(t *testing.T) {
 	const child = "chat-started-by-the-open-one"
 	userHub := newChanUserHub()
 	repo := focusRepo{catchupChatRepo: newCatchupChatRepo(10), parents: map[string]string{child: raceTestChatID}}
-	svc := NewTestStreaming(t, WithStreamingDeps(withRoles(Deps{Repo: repo, Deltas: noopHub{}, UserUpdates: userHub})))
+	svc := NewTestStreaming(t, WithStreamingDeps(withRoles(Deps{TriggerReads: fixtureTriggerReads(repo), Repo: repo, Deltas: noopHub{}, UserUpdates: userHub})))
 	membership := &orgMembers{orgs: map[string]bool{"home": true}}
 
 	mux := http.NewServeMux()
@@ -236,7 +236,7 @@ func TestStreamChatUpdates_AnOwnerStreamEndsWhenTheChatMovesOrg(t *testing.T) {
 	repo := &stampableChatRepo{catchupChatRepo: newCatchupChatRepo(42)}
 	acme := "acme"
 	repo.org.Store(&acme)
-	svc := NewTestStreaming(t, WithStreamingDeps(withRoles(Deps{Repo: repo, Deltas: noopHub{}})))
+	svc := NewTestStreaming(t, WithStreamingDeps(withRoles(Deps{TriggerReads: fixtureTriggerReads(repo), Repo: repo, Deltas: noopHub{}})))
 	svc.heartbeatInterval = time.Hour // only the re-authorization ticks
 	svc.reauthorizeInterval = 10 * time.Millisecond
 	// A member of both orgs: only the credential's binding refuses the move.

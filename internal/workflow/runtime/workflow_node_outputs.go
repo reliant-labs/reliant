@@ -31,7 +31,8 @@ const workflowNodeOutputsField = "outputs"
 // node types, routers included (they set their own `outputs`), are returned
 // unchanged.
 func publishWorkflowNodeOutputs(ctx workflow.Context, node *reliantv1.Node, out map[string]interface{}) map[string]interface{} {
-	if node.GetType() != model.NodeTypeWorkflow {
+	// A review node's output is its verdict (ReviewOutput), and nothing else.
+	if node.GetType() != model.NodeTypeWorkflow || model.IsLoweredReviewNode(node) {
 		return out
 	}
 	if _, declared := out[workflowNodeOutputsField]; declared {

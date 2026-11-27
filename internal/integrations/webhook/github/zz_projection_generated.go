@@ -823,6 +823,7 @@ func workflowRunCompletedAttrs(raw any, attrs map[string]string) {
 	attrs["conclusion"] = text(dig(raw, "workflow_run", "conclusion"))
 	attrs["branch"] = text(dig(raw, "workflow_run", "head_branch"))
 	attrs["workflow"] = text(dig(raw, "workflow_run", "name"))
+	attrs["run_event"] = text(dig(raw, "workflow_run", "event"))
 }
 
 func workflowRunCompletedData(v any) map[string]any {

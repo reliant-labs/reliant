@@ -19,11 +19,17 @@ func TestDefaults(t *testing.T) {
 	d := Defaults()
 	want := Resolved{
 		Version: 1,
-		Gate:    ResolvedGate{Runner: RunnerMachine, Pool: "gate", Timeout: 60 * time.Minute},
-		Queue:   ResolvedQueue{BatchMax: 4, Speculate: 0, RerunOnRed: 1, Preempt: false},
-		Review:  ResolvedReview{MaxRounds: 3},
-		Fix:     ResolvedFix{AttemptsPerSignature: 3},
-		Flake:   ResolvedFlake{Policy: FlakeQuarantine, QuarantineDays: 7},
+		Gate: ResolvedGate{Runner: RunnerMachine, Pool: "gate", Timeout: 60 * time.Minute, Stages: []ResolvedStage{
+			{Name: StageLint, State: StageUnavailable, Source: StageSourceDefault, Reason: undetected + ": set gate.stages.lint.run, or turn the stage off"},
+			{Name: StageTest, State: StageUnavailable, Source: StageSourceDefault, Reason: "no test command was detected: the file names it (gate, gate.run or gate.stages.test.run)"},
+			{Name: StageBuild, State: StageUnavailable, Source: StageSourceDefault, Reason: undetected + ": set gate.stages.build.run, or turn the stage off"},
+			{Name: StageSBOMScan, State: StageOn, Source: StageSourceDefault, Kind: StageBuiltinScan, Scan: &BuiltinScan{Policy: ScanPolicyDefault},
+				Reason: "a syft SBOM of the build output scanned by grype, judged by forge's default vuln_gate (block KEV and fixable criticals, warn on high)"},
+		}},
+		Queue:  ResolvedQueue{BatchMax: 4, Speculate: 0, RerunOnRed: 1, Preempt: false},
+		Review: ResolvedReview{MaxRounds: 3},
+		Fix:    ResolvedFix{AttemptsPerSignature: 3},
+		Flake:  ResolvedFlake{Policy: FlakeQuarantine, QuarantineDays: 7},
 		Sweep: ResolvedSweep{
 			Schedule: Schedule{Cron: "0 6 * * *"},
 			Checks: []SweepCheck{
@@ -45,6 +51,7 @@ func TestMinimalFileResolvesToDefaults(t *testing.T) {
 	got := mustLoad(t, "version: 1\ngate: \"npm test\"\n")
 	want := Defaults()
 	want.Gate.Run = "npm test"
+	want.Gate.Stages[1] = ResolvedStage{Name: StageTest, State: StageOn, Source: StageSourceOverride, Kind: StageCommand, Command: "npm test", Reason: "set in pipeline.yaml"}
 	// Resolve allocates the (empty) list fields; compare them as empty.
 	want.OwnerApproval, want.Pins, want.Consumers, want.Recurring = []OwnerApproval{}, []Pin{}, []Consumer{}, []ResolvedRecurringJob{}
 	if !reflect.DeepEqual(got, want) {
@@ -112,6 +119,11 @@ func TestResolve(t *testing.T) {
 		{"queue overrides keep unset defaults", base + "queue: {batch_max: 6, preempt: true}\n", func(t *testing.T, r Resolved) {
 			if r.Queue != (ResolvedQueue{BatchMax: 6, Speculate: 0, RerunOnRed: 1, Preempt: true}) {
 				t.Errorf("queue = %+v", r.Queue)
+			}
+		}},
+		{"gate allows an unisolated landing only when it says so", "version: 1\ngate: {run: make test, allow_unisolated: true}\n", func(t *testing.T, r Resolved) {
+			if !r.Gate.AllowUnisolated || Defaults().Gate.AllowUnisolated {
+				t.Errorf("allow_unisolated = %v (default %v)", r.Gate.AllowUnisolated, Defaults().Gate.AllowUnisolated)
 			}
 		}},
 		{"explicit zero rerun", base + "queue: {rerun_on_red: 0}\n", func(t *testing.T, r Resolved) {

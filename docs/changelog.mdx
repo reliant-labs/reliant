@@ -13,6 +13,135 @@ Regenerate with: task generate:docs:changelog
 
 Track what's new in each Reliant release.
 
+<Update label="v1.35.0" description="November 27, 2026">
+### 2 new features, 4 fixes and 3 other changes
+
+Every pull request merged since v1.34.1, grouped by its conventional-commit type.
+
+#### Added
+
+- **diskwatch: trim every Go build cache by forge/pkg/gocache's policy; pin forge@eaf3a164 (supersedes #3869)** [#3909](https://github.com/reliant-labs/reliant/pull/3909)
+- **mergequeue: run candidate builds, changed paths and pipeline.yaml reads as gate pool daemon jobs** [#3924](https://github.com/reliant-labs/reliant/pull/3924)
+
+#### Changed
+
+- **db: call trigger event store within delivery transaction** [#3895](https://github.com/reliant-labs/reliant/pull/3895)
+- **perf(web): typecheck with tsgo, TypeScript's native compiler (#3881)** [#3885](https://github.com/reliant-labs/reliant/pull/3885)
+- **refactor(db): delete the six deprecated trigger-event and run-list forwards from the facade (#3630)** [#3788](https://github.com/reliant-labs/reliant/pull/3788)
+
+#### Fixed
+
+- **mergequeue: no code operations on the server roles; guard the api, worker and gateway closure** [#3898](https://github.com/reliant-labs/reliant/pull/3898)
+- **architecture: deps guard skips when git history is unavailable** [#3897](https://github.com/reliant-labs/reliant/pull/3897)
+- **web: size an attachment upload's client budget by its bytes, not a fixed 60s** [#3899](https://github.com/reliant-labs/reliant/pull/3899)
+- **coverage: restore the coverage-source blob read on the API server, bounded in memory** [#3904](https://github.com/reliant-labs/reliant/pull/3904)
+
+</Update>
+
+<Update label="v1.34.1" description="November 27, 2026">
+### 1 other change
+
+Every pull request merged since v1.34.0, grouped by its conventional-commit type.
+
+#### Changed
+
+- **web: use generated reads for Settings hosting billing** [#3880](https://github.com/reliant-labs/reliant/pull/3880)
+
+</Update>
+
+<Update label="v1.34.0" description="November 27, 2026">
+### 8 new features, 9 fixes and 2 other changes
+
+Every pull request merged since v1.33.0, grouped by its conventional-commit type.
+
+#### Added
+
+- **mergequeue: dispatch a batch's gate to a gate pool member and wait for its verdict (unused)** [#3820](https://github.com/reliant-labs/reliant/pull/3820)
+- **mergequeue: wire the gate runner, gate.allow_unisolated and a per-repo runner (inert)** [#3847](https://github.com/reliant-labs/reliant/pull/3847)
+- **mergequeue: lander with tree checks, GitHub REST port, display check (unenforced until the Queue App exists)** [#3848](https://github.com/reliant-labs/reliant/pull/3848)
+- **mergequeue: run the merge queue in the worker behind pipeline.enabled (inert)** [#3854](https://github.com/reliant-labs/reliant/pull/3854)
+- **pipeline: builtin://pipeline-pr-sweep and sweep.pr@1, the daily PR sweep (inert)** [#3859](https://github.com/reliant-labs/reliant/pull/3859)
+- **workflow: record_due trigger fires once per due pipeline row (inert)** [#3853](https://github.com/reliant-labs/reliant/pull/3853)
+- **mergequeue: gate image and a per-repo warm cache for opted-in runc gates** [#3861](https://github.com/reliant-labs/reliant/pull/3861)
+- **pipeline: pipeline-pr wakes on its record_due row** [#3863](https://github.com/reliant-labs/reliant/pull/3863)
+
+#### Changed
+
+- **pipeline: opt in to unisolated runc gates until sysbox gate machines exist** [#3858](https://github.com/reliant-labs/reliant/pull/3858)
+- **db: drop the pinned-base migration version test #3846's fixer added** [#3850](https://github.com/reliant-labs/reliant/pull/3850)
+
+#### Fixed
+
+- **pipeline: the API server takes only pipeline.enabled, so the queue's caller secret reaches the worker alone** [#3860](https://github.com/reliant-labs/reliant/pull/3860)
+- **attachments: serve uploads as attachments unless the sniffed type is inline-safe** [#3840](https://github.com/reliant-labs/reliant/pull/3840)
+- **mergequeue: one warm cache per repository, never a volume the gate backend did not create** [#3862](https://github.com/reliant-labs/reliant/pull/3862)
+- **mergequeue: the gate image carries git 2.47, which the merge queue's gitport needs** [#3866](https://github.com/reliant-labs/reliant/pull/3866)
+- **reliant main's release gate (config-deps lint, inbox test race)** [#3871](https://github.com/reliant-labs/reliant/pull/3871)
+- **mergequeue: gates get the warm cache and the batch's base commit; cliupdate tests are hermetic** [#3872](https://github.com/reliant-labs/reliant/pull/3872)
+- **workflow: name the rejected concurrency.cancel_running value** [#3837](https://github.com/reliant-labs/reliant/pull/3837)
+- **workflow: name the rejected concurrency.waiting value** [#3826](https://github.com/reliant-labs/reliant/pull/3826)
+- **electron: retire the alpha update channel; every install follows latest** [#3773](https://github.com/reliant-labs/reliant/pull/3773)
+
+</Update>
+
+<Update label="v1.33.0" description="November 26, 2026">
+### 7 new features, 18 fixes and 17 other changes
+
+Every pull request merged since v1.32.0, grouped by its conventional-commit type.
+
+#### Added
+
+- **web: label Experiments (Forge Changes) Beta in the nav and on its pages** [#3623](https://github.com/reliant-labs/reliant/pull/3623)
+- **web: every chart is highlightable: sparklines on UPlotChart, hover on HeadlineBars and heatmaps** [#3626](https://github.com/reliant-labs/reliant/pull/3626)
+- **web: first signed-in Forge Change — pending-provider banner copy (unit user), launch is a separate console step** [#3639](https://github.com/reliant-labs/reliant/pull/3639)
+- **db: pipeline enrolment and settings tables (inert)** [#3660](https://github.com/reliant-labs/reliant/pull/3660)
+- **mergequeue: GitHub and git ports with a git-backed fake GitHub (test-only)** [#3658](https://github.com/reliant-labs/reliant/pull/3658)
+- **pipeline: pipeline.yaml v1 schema, parser and defaults (unused)** [#3659](https://github.com/reliant-labs/reliant/pull/3659)
+- **workflow: concurrency.cancel_running supersedes a key's running run** [#3666](https://github.com/reliant-labs/reliant/pull/3666)
+
+#### Changed
+
+- **runevents: the run-event emitter takes its own store; the activities and the reconciler stop reaching it through the facade** [#3608](https://github.com/reliant-labs/reliant/pull/3608)
+- **web: AccessTokenService calls run on its generated hooks** [#3534](https://github.com/reliant-labs/reliant/pull/3534)
+- **facade: plan, task and attachment rpcs run on forge CRUD** [#3253](https://github.com/reliant-labs/reliant/pull/3253)
+- **chatupdates: the plan, task, dependency and worktree tools announce through a Refetcher backed by chatupdates** [#3373](https://github.com/reliant-labs/reliant/pull/3373)
+- **hosting: link the public status page from Limits** [#3619](https://github.com/reliant-labs/reliant/pull/3619)
+- **db: test fixtures and the activation restore write triggers through the generated store, and the facade's CreateTrigger and UpdateTrigger are deleted** [#3581](https://github.com/reliant-labs/reliant/pull/3581)
+- **forge: feature flags and experiments (Forge Changes, beta)** [#3620](https://github.com/reliant-labs/reliant/pull/3620)
+- **hosting: document static sites' _redirects file** [#3624](https://github.com/reliant-labs/reliant/pull/3624)
+- **hosting: the free static tier is one org per person with no site limit** [#3638](https://github.com/reliant-labs/reliant/pull/3638)
+- **db: GetWorkflow leaves the facade; the chat handler and runs read workflows through their WorkflowLoader** [#3640](https://github.com/reliant-labs/reliant/pull/3640)
+- **pin: forge@83053473 (v1.11.0 + the fresh-user funnel fixes)** [#3645](https://github.com/reliant-labs/reliant/pull/3645)
+- **idlereclaim: no detached git maintenance races the harness's age walk (rc-red v1.33.0-rc.2)** [#3652](https://github.com/reliant-labs/reliant/pull/3652)
+- **trigger: the trigger handler reads rows, firings and registrations through generated stores** [#3642](https://github.com/reliant-labs/reliant/pull/3642)
+- **chatupdates: question updates go through chatupdates; CreateQuestion and ResolveQuestion put their own on the feed** [#3667](https://github.com/reliant-labs/reliant/pull/3667)
+- **db: GetChat and GetChatRow leave the facade; every caller reads the generated chat store** [#3651](https://github.com/reliant-labs/reliant/pull/3651)
+- **what Reliant replaces, and how one declared model does it** [#3670](https://github.com/reliant-labs/reliant/pull/3670)
+- **pin: forge@f76d611 (graph variant reach, ci.license, affected rules, stale-flake closing, real license check)** [#3636](https://github.com/reliant-labs/reliant/pull/3636)
+
+#### Fixed
+
+- **projects: a clone onto another machine never takes a path it cannot create, and a GitHub SSH remote clones over https** [#3616](https://github.com/reliant-labs/reliant/pull/3616)
+- **release: rc-shape accepts a fix merged onto an RC branch (matches control-plane check-pin-ancestry, cp#3641)** [#3582](https://github.com/reliant-labs/reliant/pull/3582)
+- **web: rename modules that differ only by case from their neighbours** [#3615](https://github.com/reliant-labs/reliant/pull/3615)
+- **web: one New chat per sidebar heading; the main checkout's is the project's** [#3628](https://github.com/reliant-labs/reliant/pull/3628)
+- **web: a sub-agent row's title opens its thread** [#3629](https://github.com/reliant-labs/reliant/pull/3629)
+- **web: the nav's footer stays in a short window on macOS** [#3632](https://github.com/reliant-labs/reliant/pull/3632)
+- **web: the phone's chat home opens on the URL's scope, not the desktop frame's** [#3617](https://github.com/reliant-labs/reliant/pull/3617)
+- **worktreereclaim: finish interrupted deletions; shared hard links, sandbox inits and own rollbacks no longer hold every reclaim** [#3643](https://github.com/reliant-labs/reliant/pull/3643)
+- **prove_test: say when the command ran above the repository holding the files** [#3649](https://github.com/reliant-labs/reliant/pull/3649)
+- **workflow: a missing workflow, a sign-in the user must refresh and a sub-agent ended on a provider overload are not ERROR issues** [#3655](https://github.com/reliant-labs/reliant/pull/3655)
+- **workflow: a message that reaches a sub-agent after its last turn gets a turn before it completes** [#3662](https://github.com/reliant-labs/reliant/pull/3662)
+- **tools: tools that act as the user see the run's session on every worker, not only the one that ran the turn** [#3648](https://github.com/reliant-labs/reliant/pull/3648)
+- **web: Changes panel sync buttons match the Commit button's height; plan mode calls the autonomous mode Default** [#3635](https://github.com/reliant-labs/reliant/pull/3635)
+- **workflow: retry PreflightDaemonCheck on a lost heartbeat instead of failing the run** [#3664](https://github.com/reliant-labs/reliant/pull/3664)
+- **prompt: tell agents a chat's agent-id scratch subdirectories are not theirs to delete** [#3679](https://github.com/reliant-labs/reliant/pull/3679)
+- **workflow: recognize released run steps as worker shutdown fallout** [#3695](https://github.com/reliant-labs/reliant/pull/3695)
+- **worktreereclaim: retire a checkout whose gitignored never-listed files the main checkout holds copies of** [#3646](https://github.com/reliant-labs/reliant/pull/3646)
+- **web: shop app pack answers the Inbox, the cloud machine's build and every read a page makes** [#3687](https://github.com/reliant-labs/reliant/pull/3687)
+
+</Update>
+
 <Update label="v1.32.0" description="November 25, 2026">
 ### 21 new features, 11 fixes and 36 other changes
 

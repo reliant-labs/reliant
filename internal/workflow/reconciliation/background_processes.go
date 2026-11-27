@@ -109,7 +109,7 @@ func (r *Reconciler) reconcileBackgroundedProcesses(ctx context.Context, stats *
 	if daemons == nil {
 		return 0, nil
 	}
-	calls, err := r.repo.ListBackgroundedProcessToolCalls(ctx)
+	calls, err := r.toolCalls.ListBackgroundedProcessToolCalls(ctx)
 	if err != nil {
 		logPassFailure(ctx, "[Reconciler] Failed to list backgrounded process tool calls", err)
 		return 0, fmt.Errorf("failed to list backgrounded process tool calls: %w", err)

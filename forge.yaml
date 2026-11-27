@@ -31,7 +31,7 @@
 
 name: reliant
 module_path: github.com/reliant-labs/reliant
-forge_version: v1.11.1-0.20261125195117-f76d611c7f7d
+forge_version: v1.13.1-0.20261127143700-eaf3a164d017
 harness: reliant
 config:
     # Every process setting is typed config (proto/reliant/config/v1, read through
@@ -87,6 +87,15 @@ lint:
         # blocks (`forge test flakes gate`, which scripts/test-flake.sh runs;
         # forge ci gate's flake-check step). For customers the step warns.
         flake-check: error
+        # forge v1.12.0 ends these rules' v1.11.0 warn-first grace. At that
+        # pin they report 35 findings (3 tables whose handlers scope rows by
+        # hand, 24 reads with no idempotency_level, 8 reads returning a
+        # credential). Changing an rpc's idempotency level is a buf-breaking
+        # change to a public proto, so it is not part of a pin bump. Warn
+        # until #3865 fixes them; then delete each entry so it gates.
+        crud-table-unowned: warn
+        forge-idempotency-read-undeclared: warn
+        forge-idempotency-secret-response-marked-read: warn
     tracing:
         # internal/logging's ctx-less helpers write through slog without the
         # request's context, so their lines carry no trace_id. Listing them
@@ -282,6 +291,65 @@ ci:
                 api/types/versions through forge's KCL renderer; reliant never
                 performs plugin privilege validation.
               expires: "2026-12-31"
+    license:
+        # The gate's license-check row (go-licenses over the IMPORT graph of
+        # ./...). An ALLOWLIST: a license not named here, or one the
+        # classifier cannot name, fails, and passing it takes a reasoned
+        # entry in `exceptions`. The risk is linking: a copyleft
+        # (AGPL/GPL/LGPL) or source-available (SSPL/BSL/Elastic) library in a
+        # proprietary binary reaches its source. Deliberately not allowed:
+        # those, CC-BY-SA, and MPL-2.0 (file-level copyleft: each MPL module is
+        # an exception below, so the decision is recorded per module).
+        # Replaces scripts/check-licenses.sh and .license-allowlist; the npm
+        # half stays in scripts/check-npm-licenses.sh (npm-licenses below).
+        allowed:
+            - MIT
+            - Apache-2.0
+            - BSD-2-Clause
+            - BSD-3-Clause
+            - ISC
+            - 0BSD
+            - Unlicense
+            - Zlib
+            - PostgreSQL
+            - Python-2.0
+            - CC0-1.0
+        # One module each, never a license. Revisit an entry if the module's
+        # role changes (vendored and patched is a different question).
+        exceptions:
+            # MPL-2.0 obliges publishing MPL FILES you modify; it does not reach
+            # the rest of a binary that links them (§1.12/§3.3). Imported
+            # unmodified; if we ever patch one, the patched files must be
+            # published and the entry revisited.
+            - module: github.com/hashicorp/go-version
+              reason: MPL-2.0, imported unmodified (version parsing)
+            - module: github.com/hashicorp/go-cleanhttp
+              reason: MPL-2.0, imported unmodified (stdlib http client presets)
+            - module: github.com/hashicorp/go-getter
+              reason: MPL-2.0, imported unmodified (artifact fetching)
+            - module: github.com/hashicorp/aws-sdk-go-base/v2
+              reason: MPL-2.0, imported unmodified, transitive of go-getter
+            - module: github.com/cyphar/filepath-securejoin
+              reason: >-
+                Dual-licensed per file (`SPDX-License-Identifier: BSD-3-Clause
+                AND MPL-2.0` in COPYING.md): the join code we call is
+                BSD-3-Clause, the MPL-2.0 half is imported unmodified.
+                Transitive via go-git and kcl-lang.io/kpm (forge's CLI).
+            - module: github.com/xi2/xz
+              reason: >-
+                Public domain: a Go port of XZ Embedded whose LICENSE is a
+                hand-written grant, not a standard text, so no classifier
+                names it. Read directly; no obligations.
+            - module: github.com/segmentio/asm
+              reason: >-
+                MIT-0 (MIT No Attribution), more permissive than MIT; the
+                classifier does not name it. Transitive (segmentio/encoding).
+            - module: github.com/nexus-rpc/nexus-proto-annotations
+              reason: >-
+                MIT upstream (commit 835bd8d4), committed after the v0.1.0 tag
+                we resolve to, so the tagged tree carries no license file.
+                Transitive from go.temporal.io/api via nexus-rpc/sdk-go. Delete
+                once upstream tags a release containing 835bd8d4.
     gate:
         # `task ci` = forge's checks + these. Files no Go test reads.
         affected_ignore: ["*.md", "docs/**", "research/**", "dev-docs/**"]

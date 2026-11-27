@@ -87,6 +87,10 @@ func validateHandlerStructure(wf *reliantv1.Workflow, kind handlerKind, mainIDs 
 		result.AddError(CategoryStructure, base, finallyField,
 			fmt.Sprintf("%s %s handler cannot declare its own finally: it already runs once, as the run ends", kind.a, kind.field))
 	}
+	if model.CelStringIsSet(handler.GetTimeout()) {
+		result.AddError(CategoryStructure, base, "timeout",
+			fmt.Sprintf("%s %s handler cannot declare a timeout: the run's timeout is the workflow's, and a handler is already bounded as the run ends", kind.a, kind.field))
+	}
 	if len(handler.GetOutputs()) > 0 {
 		result.AddError(CategoryStructure, base, "outputs",
 			fmt.Sprintf("%s %s handler has no outputs: nothing reads them, %s", kind.a, kind.field, kind.reported))

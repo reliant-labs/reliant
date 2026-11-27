@@ -26,6 +26,9 @@ type Message struct {
 	References string
 	// Date is the Date header; zero means now.
 	Date time.Time
+	// Draft marks a message saved to Drafts rather than sent: it may have no
+	// recipient yet.
+	Draft bool
 }
 
 // maxHeaderValue bounds a header value: RFC 5322 caps a line at 998 octets,
@@ -33,7 +36,7 @@ type Message struct {
 const maxHeaderValue = 8000
 
 // Build renders m as an RFC 2822 (5322) message, the bytes Gmail's
-// messages.send takes base64url-encoded in `raw`.
+// messages.send and drafts.create take base64url-encoded in `raw`.
 //
 // Every header value is checked for CR and LF, so a parameter cannot inject a
 // header (a Bcc smuggled into the subject) or end the header block. Addresses
@@ -48,7 +51,7 @@ const maxHeaderValue = 8000
 // caller-supplied From would be either ignored or an alias the account must
 // have verified.
 func Build(m Message) ([]byte, error) {
-	if len(m.To) == 0 {
+	if len(m.To) == 0 && !m.Draft {
 		return nil, fmt.Errorf("to: at least one recipient is required")
 	}
 	if m.Text == "" && m.HTML == "" {

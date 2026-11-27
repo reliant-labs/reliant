@@ -3,8 +3,11 @@
 package daemonpolicy
 
 import (
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
+	"path/filepath"
 	"regexp"
 	"runtime"
 	"sort"
@@ -95,34 +98,66 @@ var gitNeutralConfig = [][2]string{
 	{"core.askPass", ""},
 }
 
-var (
-	emptyGHConfigOnce sync.Once
-	emptyGHConfigDir  string
-)
-
 // neutralGHConfigDir is a path gh cannot read a login from, used when no empty
 // directory could be made.
 const neutralGHConfigDir = "/nonexistent/reliant-no-gh"
 
-// emptyGHConfig is a read-only empty directory for GH_CONFIG_DIR, made once per
-// process. Read-only so a `gh auth login` in a credentials-none shell has
-// nowhere to leave a login behind for the next one.
+// emptyGHConfigBase is the per-user cache directory the empty gh config
+// directory lives in, resolved once per process.
+var emptyGHConfigBase = sync.OnceValue(func() string {
+	dir, err := os.UserCacheDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(dir, "reliant")
+})
+
+// emptyGHConfig is the read-only empty directory for GH_CONFIG_DIR:
+// <user cache>/reliant/no-gh, one per user, shared by every process. Read-only
+// so a `gh auth login` in a credentials-none shell has nowhere to leave a login
+// behind for the next one.
+//
+// It was a fresh os.MkdirTemp per process, which nothing removed: every
+// daemon, CLI and test process left an empty /tmp/reliant-no-gh-* behind.
 func emptyGHConfig() string {
-	emptyGHConfigOnce.Do(func() {
-		dir, err := os.MkdirTemp("", "reliant-no-gh-")
-		if err != nil {
-			return
-		}
-		if err := os.Chmod(dir, 0o500); err != nil {
-			_ = os.Remove(dir)
-			return
-		}
-		emptyGHConfigDir = dir
-	})
-	if emptyGHConfigDir == "" {
+	base := emptyGHConfigBase()
+	if base == "" {
 		return neutralGHConfigDir
 	}
-	return emptyGHConfigDir
+	return emptyGHConfigIn(base)
+}
+
+// emptyGHConfigIn makes, or checks and reuses, base/no-gh. It is checked on
+// every call, not once: a directory shared across processes outlives any one
+// of them, so one that is no longer an empty directory of this user's (a
+// child chmod-ed it and wrote a login in, or someone else made it) is never
+// handed out; the neutral path is.
+func emptyGHConfigIn(base string) string {
+	dir := filepath.Join(base, "no-gh")
+	if err := os.MkdirAll(base, 0o700); err != nil {
+		return neutralGHConfigDir
+	}
+	// A read-only leaf is not enough: another user with write access to a
+	// parent could rename it and plant a login after our checks.
+	if !trustedGHConfigParent(base) {
+		return neutralGHConfigDir
+	}
+	if err := os.Mkdir(dir, 0o500); err != nil && !errors.Is(err, fs.ErrExist) {
+		return neutralGHConfigDir
+	}
+	info, err := os.Lstat(dir)
+	if err != nil || !info.IsDir() || !ownedByCurrentUser(info) {
+		return neutralGHConfigDir
+	}
+	if entries, err := os.ReadDir(dir); err != nil || len(entries) != 0 {
+		return neutralGHConfigDir
+	}
+	if info.Mode().Perm() != 0o500 {
+		if err := os.Chmod(dir, 0o500); err != nil {
+			return neutralGHConfigDir
+		}
+	}
+	return dir
 }
 
 // secretEnvName matches a variable name that says it holds a secret or says

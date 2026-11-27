@@ -15,6 +15,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/integrations/writeledger"
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
+	"github.com/reliant-labs/reliant/internal/serveraction"
 	"github.com/reliant-labs/reliant/internal/streaming"
 	"github.com/reliant-labs/reliant/internal/threads"
 	"github.com/reliant-labs/reliant/internal/toolexec"
@@ -66,6 +67,10 @@ type Activities struct {
 	// AccountRouting routes call_llm and compaction across a provider's
 	// accounts. Optional: nil uses each provider's default account.
 	AccountRouting *handlers.AccountRouting
+	// ServerActions runs the action nodes that name a Reliant server action
+	// (uses: reliant/...). Optional: nil refuses every one as switched off,
+	// which is also what a dispatcher built with pipeline.enabled off does.
+	ServerActions *serveraction.Dispatcher
 }
 
 // NewActivities creates a new Activities container

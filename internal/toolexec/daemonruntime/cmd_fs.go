@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -581,14 +582,24 @@ func handleFSListDir(ctx context.Context, payload []byte) ([]byte, error) {
 
 	result := make([]daemon.DirEntry, 0, len(entries))
 	for _, e := range entries {
+		isDir := e.IsDir()
 		info, err := e.Info()
+		// A symbolic link is listed as what it points at: e.IsDir reports the
+		// link itself, so a link to a directory was a file the directory
+		// picker could not enter. A dangling link stays a file.
+		if e.Type()&fs.ModeSymlink != 0 {
+			if target, statErr := os.Stat(filepath.Join(path, e.Name())); statErr == nil {
+				info, err = target, nil
+				isDir = target.IsDir()
+			}
+		}
 		var size int64
-		if err == nil {
+		if err == nil && !isDir {
 			size = info.Size()
 		}
 		result = append(result, daemon.DirEntry{
 			Name:  e.Name(),
-			IsDir: e.IsDir(),
+			IsDir: isDir,
 			Size:  size,
 		})
 	}
@@ -1088,6 +1099,12 @@ type fsGetTreeRequest struct {
 	//   N  = N levels of descendants (1 = immediate children only)
 	//   -1 = as deep as the node budget allows
 	Depth int `json:"depth"`
+	// ViewerRoot is the workspace root of the GetFileTree request. When set,
+	// listing a credential store (~/.ssh, ~/.aws, …), directly or through a
+	// symlink, is refused as the viewer refuses to open one
+	// (daemonpolicy.DenyViewerRead). A server that predates it sends none,
+	// and the listing behaves as it did.
+	ViewerRoot string `json:"viewer_root,omitempty"`
 }
 
 type fsFileNode struct {
@@ -1101,6 +1118,28 @@ type fsFileNode struct {
 	// the directory holds at least one visible entry. Lets the UI show an expand
 	// chevron without eagerly loading the subtree.
 	HasChildren bool `json:"has_children"`
+	// SymlinkTarget is the link's text when the entry is a symbolic link;
+	// Type then describes what it resolves to.
+	SymlinkTarget string `json:"symlink_target,omitempty"`
+	// SymlinkStatus is set for a symbolic link: "resolved", or why it cannot
+	// be followed ("broken", "loop", "denied").
+	SymlinkStatus string `json:"symlink_status,omitempty"`
+}
+
+// symlinkStatusWire names a filetree.LinkStatus on the wire.
+func symlinkStatusWire(s filetree.LinkStatus) string {
+	switch s {
+	case filetree.LinkResolved:
+		return "resolved"
+	case filetree.LinkBroken:
+		return "broken"
+	case filetree.LinkLoop:
+		return "loop"
+	case filetree.LinkDenied:
+		return "denied"
+	default:
+		return ""
+	}
 }
 
 type fsGetTreeResponse struct {
@@ -1124,6 +1163,10 @@ func toFSFileNodes(nodes []*filetree.Node) []*fsFileNode {
 			Modified:    n.ModTime.Format(time.RFC3339),
 			HasChildren: n.HasChildren,
 		}
+		if n.Link != nil {
+			node.SymlinkTarget = n.Link.Target
+			node.SymlinkStatus = symlinkStatusWire(n.Link.Status)
+		}
 		if n.IsDir {
 			node.Type = "directory"
 			if len(n.Children) > 0 {
@@ -1136,6 +1179,27 @@ func toFSFileNodes(nodes []*filetree.Node) []*fsFileNode {
 		out = append(out, node)
 	}
 	return out
+}
+
+// maxTreeReplyReserve caps how much of a request's remaining time the walk
+// leaves for the reply: marshalling, the gateway stream, NATS, the API's
+// conversion and the browser's download of a tree that can hold
+// filetree.MaxTreeNodes nodes.
+const maxTreeReplyReserve = 2 * time.Second
+
+// treeWalkDeadline is when fs.get_tree stops walking: a fifth of the time the
+// request has left before its deadline (at most maxTreeReplyReserve) is kept
+// for the reply, so a partial tree arrives before the caller gives up rather
+// than a whole one after (filetree.Options.Deadline). handleDaemonCommand
+// bounds ctx by the command's budget, which the router has already cut to the
+// RPC's own deadline. Zero, meaning no deadline, when ctx has none.
+func treeWalkDeadline(ctx context.Context, now time.Time) time.Time {
+	deadline, ok := ctx.Deadline()
+	if !ok {
+		return time.Time{}
+	}
+	reserve := min(max(deadline.Sub(now), 0)/5, maxTreeReplyReserve)
+	return deadline.Add(-reserve)
 }
 
 func handleFSGetTree(ctx context.Context, payload []byte) ([]byte, error) {
@@ -1168,6 +1232,61 @@ func handleFSGetTree(ctx context.Context, payload []byte) ([]byte, error) {
 	}
 	basePath = resolved
 
+	// A directory the tree now expands through a symlink can lead anywhere on
+	// the machine, so the tree applies the viewer's credential guard: a link
+	// into ~/.ssh is listed but never expanded (DenyDir below), and a request
+	// that names one anyway is refused here.
+	viewerRoot := req.ViewerRoot
+	if viewerRoot != "" {
+		// The exemption root must obey the same grant as the listing. A
+		// connector cannot claim an out-of-scope workspace to exempt a target.
+		viewerRoot, err = daemonpolicy.ResolveDir(ctx, viewerRoot)
+		if err != nil {
+			return nil, err
+		}
+		if err := daemonpolicy.DenyViewerRead(basePath, viewerRoot); err != nil {
+			return nil, err
+		}
+	} else {
+		viewerRoot = basePath
+	}
+
+	// Resolve the workspace independently of caller confinement: ResolveDir is
+	// a no-op for unconfined callers. Lazy expansion is a new tree request, so
+	// its root must pass the same boundary as links discovered during a walk.
+	viewerRoot, err = filepath.EvalSymlinks(viewerRoot)
+	if err != nil {
+		return nil, err
+	}
+	viewerRoot, err = filepath.Abs(viewerRoot)
+	if err != nil {
+		return nil, err
+	}
+	checkTreeDir := func(path string) error {
+		if _, err := daemonpolicy.ResolveDir(ctx, path); err != nil {
+			return err
+		}
+		if err := daemonpolicy.DenyViewerRead(path, viewerRoot); err != nil {
+			return err
+		}
+		target, err := filepath.EvalSymlinks(path)
+		if err != nil {
+			return err
+		}
+		target, err = filepath.Abs(target)
+		if err != nil {
+			return err
+		}
+		rel, err := filepath.Rel(viewerRoot, target)
+		if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			return fmt.Errorf("tree directory outside workspace: %w", os.ErrPermission)
+		}
+		return nil
+	}
+	if err := checkTreeDir(basePath); err != nil {
+		return nil, err
+	}
+
 	// Serve from a live, bounded filesystem walk (VS Code style) rather than
 	// the git index: this reads filesystem truth, so manually-removed files
 	// (rm, not `git rm`) disappear and every node reports its real size. A
@@ -1183,6 +1302,12 @@ func handleFSGetTree(ctx context.Context, payload []byte) ([]byte, error) {
 		Root:       basePath,
 		ShowHidden: req.ShowHidden,
 		Depth:      req.Depth,
+		Deadline:   treeWalkDeadline(ctx, time.Now()),
+		// Discovery and lazy expansion enforce the same workspace boundary,
+		// even for unconfined callers, as well as the credential guard.
+		DenyDir: func(path string) bool {
+			return checkTreeDir(path) != nil
+		},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("read dir %s: %w", basePath, err)

@@ -6,7 +6,8 @@ import { describe, expect, it, vi } from "vitest";
 import { fixtureCatalog, fixtureGraph } from "../../__fixtures__/fixtureGraph";
 import { GraphView } from "../GraphView";
 const api = { getServiceGraph: vi.fn(), getServiceGraphCatalog: vi.fn() };
-vi.mock("@/hooks/observability-queries", () => ({ obsKeys: { all: (s: unknown) => ["observability", s] }, useObsReadApi: () => api }));
+vi.mock("@/hooks/observability-queries", () => ({ obsKeys: { all: (s: unknown) => ["observability", s] } }));
+vi.mock("@/services/controlPlane/observability/ObservabilityApiContext", () => ({ useObservabilityApi: () => api }));
 vi.mock("../GraphPanel", () => ({ GraphPanel: () => <div>Graph populated</div> }));
 const scope = { orgId: "org", projectId: "shop", envIds: ["env-prod"], filters: [] };
 function show(search = {}, client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })) {

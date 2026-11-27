@@ -356,6 +356,11 @@ func isValidNodeRef(nodeRef string, validNodes map[string]nodeInfo) bool {
 				if la := model.GetLoopArgs(info.protoNode); la != nil && model.CelStringRaw(la.GetRef()) != "" {
 					return true
 				}
+				// A review node runs the engine's reviewer (model.ReviewAgentRef)
+				// as its body, the same as a ref.
+				if info.protoNode.GetType() == model.NodeTypeReview {
+					return true
+				}
 			}
 		}
 	}

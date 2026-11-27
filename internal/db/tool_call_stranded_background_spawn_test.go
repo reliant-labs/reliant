@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // TestListStrandedSpawnToolCalls_MissesTerminalBackgroundedSpawn is the
@@ -52,7 +53,7 @@ func TestListStrandedSpawnToolCalls_MissesTerminalBackgroundedSpawn(t *testing.T
 		t.Fatalf("UpsertToolCallResult: %v", err)
 	}
 
-	stranded, err := repo.ListStrandedSpawnToolCalls(ctx)
+	stranded, err := store.ListStrandedSpawnToolCalls(ctx, repo.ORM())
 	if err != nil {
 		t.Fatalf("ListStrandedSpawnToolCalls: %v", err)
 	}

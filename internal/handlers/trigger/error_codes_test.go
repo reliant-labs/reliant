@@ -39,7 +39,7 @@ func TestTriggerStoreErrorCodes(t *testing.T) {
 			t.Parallel()
 			repo := &MockRepository{}
 			rows := &MockTriggers{GetTriggerFunc: func(context.Context, string) (*core.Trigger, error) { return nil, tc.err }}
-			svc := NewTestTrigger(t, WithTriggerDeps(Deps{Repo: repo, Triggers: rows, Projects: projectaccesstest.For(repo)}), WithPlaceholderDeps())
+			svc := NewTestTrigger(t, WithTriggerDeps(Deps{Repo: repo, FiringReads: &MockFiringReads{}, Registrations: &MockRegistrationReads{}, Triggers: rows, Projects: projectaccesstest.For(repo)}), WithPlaceholderDeps())
 			_, err := svc.GetTrigger(AuthedContext(t), connect.NewRequest(&reliantv1.GetTriggerRequest{Id: "t-1"}))
 			require.Error(t, err)
 			assert.Equal(t, tc.code, svcerr.Code(err))
@@ -67,7 +67,7 @@ func TestTriggerErrorsOnTheWire(t *testing.T) {
 		}
 		return nil, errors.New("dsn=postgres://u:secret@h")
 	}}
-	_, client := NewTestTriggerServer(t, WithTriggerDeps(Deps{Repo: &MockRepository{}, Triggers: rows, Projects: projectaccesstest.For(&MockRepository{})}), WithPlaceholderDeps())
+	_, client := NewTestTriggerServer(t, WithTriggerDeps(Deps{FiringReads: &MockFiringReads{}, Registrations: &MockRegistrationReads{}, Repo: &MockRepository{}, Triggers: rows, Projects: projectaccesstest.For(&MockRepository{})}), WithPlaceholderDeps())
 	for _, id := range []string{"theirs", "missing"} {
 		_, err := client.GetTrigger(context.Background(), connect.NewRequest(&reliantv1.GetTriggerRequest{Id: id}))
 		require.Error(t, err)

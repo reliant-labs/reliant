@@ -139,6 +139,8 @@ function CoverageBody({ scope, search, path, target, summary, projectId, hrefFor
   const isFile = node?.kind === "file";
   const dir = useCoverage(scope.project, parentSettled && !isFile ? { target, path, ...lens } : null);
   const file = useFileCoverage(scope.project, isFile ? target : null, path, search.base);
+  // Below the root, the whole report's figure too: a subtree's rows must never pass for all of the code.
+  const root = useCoverage(scope.project, path ? { target, path: "", ...lens } : null);
 
   const report = isFile ? file.data : dir.data;
   const lanes = orderLanes([...(report?.lanes ?? parent.data?.lanes ?? summary?.latest?.lanes ?? []), ...(search.lane ? [search.lane] : [])]);
@@ -175,7 +177,37 @@ function CoverageBody({ scope, search, path, target, summary, projectId, hrefFor
           return <RaiseCoverageButton project={scope.project} projectId={projectId} pkg={pkg} target={target} currentPercent={current} defaultBranch={summary?.branch || undefined} />;
         }}
       />
+      {path && (
+        <SubtreeNotice
+          path={path}
+          isFile={isFile}
+          statements={(isFile ? node?.combined : dir.data?.coverage?.combined)?.statements ?? null}
+          rootStatements={root.data?.coverage?.combined?.statements ?? null}
+          rootHref={hrefFor({ ...search, path: undefined })}
+        />
+      )}
       {body}
+    </div>
+  );
+}
+
+/**
+ * Below the root, one line saying so, with the share of the report it is and
+ * the way back to all of it: a deep link (an agent's, a bookmark) lands here
+ * with no drill to remember, and a subtree's rows read like a whole report.
+ */
+function SubtreeNotice({ path, isFile, statements, rootStatements, rootHref }: { path: string; isFile: boolean; statements: number | null; rootStatements: number | null; rootHref: string }) {
+  const share = statements !== null && rootStatements ? ` · ${statements.toLocaleString("en-US")} of ${rootStatements.toLocaleString("en-US")} statements` : "";
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-primary/40 bg-primary/5 px-3 py-2 text-ui" role="status" data-testid="tests-coverage-subtree">
+      <span className="text-ink">
+        {isFile ? "Showing only the file " : "Showing only "}
+        <code className="font-mono font-medium">{isFile ? path : `${path}/`}</code>
+        <span className="text-ink-muted">{share}</span>
+      </span>
+      <Link href={rootHref} className="font-medium text-primary-ink underline-offset-2 hover:underline">
+        View all code
+      </Link>
     </div>
   );
 }

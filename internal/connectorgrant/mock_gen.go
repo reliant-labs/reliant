@@ -14,14 +14,15 @@ import (
 )
 
 // forge:section MockStore
-// forge:hash=9e3eed63975803a3fae293d8d1b10143c05a7ba8fe89f1313466a8b97ea8b7f0
+// forge:hash=e1636a9017ea31dccddfbd9555e2aee252fa75b83e25b795944222bc90153706
 
 // MockStore is a test mock for the Store interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockStore.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockStore.<Method>Func not set" error.
 type MockStore struct {
 	contractkit.Recorder
 	SetTokenPrefixFunc     func(context.Context, string, string) error
@@ -174,6 +175,328 @@ func (m *MockStore) ListAuditByGrant(ctx context.Context, userID string, grantID
 		return m.ListAuditByGrantFunc(ctx, userID, grantID, limit)
 	}
 	return nil, contractkit.MockNotSet("MockStore", "ListAuditByGrant")
+}
+
+// MockStoreSetTokenPrefixCall is one recorded call of MockStore.SetTokenPrefix, one
+// field per parameter.
+type MockStoreSetTokenPrefixCall struct {
+	Ctx    context.Context
+	ID     string
+	Prefix string
+}
+
+// SetTokenPrefixCalls returns every recorded SetTokenPrefix call, oldest first, with
+// its arguments typed. It reads the same log as Calls("SetTokenPrefix").
+func (m *MockStore) SetTokenPrefixCalls() []MockStoreSetTokenPrefixCall {
+	var out []MockStoreSetTokenPrefixCall
+	for _, c := range m.Recorder.Calls("SetTokenPrefix") {
+		var r MockStoreSetTokenPrefixCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ID, _ = c.Args[1].(string)
+		r.Prefix, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockStoreCreateGrantCall is one recorded call of MockStore.CreateGrant, one
+// field per parameter.
+type MockStoreCreateGrantCall struct {
+	Ctx context.Context
+	G   *Grant
+}
+
+// CreateGrantCalls returns every recorded CreateGrant call, oldest first, with
+// its arguments typed. It reads the same log as Calls("CreateGrant").
+func (m *MockStore) CreateGrantCalls() []MockStoreCreateGrantCall {
+	var out []MockStoreCreateGrantCall
+	for _, c := range m.Recorder.Calls("CreateGrant") {
+		var r MockStoreCreateGrantCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.G, _ = c.Args[1].(*Grant)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockStoreListGrantsByUserCall is one recorded call of MockStore.ListGrantsByUser, one
+// field per parameter.
+type MockStoreListGrantsByUserCall struct {
+	Ctx    context.Context
+	UserID string
+}
+
+// ListGrantsByUserCalls returns every recorded ListGrantsByUser call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListGrantsByUser").
+func (m *MockStore) ListGrantsByUserCalls() []MockStoreListGrantsByUserCall {
+	var out []MockStoreListGrantsByUserCall
+	for _, c := range m.Recorder.Calls("ListGrantsByUser") {
+		var r MockStoreListGrantsByUserCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockStoreGetGrantCall is one recorded call of MockStore.GetGrant, one
+// field per parameter.
+type MockStoreGetGrantCall struct {
+	Ctx    context.Context
+	UserID string
+	ID     string
+}
+
+// GetGrantCalls returns every recorded GetGrant call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetGrant").
+func (m *MockStore) GetGrantCalls() []MockStoreGetGrantCall {
+	var out []MockStoreGetGrantCall
+	for _, c := range m.Recorder.Calls("GetGrant") {
+		var r MockStoreGetGrantCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.ID, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockStoreGetGrantByIDCall is one recorded call of MockStore.GetGrantByID, one
+// field per parameter.
+type MockStoreGetGrantByIDCall struct {
+	Ctx context.Context
+	ID  string
+}
+
+// GetGrantByIDCalls returns every recorded GetGrantByID call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetGrantByID").
+func (m *MockStore) GetGrantByIDCalls() []MockStoreGetGrantByIDCall {
+	var out []MockStoreGetGrantByIDCall
+	for _, c := range m.Recorder.Calls("GetGrantByID") {
+		var r MockStoreGetGrantByIDCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockStoreRevokeGrantCall is one recorded call of MockStore.RevokeGrant, one
+// field per parameter.
+type MockStoreRevokeGrantCall struct {
+	Ctx    context.Context
+	UserID string
+	ID     string
+}
+
+// RevokeGrantCalls returns every recorded RevokeGrant call, oldest first, with
+// its arguments typed. It reads the same log as Calls("RevokeGrant").
+func (m *MockStore) RevokeGrantCalls() []MockStoreRevokeGrantCall {
+	var out []MockStoreRevokeGrantCall
+	for _, c := range m.Recorder.Calls("RevokeGrant") {
+		var r MockStoreRevokeGrantCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.ID, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockStoreTouchGrantCall is one recorded call of MockStore.TouchGrant, one
+// field per parameter.
+type MockStoreTouchGrantCall struct {
+	Ctx context.Context
+	ID  string
+}
+
+// TouchGrantCalls returns every recorded TouchGrant call, oldest first, with
+// its arguments typed. It reads the same log as Calls("TouchGrant").
+func (m *MockStore) TouchGrantCalls() []MockStoreTouchGrantCall {
+	var out []MockStoreTouchGrantCall
+	for _, c := range m.Recorder.Calls("TouchGrant") {
+		var r MockStoreTouchGrantCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockStoreGetBindingCall is one recorded call of MockStore.GetBinding, one
+// field per parameter.
+type MockStoreGetBindingCall struct {
+	Ctx      context.Context
+	UserID   string
+	ClientID string
+}
+
+// GetBindingCalls returns every recorded GetBinding call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetBinding").
+func (m *MockStore) GetBindingCalls() []MockStoreGetBindingCall {
+	var out []MockStoreGetBindingCall
+	for _, c := range m.Recorder.Calls("GetBinding") {
+		var r MockStoreGetBindingCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.ClientID, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockStorePutBindingCall is one recorded call of MockStore.PutBinding, one
+// field per parameter.
+type MockStorePutBindingCall struct {
+	Ctx context.Context
+	B   *ClientBinding
+}
+
+// PutBindingCalls returns every recorded PutBinding call, oldest first, with
+// its arguments typed. It reads the same log as Calls("PutBinding").
+func (m *MockStore) PutBindingCalls() []MockStorePutBindingCall {
+	var out []MockStorePutBindingCall
+	for _, c := range m.Recorder.Calls("PutBinding") {
+		var r MockStorePutBindingCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.B, _ = c.Args[1].(*ClientBinding)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockStoreDeleteBindingCall is one recorded call of MockStore.DeleteBinding, one
+// field per parameter.
+type MockStoreDeleteBindingCall struct {
+	Ctx      context.Context
+	UserID   string
+	ClientID string
+}
+
+// DeleteBindingCalls returns every recorded DeleteBinding call, oldest first, with
+// its arguments typed. It reads the same log as Calls("DeleteBinding").
+func (m *MockStore) DeleteBindingCalls() []MockStoreDeleteBindingCall {
+	var out []MockStoreDeleteBindingCall
+	for _, c := range m.Recorder.Calls("DeleteBinding") {
+		var r MockStoreDeleteBindingCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.ClientID, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockStoreListBindingsByUserCall is one recorded call of MockStore.ListBindingsByUser, one
+// field per parameter.
+type MockStoreListBindingsByUserCall struct {
+	Ctx    context.Context
+	UserID string
+}
+
+// ListBindingsByUserCalls returns every recorded ListBindingsByUser call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListBindingsByUser").
+func (m *MockStore) ListBindingsByUserCalls() []MockStoreListBindingsByUserCall {
+	var out []MockStoreListBindingsByUserCall
+	for _, c := range m.Recorder.Calls("ListBindingsByUser") {
+		var r MockStoreListBindingsByUserCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockStoreRecordAuditCall is one recorded call of MockStore.RecordAudit, one
+// field per parameter.
+type MockStoreRecordAuditCall struct {
+	Ctx context.Context
+	Rec *AuditRecord
+}
+
+// RecordAuditCalls returns every recorded RecordAudit call, oldest first, with
+// its arguments typed. It reads the same log as Calls("RecordAudit").
+func (m *MockStore) RecordAuditCalls() []MockStoreRecordAuditCall {
+	var out []MockStoreRecordAuditCall
+	for _, c := range m.Recorder.Calls("RecordAudit") {
+		var r MockStoreRecordAuditCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Rec, _ = c.Args[1].(*AuditRecord)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockStoreCompleteAuditCall is one recorded call of MockStore.CompleteAudit, one
+// field per parameter.
+type MockStoreCompleteAuditCall struct {
+	Ctx        context.Context
+	ID         string
+	Status     string
+	ErrMsg     string
+	DurationMS int
+}
+
+// CompleteAuditCalls returns every recorded CompleteAudit call, oldest first, with
+// its arguments typed. It reads the same log as Calls("CompleteAudit").
+func (m *MockStore) CompleteAuditCalls() []MockStoreCompleteAuditCall {
+	var out []MockStoreCompleteAuditCall
+	for _, c := range m.Recorder.Calls("CompleteAudit") {
+		var r MockStoreCompleteAuditCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ID, _ = c.Args[1].(string)
+		r.Status, _ = c.Args[2].(string)
+		r.ErrMsg, _ = c.Args[3].(string)
+		r.DurationMS, _ = c.Args[4].(int)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockStoreListAuditByUserCall is one recorded call of MockStore.ListAuditByUser, one
+// field per parameter.
+type MockStoreListAuditByUserCall struct {
+	Ctx    context.Context
+	UserID string
+	Limit  int
+}
+
+// ListAuditByUserCalls returns every recorded ListAuditByUser call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListAuditByUser").
+func (m *MockStore) ListAuditByUserCalls() []MockStoreListAuditByUserCall {
+	var out []MockStoreListAuditByUserCall
+	for _, c := range m.Recorder.Calls("ListAuditByUser") {
+		var r MockStoreListAuditByUserCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.Limit, _ = c.Args[2].(int)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockStoreListAuditByGrantCall is one recorded call of MockStore.ListAuditByGrant, one
+// field per parameter.
+type MockStoreListAuditByGrantCall struct {
+	Ctx     context.Context
+	UserID  string
+	GrantID string
+	Limit   int
+}
+
+// ListAuditByGrantCalls returns every recorded ListAuditByGrant call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListAuditByGrant").
+func (m *MockStore) ListAuditByGrantCalls() []MockStoreListAuditByGrantCall {
+	var out []MockStoreListAuditByGrantCall
+	for _, c := range m.Recorder.Calls("ListAuditByGrant") {
+		var r MockStoreListAuditByGrantCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.GrantID, _ = c.Args[2].(string)
+		r.Limit, _ = c.Args[3].(int)
+		out = append(out, r)
+	}
+	return out
 }
 
 // Compile-time check.

@@ -64,7 +64,7 @@ func TestListStrandedBackgroundSpawnToolCalls_FindsUnreportedTerminalChild(t *te
 	insertTestWorkflowWithParent(t, repo, childThreadID, chatID, nil, Completed())
 	seedBackgroundSpawnToolCall(t, repo, ctx, "tc-bg-stranded", chatID, parentThreadID, childThreadID)
 
-	stranded, err := repo.ListStrandedBackgroundSpawnToolCalls(ctx)
+	stranded, err := store.ListStrandedBackgroundSpawnToolCalls(ctx, repo.ORM())
 	require.NoError(t, err)
 
 	var found *StrandedBackgroundSpawn
@@ -121,7 +121,7 @@ func TestListStrandedBackgroundSpawnToolCalls_FailClosed(t *testing.T) {
 		Status: core.AgentMessageStatusQueued, CreatedAt: time.Now().UTC(),
 	}))
 
-	stranded, err := repo.ListStrandedBackgroundSpawnToolCalls(ctx)
+	stranded, err := store.ListStrandedBackgroundSpawnToolCalls(ctx, repo.ORM())
 	require.NoError(t, err)
 
 	got := map[string]*StrandedBackgroundSpawn{}

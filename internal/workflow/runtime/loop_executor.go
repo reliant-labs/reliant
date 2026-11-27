@@ -847,6 +847,12 @@ func (e *InlineLoopExecutor) Execute() (*reliantv1.LoopOutput, error) {
 	if err != nil {
 		return nil, err
 	}
+	// A node that sets preflight checks the machine its body runs on first,
+	// and moves off one that fails (node_preflight.go).
+	placed, err = preflightStructural(e.ctx, e.chatID, e.workflowID, e.nodePath(), e.loopStep.Node, resolveNodeDaemonSelector(e.loopStep.Node, e.daemonScope), placed)
+	if err != nil {
+		return nil, err
+	}
 	e.execContext = placed
 
 	out, err := e.execute()
@@ -1731,7 +1737,7 @@ func (e *InlineLoopExecutor) executeIteration(askUserHandoff *toolBatchHandoff, 
 				// Build child execution context for this inline workflow
 				var childExecCtx *ExecutionContext
 				if iterExecContext != nil {
-					childExecCtx = iterExecContext.ForChild(step.Node.GetId(), model.NodeThreadMode(evalResult), contract.WorkflowIdentity, model.NodeThreadMemo(evalResult))
+					childExecCtx = workflowNodeContext(e.ctx, e.childTracker, iterExecContext, step.Node, joinNodePath(e.nodePath(), step.Node.GetId()), model.NodeThreadMode(evalResult), contract.WorkflowIdentity, model.NodeThreadMemo(evalResult))
 
 					// Set thread title: use node ID, with ordinal for loop iterations
 					childExecCtx.ThreadTitle = step.Node.GetId()

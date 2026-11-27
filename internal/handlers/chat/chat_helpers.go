@@ -203,13 +203,20 @@ func (s *Service) trackStartedChatMessage(ctx context.Context, userID string, ch
 	if messageID == "" {
 		messageID = chat.ID
 	}
-	go s.trackMessageSent(context.WithoutCancel(ctx), userID, chat, messageID, chat.MainThreadID(), content, len(msg.GetAttachments()))
+	go s.trackMessageSent(ctx, userID, chat, messageID, chat.MainThreadID(), content, len(msg.GetAttachments()))
 }
+
+const messageAnalyticsTimeout = 5 * time.Second
 
 func (s *Service) trackMessageSent(ctx context.Context, userID string, chat *db.Chat, messageID, threadID, userContent string, attachmentCount int) {
 	if chat == nil || messageID == "" {
 		return
 	}
+
+	// Keep request values for tracing and attribution, but let the analytics
+	// DB calls finish after the RPC returns under their own bounded deadline.
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), messageAnalyticsTimeout)
+	defer cancel()
 
 	// Determine workflow name and type
 	var workflowName, workflowType string
@@ -255,7 +262,7 @@ func (s *Service) trackMessageSent(ctx context.Context, userID string, chat *db.
 	// recorded yet; the claim checks all three and records it in one
 	// statement, so a replayed send or another replica never emits it twice.
 	// A failed claim reports nothing rather than a wrong first.
-	firstForUser, err := s.deps.Repo.ClaimUserActivation(ctx, userID, chat.ID, messageID)
+	firstForUser, err := s.deps.Messages.ClaimUserActivation(ctx, userID, chat.ID, messageID)
 	if err != nil {
 		firstForUser = false
 		logging.WarnContext(ctx, "[Analytics] Could not claim the user's activation; user_first_message not emitted",

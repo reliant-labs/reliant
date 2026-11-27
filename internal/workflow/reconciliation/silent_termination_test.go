@@ -171,7 +171,7 @@ func TestReconciler_HardTermination_EmitsUserVisibleError(t *testing.T) {
 		historyEvents: makeTerminatedCloseEvent("Workflow history count exceeds limit."),
 	}
 
-	reconciler := New(Deps{Store: repo, RunEvents: repo, Chats: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: tempClient, Config: DefaultConfig(), Mailbox: repo, Orphans: repo})
+	reconciler := New(Deps{Store: repo, RunEvents: repo, Chats: repo, ToolCalls: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: tempClient, Config: DefaultConfig(), Mailbox: repo, Orphans: repo})
 
 	_, errs := reconciler.ReconcileRunningWorkflows(context.Background())
 	require.Empty(t, errs)
@@ -223,7 +223,7 @@ func TestReconciler_HardTermination_ErrorEmittedOncePerRun(t *testing.T) {
 		historyEvents: makeTerminatedCloseEvent("Workflow history count exceeds limit."),
 	}
 
-	reconciler := New(Deps{Store: repo, RunEvents: repo, Chats: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: tempClient, Config: DefaultConfig(), Mailbox: repo, Orphans: repo})
+	reconciler := New(Deps{Store: repo, RunEvents: repo, Chats: repo, ToolCalls: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: tempClient, Config: DefaultConfig(), Mailbox: repo, Orphans: repo})
 
 	for pass := 1; pass <= 2; pass++ {
 		_, errs := reconciler.ReconcileRunningWorkflows(context.Background())
@@ -247,7 +247,7 @@ func TestReconciler_HardTermination_WhilePaused_EmitsError(t *testing.T) {
 		historyEvents: makeTerminatedCloseEvent("Workflow history count exceeds limit."),
 	}
 
-	reconciler := New(Deps{Store: repo, RunEvents: repo, Chats: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: tempClient, Config: DefaultConfig(), Mailbox: repo, Orphans: repo})
+	reconciler := New(Deps{Store: repo, RunEvents: repo, Chats: repo, ToolCalls: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: tempClient, Config: DefaultConfig(), Mailbox: repo, Orphans: repo})
 
 	_, errs := reconciler.ReconcileRunningWorkflows(context.Background())
 	require.Empty(t, errs)
@@ -267,7 +267,7 @@ func TestReconciler_HardTermination_ReasonUnavailable_StillEmits(t *testing.T) {
 		historyEvents: nil, // no close event available
 	}
 
-	reconciler := New(Deps{Store: repo, RunEvents: repo, Chats: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: tempClient, Config: DefaultConfig(), Mailbox: repo, Orphans: repo})
+	reconciler := New(Deps{Store: repo, RunEvents: repo, Chats: repo, ToolCalls: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: tempClient, Config: DefaultConfig(), Mailbox: repo, Orphans: repo})
 
 	_, errs := reconciler.ReconcileRunningWorkflows(context.Background())
 	require.Empty(t, errs)
@@ -289,7 +289,7 @@ func TestReconciler_CleanCompletionDrift_EmitsNoError(t *testing.T) {
 		},
 	}
 
-	reconciler := New(Deps{Store: repo, RunEvents: repo, Chats: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: tempClient, Config: DefaultConfig(), Mailbox: repo, Orphans: repo})
+	reconciler := New(Deps{Store: repo, RunEvents: repo, Chats: repo, ToolCalls: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: tempClient, Config: DefaultConfig(), Mailbox: repo, Orphans: repo})
 
 	_, errs := reconciler.ReconcileRunningWorkflows(context.Background())
 	require.Empty(t, errs)
@@ -308,7 +308,7 @@ func TestReconciler_UserCancelledDrift_EmitsNoError(t *testing.T) {
 		},
 	}
 
-	reconciler := New(Deps{Store: repo, RunEvents: repo, Chats: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: tempClient, Config: DefaultConfig(), Mailbox: repo, Orphans: repo})
+	reconciler := New(Deps{Store: repo, RunEvents: repo, Chats: repo, ToolCalls: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: tempClient, Config: DefaultConfig(), Mailbox: repo, Orphans: repo})
 
 	_, errs := reconciler.ReconcileRunningWorkflows(context.Background())
 	require.Empty(t, errs)
@@ -367,7 +367,7 @@ func TestReconciler_ReplayedFailureDrift_SurfacesRootCause(t *testing.T) {
 		historyEvents: makeReplayedFailureCloseEvent(),
 	}
 
-	reconciler := New(Deps{Store: repo, RunEvents: repo, Chats: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: tempClient, Config: DefaultConfig(), Mailbox: repo, Orphans: repo})
+	reconciler := New(Deps{Store: repo, RunEvents: repo, Chats: repo, ToolCalls: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: tempClient, Config: DefaultConfig(), Mailbox: repo, Orphans: repo})
 
 	_, errs := reconciler.ReconcileRunningWorkflows(context.Background())
 	require.Empty(t, errs)

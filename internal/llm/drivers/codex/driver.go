@@ -749,7 +749,9 @@ func (c *CodexClient) SendMessages(ctx context.Context, prompts []string, messag
 		}
 		return ratelimit.Failure{}, true
 	}, nil); err != nil {
-		return nil, fmt.Errorf("codex API request failed: %w", AugmentAPIError(err))
+		err = AugmentAPIError(err)
+		c.forgetCatalogOnRefusal(err)
+		return nil, fmt.Errorf("codex API request failed: %w", err)
 	}
 	if resp.Error.Message != "" {
 		return nil, fmt.Errorf("codex API error: %s", resp.Error.Message)
@@ -858,6 +860,7 @@ func (c *CodexClient) StreamResponse(ctx context.Context, prompts []string, mess
 				return
 			}
 			openErr = AugmentAPIError(openErr)
+			c.forgetCatalogOnRefusal(openErr)
 			// WARN, not ERROR: one attempt's failure is not the call's. The error goes
 			// back to call_llm, which retries the activity and fails over, and a
 			// call that fails for good reaches the user as the run's error. A

@@ -20,6 +20,7 @@ import { isForgeShell } from "../../../lib/shell";
 import { cn } from "../../../lib/utils";
 import { ForgeMark } from "../../ForgeShell/ForgeBrand";
 import { BrandMark } from "../../icons/BrandMark";
+import { ProjectMark } from "../ProjectMark";
 import { CHAT_ROW_DOT_CLASS, type ChatRowChip } from "../chatRowStatus";
 
 /** A 24px icon button in a row's trailing slot (New chat in a project, More options). */
@@ -35,9 +36,13 @@ export function SidebarOrgRow({ children }: { children: ReactNode }) {
   return <div className="flex h-[var(--shell-bar-h)] shrink-0 items-center px-2">{children}</div>;
 }
 
-/** The org row's control: a button when it opens a menu, a plain row when it does not. */
+/**
+ * The org row's control: a button when it opens a menu, a plain row when it does not.
+ * A nav row's height (`--row-h`), like Find and the rows under it, so the narrow
+ * window's and the phone's drawer make it the same 44px touch target as the rest.
+ */
 export const SIDEBAR_ORG_TRIGGER =
-  "flex h-8 min-w-0 flex-1 items-center gap-2 rounded-md px-2 text-left text-ui text-foreground transition-colors hover:bg-foreground/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+  "flex h-[var(--row-h)] min-w-0 flex-1 items-center gap-2 rounded-md px-2 text-left text-ui text-foreground transition-colors hover:bg-foreground/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
 /**
  * The brand's mark at the nav's top: Forge's on the forge host (and the demo),
@@ -65,6 +70,36 @@ export function SidebarOrgLabel({
       </span>
       {menu && <ChevronsUpDown className="ml-auto size-4 shrink-0 text-muted-foreground" aria-hidden="true" />}
     </>
+  );
+}
+
+// --- The project row ------------------------------------------------------
+
+/** The row under the org row (and Find) naming the project the nav is about. */
+export function SidebarProjectRow({ children, testId }: { children: ReactNode; testId?: string }) {
+  return (
+    <div className="flex shrink-0 px-2 pb-1 pt-1" data-testid={testId}>
+      {children}
+    </div>
+  );
+}
+
+/** The project row's control: the org row's, at the row's width. */
+export const SIDEBAR_PROJECT_TRIGGER = cn(SIDEBAR_ORG_TRIGGER, "w-full gap-2 px-1.5");
+
+/**
+ * A project row that opens nothing (the public demo's one sample project): the
+ * project switcher's mark and name (ProjectSwitcher.tsx), without its menu,
+ * chevron or hover wash.
+ */
+export function SidebarProjectLabel({ name, testId }: { name: string; testId?: string }) {
+  return (
+    <SidebarProjectRow testId={testId}>
+      <div className={cn(SIDEBAR_PROJECT_TRIGGER, "hover:bg-transparent")}>
+        <ProjectMark name={name} className="size-5 text-meta" />
+        <span className="min-w-0 truncate font-semibold">{name}</span>
+      </div>
+    </SidebarProjectRow>
   );
 }
 

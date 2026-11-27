@@ -236,6 +236,11 @@ type rule struct {
 	webSrc bool
 	// electron: run the electron tests.
 	electron bool
+	// forgePin: when the diff's go.mod, go.sum and forge.yaml carry only a
+	// forge pin move (Graph.ForgePin), this rule leaves its pin file's Go
+	// lane to the forge packages that changed instead of running it full
+	// (forgepin.go). Its other lanes are unchanged.
+	forgePin bool
 	// note is printed in the plan, to explain a claim that selects nothing.
 	note string
 }
@@ -268,6 +273,11 @@ var rules = []rule{
 		},
 		full:   []lane{laneGo},
 		reason: "a Go dependency or toolchain pin changed (a subset cannot judge a new version)",
+		// A forge pin bump moves only forge's own lines: forge's source at
+		// both versions says which of its packages changed, and the
+		// packages reaching those judge it (#3645's ran the whole lane, 41
+		// minutes of merge gate).
+		forgePin: true,
 	},
 	{
 		id: "node-toolchain",
@@ -281,7 +291,7 @@ var rules = []rule{
 		id: "web-config",
 		patterns: []string{
 			"frontends/web/package.json", "frontends/web/pnpm-lock.yaml", "frontends/web/pnpm-workspace.yaml", "frontends/web/.nvmrc",
-			"frontends/web/vite.config.ts", "frontends/web/tsconfig*.json", "frontends/web/tailwind.config.js", "frontends/web/postcss.config.js",
+			"frontends/web/vite.config.ts", "frontends/web/vitest-load.ts", "frontends/web/tsconfig*.json", "frontends/web/tailwind.config.js", "frontends/web/postcss.config.js",
 			"frontends/web/src/test/setup.ts",
 			// pnpm-workspace.yaml's patchedDependencies: a patch rewrites an
 			// installed dependency that any vitest file may load.
@@ -341,6 +351,7 @@ var rules = []rule{
 		patterns: []string{"forge.yaml"},
 		full:     []lane{laneGo, laneForgeGen},
 		reason:   "the forge pin or forge's configuration changed",
+		forgePin: true,
 	},
 	{
 		id:       "proto-source",
@@ -439,7 +450,7 @@ var rules = []rule{
 		id: "inert",
 		patterns: []string{
 			"docs/**", "**/*.md", "**/*.mdx", "research/**", "dev-docs/**", "contributing/**",
-			"LICENSE", "LICENSES.txt", ".license-allowlist", ".license-allowlist-npm",
+			"LICENSE", "LICENSES.txt", ".license-allowlist-npm",
 			".githooks/**", ".github/**", ".reliant/**", ".golangci.yml", ".goreleaser.yml",
 			".gitignore", ".dockerignore", ".air*.toml", "Dockerfile*", "docker-compose*.yml",
 			"tools/protoc-gen-es/**", "tmp/**",
