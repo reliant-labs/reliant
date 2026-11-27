@@ -15,14 +15,15 @@ import (
 )
 
 // forge:section MockService
-// forge:hash=35290b3b000f719f6f05db5b09ddb70ef7cb0486905234b94714f362399aad20
+// forge:hash=334747d8dbf184d748dd13faaa5650e1cf20b47ac5b162ef46c79148d56caf82
 
 // MockService is a test mock for the Service interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockService.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockService.<Method>Func not set" error.
 type MockService struct {
 	contractkit.Recorder
 	LoginFunc                     func(context.Context, Login) (credentials.Credential, error)
@@ -87,18 +88,127 @@ func (m *MockService) RemoveLegacyForgeDeposits() (int, error) {
 	return 0, contractkit.MockNotSet("MockService", "RemoveLegacyForgeDeposits")
 }
 
+// MockServiceLoginCall is one recorded call of MockService.Login, one
+// field per parameter.
+type MockServiceLoginCall struct {
+	Ctx context.Context
+	L   Login
+}
+
+// LoginCalls returns every recorded Login call, oldest first, with
+// its arguments typed. It reads the same log as Calls("Login").
+func (m *MockService) LoginCalls() []MockServiceLoginCall {
+	var out []MockServiceLoginCall
+	for _, c := range m.Recorder.Calls("Login") {
+		var r MockServiceLoginCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.L, _ = c.Args[1].(Login)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceCredentialsPathCall is one recorded call of MockService.CredentialsPath, one
+// field per parameter.
+type MockServiceCredentialsPathCall struct {
+}
+
+// CredentialsPathCalls returns every recorded CredentialsPath call, oldest first, with
+// its arguments typed. It reads the same log as Calls("CredentialsPath").
+func (m *MockService) CredentialsPathCalls() []MockServiceCredentialsPathCall {
+	var out []MockServiceCredentialsPathCall
+	for range m.Recorder.Calls("CredentialsPath") {
+		var r MockServiceCredentialsPathCall
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceStoreCall is one recorded call of MockService.Store, one
+// field per parameter.
+type MockServiceStoreCall struct {
+	Server string
+	C      credentials.Credential
+}
+
+// StoreCalls returns every recorded Store call, oldest first, with
+// its arguments typed. It reads the same log as Calls("Store").
+func (m *MockService) StoreCalls() []MockServiceStoreCall {
+	var out []MockServiceStoreCall
+	for _, c := range m.Recorder.Calls("Store") {
+		var r MockServiceStoreCall
+		r.Server, _ = c.Args[0].(string)
+		r.C, _ = c.Args[1].(credentials.Credential)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceLookupCall is one recorded call of MockService.Lookup, one
+// field per parameter.
+type MockServiceLookupCall struct {
+	Server string
+}
+
+// LookupCalls returns every recorded Lookup call, oldest first, with
+// its arguments typed. It reads the same log as Calls("Lookup").
+func (m *MockService) LookupCalls() []MockServiceLookupCall {
+	var out []MockServiceLookupCall
+	for _, c := range m.Recorder.Calls("Lookup") {
+		var r MockServiceLookupCall
+		r.Server, _ = c.Args[0].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceRemoveCall is one recorded call of MockService.Remove, one
+// field per parameter.
+type MockServiceRemoveCall struct {
+	Server string
+}
+
+// RemoveCalls returns every recorded Remove call, oldest first, with
+// its arguments typed. It reads the same log as Calls("Remove").
+func (m *MockService) RemoveCalls() []MockServiceRemoveCall {
+	var out []MockServiceRemoveCall
+	for _, c := range m.Recorder.Calls("Remove") {
+		var r MockServiceRemoveCall
+		r.Server, _ = c.Args[0].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceRemoveLegacyForgeDepositsCall is one recorded call of MockService.RemoveLegacyForgeDeposits, one
+// field per parameter.
+type MockServiceRemoveLegacyForgeDepositsCall struct {
+}
+
+// RemoveLegacyForgeDepositsCalls returns every recorded RemoveLegacyForgeDeposits call, oldest first, with
+// its arguments typed. It reads the same log as Calls("RemoveLegacyForgeDeposits").
+func (m *MockService) RemoveLegacyForgeDepositsCalls() []MockServiceRemoveLegacyForgeDepositsCall {
+	var out []MockServiceRemoveLegacyForgeDepositsCall
+	for range m.Recorder.Calls("RemoveLegacyForgeDeposits") {
+		var r MockServiceRemoveLegacyForgeDepositsCall
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ Service = (*MockService)(nil)
 
 // forge:section MockCredentialsLocator
-// forge:hash=34380c80575668338dc11cd6d8d6934a49e9dd61cc7f68b36ddfad80535dbad3
+// forge:hash=f21a5b8b6bb21fea417c19470d2b0101264c6bd343691e5c1e56f8d215bef8ea
 
 // MockCredentialsLocator is a test mock for the CredentialsLocator interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockCredentialsLocator.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockCredentialsLocator.<Method>Func not set" error.
 type MockCredentialsLocator struct {
 	contractkit.Recorder
 	PathFunc func() (string, error)
@@ -111,6 +221,22 @@ func (m *MockCredentialsLocator) Path() (string, error) {
 		return m.PathFunc()
 	}
 	return "", contractkit.MockNotSet("MockCredentialsLocator", "Path")
+}
+
+// MockCredentialsLocatorPathCall is one recorded call of MockCredentialsLocator.Path, one
+// field per parameter.
+type MockCredentialsLocatorPathCall struct {
+}
+
+// PathCalls returns every recorded Path call, oldest first, with
+// its arguments typed. It reads the same log as Calls("Path").
+func (m *MockCredentialsLocator) PathCalls() []MockCredentialsLocatorPathCall {
+	var out []MockCredentialsLocatorPathCall
+	for range m.Recorder.Calls("Path") {
+		var r MockCredentialsLocatorPathCall
+		out = append(out, r)
+	}
+	return out
 }
 
 // Compile-time check.
