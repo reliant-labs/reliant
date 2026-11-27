@@ -39,6 +39,13 @@ type Store interface {
 	CurrentQueueBatch(ctx context.Context, repoID string) (*core.QueueBatch, error)
 }
 
+// Grants is the caller's pipeline capability grants, listed and revoked.
+// *grants.Service implements it.
+type Grants interface {
+	List(ctx context.Context, userID, triggerID string, includeRevoked bool) ([]*core.PipelineCapabilityGrant, error)
+	Revoke(ctx context.Context, userID, id string) (*core.PipelineCapabilityGrant, error)
+}
+
 // Deps holds dependencies for the pipeline service. Composition
 // (internal/app/compose.go) supplies Logger/Config and resolves added fields
 // by type. The rpc methods on *Service are where this service's logic lives;
@@ -54,6 +61,11 @@ type Deps struct {
 	Pipeline *configv1.PipelineConfig
 	// Store is the pipeline store layer, the projects and the access grants.
 	Store Store
+	// Grants lists and revokes the caller's pipeline capability grants
+	// (internal/pipeline/grants). Without it those rpcs are Unavailable.
+	//
+	// forge:optional-dep
+	Grants Grants
 	// Now is the clock access freshness is judged by; nil is time.Now.
 	//
 	// forge:optional-dep

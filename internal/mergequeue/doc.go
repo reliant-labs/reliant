@@ -12,8 +12,8 @@
 //  1. pick: the admissible entries (DB state, [Admission]), at most
 //     queue.batch_max of them by priority then enqueue time, an urgent one
 //     (priority >= 90) alone;
-//  2. build: candidate.Build squashes them onto the base, pushing
-//     refs/heads/reliant-queue/<batch>;
+//  2. build: the [Builder] squashes them onto the base, pushing
+//     refs/heads/reliant-queue/<batch>, as a job on a gate pool daemon;
 //  3. gate: the [Gate] judges the candidate (M9's gaterun.Dispatcher behind
 //     an adapter);
 //  4. record: queue_batches, main_health and, on an ejection, the PR's
@@ -26,11 +26,29 @@
 // batch goes to the [Lander] (M11); only a gate result that is landable
 // (passed inside an isolation boundary) ever reaches it.
 //
+// In mode on a head lands only while the run that approved it holds the
+// owner's land grant (internal/pipeline/grants): admission refuses one whose
+// approver does not (land_not_granted), and every entry is checked again
+// just before the lander's first squash merge, so a grant revoked while the
+// batch gated abandons it and its entries wait. Shadow never lands and asks
+// for no grant.
+//
 // The queue.enqueue@1 server action ([EnqueueHandler]) puts an approved PR
 // head in the queue, recomputing admission on the server.
 //
-// Nothing constructs a Scheduler yet: it is wired into the worker, behind
-// pipeline.enabled, once the gate runner (M9) and the lander (M11) merge.
+// The queue is coordination only: DB state, batching and bisect decisions,
+// verdicts and scheduling. It holds no repository bytes — no git, no
+// checkout, no file contents (owner, 2026-11-27): every code operation (a
+// candidate build, a head's changed paths, a gate) is a job on a daemon of
+// the repository's gate pool, and the queue sees only the ids, paths and
+// verdicts the job reports (internal/mergequeue/buildjob), which it checks
+// against what it asked for. internal/architecture's
+// TestServerRolesRunNoCode holds every package the server roles reach to
+// that.
 //
-//forge:exclude-contract: the Scheduler is driven by the worker, not called through a contract; its seams are the small consumer-side interfaces in deps.go (Store, Gate, Lander, Workdirs, Configs, LeaderLock), and it does no I/O of its own
+// Nothing constructs a Scheduler on a server yet: the worker started it
+// behind pipeline.enabled until it was found building checkouts in the
+// worker pod, and it returns once the daemon-side builder exists.
+//
+//forge:exclude-contract: the Scheduler is driven by the worker, not called through a contract; its seams are the small consumer-side interfaces in deps.go (Store, Gate, Lander, Builder, Refs, Configs, LeaderLock), and it does no I/O of its own
 package mergequeue

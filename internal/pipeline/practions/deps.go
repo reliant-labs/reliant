@@ -11,6 +11,7 @@ import (
 	"github.com/reliant-labs/forge/pkg/orm"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/pipeline/grants"
 	"github.com/reliant-labs/reliant/internal/pipeline/prpolicy"
 	"github.com/reliant-labs/reliant/internal/serveraction"
 )
@@ -76,16 +77,33 @@ type ChangedFiles struct {
 	Blobs map[string]string
 }
 
-// GitHub is the PR reads and writes the actions make. Reads are made as the
-// run's owner; Comment and Close as the Reliant GitHub App's bot. Only the
-// writer (writer.go) calls Comment and Close, so shadow mode is enforced in
-// one place.
+// GitHub is the PR reads and writes the actions make: metadata only, never
+// a file's contents or a diff (internal/architecture's
+// TestServerRolesRunNoCode). Reads are made as the run's owner; Comment and
+// Close as the Reliant GitHub App's bot. Only the writer (writer.go) calls
+// Comment and Close, so shadow mode is enforced in one place.
 type GitHub interface {
 	PullRequest(ctx context.Context, as Caller, repo string, number int) (PullRequest, error)
-	ChangedFiles(ctx context.Context, as Caller, repo string, number int) (ChangedFiles, error)
+	// BranchTip is the commit a branch points at now.
+	BranchTip(ctx context.Context, as Caller, repo, branch string) (string, error)
 	Comment(ctx context.Context, as Caller, repo string, number int, body string) error
 	Close(ctx context.Context, as Caller, repo string, number int) error
 }
+
+// Files lists a PR's changed files without its diff reaching the worker: a
+// job on a daemon of the repository's gate pool, which diffs head against
+// its merge base with base (the base branch's tip) and reports each file's
+// status, line counts and blob. The worker never reads the diff.
+type Files interface {
+	ChangedFiles(ctx context.Context, repo *core.PipelineRepo, base, head string) (ChangedFiles, error)
+}
+
+// ErrFilesUnavailable is a Files that cannot list the files and will not
+// soon: the gate pool has no member that can (none connected, or every one
+// refused or runs a Reliant too old), or a member's report did not hold
+// up. pr.next then judges the head high risk, so a model reviews it,
+// rather than wait or read the diff on the worker.
+var ErrFilesUnavailable = errors.New("practions: no gate pool daemon can list the changed files")
 
 // InboxItem is a page to a person: one item in the run owner's Inbox, on
 // the run's chat.
@@ -114,8 +132,19 @@ type Inbox interface {
 type Deps struct {
 	Store  Store
 	GitHub GitHub
+	// Files lists a head's changed files for pr.next's risk tier. Nil
+	// lists none: every head pr.next reviews is judged high risk and goes
+	// to a model ("changed files unavailable without a gate pool daemon").
+	// forge:optional-dep
+	Files Files
 	// forge:optional-dep
 	Inbox Inbox
+	// Grants decides whether a run holds a pipeline capability. pr.verdict
+	// records a pass only from a run whose activation holds approve (in mode
+	// on; shadow logs what it would refuse). Nil refuses every pass in mode
+	// on.
+	// forge:optional-dep
+	Grants grants.Authorizer
 	// Now is the clock; nil is time.Now.
 	// forge:optional-dep
 	Now func() time.Time

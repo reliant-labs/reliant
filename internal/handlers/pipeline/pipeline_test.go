@@ -139,6 +139,10 @@ func TestPipelineServiceIsOffBehindTheSwitch(t *testing.T) {
 	requireSwitchOff(t, err)
 	_, err = e.svc.ListQueue(ctx, connect.NewRequest(&pb.ListQueueRequest{RepoId: "r"}))
 	requireSwitchOff(t, err)
+	_, err = e.svc.ListCapabilityGrants(ctx, connect.NewRequest(&pb.ListCapabilityGrantsRequest{}))
+	requireSwitchOff(t, err)
+	_, err = e.svc.RevokeCapabilityGrant(ctx, connect.NewRequest(&pb.RevokeCapabilityGrantRequest{GrantId: "g"}))
+	requireSwitchOff(t, err)
 }
 
 func requireSwitchOff(t *testing.T, err error) {
