@@ -1,0 +1,133 @@
+// Copyright (c) 2026 Reliant Labs
+
+/**
+ * GTM › Ideas over GtmService (a mock transport): the list reads the org's
+ * ideas, the status tabs filter them, and "Ask the agent for ideas" opens a
+ * chat with the prompt waiting, unsent, and creates no workflow. One idea's
+ * page: Accept and Reject are SetIdeaStatus on the revision on screen, and a
+ * draft edit writes the body back whole.
+ */
+
+import { create } from "@bufbuild/protobuf";
+import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+import { GtmIdeaKind, GtmIdeaSchema, GtmIdeaSource, GtmIdeaStatus } from "@/gen/reliant/v1/gtm_pb";
+
+import { renderGtm, TEST_ORG } from "../../shared/__tests__/gtmHarness";
+import { IdeaDetailView } from "../IdeaDetailPage";
+import { ASK_FOR_IDEAS_PROMPT } from "../AskForIdeas";
+import { joinIdeaBody, splitIdeaBody } from "../ideaBody";
+import { IdeasView } from "../IdeasPage";
+
+const started = vi.hoisted(() => ({ calls: [] as unknown[] }));
+vi.mock("../../../Forge/Observability/AskReliant/startAskReliantChat", () => ({
+  startAskReliantChat: async (args: unknown) => {
+    started.calls.push(args);
+    return { worktreeId: "wt-1" };
+  },
+}));
+vi.mock("@/store/projectStore", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/store/projectStore")>();
+  return { ...actual, useProjectStore: Object.assign(() => null, { getState: () => ({ currentProject: { id: "p1", name: "site" } }) }) };
+});
+vi.mock("@/lib/toast-manager", () => ({ toast: { warning: vi.fn(), error: vi.fn(), success: vi.fn() } }));
+
+afterEach(() => {
+  cleanup();
+  started.calls = [];
+});
+
+const proposed = create(GtmIdeaSchema, {
+  id: "idea-1",
+  orgId: TEST_ORG,
+  kind: GtmIdeaKind.CONTENT,
+  title: "Explain flows in one post",
+  bodyMd: "Docs views are high but few create a flow.\n\n# The post\n\nBuild one in five minutes.",
+  status: GtmIdeaStatus.PROPOSED,
+  source: GtmIdeaSource.AGENT,
+  revision: 2,
+});
+const accepted = create(GtmIdeaSchema, { ...proposed, id: "idea-2", title: "Launch post", status: GtmIdeaStatus.ACCEPTED, source: GtmIdeaSource.HUMAN });
+
+const lists = {
+  "GtmService.ListCampaigns": { response: { campaigns: [] } },
+  "GtmService.ListItems": { response: { items: [] } },
+  "GtmService.ListChannels": { response: { channels: [] } },
+};
+
+describe("ideaBody", () => {
+  it("reads the first paragraph as why and the rest as the draft, and joins them back", () => {
+    const body = splitIdeaBody(proposed.bodyMd);
+    expect(body.why).toBe("Docs views are high but few create a flow.");
+    expect(body.draft).toBe("# The post\n\nBuild one in five minutes.");
+    expect(joinIdeaBody(body)).toBe(proposed.bodyMd);
+    expect(splitIdeaBody("Only a reason.")).toEqual({ why: "Only a reason.", draft: "" });
+  });
+});
+
+describe("IdeasView", () => {
+  it("lists the org's ideas, and a status tab filters them", async () => {
+    const list = vi.fn(() => ({ ideas: [proposed, accepted] }));
+    renderGtm(<IdeasView />, { ...lists, "GtmService.ListIdeas": list }, { path: "/gtm/ideas?status=proposed", routePath: "/gtm/ideas" });
+    expect(await screen.findByText("Explain flows in one post")).toBeInTheDocument();
+    expect(screen.queryByText("Launch post")).not.toBeInTheDocument();
+    expect(screen.getByText("Docs views are high but few create a flow.")).toBeInTheDocument();
+    expect(list).toHaveBeenCalledWith(expect.objectContaining({ orgId: TEST_ORG }));
+    expect(screen.queryByTestId("gtm-ideas-truncated")).not.toBeInTheDocument();
+  });
+
+  it("says when it shows only the first page", async () => {
+    renderGtm(<IdeasView />, { ...lists, "GtmService.ListIdeas": { response: { ideas: [proposed], nextPageToken: "next" } } }, { path: "/gtm/ideas" });
+    expect(await screen.findByTestId("gtm-ideas-truncated")).toHaveTextContent("Showing the first 200 ideas.");
+  });
+
+  it("asks the agent in a new chat, the prompt waiting unsent", async () => {
+    renderGtm(<IdeasView />, { ...lists, "GtmService.ListIdeas": { response: { ideas: [] } } }, { path: "/gtm/ideas" });
+    fireEvent.click(await screen.findByRole("button", { name: "Ask the agent for ideas" }));
+    expect(screen.getByLabelText("Prompt")).toHaveValue(ASK_FOR_IDEAS_PROMPT);
+    fireEvent.click(screen.getByRole("button", { name: "Open chat" }));
+    await waitFor(() => expect(started.calls).toHaveLength(1));
+    expect(started.calls[0]).toEqual(expect.objectContaining({ prompt: ASK_FOR_IDEAS_PROMPT, send: false, project: expect.objectContaining({ id: "p1" }) }));
+  });
+});
+
+describe("IdeaDetailView", () => {
+  const at = { path: "/gtm/ideas/idea-1", routePath: "/gtm/ideas/$ideaId" };
+
+  it("accepts on the revision on screen", async () => {
+    const setStatus = vi.fn(() => ({ idea: { ...proposed, status: GtmIdeaStatus.ACCEPTED, revision: 3 } }));
+    renderGtm(<IdeaDetailView />, { ...lists, "GtmService.GetIdea": { response: { idea: proposed } }, "GtmService.SetIdeaStatus": setStatus }, at);
+    fireEvent.click(await screen.findByRole("button", { name: "Accept" }));
+    await waitFor(() => expect(setStatus).toHaveBeenCalled());
+    expect(setStatus).toHaveBeenCalledWith(expect.objectContaining({ orgId: TEST_ORG, id: "idea-1", expectedRevision: 2, status: GtmIdeaStatus.ACCEPTED }));
+  });
+
+  it("rejects after a confirm", async () => {
+    const setStatus = vi.fn(() => ({ idea: { ...proposed, status: GtmIdeaStatus.REJECTED } }));
+    renderGtm(<IdeaDetailView />, { ...lists, "GtmService.GetIdea": { response: { idea: proposed } }, "GtmService.SetIdeaStatus": setStatus }, at);
+    fireEvent.click(await screen.findByRole("button", { name: "Reject" }));
+    const confirm = await screen.findAllByRole("button", { name: "Reject" });
+    fireEvent.click(confirm[confirm.length - 1]!);
+    await waitFor(() => expect(setStatus).toHaveBeenCalledWith(expect.objectContaining({ status: GtmIdeaStatus.REJECTED, expectedRevision: 2 })));
+  });
+
+  it("saves a draft edit with the rationale kept", async () => {
+    const update = vi.fn(() => ({ idea: proposed }));
+    renderGtm(<IdeaDetailView />, { ...lists, "GtmService.GetIdea": { response: { idea: proposed } }, "GtmService.UpdateIdea": update }, at);
+    expect(await screen.findByText("Docs views are high but few create a flow.")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    fireEvent.change(screen.getByLabelText("Draft"), { target: { value: "A new draft." } });
+    fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
+    await waitFor(() => expect(update).toHaveBeenCalled());
+    expect(update).toHaveBeenCalledWith(
+      expect.objectContaining({ orgId: TEST_ORG, id: "idea-1", expectedRevision: 2, bodyMd: "Docs views are high but few create a flow.\n\nA new draft." }),
+    );
+  });
+
+  it("says when the idea is not there", async () => {
+    const { ConnectError, Code } = await import("@connectrpc/connect");
+    renderGtm(<IdeaDetailView />, { ...lists, "GtmService.GetIdea": { error: new ConnectError("no", Code.NotFound) } }, at);
+    expect(await screen.findByText("Idea not found")).toBeInTheDocument();
+  });
+});
