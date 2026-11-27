@@ -98,10 +98,6 @@ export function useSessions(scope: RumScope | null, filters: SessionFilters) {
       services: filters.service ? [filters.service] : [],
       window: relativeWindow(rangeMs(filters.range)),
       hasError: filters.hasError,
-      // Only sessions with a replay exist as sessions: one with nothing to
-      // watch (a hidden window's background requests) is never listed. The
-      // control plane enforces it too; asking for it keeps an older one honest.
-      hasReplay: true,
       userId: filters.userId,
       pathContains: filters.pathContains,
       browser: filters.browser,
