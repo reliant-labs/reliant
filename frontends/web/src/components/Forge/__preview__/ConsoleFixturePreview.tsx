@@ -36,7 +36,7 @@ import { ServicePage, ServicesPage } from "../Services/ServicesPages";
 import { ProjectUsagePage } from "../Usage/ProjectUsagePage";
 import { AnalyticsPage } from "../Analytics/AnalyticsPage";
 import { EventsMetricsPage } from "../Analytics/EventsMetricsPage";
-import { SpeedInsightsPage } from "../Analytics/SpeedInsightsPage";
+import { SiteInsightsPage } from "../Analytics/SiteInsightsPage";
 import { ObservabilityViewPage } from "../Console/ConsolePages";
 import { SecretsPage } from "../Console/SecretsPage";
 import { DataPage } from "../Data/DataPage";
@@ -118,7 +118,7 @@ function buildRouter(path: string) {
     usage: ProjectUsagePage,
     events: EventsMetricsPage,
     analytics: AnalyticsPage,
-    speedInsights: SpeedInsightsPage,
+    siteInsights: SiteInsightsPage,
     experiments: ExperimentsPage,
     experiment: ExperimentPage,
     orgLayout: OrgConsoleLayout,

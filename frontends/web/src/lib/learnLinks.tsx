@@ -10,7 +10,7 @@
  * names a page in docs/docs.json's navigation, never a redirect source (the
  * observability, secrets and domains pages live under hosting/ since main
  * moved them). features/chats, integrations/connectors, forge/services,
- * forge/data, forge/storage, forge/auth, forge/observability/speed-insights,
+ * forge/data, forge/storage, forge/auth, forge/observability/site-insights,
  * forge/observability/product-analytics, forge/security/vulnerabilities,
  * account/project-usage and forge/migrate-an-existing-app are added by docs
  * PR #3089 (docs/project-shell-learn).
@@ -36,7 +36,9 @@ export const LEARN_SLUGS = {
   auth: "forge/auth",
   dashboards: "hosting/observability/dashboards-and-alerts",
   observability: "hosting/observability",
-  "speed-insights": "forge/observability/speed-insights",
+  "site-insights": "forge/observability/site-insights",
+  /** @deprecated Speed insights is Site insights: its guide moved, and the old docs URL redirects to it. */
+  "speed-insights": "forge/observability/site-insights",
   analytics: "forge/observability/product-analytics",
   security: "forge/security/vulnerabilities",
   // The Tests pages' guide until a page of their own is written (forge docs/proposals/tests-coverage-flakes.md).
@@ -57,7 +59,7 @@ export function learnUrl(section: LearnSection): string {
   return `${DOCS_ORIGIN}/${LEARN_SLUGS[section]}`;
 }
 
-/** What a section is called in a Learn link's accessible name ("Learn about Speed insights"). */
+/** What a section is called in a Learn link's accessible name ("Learn about site insights"). */
 const SECTION_NAMES: Record<LearnSection, string> = {
   overview: "forge projects",
   "agents/chats": "chats",
@@ -71,7 +73,8 @@ const SECTION_NAMES: Record<LearnSection, string> = {
   auth: "auth",
   dashboards: "dashboards",
   observability: "observability",
-  "speed-insights": "speed insights",
+  "site-insights": "site insights",
+  "speed-insights": "site insights",
   analytics: "analytics",
   security: "security",
   tests: "tests",

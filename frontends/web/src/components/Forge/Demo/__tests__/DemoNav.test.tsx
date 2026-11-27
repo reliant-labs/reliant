@@ -76,7 +76,7 @@ describe("the demo's nav", () => {
     expect(screen.queryByTestId("nav-top")).toBeNull();
     expect(document.querySelector("[data-tour='forge-console-nav']")).toBeNull();
     expect(within(drill).getByTestId("nav-obs-traces")).toHaveAttribute("aria-current", "page");
-    expect(within(drill).getByTestId("nav-speed-insights")).toBeInTheDocument();
+    expect(within(drill).getByTestId("nav-site-insights")).toBeInTheDocument();
   });
 
   it("puts the tour, Install Forge and the telemetry notice in a phone's drawer, every row drawn flat", async () => {

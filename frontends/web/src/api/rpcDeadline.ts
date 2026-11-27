@@ -43,7 +43,7 @@
  */
 
 import { Code, ConnectError } from "@connectrpc/connect";
-import type { Interceptor, UnaryRequest, UnaryResponse } from "@connectrpc/connect";
+import type { ContextValues, Interceptor, UnaryRequest, UnaryResponse } from "@connectrpc/connect";
 import type { PageActivity, ResumeEvent } from "../lib/pageActivity";
 import { noteRpcFailureDecided } from "../lib/handledRpcFailures";
 
@@ -211,8 +211,12 @@ export function formatInFlight(
 // ─── The interceptor ────────────────────────────────────────────────────────
 
 export interface DeadlineInterceptorOptions {
-  /** Active-time budget for a call; 0 means "no client deadline". */
-  timeoutFor: (serviceTypeName: string, methodName: string) => number;
+  /**
+   * Active-time budget for a call; 0 means "no client deadline". The call's
+   * context values are passed so a caller can size one call's budget (an
+   * upload's, by its byte count).
+   */
+  timeoutFor: (serviceTypeName: string, methodName: string, contextValues?: ContextValues) => number;
   activity: () => PageActivity;
   /**
    * Called once per call whose budget ran out, before it is aborted — unless
@@ -357,7 +361,7 @@ export function createDeadlineInterceptor(options: DeadlineInterceptorOptions): 
 
   const interceptor: Interceptor = (next) => async (req) => {
     const methodName = req.method.name;
-    const budgetMs = options.timeoutFor(req.service.typeName, methodName);
+    const budgetMs = options.timeoutFor(req.service.typeName, methodName, req.contextValues);
     if (budgetMs === 0) return next(req);
     if (req.stream) return raceStreamHeaders(next, req, budgetMs, methodName);
 

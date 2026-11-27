@@ -461,7 +461,7 @@ function CheckoutReturnBanner({
           </p>
           <p className="text-sm text-muted-foreground">
             {confirmed
-              ? "You can start a cloud machine now."
+              ? "You can start a sandbox now."
               : "Stripe has your payment. This usually takes a few seconds."}
           </p>
         </div>
