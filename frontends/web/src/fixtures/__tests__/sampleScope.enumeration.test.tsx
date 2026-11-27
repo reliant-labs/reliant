@@ -210,12 +210,15 @@ function Shell() {
   );
 }
 
-function renderAt(path: string): QueryClient {
+async function renderAt(path: string): Promise<QueryClient> {
   const app = createAppQueryClient();
   const root = createRootRoute({ component: Shell });
   const authenticated = createRoute({ getParentRoute: () => root, id: "_authenticated", component: () => <Outlet /> });
   const tree = root.addChildren([authenticated.addChildren([createForgeConsoleRoutes(() => authenticated, forgeConsolePages)])]);
   const router = createRouter({ routeTree: tree, history: createMemoryHistory({ initialEntries: [path] }) });
+  // Resolve the matched lazy chunks before mounting. Otherwise settling also
+  // races the first import and the router's pending/Suspense timers.
+  await router.load();
   const AppQueries = ({ children }: { children: ReactNode }) => <QueryClientProvider client={app}>{children}</QueryClientProvider>;
   render(<RouterProvider router={router} />, { wrapper: AppQueries });
   return app;
@@ -275,10 +278,9 @@ describe("every page the forge tour walks reads the sample's scope, never the li
     expect(TOUR_ROUTES.some((path) => path.includes(`issue=${SAMPLE_ID_PREFIX}`)), "the issue fg-ask opens, by the sample's id").toBe(true);
   });
 
-  // The Overview and Releases cases intermittently never settle on their lazy mount.
-  // Removed per the flake rule; the other route and tour-target checks remain.
-  it.each(TOUR_ROUTES.filter((path) => path !== SAMPLE && path !== `${SAMPLE}/releases`))("%s", async (path) => {
-    const app = renderAt(path);
+  // The Overview case was removed per the flake rule; the other route and tour-target checks remain.
+  it.each(TOUR_ROUTES.filter((path) => path !== SAMPLE))("%s", async (path) => {
+    const app = await renderAt(path);
     await settle();
 
     const unexpected = [...new Set(liveCalls.map((call) => call.rpc).filter((rpc) => !(rpc in GLOBAL_READS) && !(rpc in PENDING_P4_1)))];
@@ -329,7 +331,7 @@ describe("each step of the forge tour finds its target on the sample's pages", (
   it.each(STEPS.map((step) => [step.id, step] as const))("%s", async (_id, step) => {
     const open = step.route!.open as RouteTarget;
     const search = Object.fromEntries(Object.entries(open.search ?? {}).filter(([, value]) => value !== undefined)) as Record<string, string>;
-    renderAt(withSearch(open.to, search));
+    await renderAt(withSearch(open.to, search));
     await settle();
     const target = NOT_IN_JSDOM[step.id]?.instead ?? presentStep(step).target!;
     // The spotlight's selector, on the sample's own data: the nav's anchors, a trace row, a span, an issue.
