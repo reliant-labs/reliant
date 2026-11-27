@@ -102,7 +102,10 @@ describe("useMembers / useInvitations", () => {
     listMembershipActivity.mockClear();
     const refresh = renderHook(() => useRefreshMembers("org-a"), { wrapper });
     await refresh.result.current();
-    expect(new Set(listMembershipActivity.mock.calls.map(([req]) => req.orgId))).toEqual(new Set(["org-a"]));
+    expect(listMembershipActivity.mock.calls.map(([req]) => [req.orgId, req.pageToken])).toEqual([
+      ["org-a", ""],
+      ["org-a", "p2"],
+    ]);
   });
 
   it("an org switch drops the roster reads by their keys, and keeps the person's org list", () => {

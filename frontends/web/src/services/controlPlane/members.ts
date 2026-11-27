@@ -69,6 +69,7 @@ export const ORG_MEMBER_READS: readonly QueryKey[] = [
   organizationServiceKeys.listMembers.all,
   organizationServiceKeys.listInvitations.all,
   activityServiceKeys.listMembershipActivity.all,
+  activityServiceKeys.listMembershipActivityInfinite.all,
 ];
 
 export interface OrgMember {
