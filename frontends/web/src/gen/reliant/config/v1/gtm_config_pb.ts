@@ -58,10 +58,12 @@ export const GtmConfigSchema: GenMessage<GtmConfig> = /*@__PURE__*/
  * GtmAssetsConfig is the bucket GTM's assets (the files attached to items and
  * campaigns) live in. Their size and quota limits are internal/gtm's
  * constants (MaxAssetBytes, MaxCopiedAssetBytes, MaxOrgAssetBytes), not
- * settings. It is composed on the root ReliantConfig beside GtmConfig (as
- * gtm_assets: forge projects one level of config blocks), for the same reason
- * GtmConfig is: the API server and the worker must read one setting.
- * internal/gtm/assetstore opens it (assetstore.StoreFromConfig).
+ * settings. It is composed on ServerProcessConfig as gtm_assets (a block of
+ * its own: forge projects one level of config blocks), which every server
+ * role loads, but only the roles whose graph reads it (the API server and the
+ * worker) reach it, so no other role's env carries the bucket's credentials
+ * (pkg/config's gateway reach test). internal/gtm/assetstore opens it
+ * (assetstore.StoreFromConfig).
  *
  * Its leaves are forge/pkg/blobstore's S3Config, named as
  * `forge.bucket_env("GTM_ASSETS", "gtm-assets")` names them, so a workload

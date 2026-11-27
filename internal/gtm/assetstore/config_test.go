@@ -26,18 +26,19 @@ var bucketEnv = map[string]string{
 	"GTM_ASSETS_PATH_STYLE":        "true",
 }
 
-// load loads the root config from env alone.
-func load(t *testing.T, env map[string]string) (*config.ReliantConfig, error) {
+// load loads the server roles' config, where the bucket is, from env alone.
+func load(t *testing.T, env map[string]string) (*config.ServerProcessConfig, error) {
 	t.Helper()
 	for k := range bucketEnv {
 		t.Setenv(k, "")
 	}
+	t.Setenv("NATS_URL", "nats://127.0.0.1:4222") // required by every server role
 	for k, v := range env {
 		t.Setenv(k, v)
 	}
 	cmd := &cobra.Command{Use: "test"}
-	config.RegisterReliantConfigFlags(cmd)
-	return config.LoadReliantConfig(cmd)
+	config.RegisterServerProcessConfigFlags(cmd)
+	return config.LoadServerProcessConfig(cmd)
 }
 
 func TestConfigDefaultIsOff(t *testing.T) {

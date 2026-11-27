@@ -7,6 +7,7 @@ import "forge/v1/forge.proto";
 import "reliant/config/v1/analytics_config.proto";
 import "reliant/config/v1/client_version_config.proto";
 import "reliant/config/v1/control_plane_config.proto";
+import "reliant/config/v1/gtm_config.proto";
 import "reliant/config/v1/integrations_config.proto";
 import "reliant/config/v1/llm_config.proto";
 import "reliant/config/v1/observability_config.proto";
@@ -81,6 +82,10 @@ message ServerProcessConfig {
   // role loads it: the worker runs the pipeline's server actions, and the API
   // server serves its RPCs.
   PipelineConfig pipeline = 16;
+  // The GTM assets bucket (gtm_config.proto). Here, not on the root config,
+  // so only the server roles whose graph reads it (the API server and the
+  // worker) are handed its credentials; the gateway never is.
+  GtmAssetsConfig gtm_assets = 18;
 }
 
 // PipelineConfig is the platform switch of Reliant's PR and release

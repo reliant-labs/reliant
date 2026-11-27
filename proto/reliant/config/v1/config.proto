@@ -78,7 +78,6 @@ message ReliantConfig {
   MachineOrgConfig machine_org = 6;
   IdleReclaimConfig idle_reclaim = 7;
   GtmConfig gtm = 8;
-  GtmAssetsConfig gtm_assets = 9;
 }
 
 // MachineOrgConfig is how the gateway keeps a machine's project checkouts in
