@@ -91,13 +91,16 @@ func (x *GtmConfig) GetAnalyticsToken() string {
 }
 
 // GtmAssetsConfig is the bucket GTM's assets (the files attached to items and
-// campaigns) live in, and their limits. It is composed on the root
-// ReliantConfig beside GtmConfig (as gtm_assets: forge projects one level of
-// config blocks), for the same reason GtmConfig is: the API server and the
-// worker must read one setting. internal/gtm/assetstore opens it
+// campaigns) live in. Their size and quota limits are internal/gtm's
+// constants (MaxAssetBytes, MaxCopiedAssetBytes, MaxOrgAssetBytes), not
+// settings. It is composed on ServerProcessConfig as gtm_assets (a block of
+// its own: forge projects one level of config blocks), which every server
+// role loads, but only the roles whose graph reads it (the API server and the
+// worker) reach it, so no other role's env carries the bucket's credentials
+// (pkg/config's gateway reach test). internal/gtm/assetstore opens it
 // (assetstore.StoreFromConfig).
 //
-// The first seven leaves are forge/pkg/blobstore's S3Config, named as
+// Its leaves are forge/pkg/blobstore's S3Config, named as
 // `forge.bucket_env("GTM_ASSETS", "gtm-assets")` names them, so a workload
 // that binds that env reads the bucket with no other wiring: the dev MinIO,
 // or in prod an S3-compatible bucket (GCS through an HMAC key). With no
@@ -118,16 +121,7 @@ type GtmAssetsConfig struct {
 	AccessKeyId     string `protobuf:"bytes,5,opt,name=access_key_id,json=accessKeyId,proto3" json:"access_key_id,omitempty"`
 	SecretAccessKey string `protobuf:"bytes,6,opt,name=secret_access_key,json=secretAccessKey,proto3" json:"secret_access_key,omitempty"`
 	// Address the bucket as <endpoint>/<bucket>/<key>; MinIO needs it.
-	PathStyle bool `protobuf:"varint,7,opt,name=path_style,json=pathStyle,proto3" json:"path_style,omitempty"`
-	// The largest asset a person uploads, in bytes. At most 64 MiB, the
-	// gtm_assets table's own ceiling.
-	MaxAssetBytes int64 `protobuf:"varint,8,opt,name=max_asset_bytes,json=maxAssetBytes,proto3" json:"max_asset_bytes,omitempty"`
-	// The largest asset copied from a chat attachment, in bytes. At most
-	// 64 MiB.
-	MaxCopiedAssetBytes int64 `protobuf:"varint,9,opt,name=max_copied_asset_bytes,json=maxCopiedAssetBytes,proto3" json:"max_copied_asset_bytes,omitempty"`
-	// What one org's assets may hold together, in bytes (READY assets and
-	// unexpired PENDING ones).
-	OrgQuotaBytes int64 `protobuf:"varint,10,opt,name=org_quota_bytes,json=orgQuotaBytes,proto3" json:"org_quota_bytes,omitempty"`
+	PathStyle     bool `protobuf:"varint,7,opt,name=path_style,json=pathStyle,proto3" json:"path_style,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -211,27 +205,6 @@ func (x *GtmAssetsConfig) GetPathStyle() bool {
 	return false
 }
 
-func (x *GtmAssetsConfig) GetMaxAssetBytes() int64 {
-	if x != nil {
-		return x.MaxAssetBytes
-	}
-	return 0
-}
-
-func (x *GtmAssetsConfig) GetMaxCopiedAssetBytes() int64 {
-	if x != nil {
-		return x.MaxCopiedAssetBytes
-	}
-	return 0
-}
-
-func (x *GtmAssetsConfig) GetOrgQuotaBytes() int64 {
-	if x != nil {
-		return x.OrgQuotaBytes
-	}
-	return 0
-}
-
 var File_reliant_config_v1_gtm_config_proto protoreflect.FileDescriptor
 
 const file_reliant_config_v1_gtm_config_proto_rawDesc = "" +
@@ -241,7 +214,7 @@ const file_reliant_config_v1_gtm_config_proto_rawDesc = "" +
 	"\x0fallowed_org_ids\x18\x01 \x03(\tBl\x82\xce\x18h\n" +
 	"\x13GTM_ALLOWED_ORG_IDS*QComma-separated organization ids GTM is enabled for (none: GTM is off everywhere)R\rallowedOrgIds\x12\xb0\x01\n" +
 	"\x0fanalytics_token\x18\x02 \x01(\tB\x86\x01\x82\xce\x18\x81\x01\n" +
-	"\x13GTM_ANALYTICS_TOKEN*fControl-plane access token (obs:read, org-bound) for GTM's product-analytics read (unset: unavailable)0\x01P\x01R\x0eanalyticsToken\"\xc1\r\n" +
+	"\x13GTM_ANALYTICS_TOKEN*fControl-plane access token (obs:read, org-bound) for GTM's product-analytics read (unset: unavailable)0\x01P\x01R\x0eanalyticsToken\"\xd6\t\n" +
 	"\x0fGtmAssetsConfig\x12\x83\x01\n" +
 	"\bendpoint\x18\x01 \x01(\tBg\x82\xce\x18c\n" +
 	"\x13GTM_ASSETS_ENDPOINT*LGTM assets bucket: the S3 API base URL this process dials (forge.bucket_env)R\bendpoint\x12\xbb\x01\n" +
@@ -257,15 +230,7 @@ const file_reliant_config_v1_gtm_config_proto_rawDesc = "" +
 	"\x1cGTM_ASSETS_SECRET_ACCESS_KEY*:GTM assets bucket: S3 secret access key (forge.bucket_env)0\x01P\x01R\x0fsecretAccessKey\x12\x87\x01\n" +
 	"\n" +
 	"path_style\x18\a \x01(\bBh\x82\xce\x18d\n" +
-	"\x15GTM_ASSETS_PATH_STYLE*KGTM assets bucket: path-style addressing (forge.bucket_env; MinIO needs it)R\tpathStyle\x12\x97\x01\n" +
-	"\x0fmax_asset_bytes\x18\b \x01(\x03Bo\xbaH\t\"\a\x18\x80\x80\x80  \x00\x82\xce\x18_\n" +
-	"\x14GTM_ASSETS_MAX_BYTES\x1a\b26214400*=Largest GTM asset a person uploads, in bytes (at most 64 MiB)R\rmaxAssetBytes\x12\xb9\x01\n" +
-	"\x16max_copied_asset_bytes\x18\t \x01(\x03B\x83\x01\xbaH\t\"\a\x18\x80\x80\x80  \x00\x82\xce\x18s\n" +
-	"\x1bGTM_ASSETS_MAX_COPIED_BYTES\x1a\b67108864*JLargest GTM asset copied from a chat attachment, in bytes (at most 64 MiB)R\x13maxCopiedAssetBytes\x12\x92\x01\n" +
-	"\x0forg_quota_bytes\x18\n" +
-	" \x01(\x03Bj\xbaH\x04\"\x02 \x00\x82\xce\x18_\n" +
-	"\x1aGTM_ASSETS_ORG_QUOTA_BYTES\x1a\n" +
-	"2147483648*5Bytes one organization's GTM assets may hold togetherR\rorgQuotaBytes:\xf6\x01\xbaH\xf2\x01\x1a\xef\x01\n" +
+	"\x15GTM_ASSETS_PATH_STYLE*KGTM assets bucket: path-style addressing (forge.bucket_env; MinIO needs it)R\tpathStyle:\xf6\x01\xbaH\xf2\x01\x1a\xef\x01\n" +
 	"\x1agtm_assets_bucket_complete\x12iGTM_ASSETS_BUCKET requires GTM_ASSETS_ENDPOINT, GTM_ASSETS_ACCESS_KEY_ID and GTM_ASSETS_SECRET_ACCESS_KEY\x1afthis.bucket == '' || (this.endpoint != '' && this.access_key_id != '' && this.secret_access_key != '')B@Z>github.com/reliant-labs/reliant/gen/reliant/config/v1;configv1b\x06proto3"
 
 var (

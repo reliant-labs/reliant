@@ -69,7 +69,11 @@ type ServerProcessConfig struct {
 	// (gtm_config.proto). Here, not on the root config, so only the server
 	// roles whose graph reads it (the API server and the worker) are handed
 	// its settings and its secret; the gateway never is.
-	Gtm           *GtmConfig `protobuf:"bytes,17,opt,name=gtm,proto3" json:"gtm,omitempty"`
+	Gtm *GtmConfig `protobuf:"bytes,17,opt,name=gtm,proto3" json:"gtm,omitempty"`
+	// The GTM assets bucket (gtm_config.proto). Here, not on the root config,
+	// so only the server roles whose graph reads it (the API server and the
+	// worker) are handed its credentials; the gateway never is.
+	GtmAssets     *GtmAssetsConfig `protobuf:"bytes,18,opt,name=gtm_assets,json=gtmAssets,proto3" json:"gtm_assets,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -212,6 +216,13 @@ func (x *ServerProcessConfig) GetPipeline() *PipelineConfig {
 func (x *ServerProcessConfig) GetGtm() *GtmConfig {
 	if x != nil {
 		return x.Gtm
+	}
+	return nil
+}
+
+func (x *ServerProcessConfig) GetGtmAssets() *GtmAssetsConfig {
+	if x != nil {
+		return x.GtmAssets
 	}
 	return nil
 }
@@ -619,7 +630,7 @@ var File_reliant_config_v1_server_config_proto protoreflect.FileDescriptor
 
 const file_reliant_config_v1_server_config_proto_rawDesc = "" +
 	"\n" +
-	"%reliant/config/v1/server_config.proto\x12\x11reliant.config.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\x1a(reliant/config/v1/analytics_config.proto\x1a-reliant/config/v1/client_version_config.proto\x1a,reliant/config/v1/control_plane_config.proto\x1a\"reliant/config/v1/gtm_config.proto\x1a+reliant/config/v1/integrations_config.proto\x1a\"reliant/config/v1/llm_config.proto\x1a,reliant/config/v1/observability_config.proto\x1a&reliant/config/v1/preview_config.proto\"\xb2\t\n" +
+	"%reliant/config/v1/server_config.proto\x12\x11reliant.config.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\x1a(reliant/config/v1/analytics_config.proto\x1a-reliant/config/v1/client_version_config.proto\x1a,reliant/config/v1/control_plane_config.proto\x1a\"reliant/config/v1/gtm_config.proto\x1a+reliant/config/v1/integrations_config.proto\x1a\"reliant/config/v1/llm_config.proto\x1a,reliant/config/v1/observability_config.proto\x1a&reliant/config/v1/preview_config.proto\"\xf5\t\n" +
 	"\x13ServerProcessConfig\x12J\n" +
 	"\rcontrol_plane\x18\x01 \x01(\v2%.reliant.config.v1.ControlPlaneConfigR\fcontrolPlane\x121\n" +
 	"\x04nats\x18\x02 \x01(\v2\x1d.reliant.config.v1.NatsConfigR\x04nats\x12=\n" +
@@ -639,7 +650,9 @@ const file_reliant_config_v1_server_config_proto_rawDesc = "" +
 	"\x16org_policy_enforcement\x18\x0e \x01(\v2-.reliant.config.v1.OrgPolicyEnforcementConfigR\x14orgPolicyEnforcement\x12O\n" +
 	"\x0fclient_versions\x18\x0f \x01(\v2&.reliant.config.v1.ClientVersionPolicyR\x0eclientVersions\x12=\n" +
 	"\bpipeline\x18\x10 \x01(\v2!.reliant.config.v1.PipelineConfigR\bpipeline\x12.\n" +
-	"\x03gtm\x18\x11 \x01(\v2\x1c.reliant.config.v1.GtmConfigR\x03gtm:\x17\xca\xc1\x18\x13\n" +
+	"\x03gtm\x18\x11 \x01(\v2\x1c.reliant.config.v1.GtmConfigR\x03gtm\x12A\n" +
+	"\n" +
+	"gtm_assets\x18\x12 \x01(\v2\".reliant.config.v1.GtmAssetsConfigR\tgtmAssets:\x17\xca\xc1\x18\x13\n" +
 	"\areliant\x1a\b\n" +
 	"\x06serverJ\x04\b\t\x10\n" +
 	"R\x06sentry\"\xc6\x01\n" +
@@ -712,6 +725,7 @@ var file_reliant_config_v1_server_config_proto_goTypes = []any{
 	(*PreviewConfig)(nil),              // 12: reliant.config.v1.PreviewConfig
 	(*ClientVersionPolicy)(nil),        // 13: reliant.config.v1.ClientVersionPolicy
 	(*GtmConfig)(nil),                  // 14: reliant.config.v1.GtmConfig
+	(*GtmAssetsConfig)(nil),            // 15: reliant.config.v1.GtmAssetsConfig
 }
 var file_reliant_config_v1_server_config_proto_depIdxs = []int32{
 	7,  // 0: reliant.config.v1.ServerProcessConfig.control_plane:type_name -> reliant.config.v1.ControlPlaneConfig
@@ -728,11 +742,12 @@ var file_reliant_config_v1_server_config_proto_depIdxs = []int32{
 	13, // 11: reliant.config.v1.ServerProcessConfig.client_versions:type_name -> reliant.config.v1.ClientVersionPolicy
 	1,  // 12: reliant.config.v1.ServerProcessConfig.pipeline:type_name -> reliant.config.v1.PipelineConfig
 	14, // 13: reliant.config.v1.ServerProcessConfig.gtm:type_name -> reliant.config.v1.GtmConfig
-	14, // [14:14] is the sub-list for method output_type
-	14, // [14:14] is the sub-list for method input_type
-	14, // [14:14] is the sub-list for extension type_name
-	14, // [14:14] is the sub-list for extension extendee
-	0,  // [0:14] is the sub-list for field type_name
+	15, // 14: reliant.config.v1.ServerProcessConfig.gtm_assets:type_name -> reliant.config.v1.GtmAssetsConfig
+	15, // [15:15] is the sub-list for method output_type
+	15, // [15:15] is the sub-list for method input_type
+	15, // [15:15] is the sub-list for extension type_name
+	15, // [15:15] is the sub-list for extension extendee
+	0,  // [0:15] is the sub-list for field type_name
 }
 
 func init() { file_reliant_config_v1_server_config_proto_init() }

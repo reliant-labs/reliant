@@ -577,33 +577,8 @@ schema ReliantConfigIdleReclaim:
         scratch_remove_idle != "", "scratch_remove_idle = \"\" cannot reach the process: an empty RELIANT_IDLE_RECLAIM_SCRATCH_REMOVE_IDLE counts as unset, so it would load the default \"168h\" — set a value, or change its default in the proto"
         worktree_node_modules_idle != "", "worktree_node_modules_idle = \"\" cannot reach the process: an empty RELIANT_IDLE_RECLAIM_WORKTREE_NODE_MODULES_IDLE counts as unset, so it would load the default \"72h\" — set a value, or change its default in the proto"
 
-# forge:section schema ReliantConfigGtmAssets
-# forge:hash=273956fdf14ce0c25b167e09aae9737690286342725f650c840ffea6fa31f116
-# ReliantConfigGtmAssets is the gtm_assets block (GtmAssetsConfig) — author its values in config.k as `gtm_assets.<field> = ...`.
-schema ReliantConfigGtmAssets:
-    # GTM assets bucket: the S3 API base URL this process dials (forge.bucket_env)
-    endpoint: str = ""
-    # GTM assets bucket: the S3 API base URL a browser reaches, when it differs from the endpoint (forge.bucket_env)
-    public_endpoint: str = ""
-    # GTM assets bucket: region (forge.bucket_env; unset: us-east-1)
-    region: str = ""
-    # GTM assets bucket: its name (forge.bucket_env; unset: GTM assets are off)
-    bucket: str = ""
-    # GTM assets bucket: S3 access key id (forge.bucket_env)
-    access_key_id: ConfigSecretRef = ConfigSecretRef { name = "reliant-secrets", key = "gtm_assets_access_key_id" }
-    # GTM assets bucket: S3 secret access key (forge.bucket_env)
-    secret_access_key: ConfigSecretRef = ConfigSecretRef { name = "reliant-secrets", key = "gtm_assets_secret_access_key" }
-    # GTM assets bucket: path-style addressing (forge.bucket_env; MinIO needs it)
-    path_style: bool = False
-    # Largest GTM asset a person uploads, in bytes (at most 64 MiB)
-    max_asset_bytes: int = 26214400
-    # Largest GTM asset copied from a chat attachment, in bytes (at most 64 MiB)
-    max_copied_asset_bytes: int = 67108864
-    # Bytes one organization's GTM assets may hold together
-    org_quota_bytes: int = 2147483648
-
 # forge:section schema ReliantConfig
-# forge:hash=ea784234487abf4419f0ac1e50437d4ad1138a644130ee462200ff966cefde0f
+# forge:hash=8e5f05c2b1de77b6022f25bc3da693beafdfcbddcc9896672935f993c479aec0
 schema ReliantConfig:
     # log config block (LogConfig). Set its fields as `log.<field> = ...`.
     log: ReliantConfigLog = ReliantConfigLog {}
@@ -619,8 +594,6 @@ schema ReliantConfig:
     machine_org: ReliantConfigMachineOrg = ReliantConfigMachineOrg {}
     # idle_reclaim config block (IdleReclaimConfig). Set its fields as `idle_reclaim.<field> = ...`.
     idle_reclaim: ReliantConfigIdleReclaim = ReliantConfigIdleReclaim {}
-    # gtm_assets config block (GtmAssetsConfig). Set its fields as `gtm_assets.<field> = ...`.
-    gtm_assets: ReliantConfigGtmAssets = ReliantConfigGtmAssets {}
 
 # forge:section env-map reliantConfigEnvMap
 # forge:hash=b6d59175cfbe3674b1beacb0e82b712699f93bd21c82d21648a5b68b7da62db8
@@ -630,11 +603,6 @@ schema ReliantConfig:
 # credential is the broadcast that put one feature's secretKeyRef on
 # every pod. Declare what a workload reads in its `config_secrets` instead.
 RELIANT_CONFIG_SENSITIVE_ENV: [str] = [
-    # forge:section RELIANT_CONFIG_SENSITIVE_ENV gtm_assets
-    # forge:hash=b8beb741cd69883b892a8fb4fb3fffc7962e612621a0bc9bb1f2d833f7456ea9
-    "GTM_ASSETS_ACCESS_KEY_ID"
-    "GTM_ASSETS_SECRET_ACCESS_KEY"
-
     # forge:section RELIANT_CONFIG_SENSITIVE_ENV (end)
     # forge:hash=8f6169d91ce0159578853ff1837be73119109fa462ad430ea7dc1c44cb37ce10
 ]
@@ -645,11 +613,6 @@ RELIANT_CONFIG_SENSITIVE_ENV: [str] = [
 # stating that THIS one's absence is intended (a tier's off-switch, a
 # credential only some environments own).
 RELIANT_CONFIG_OPTIONAL_SECRET_ENV: [str] = [
-    # forge:section RELIANT_CONFIG_OPTIONAL_SECRET_ENV gtm_assets
-    # forge:hash=c69ec3fbfbf6c408e8581ae909c0feb6e561785be8790ea6358761e105f24860
-    "GTM_ASSETS_ACCESS_KEY_ID"
-    "GTM_ASSETS_SECRET_ACCESS_KEY"
-
     # forge:section RELIANT_CONFIG_OPTIONAL_SECRET_ENV (end)
     # forge:hash=3d68c81c1b9e6fb0b06cf3da43ce13ca5a60fdeb6b0c3927ac76003f4031a3a5
 ]
@@ -670,11 +633,6 @@ RELIANT_CONFIG_OPTIONAL_SECRET_ENV: [str] = [
 #     env = reliantConfigEnvMap(cfg, config_secrets) | {EXTRA = "value"}
 reliantConfigEnvMap = lambda c: ReliantConfig, config_secrets: [str] -> {str: str | forge.SecretRef} {
     _sensitive: {str: forge.SecretRef} = {
-        # forge:section reliantConfigEnvMap secrets gtm_assets
-        # forge:hash=e4b09c007126d14a37de9f1b248c6cb4b71eb4b357e74c7151fcb92dd4280b62
-        "GTM_ASSETS_ACCESS_KEY_ID" = forge.SecretRef {name = c.gtm_assets.access_key_id.name, key = c.gtm_assets.access_key_id.key, store_key = "GTM_ASSETS_ACCESS_KEY_ID", optional = True}
-        "GTM_ASSETS_SECRET_ACCESS_KEY" = forge.SecretRef {name = c.gtm_assets.secret_access_key.name, key = c.gtm_assets.secret_access_key.key, store_key = "GTM_ASSETS_SECRET_ACCESS_KEY", optional = True}
-
         # forge:section reliantConfigEnvMap secrets (end)
         # forge:hash=8814721ecfde294a68421f4230bd7c3f0c85f54ed77f18b7b62982501bc97207
     }
@@ -719,17 +677,6 @@ reliantConfigEnvMap = lambda c: ReliantConfig, config_secrets: [str] -> {str: st
         "RELIANT_IDLE_RECLAIM_SCRATCH_STRIP_IDLE" = c.idle_reclaim.scratch_strip_idle
         "RELIANT_IDLE_RECLAIM_SCRATCH_REMOVE_IDLE" = c.idle_reclaim.scratch_remove_idle
         "RELIANT_IDLE_RECLAIM_WORKTREE_NODE_MODULES_IDLE" = c.idle_reclaim.worktree_node_modules_idle
-
-        # forge:section reliantConfigEnvMap values gtm_assets
-        # forge:hash=b913ebdb46e2180d2fca5e7d6c59cfca5c961f221039f2e2139682634681b423
-        "GTM_ASSETS_ENDPOINT" = c.gtm_assets.endpoint
-        "GTM_ASSETS_PUBLIC_ENDPOINT" = c.gtm_assets.public_endpoint
-        "GTM_ASSETS_REGION" = c.gtm_assets.region
-        "GTM_ASSETS_BUCKET" = c.gtm_assets.bucket
-        "GTM_ASSETS_PATH_STYLE" = "true" if c.gtm_assets.path_style else "false"
-        "GTM_ASSETS_MAX_BYTES" = str(c.gtm_assets.max_asset_bytes)
-        "GTM_ASSETS_MAX_COPIED_BYTES" = str(c.gtm_assets.max_copied_asset_bytes)
-        "GTM_ASSETS_ORG_QUOTA_BYTES" = str(c.gtm_assets.org_quota_bytes)
 
         # forge:section reliantConfigEnvMap values (end)
         # forge:hash=e1769827ac16f2cb38e2dd9a87b234861e5af33f295889268d5884a88256e96c
@@ -1664,8 +1611,27 @@ schema ServerProcessConfigGtm:
     # Control-plane access token (obs:read, org-bound) for GTM's product-analytics read (unset: unavailable)
     analytics_token: ConfigSecretRef = ConfigSecretRef { name = "reliant-secrets", key = "gtm_analytics_token" }
 
+# forge:section schema ServerProcessConfigGtmAssets
+# forge:hash=4d3fb463bfc540a7b6133aeeccbdc3bd5c4a6c91f0c85f99dcb5b0f42097ee49
+# ServerProcessConfigGtmAssets is the gtm_assets block (GtmAssetsConfig) — author its values in config.k as `gtm_assets.<field> = ...`.
+schema ServerProcessConfigGtmAssets:
+    # GTM assets bucket: the S3 API base URL this process dials (forge.bucket_env)
+    endpoint: str = ""
+    # GTM assets bucket: the S3 API base URL a browser reaches, when it differs from the endpoint (forge.bucket_env)
+    public_endpoint: str = ""
+    # GTM assets bucket: region (forge.bucket_env; unset: us-east-1)
+    region: str = ""
+    # GTM assets bucket: its name (forge.bucket_env; unset: GTM assets are off)
+    bucket: str = ""
+    # GTM assets bucket: S3 access key id (forge.bucket_env)
+    access_key_id: ConfigSecretRef = ConfigSecretRef { name = "reliant-secrets", key = "gtm_assets_access_key_id" }
+    # GTM assets bucket: S3 secret access key (forge.bucket_env)
+    secret_access_key: ConfigSecretRef = ConfigSecretRef { name = "reliant-secrets", key = "gtm_assets_secret_access_key" }
+    # GTM assets bucket: path-style addressing (forge.bucket_env; MinIO needs it)
+    path_style: bool = False
+
 # forge:section schema ServerProcessConfig
-# forge:hash=0d7cdc270690a6224b2d4a17a1f82d228f0305a20dba538c967aec6dcc1670c1
+# forge:hash=695ad57bcddaf91a1586ee9a93d231ac3151263bf50079426583d08b908bef97
 schema ServerProcessConfig:
     # Data directory for logs and certs
     data_dir: str = "./data"
@@ -1699,6 +1665,8 @@ schema ServerProcessConfig:
     pipeline: ServerProcessConfigPipeline = ServerProcessConfigPipeline {}
     # gtm config block (GtmConfig). Set its fields as `gtm.<field> = ...`.
     gtm: ServerProcessConfigGtm = ServerProcessConfigGtm {}
+    # gtm_assets config block (GtmAssetsConfig). Set its fields as `gtm_assets.<field> = ...`.
+    gtm_assets: ServerProcessConfigGtmAssets = ServerProcessConfigGtmAssets {}
 
     check:
         data_dir != "", "data_dir = \"\" cannot reach the process: an empty DATA_DIR counts as unset, so it would load the default \"./data\" — set a value, or pass --data-dir= in the workload's args to make it empty"
@@ -1732,6 +1700,11 @@ SERVER_PROCESS_CONFIG_SENSITIVE_ENV: [str] = [
     # forge:hash=0da69df5e99ffed3adee8573a56e53345423e99a3c92d1138eca3e18d1e414bb
     "GTM_ANALYTICS_TOKEN"
 
+    # forge:section SERVER_PROCESS_CONFIG_SENSITIVE_ENV gtm_assets
+    # forge:hash=b76e797a4ae665eca1b9153c5a896ecb939bf286da7d9e94975d61ed9a7e90af
+    "GTM_ASSETS_ACCESS_KEY_ID"
+    "GTM_ASSETS_SECRET_ACCESS_KEY"
+
     # forge:section SERVER_PROCESS_CONFIG_SENSITIVE_ENV (root)
     # forge:hash=fa807b1957f7aadf24512d851ee31f0a3cce8a592088aa1c8c31993baf88d46c
     "RELIANT_OAUTH_<KEY>_CLIENT_SECRET"
@@ -1764,6 +1737,11 @@ SERVER_PROCESS_CONFIG_OPTIONAL_SECRET_ENV: [str] = [
     # forge:section SERVER_PROCESS_CONFIG_OPTIONAL_SECRET_ENV gtm
     # forge:hash=78ae2df0a749882a2534f831996250c33a208c6ca670084124edaa53287c5ead
     "GTM_ANALYTICS_TOKEN"
+
+    # forge:section SERVER_PROCESS_CONFIG_OPTIONAL_SECRET_ENV gtm_assets
+    # forge:hash=abb328fde80908a32fd07c053b7f092c8cc66fa7299339a1567e228bc455ba45
+    "GTM_ASSETS_ACCESS_KEY_ID"
+    "GTM_ASSETS_SECRET_ACCESS_KEY"
 
     # forge:section SERVER_PROCESS_CONFIG_OPTIONAL_SECRET_ENV (root)
     # forge:hash=ba93ebc6a133877e7d793fafefbd1983453237ac12c4626f0f9d7b18d2613c3f
@@ -1808,6 +1786,11 @@ serverProcessConfigEnvMap = lambda c: ServerProcessConfig, config_secrets: [str]
         # forge:section serverProcessConfigEnvMap secrets gtm
         # forge:hash=7a64aeba41707745435902ba6d2623a9bd193f816eb7933035b5ebd0e83d7511
         "GTM_ANALYTICS_TOKEN" = forge.SecretRef {name = c.gtm.analytics_token.name, key = c.gtm.analytics_token.key, store_key = "GTM_ANALYTICS_TOKEN", optional = True}
+
+        # forge:section serverProcessConfigEnvMap secrets gtm_assets
+        # forge:hash=ffd7fb8597bd133f210554cdc98cdf46703f6f69076b5697006534d9a29275e1
+        "GTM_ASSETS_ACCESS_KEY_ID" = forge.SecretRef {name = c.gtm_assets.access_key_id.name, key = c.gtm_assets.access_key_id.key, store_key = "GTM_ASSETS_ACCESS_KEY_ID", optional = True}
+        "GTM_ASSETS_SECRET_ACCESS_KEY" = forge.SecretRef {name = c.gtm_assets.secret_access_key.name, key = c.gtm_assets.secret_access_key.key, store_key = "GTM_ASSETS_SECRET_ACCESS_KEY", optional = True}
 
         # forge:section serverProcessConfigEnvMap secrets (end)
         # forge:hash=efede3d8161a204eb8a0d16899c8d3af3adbc86ab32cabf0dd06f8ee1f72642c
@@ -1926,6 +1909,14 @@ serverProcessConfigEnvMap = lambda c: ServerProcessConfig, config_secrets: [str]
         # forge:section serverProcessConfigEnvMap values gtm
         # forge:hash=adc348f52f0ec0451dec20dc908607e4f4acb2cc4deb7a60f177d70f1b130c80
         "GTM_ALLOWED_ORG_IDS" = c.gtm.allowed_org_ids
+
+        # forge:section serverProcessConfigEnvMap values gtm_assets
+        # forge:hash=e0a1fd9b5cf3ed33f5da0fa3f5f95c8911c82e7b9d696ccec2a6317575d840fb
+        "GTM_ASSETS_ENDPOINT" = c.gtm_assets.endpoint
+        "GTM_ASSETS_PUBLIC_ENDPOINT" = c.gtm_assets.public_endpoint
+        "GTM_ASSETS_REGION" = c.gtm_assets.region
+        "GTM_ASSETS_BUCKET" = c.gtm_assets.bucket
+        "GTM_ASSETS_PATH_STYLE" = "true" if c.gtm_assets.path_style else "false"
 
         # forge:section serverProcessConfigEnvMap values (end)
         # forge:hash=6e40ebe66a4bd1160f079d94eae59be0c27a98446b351e00c478d59941a3fc6d
@@ -2272,17 +2263,6 @@ ROOTS: {str: Root} = {
             "RELIANT_IDLE_RECLAIM_SCRATCH_REMOVE_IDLE",
             "RELIANT_IDLE_RECLAIM_WORKTREE_NODE_MODULES_IDLE",
 
-            # forge:section root api env gtm_assets
-            # forge:hash=8b1578acf3e0de8fdf36e7a4d31ce2c767f02ed0ee218f75ec16b0a57d2e8107
-            "GTM_ASSETS_ENDPOINT",
-            "GTM_ASSETS_PUBLIC_ENDPOINT",
-            "GTM_ASSETS_REGION",
-            "GTM_ASSETS_BUCKET",
-            "GTM_ASSETS_PATH_STYLE",
-            "GTM_ASSETS_MAX_BYTES",
-            "GTM_ASSETS_MAX_COPIED_BYTES",
-            "GTM_ASSETS_ORG_QUOTA_BYTES",
-
             # forge:section root api env (root)
             # forge:hash=5305b56f25d75cda0413c1c63d9abe6b9b80e689bc28041cc9fcd22b02b3dd2e
             "JWT_PUBLIC_KEY",
@@ -2458,11 +2438,6 @@ ROOTS: {str: Root} = {
             # forge:hash=7cce70f80c7f09e7d6d0f6dadef2f51be26ee5e885d6331fc33ef3bad4a54a1a
         ]
         secrets = [
-            # forge:section root api secrets gtm_assets
-            # forge:hash=22fe72bbecf20bae01492c2ccdfb3a75139bb8a34bf0ca1d2bcc8781a87cbeed
-            "GTM_ASSETS_ACCESS_KEY_ID",
-            "GTM_ASSETS_SECRET_ACCESS_KEY",
-
             # forge:section root api secrets (root)
             # forge:hash=7644db6ed035848e2f2801d70d42bca729aacbbd45665db122772f125656e93d
             "JWT_JWKS_SNAPSHOT",
@@ -2548,17 +2523,6 @@ ROOTS: {str: Root} = {
             "RELIANT_IDLE_RECLAIM_SCRATCH_REMOVE_IDLE",
             "RELIANT_IDLE_RECLAIM_WORKTREE_NODE_MODULES_IDLE",
 
-            # forge:section root gateway env gtm_assets
-            # forge:hash=b04ab4a2e2db0993bbe06edc69c33f3603296724d4f8641fe4c57486ed77a410
-            "GTM_ASSETS_ENDPOINT",
-            "GTM_ASSETS_PUBLIC_ENDPOINT",
-            "GTM_ASSETS_REGION",
-            "GTM_ASSETS_BUCKET",
-            "GTM_ASSETS_PATH_STYLE",
-            "GTM_ASSETS_MAX_BYTES",
-            "GTM_ASSETS_MAX_COPIED_BYTES",
-            "GTM_ASSETS_ORG_QUOTA_BYTES",
-
             # forge:section root gateway env (root)
             # forge:hash=751acacff603d412b87b85659d2724d1b9ea693dd4d7863993d4f5276f14383d
             "DATABASE_DRIVER",
@@ -2640,11 +2604,6 @@ ROOTS: {str: Root} = {
             # forge:hash=7376a153bc04c136aa661594f92ab9f2c2eba3f0b6aece22c25b9e2fba3fe39f
         ]
         secrets = [
-            # forge:section root gateway secrets gtm_assets
-            # forge:hash=cf52d55c48faf9f75b1f4c8eeec671856b30ab8675445f2549ee6b4fed6b1397
-            "GTM_ASSETS_ACCESS_KEY_ID",
-            "GTM_ASSETS_SECRET_ACCESS_KEY",
-
             # forge:section root gateway secrets (root)
             # forge:hash=3866495ae5fbd45cadcb97c8b7bb9534a83959306fa1959040054cc1a5c95342
             "DATABASE_URL",
@@ -2716,17 +2675,6 @@ ROOTS: {str: Root} = {
             "RELIANT_IDLE_RECLAIM_SCRATCH_STRIP_IDLE",
             "RELIANT_IDLE_RECLAIM_SCRATCH_REMOVE_IDLE",
             "RELIANT_IDLE_RECLAIM_WORKTREE_NODE_MODULES_IDLE",
-
-            # forge:section root worker env gtm_assets
-            # forge:hash=686e6156f9ce137a3e9c7224548f82957c6d354233687ad2225a530f32ca8ebe
-            "GTM_ASSETS_ENDPOINT",
-            "GTM_ASSETS_PUBLIC_ENDPOINT",
-            "GTM_ASSETS_REGION",
-            "GTM_ASSETS_BUCKET",
-            "GTM_ASSETS_PATH_STYLE",
-            "GTM_ASSETS_MAX_BYTES",
-            "GTM_ASSETS_MAX_COPIED_BYTES",
-            "GTM_ASSETS_ORG_QUOTA_BYTES",
 
             # forge:section root worker env (root)
             # forge:hash=84aaf81e7e16a419f918f4ddcce4e4a5c2fb7ca9a2e408ffd246c84e9dc5f6f3
@@ -2837,11 +2785,6 @@ ROOTS: {str: Root} = {
             # forge:hash=870d2e1cb19ff2c9d8d3359b10e1fe506b0ea907940a4ad023f3f6bc6b0cdf3d
         ]
         secrets = [
-            # forge:section root worker secrets gtm_assets
-            # forge:hash=694b2822ff06e31ec381dadd8d104c1de5dd3b3ff961cefe7e213fb78525bcb9
-            "GTM_ASSETS_ACCESS_KEY_ID",
-            "GTM_ASSETS_SECRET_ACCESS_KEY",
-
             # forge:section root worker secrets (root)
             # forge:hash=41bc290c3090c98a4ba10fd8f412e3482f979a8b4c92b99d2a328ed5d8e86740
             "DATABASE_URL",

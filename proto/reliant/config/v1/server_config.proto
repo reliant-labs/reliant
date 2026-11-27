@@ -87,6 +87,10 @@ message ServerProcessConfig {
   // roles whose graph reads it (the API server and the worker) are handed
   // its settings and its secret; the gateway never is.
   GtmConfig gtm = 17;
+  // The GTM assets bucket (gtm_config.proto). Here, not on the root config,
+  // so only the server roles whose graph reads it (the API server and the
+  // worker) are handed its credentials; the gateway never is.
+  GtmAssetsConfig gtm_assets = 18;
 }
 
 // PipelineConfig is the platform switch of Reliant's PR and release

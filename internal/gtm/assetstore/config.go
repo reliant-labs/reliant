@@ -11,11 +11,13 @@ import (
 	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
 )
 
-// StoreFromConfig opens the bucket cfg names (ReliantConfig.gtm_assets, the leaves
-// forge.bucket_env("GTM_ASSETS", "gtm-assets") fills). With no bucket it is
-// nil and no error: GTM assets are off, and New(nil) keeps them off. A
-// bucket without its endpoint or credentials is an error (the config's own
-// validation refuses it at load too).
+// StoreFromConfig opens the bucket cfg names (ServerProcessConfig.gtm_assets,
+// the leaves forge.bucket_env("GTM_ASSETS", "gtm-assets") fills; PR-12 reads
+// it as g.ServerProcessConfig.GetGtmAssets(), which is what makes the API
+// server and the worker reach it). With no bucket it is nil and no error:
+// GTM assets are off, and New(nil) keeps them off. A bucket without its
+// endpoint or credentials is an error (the config's own validation refuses
+// it at load too).
 func StoreFromConfig(cfg *configv1.GtmAssetsConfig) (blobstore.Store, error) {
 	if cfg.GetBucket() == "" {
 		return nil, nil
