@@ -2137,14 +2137,6 @@ func (g *Graph) newInternalControlPlane() (*InternalControlPlane, error) {
 	})
 }
 
-// newGtm constructs the gtm handler (internal/handlers/gtm).
-func (g *Graph) newGtm() (*gtm.Service, error) {
-	return gtm.New(gtm.Deps{
-		Logger: g.Log,
-		Config: g.Cfg,
-	})
-}
-
 // newPipeline constructs the pipeline handler (internal/handlers/pipeline).
 // pipeline.enabled reaches the API server here (G4): off, every rpc refuses.
 func (g *Graph) newPipeline() (*pipeline.Service, error) {
@@ -2158,5 +2150,13 @@ func (g *Graph) newPipeline() (*pipeline.Service, error) {
 		Pipeline: &configv1.PipelineConfig{Enabled: g.ServerProcessConfig.GetPipeline().GetEnabled()},
 		Store:    g.Database(),
 		Now:      nil, // optional — no provider
+	})
+}
+
+// newGtm constructs the gtm handler (internal/handlers/gtm).
+func (g *Graph) newGtm() (*gtm.Service, error) {
+	return gtm.New(gtm.Deps{
+		Logger: g.Log,
+		Config: g.Cfg,
 	})
 }
