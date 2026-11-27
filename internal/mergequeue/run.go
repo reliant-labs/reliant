@@ -174,7 +174,7 @@ func (r *round) rerunOf(ctx context.Context, b *built) (*built, error) {
 		return nil, err
 	}
 	r.report.Batches = append(r.report.Batches, batch.ID)
-	rr := &built{batch: batch, entries: b.entries, heads: b.heads, trees: b.trees, verdict: r.newVerdict(), rerunOfRed: b}
+	rr := &built{batch: batch, entries: b.entries, heads: b.heads, trees: b.trees, machine: b.machine, verdict: r.newVerdict(), rerunOfRed: b}
 	rr.verdict.Regenerated = b.verdict.Regenerated
 	if err := st.AttachQueueEntries(ctx, batch.ID, rr.ids()); err != nil {
 		if errors.Is(err, core.ErrQueueEntryNotAttachable) {

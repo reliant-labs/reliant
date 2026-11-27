@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/pipeline/grants"
 	"github.com/reliant-labs/reliant/internal/serveraction"
 )
 
@@ -29,7 +30,11 @@ type EnqueueHandler struct {
 	// cannot be decided, and the head is not queued.
 	Refs    Refs
 	Builder Builder
-	Now     func() time.Time
+	// Authorizer decides the land capability: in mode on a head is queued
+	// only while the run that approved it holds land. nil queues nothing in
+	// mode on.
+	Authorizer grants.Authorizer
+	Now        func() time.Time
 }
 
 // Handle implements serveraction.Handler.
@@ -81,7 +86,7 @@ func (h EnqueueHandler) Handle(ctx context.Context, req *serveraction.Request) (
 	if err != nil {
 		return nil, serveraction.Errorf(serveraction.CodeFailedPrecondition, "the repository's pipeline.yaml does not resolve: %v", err)
 	}
-	adm := admission{store: h.Store, now: now}
+	adm := admission{store: h.Store, auth: h.Authorizer, now: now}
 	refusal, err := adm.admit(ctx, repo, cfg, rec, head, func(ctx context.Context) ([]string, error) {
 		if h.Refs == nil || h.Builder == nil {
 			return nil, ErrNoBuilder

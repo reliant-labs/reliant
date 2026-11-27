@@ -20,7 +20,8 @@ import (
 //     re-dispatches them to a live replica rather than waiting out their
 //     heartbeat timeout (workersetup.Worker). It is also the node whose
 //     Ready ("polling") holds the process's readiness until it polls.
-//  2. workflow_event_relay, trigger_delivery_relay, workflow_check_syncer, account_usage_poller,
+//  2. workflow_event_relay, trigger_delivery_relay, record_due_scanner, merge_queue,
+//     pipeline_config_refresh, workflow_check_syncer, account_usage_poller,
 //     write_ledger_prune, ledger_retention, project_purge: the background
 //     loops, which take no Temporal tasks; each ends with its context.
 //  3. account_recorder: after every loop, because the activities record into
@@ -63,6 +64,16 @@ type Worker struct {
 	// RecordDue fires record_due triggers from the due scan; nil while
 	// pipeline.enabled is off.
 	RecordDue recorddue.Service
+	// MergeQueue drives the Reliant merge queue of every enrolled
+	// repository this worker leads (internal/mergequeue), its code
+	// operations as jobs on the gate pool's daemons; nil, and nothing runs,
+	// while pipeline.enabled is off. A background loop like Relay: a batch
+	// it leaves mid-round is abandoned and requeued by the next leader.
+	MergeQueue *MergeQueue
+	// ConfigRefresh reads the pipeline.yaml base-branch pushes leave
+	// pending, on the gate pool's daemons; nil while pipeline.enabled is
+	// off. A loop like Relay: a read it leaves stays due for another.
+	ConfigRefresh *PipelineConfigRefresh
 	// Checks writes the GitHub check runs workflows' `check:` blocks
 	// declare (workflowcheck), a background loop like Relay.
 	Checks *workflowcheck.Syncer

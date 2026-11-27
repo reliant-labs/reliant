@@ -25,6 +25,11 @@ func TestWorkerStopsTakingWorkFirst(t *testing.T) {
 		// The record_due due scan is a loop like the relay; a record it
 		// has not fired stays due for another worker's scan.
 		"record_due_scanner",
+		// The merge queue and the pipeline.yaml refresh are loops like the
+		// relay (nil while pipeline.enabled is off): a batch or a read left
+		// unfinished is taken up by the next worker.
+		"merge_queue",
+		"pipeline_config_refresh",
 		// The check syncer is a loop like the relay; what it has not written
 		// yet stays due in the database for another worker's.
 		"workflow_check_syncer",

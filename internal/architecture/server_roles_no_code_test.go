@@ -53,8 +53,16 @@ import (
 
 const reliantModule = "github.com/reliant-labs/reliant"
 
-// serverRoots are the server roles' composition roots.
-var serverRoots = []string{"internal/app"}
+// serverRoots are the server roles' composition roots, and the server-side
+// merge queue packages the worker is to be wired with (the scheduler, its
+// gate dispatcher and its daemon job dispatcher), held to the rule before
+// internal/app reaches them.
+var serverRoots = []string{
+	"internal/app",
+	"internal/mergequeue",
+	"internal/mergequeue/gaterun",
+	"internal/mergequeue/jobrun",
+}
 
 // codeFinding kinds.
 const (
@@ -86,10 +94,6 @@ var serverCodeAllowed = map[string]struct {
 	"internal/integrations/ghblobs": {
 		[]string{findContents},
 		"GetCoverageSource reads one covered file's blob as the viewer, for the Forge Tests coverage view: a read, never a checkout or a build. The owner allowed it on the API server (2026-11-27 15:11Z), bounded in memory: MaxBytes per blob, MaxInFlight reads at once, the handler's capped cache",
-	},
-	"internal/pipeline/practions": {
-		[]string{findContents},
-		"pr.next's risk tier lists a PR's files with github/pr.list_files: GitHub's response carries each file's patch, which the catalog drops. Pending the owner's decision (moving it to a gate pool daemon job in the merge queue's daemon-side rebuild)",
 	},
 }
 

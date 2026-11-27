@@ -32,6 +32,14 @@ func repoProto(r *core.PipelineRepo) *pb.PipelineRepository {
 	}
 }
 
+func grantProto(g *core.PipelineCapabilityGrant) *pb.PipelineCapabilityGrant {
+	return &pb.PipelineCapabilityGrant{
+		Id: g.ID, TriggerId: g.TriggerID, MachinePoolId: g.MachinePoolID, RepoId: g.RepoID,
+		Capability: string(g.Capability), GrantedByUserId: g.UserID, ApprovalId: g.ApprovalID,
+		GrantedAt: ts(g.GrantedAt), RevokedAt: tsp(g.RevokedAt), RevokedByUserId: g.RevokedByUserID,
+	}
+}
+
 func batchProto(b *core.QueueBatch) *pb.PipelineQueueBatch {
 	if b == nil {
 		return nil

@@ -54,8 +54,8 @@ const (
 	IsolationSysbox Isolation = "sysbox"
 	// IsolationVM is a per-gate microVM (planned, E9e).
 	IsolationVM Isolation = "vm"
-	// IsolationRunc is plain runc: contained (no host mounts, an env
-	// allowlist, limits) but not isolated. Shadow gates only.
+	// IsolationRunc is plain runc: contained (no writable host mounts, an
+	// env allowlist, limits) but not isolated. Shadow gates only.
 	IsolationRunc Isolation = "runc"
 )
 

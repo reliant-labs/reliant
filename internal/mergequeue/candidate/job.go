@@ -4,7 +4,9 @@ package candidate
 import (
 	"context"
 	"errors"
+	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/reliant-labs/reliant/internal/mergequeue/buildjob"
@@ -58,7 +60,9 @@ func (j Job) Build(ctx context.Context, req buildjob.BuildRequest) (buildjob.Bui
 }
 
 // ChangedPaths implements the queue's changed-paths job: the paths Head
-// changes against Base, from their merge base, rename detection off.
+// changes against Base, from their merge base, rename detection off. A
+// request with Stats also gets each changed file's status, line counts and
+// blob at Head (fileStats), from the same merge base.
 func (j Job) ChangedPaths(ctx context.Context, req buildjob.PathsRequest) (buildjob.PathsResult, error) {
 	if !shaRE.MatchString(req.Base) || !shaRE.MatchString(req.Head) {
 		return buildjob.PathsResult{}, errors.New("candidate: changed paths need two commit shas")
@@ -71,11 +75,64 @@ func (j Job) ChangedPaths(ctx context.Context, req buildjob.PathsRequest) (build
 	if err != nil {
 		return buildjob.PathsResult{}, err
 	}
-	paths, err := b.local.changedPaths(ctx, strings.TrimSpace(mb), req.Head)
+	base := strings.TrimSpace(mb)
+	paths, err := b.local.changedPaths(ctx, base, req.Head)
 	if err != nil {
 		return buildjob.PathsResult{}, err
 	}
-	return buildjob.PathsResult{Paths: paths}, nil
+	res := buildjob.PathsResult{Paths: paths}
+	if req.Stats {
+		files, err := b.local.fileStats(ctx, base, req.Head)
+		if err != nil {
+			return buildjob.PathsResult{}, err
+		}
+		if len(files) > buildjob.MaxFileStats {
+			files, res.FilesTruncated = files[:buildjob.MaxFileStats], true
+		}
+		res.Stats, res.Files = true, files
+	}
+	return res, nil
+}
+
+// ReadConfig implements the queue's config job: one file under .reliant/ at
+// a commit, as bytes. A path with nothing at the commit is Found false; a
+// path that is not a regular file, or is larger than
+// buildjob.ConfigMaxBytes, is an error. The bytes are reported as they are:
+// the server parses and validates them.
+func (j Job) ReadConfig(ctx context.Context, req buildjob.ConfigRequest) (buildjob.ConfigResult, error) {
+	if !shaRE.MatchString(req.SHA) || !buildjob.ValidConfigPath(req.Path) {
+		return buildjob.ConfigResult{}, fmt.Errorf("candidate: a config read needs a commit sha and a path under %s", buildjob.ConfigDir)
+	}
+	b := &builder{p: j.Ports, local: localGit{dir: j.Ports.Git.Dir(), id: gitport.DefaultIdentity()}}
+	if err := b.ensure(ctx, req.SHA); err != nil {
+		return buildjob.ConfigResult{}, err
+	}
+	out, _, err := b.local.run(ctx, "", "", "ls-tree", "-z", "--full-tree", req.SHA, "--", req.Path)
+	if err != nil {
+		return buildjob.ConfigResult{}, err
+	}
+	entry := strings.TrimRight(out, "\x00")
+	if entry == "" {
+		return buildjob.ConfigResult{Found: false}, nil
+	}
+	// "<mode> <type> <object>\t<path>"
+	meta, name, _ := strings.Cut(entry, "\t")
+	fields := strings.Fields(meta)
+	if name != req.Path || len(fields) != 3 || fields[1] != "blob" || (fields[0] != "100644" && fields[0] != "100755") {
+		return buildjob.ConfigResult{}, fmt.Errorf("candidate: %s at %s is not a regular file", req.Path, req.SHA)
+	}
+	size, _, err := b.local.run(ctx, "", "", "cat-file", "-s", fields[2])
+	if err != nil {
+		return buildjob.ConfigResult{}, err
+	}
+	if n, err := strconv.Atoi(strings.TrimSpace(size)); err != nil || n > buildjob.ConfigMaxBytes {
+		return buildjob.ConfigResult{}, fmt.Errorf("candidate: %s at %s is %s bytes; at most %d are read", req.Path, req.SHA, strings.TrimSpace(size), buildjob.ConfigMaxBytes)
+	}
+	data, _, err := b.local.run(ctx, "", "", "cat-file", "blob", fields[2])
+	if err != nil {
+		return buildjob.ConfigResult{}, err
+	}
+	return buildjob.ConfigResult{Found: true, Bytes: []byte(data)}, nil
 }
 
 func wireEntry(e Entry) buildjob.Entry {

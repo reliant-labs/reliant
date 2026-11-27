@@ -130,6 +130,9 @@ const sectionGroups: SectionGroup[] = [
       // Gmail, Twilio, HTTP, GitHub's integration), to find, test or revoke.
       { id: "integrations", label: "Integrations", icon: Plug },
       { id: "git-connections", label: "GitHub", icon: Github },
+      // Cloud-only: the GitHub App installations linked to the organization.
+      // Members read them; the page decides who may link.
+      ...(hasControlPlane ? [{ id: "org-github" as const, label: "Organization GitHub", icon: Building2 }] : []),
       { id: "mcp", label: "Tools (MCP)", icon: McpIcon },
     ],
   },

@@ -26,6 +26,13 @@
 // batch goes to the [Lander] (M11); only a gate result that is landable
 // (passed inside an isolation boundary) ever reaches it.
 //
+// In mode on a head lands only while the run that approved it holds the
+// owner's land grant (internal/pipeline/grants): admission refuses one whose
+// approver does not (land_not_granted), and every entry is checked again
+// just before the lander's first squash merge, so a grant revoked while the
+// batch gated abandons it and its entries wait. Shadow never lands and asks
+// for no grant.
+//
 // The queue.enqueue@1 server action ([EnqueueHandler]) puts an approved PR
 // head in the queue, recomputing admission on the server.
 //

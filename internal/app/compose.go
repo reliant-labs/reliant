@@ -724,6 +724,25 @@ func (g *Graph) newRecordDueScanner() (recorddue.Service, error) {
 	})
 }
 
+func (g *Graph) newMergeQueue() (*MergeQueue, error) {
+	return NewMergeQueue(MergeQueueDeps{
+		DB:     g.Database(),
+		Router: g.WorkerDaemonRouter(),
+		// Read here, not in the provider, so the worker root's config reach
+		// names them (pkg/config Roots).
+		Pipeline:     g.ServerProcessConfig.GetPipeline(),
+		ControlPlane: g.ServerProcessConfig.GetControlPlane(),
+	})
+}
+
+func (g *Graph) newPipelineConfigRefresh() (*PipelineConfigRefresh, error) {
+	return NewPipelineConfigRefresh(PipelineConfigRefreshDeps{
+		DB:       g.Database(),
+		Router:   g.WorkerDaemonRouter(),
+		Pipeline: g.ServerProcessConfig.GetPipeline(),
+	})
+}
+
 func (g *Graph) newAccountUsagePoller() (*accountlimits.Poller, error) {
 	return NewAccountUsagePoller(AccountUsagePollerDeps{
 		DB:       g.Database(),
@@ -1130,6 +1149,10 @@ func (g *Graph) newAccount() (*account.Service, error) {
 
 // newApproval constructs the approval handler (internal/handlers/approval).
 func (g *Graph) newApproval() (*approval.Service, error) {
+	capabilityGrants, err := pipelineGrants(g.Database())
+	if err != nil {
+		return nil, err
+	}
 	return approval.New(approval.Deps{
 		Logger:      g.Log,
 		Config:      g.Cfg,
@@ -1137,6 +1160,7 @@ func (g *Graph) newApproval() (*approval.Service, error) {
 		Chats:       store.NewChatExtStore(g.Database().ORM()),
 		Signals:     g.PauseService(),
 		Connections: g.APIConnections().Service,
+		Grants:      capabilityGrants,
 	})
 }
 
@@ -2153,6 +2177,10 @@ func (g *Graph) newInternalControlPlane() (*InternalControlPlane, error) {
 // newPipeline constructs the pipeline handler (internal/handlers/pipeline).
 // pipeline.enabled reaches the API server here (G4): off, every rpc refuses.
 func (g *Graph) newPipeline() (*pipeline.Service, error) {
+	capabilityGrants, err := pipelineGrants(g.Database())
+	if err != nil {
+		return nil, err
+	}
 	return pipeline.New(pipeline.Deps{
 		Logger: g.Log,
 		Config: g.Cfg,
@@ -2163,5 +2191,6 @@ func (g *Graph) newPipeline() (*pipeline.Service, error) {
 		Pipeline: &configv1.PipelineConfig{Enabled: g.ServerProcessConfig.GetPipeline().GetEnabled()},
 		Store:    g.Database(),
 		Now:      nil, // optional — no provider
+		Grants:   capabilityGrants,
 	})
 }

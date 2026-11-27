@@ -147,6 +147,9 @@ type GateRequest struct {
 	// AvoidMachines are members that already left this batch unproven: a
 	// retry asks for another one.
 	AvoidMachines []string
+	// PreferMachine is the member that built the candidate, to try first:
+	// its git cache already holds it. "" prefers none.
+	PreferMachine string
 }
 
 // GateResult is a gate's verdict: the queue's half of the MVP contract's
