@@ -126,6 +126,29 @@ func TestFSListMachineDir_RefusesCredentialStores(t *testing.T) {
 	}
 }
 
+func TestFSListMachineDir_ProtectsHardLinkMetadata(t *testing.T) {
+	home, project := machineFixture(t)
+	link := filepath.Join(project, "notes.md")
+	if err := os.Link(filepath.Join(home, ".ssh", "id_rsa"), link); err != nil {
+		t.Fatal(err)
+	}
+	got, err := listMachineDir(t, project, project)
+	if err != nil {
+		t.Fatal(err)
+	}
+	byName := map[string]fsMachineDirEntry{}
+	for _, e := range got.Entries {
+		byName[e.Name] = e
+	}
+	e, ok := byName["notes.md"]
+	if !ok || e.Path != link || e.IsSymlink || e.IsDir || e.Size != 0 || e.Modified != "" {
+		t.Errorf("credential hard link must be name-only: %+v (present=%v)", e, ok)
+	}
+	if e := byName["README.md"]; e.Size != int64(len("readme\n")) || e.Modified == "" {
+		t.Errorf("ordinary file must retain its metadata: %+v", e)
+	}
+}
+
 func TestFSListMachineDir_ProtectsSymlinkTargetMetadata(t *testing.T) {
 	home, project := machineFixture(t)
 	for name, target := range map[string]string{

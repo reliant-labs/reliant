@@ -177,7 +177,10 @@ func readMachineDir(dir *os.File, path, viewerRoot string) ([]fsMachineDirEntry,
 		} else {
 			fi, _ = de.Info()
 		}
-		if fi != nil {
+		// Check the exact stat identity whose metadata we publish: checking
+		// only the pathname would miss hard links to credential files (and
+		// could check a different file after a concurrent rename).
+		if fi != nil && daemonpolicy.CheckViewerInfo(fi, full, viewerRoot) == nil {
 			e.IsDir = fi.IsDir()
 			e.Size = fi.Size()
 			e.Modified = fi.ModTime().UTC().Format(time.RFC3339)

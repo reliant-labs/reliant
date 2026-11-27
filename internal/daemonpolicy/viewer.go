@@ -155,6 +155,15 @@ func DenyViewerRead(path, root string) error {
 	return denyViewerRead(path, root, viewerProtected(home, forgeCredentialsPath(), viewerGetenv))
 }
 
+// CheckViewerInfo checks viewer metadata against the identity that was stat'ed,
+// rather than stat'ing the pathname again. The caller may publish only metadata
+// from info after this check succeeds; it must not resolve the path again for it.
+func CheckViewerInfo(info os.FileInfo, path, root string) error {
+	home, _ := os.UserHomeDir()
+	abs, real := viewerPaths(path)
+	return checkViewerRead(abs, real, root, info, viewerProtected(home, forgeCredentialsPath(), viewerGetenv))
+}
+
 // CheckViewerFile is DenyViewerRead for a file the viewer has already opened
 // by path: it refuses f unless it is not a credential store AND it is the file
 // path names now. The caller then reads f, never the pathname again.
