@@ -173,7 +173,10 @@ const WHERE = (device: Device | "any", project: string) => [
   "WHERE ScopeName = 'webvitals'",
   `  AND ${projectWhere(project)}`,
   "  AND Timestamp >= {from:DateTime64(9)} AND Timestamp < {to:DateTime64(9)}",
-  "  AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, ResourceAttributes['reliant.env.id']))",
+  // QueryScope.project_id resolves to authorized environment ids server-side.
+  // Require that trusted stamp even when the resolved list is empty: namespace
+  // and service names are producer-controlled and can collide across projects.
+  "  AND has({env_ids:Array(String)}, ResourceAttributes['reliant.env.id'])",
   `  AND ${SERVICE_WHERE}`,
   // The site list counts every device but bots, which no toggle ever shows.
   `  AND ${device === "any" ? "ResourceAttributes['reliant.device.type'] != 'bot'" : deviceWhere(device)}`,
