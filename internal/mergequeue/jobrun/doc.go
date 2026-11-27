@@ -10,6 +10,10 @@
 //   - [Builder] is the queue's mergequeue.Builder: Build builds a batch's
 //     candidate (a build job) and ChangedPaths lists a head's changed paths
 //     (a paths job).
+//   - [Files] lists a head's changed files with statuses, line counts and
+//     blobs (a paths job with stats), for pr.next's risk tier, so GitHub's
+//     pull request files list, which carries every file's patch, is never
+//     read on the worker.
 //   - [ConfigReader] is prrecords.Contents: it reads .reliant/pipeline.yaml
 //     at a commit (a config job). The server parses and validates the bytes;
 //     the daemon never reports a resolved config.

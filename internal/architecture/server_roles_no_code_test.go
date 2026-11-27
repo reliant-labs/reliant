@@ -95,10 +95,6 @@ var serverCodeAllowed = map[string]struct {
 		[]string{findContents},
 		"GetCoverageSource reads one covered file's blob as the viewer, for the Forge Tests coverage view: a read, never a checkout or a build. The owner allowed it on the API server (2026-11-27 15:11Z), bounded in memory: MaxBytes per blob, MaxInFlight reads at once, the handler's capped cache",
 	},
-	"internal/pipeline/practions": {
-		[]string{findContents},
-		"pr.next's risk tier lists a PR's files with github/pr.list_files: GitHub's response carries each file's patch, which the catalog drops. Pending the owner's decision (moving it to a gate pool daemon job in the merge queue's daemon-side rebuild)",
-	},
 }
 
 // catalogContentsAllowed are the integration catalog actions that call a

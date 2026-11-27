@@ -142,6 +142,10 @@ func (s *Service) Verdict(ctx context.Context, req *serveraction.Request) (*serv
 		paths = append(paths, path)
 	}
 	slices.Sort(paths)
+	required := requiredDecisions(p.cfg, head, paths)
+	if detail.FilesUnknown {
+		required = requiredDecisionsAnyPath(p.cfg, head)
+	}
 	counted := dec.Findings
 	if counted == nil {
 		counted = []prpolicy.Finding{}
@@ -163,7 +167,7 @@ func (s *Service) Verdict(ctx context.Context, req *serveraction.Request) (*serv
 		v, err := s.deps.Store.InsertPRHeadVerdict(ctx, core.PRHeadVerdictRecord{
 			OrgID: p.repo.OrgID, ProjectID: p.repo.ProjectID, RecordID: p.rec.ID, HeadSHA: head, Round: round,
 			Verdict: verdict, Rule: core.PRVerdictRuleModel, RiskTier: risk, FindingsJSON: findings,
-			RequiredDecisions: requiredDecisions(p.cfg, head, paths),
+			RequiredDecisions: required,
 			RunID:             inv.RunID, NodeID: from, ReviewerPrincipal: principal,
 			// The activation and machine the verdict came from, so the
 			// land check can ask whether that activation still holds land.

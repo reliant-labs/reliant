@@ -33,7 +33,7 @@ func newGrantsHarness(t *testing.T, mode core.PipelineRepoMode) *grantsHarness {
 	if err != nil {
 		t.Fatal(err)
 	}
-	svc, err := practions.New(practions.Deps{Store: h.env.Repo, GitHub: h.gh, Inbox: h.inbox, Grants: g, Now: func() time.Time { return h.now }})
+	svc, err := practions.New(practions.Deps{Store: h.env.Repo, GitHub: h.gh, Files: h.files, Inbox: h.inbox, Grants: g, Now: func() time.Time { return h.now }})
 	if err != nil {
 		t.Fatal(err)
 	}

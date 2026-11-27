@@ -60,7 +60,9 @@ func (j Job) Build(ctx context.Context, req buildjob.BuildRequest) (buildjob.Bui
 }
 
 // ChangedPaths implements the queue's changed-paths job: the paths Head
-// changes against Base, from their merge base, rename detection off.
+// changes against Base, from their merge base, rename detection off. A
+// request with Stats also gets each changed file's status, line counts and
+// blob at Head (fileStats), from the same merge base.
 func (j Job) ChangedPaths(ctx context.Context, req buildjob.PathsRequest) (buildjob.PathsResult, error) {
 	if !shaRE.MatchString(req.Base) || !shaRE.MatchString(req.Head) {
 		return buildjob.PathsResult{}, errors.New("candidate: changed paths need two commit shas")
@@ -73,11 +75,23 @@ func (j Job) ChangedPaths(ctx context.Context, req buildjob.PathsRequest) (build
 	if err != nil {
 		return buildjob.PathsResult{}, err
 	}
-	paths, err := b.local.changedPaths(ctx, strings.TrimSpace(mb), req.Head)
+	base := strings.TrimSpace(mb)
+	paths, err := b.local.changedPaths(ctx, base, req.Head)
 	if err != nil {
 		return buildjob.PathsResult{}, err
 	}
-	return buildjob.PathsResult{Paths: paths}, nil
+	res := buildjob.PathsResult{Paths: paths}
+	if req.Stats {
+		files, err := b.local.fileStats(ctx, base, req.Head)
+		if err != nil {
+			return buildjob.PathsResult{}, err
+		}
+		if len(files) > buildjob.MaxFileStats {
+			files, res.FilesTruncated = files[:buildjob.MaxFileStats], true
+		}
+		res.Stats, res.Files = true, files
+	}
+	return res, nil
 }
 
 // ReadConfig implements the queue's config job: one file under .reliant/ at

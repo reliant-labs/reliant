@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -118,6 +119,9 @@ func newDispatcher(deps Deps) *dispatcher {
 type target struct {
 	repo gaterun.GateRepo
 	pool string
+	// skip are members (daemon ids) not to place the job on: ones that
+	// already answered a job of this request in a shape too old to use.
+	skip []string
 }
 
 func (d *dispatcher) target(ctx context.Context, repo *core.PipelineRepo) (target, error) {
@@ -167,6 +171,10 @@ func (d *dispatcher) run(ctx context.Context, t target, start buildjob.StartRequ
 			return buildjob.StatusReply{}, "", fmt.Errorf("%w: %w", ErrNoMember, err)
 		}
 		return buildjob.StatusReply{}, "", err
+	}
+	members = slices.DeleteFunc(members, func(m machinepool.Member) bool { return slices.Contains(t.skip, m.DaemonID) })
+	if len(members) == 0 {
+		return buildjob.StatusReply{}, "", fmt.Errorf("%w: every connected member of pool %s was tried", ErrNoMember, t.pool)
 	}
 	members = gaterun.PreferMember(members, prefer)
 	start.MaxConcurrent = maxPer
