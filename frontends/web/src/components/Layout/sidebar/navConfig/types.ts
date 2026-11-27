@@ -46,6 +46,11 @@ export interface NavCtx {
   page: ConsolePage | null;
   /** The org console page on screen (org-wide Observability), when it is one. */
   orgPage: OrgPage | null;
+  /**
+   * Org-gated areas the server says this org may see (GTM). Optional and
+   * fail-closed: absent, or a feature not named, is hidden.
+   */
+  features?: { gtm?: boolean };
 }
 
 export type NavHref = (ctx: NavCtx) => string | undefined;

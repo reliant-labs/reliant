@@ -19,7 +19,14 @@
 import {
   Activity,
   ArrowUpRight,
+  BadgeCheck,
   BarChart3,
+  CalendarDays,
+  Compass,
+  Lightbulb,
+  Megaphone,
+  Radio,
+  SquareKanban,
   Bell,
   BookOpen,
   Boxes,
@@ -64,7 +71,7 @@ import {
 } from "lucide-react";
 import type { ReactNode } from "react";
 
-import { connectorsPath, homePath, inboxPath, projectChatsPath, projectPath, projectsPath, runsPath, sandboxesPath, settingsPath, usageBillingPath, withSearch, workflowLibraryPath } from "@/lib/paths";
+import { connectorsPath, gtmPath, homePath, inboxPath, projectChatsPath, projectPath, projectsPath, runsPath, sandboxesPath, settingsPath, usageBillingPath, withSearch, workflowLibraryPath, type GtmPage } from "@/lib/paths";
 import { changesUIEnabled } from "@/lib/changesFeature";
 import { isWorkflowsAreaPath, workflowsTabForPath } from "@/lib/workflowsArea";
 
@@ -524,6 +531,37 @@ export const agentsArea: NavArea = {
   href: (ctx) => (ctx.mode === "one" && ctx.projectId ? projectChatsPath(ctx.projectId) : homePath()),
   trail: "chats-need-you",
   children: agentsChildren,
+};
+
+// ── GTM ─────────────────────────────────────────────────────────────────────
+
+/** GTM's rows: each a page under /gtm (components/Gtm). */
+function gtmRow(page: GtmPage, label: string, Icon: typeof Activity): NavRow {
+  return { kind: "row", id: `gtm-${page}`, label, flatIcon: icon(Icon), href: () => gtmPath(page), match: (ctx) => isAtOrBelow(ctx.pathname, gtmPath(page)) };
+}
+
+/**
+ * GTM › — a drill-in like Agents: Strategy, Ideas, Campaigns, Calendar,
+ * Channels, Positioning & facts. Org-gated: shown only when the server says the org may see it
+ * (`ctx.features.gtm`, components/Gtm/shared/access.ts); hidden while that
+ * answer is missing.
+ */
+export const gtmArea: NavArea = {
+  kind: "area",
+  id: "gtm",
+  label: "GTM",
+  icon: icon(Megaphone),
+  match: (ctx) => isAtOrBelow(ctx.pathname, gtmPath()),
+  href: () => gtmPath("ideas"),
+  available: (ctx) => ctx.features?.gtm === true,
+  children: [
+    gtmRow("strategy", "Strategy", Compass),
+    gtmRow("ideas", "Ideas", Lightbulb),
+    gtmRow("campaigns", "Campaigns", SquareKanban),
+    gtmRow("calendar", "Calendar", CalendarDays),
+    gtmRow("channels", "Channels", Radio),
+    gtmRow("positioning", "Positioning & facts", BadgeCheck),
+  ],
 };
 
 // ── The footer ──────────────────────────────────────────────────────────────

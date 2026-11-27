@@ -37,6 +37,8 @@ interface AreaShellProps {
   areaNoun: string;
   /** The guide the area's bar links to (lib/learnLinks.tsx), if any. */
   learn?: LearnSection;
+  /** A page that needs the width (a board, a calendar): up to 7xl, with a phone's narrower gutter. */
+  wide?: boolean;
   children: ReactNode;
 }
 
@@ -46,7 +48,7 @@ export function AreaShell(props: AreaShellProps) {
 }
 
 /** The area inside the one shell: no exit, no org switcher, no title-bar chrome of its own. */
-function ShellArea({ areaPath, areaLabel, learn, children }: AreaShellProps) {
+function ShellArea({ areaPath, areaLabel, learn, wide, children }: AreaShellProps) {
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const isDetail = orgFreePath(pathname).startsWith(`${orgFreePath(areaPath)}/`);
@@ -72,7 +74,7 @@ function ShellArea({ areaPath, areaLabel, learn, children }: AreaShellProps) {
         )}
       </ShellPageHeader>
       <PageMain className="relative min-h-0 flex-1 overflow-y-auto">
-        <div className="mx-auto w-full max-w-5xl px-8 pb-12 pt-2">
+        <div className={cn("mx-auto w-full pb-12 pt-2", wide ? "max-w-7xl px-4 sm:px-8" : "max-w-5xl px-8")}>
           <ErrorBoundary layout="panel">{children}</ErrorBoundary>
         </div>
       </PageMain>
@@ -104,7 +106,7 @@ function useEscape(onEscape: (() => void) | null) {
   }, [onEscape]);
 }
 
-function StandaloneArea({ areaPath, areaLabel, areaNoun, learn, children }: AreaShellProps) {
+function StandaloneArea({ areaPath, areaLabel, areaNoun, learn, wide, children }: AreaShellProps) {
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const { isElectron, trafficLightPadding, dragRegionStyle, noDragRegionStyle } =
@@ -175,7 +177,7 @@ function StandaloneArea({ areaPath, areaLabel, areaNoun, learn, children }: Area
           span) is contained by the scroller rather than stretching the
           document — without it the window scrolls past the content. */}
       <PageMain className="relative flex-1 overflow-y-auto">
-        <div className="mx-auto w-full max-w-5xl px-6 py-8">
+        <div className={cn("mx-auto w-full py-8", wide ? "max-w-7xl px-4 sm:px-6" : "max-w-5xl px-6")}>
           {/* A crash in the area stays in the area: the title bar above keeps
               the way out, which in Electron is the only one. */}
           <ErrorBoundary layout="panel">{children}</ErrorBoundary>

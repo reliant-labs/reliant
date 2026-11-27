@@ -5,13 +5,19 @@
  * Observability drill in (route-derived, Back restores the top level),
  * Settings is a plain link whose pages show their own sections, accordions
  * collapse on a second click, Dashboards and Inbox appear once, and a stale
- * `?nav=` changes nothing.
+ * `?nav=` changes nothing. GTM › is drawn only when the server says the org
+ * may see it (Gtm/shared/access.ts).
  */
 
-import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { Code, ConnectError } from "@connectrpc/connect";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { inboxPath, machineSettingsPath, newChatPath, projectChatsPath, runsPath, sandboxesPath, settingsPath } from "@/lib/paths";
+import { setTransport } from "@/lib/connect";
+import { mockTransport, type MockHandlers } from "@/lib/test-utils";
+
+import { gtmPath, inboxPath, machineSettingsPath, newChatPath, projectChatsPath, runsPath, sandboxesPath, settingsPath } from "@/lib/paths";
 
 import { getVisibleSettingsSectionIds, SETTINGS_SECTIONS_WITH_OTHER_NAV_HOME } from "../../../Settings/SettingsNavigation";
 
@@ -19,9 +25,17 @@ import { registerConsoleNavEntry } from "../../../Forge/Console/consoleNavRegist
 import { consolePageOf, consolePath, obsOverviewPath, orgPageOf, orgPath } from "../../../Forge/Console/paths";
 import { activeArea, backHref, childrenOf, drillInIds, flattenIds, hrefOf, hybridNav, isCurrent, visibleItems, type NavCtx } from "../navConfig";
 import { NavRenderer } from "../NavRenderer";
+import { ShellNavBody } from "../ShellNavBody";
+import type { ShellProject } from "../shellProject";
 
 const changesUI = vi.hoisted(() => ({ on: false }));
 vi.mock("@/lib/changesFeature", () => ({ changesUIEnabled: () => changesUI.on }));
+
+// The tab's org, as GetGtmAccess names it.
+vi.mock("@/lib/orgScope", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/orgScope")>()),
+  useOrgScope: () => ({ ready: true, orgId: "org-1", error: null, retry: () => {} }),
+}));
 
 function ctxAt(href: string, over: Partial<NavCtx> = {}): NavCtx {
   const [pathname, query = ""] = href.split("?");
@@ -86,8 +100,8 @@ describe("the hybrid nav's shape", () => {
     expect(hybridNav.footer.find((item) => item.id === "settings")?.kind).toBe("row");
   });
 
-  it("drills in only for Agents and Observability", () => {
-    expect(drillInIds(hybridNav)).toEqual(["agents", "observability"]);
+  it("drills in only for Agents, GTM and Observability", () => {
+    expect(drillInIds(hybridNav)).toEqual(["agents", "gtm", "observability"]);
   });
 
   it("lists Dashboards once, and Inbox once at the top level and once in Agents", () => {
@@ -393,5 +407,79 @@ describe("the nav's tour anchors", () => {
     } finally {
       unregister();
     }
+  });
+});
+
+describe("GTM ›, gated per org", () => {
+  const on = { features: { gtm: true } };
+
+  it("is hidden unless the org's answer is yes", () => {
+    expect(topIds(ctxAt(inboxPath()))).not.toContain("gtm");
+    expect(topIds(ctxAt(inboxPath(), { features: {} }))).not.toContain("gtm");
+    expect(topIds(ctxAt(inboxPath(), { features: { gtm: false } }))).not.toContain("gtm");
+  });
+
+  it("sits right after Agents when shown, and drills into its six pages", () => {
+    const ctx = ctxAt(inboxPath(), on);
+    const ids = topIds(ctx);
+    expect(ids.indexOf("gtm")).toBe(ids.indexOf("agents") + 1);
+    const gtm = hybridNav.items.find((item) => item.id === "gtm")!;
+    expect(childrenOf(gtm, ctx).map((item) => item.id)).toEqual(["gtm-strategy", "gtm-ideas", "gtm-campaigns", "gtm-calendar", "gtm-channels", "gtm-positioning"]);
+    expect(hrefOf(gtm, ctx)).toBe(gtmPath("ideas"));
+  });
+
+  it("is the area on its pages", () => {
+    expect(activeArea(hybridNav, ctxAt(gtmPath("calendar"), on))?.id).toBe("gtm");
+  });
+
+  describe("as the shell's nav asks (ShellNavBody → GetGtmAccess)", () => {
+    let client: QueryClient;
+    afterEach(() => {
+      cleanup();
+      client.clear();
+    });
+
+    const shell = { mode: "one", ids: ["p1"], key: "p1", name: "shopfront", projectId: "p1", app: null, deployed: false, row: undefined } as unknown as ShellProject;
+
+    function renderNav(handlers: MockHandlers) {
+      setTransport(mockTransport(handlers));
+      client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
+      render(
+        <QueryClientProvider client={client}>
+          <ShellNavBody config={hybridNav} shell={shell} pathname={inboxPath()} search={{}} slots={{}} onNavigate={vi.fn()} />
+        </QueryClientProvider>,
+      );
+    }
+
+    /** Lets an answered read reach the nav. */
+    const settle = () => act(() => new Promise((resolve) => setTimeout(resolve, 0)));
+
+    it("is hidden while the answer loads", async () => {
+      const asked = vi.fn();
+      renderNav({ "GtmService.GetGtmAccess": (req: unknown) => (asked(req), new Promise(() => {})) });
+      await waitFor(() => expect(asked).toHaveBeenCalled());
+      expect(screen.queryByText("GTM")).not.toBeInTheDocument();
+    });
+
+    it("is hidden when the server says no", async () => {
+      const asked = vi.fn();
+      renderNav({ "GtmService.GetGtmAccess": (req: unknown) => (asked(req), { enabled: false }) });
+      await waitFor(() => expect(asked).toHaveBeenCalled());
+      await settle();
+      expect(screen.queryByText("GTM")).not.toBeInTheDocument();
+    });
+
+    it("is hidden when the read fails", async () => {
+      renderNav({ "GtmService.GetGtmAccess": { error: new ConnectError("boom", Code.Unavailable) } });
+      await waitFor(() => expect(client.getQueryCache().getAll().some((q) => q.state.status === "error")).toBe(true));
+      expect(screen.queryByText("GTM")).not.toBeInTheDocument();
+    });
+
+    it("is shown when the server says yes, asked in the tab's org", async () => {
+      const asked = vi.fn();
+      renderNav({ "GtmService.GetGtmAccess": (req: unknown) => (asked((req as { orgId: string }).orgId), { enabled: true }) });
+      expect(await screen.findByText("GTM")).toBeInTheDocument();
+      expect(asked).toHaveBeenCalledWith("org-1");
+    });
   });
 });

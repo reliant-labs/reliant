@@ -54,7 +54,7 @@ const ALLOWED_ROUTE: Record<string, { why: string; texts: readonly string[] }> =
   },
   "lib/mobileRedirect.ts": {
     why: "Matchers: the desktop paths a phone is never handed off from. Each desktop path's mobile twin is built by lib/paths.",
-    texts: ["/auth", "/oauth", "/connections/oauth", "/onboarding", "/reset-password", "/verify-email", "/upgrade", "/claim", "/accept-invite", "/design-sandbox", "/forge", "/projects", "/apps", "/sites", "/connectors", "/usage"],
+    texts: ["/auth", "/oauth", "/connections/oauth", "/onboarding", "/reset-password", "/verify-email", "/upgrade", "/claim", "/accept-invite", "/design-sandbox", "/forge", "/projects", "/apps", "/sites", "/connectors", "/usage", "/gtm"],
   },
   "lib/monacoPreload.ts": {
     why: "Matchers: the entry pages the editor preload skips.",

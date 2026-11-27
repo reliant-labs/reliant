@@ -114,6 +114,9 @@ export function shouldRedirectToMobile(env: MobileRedirectEnv): boolean {
     // drawer opens them rather than the chat list.
     "/connectors",
     "/usage",
+    // GTM (components/Gtm) has no phone twin: its pages are responsive pages
+    // of the shell, a sheet for each dialog, so a phone stays on them.
+    "/gtm",
   ];
   if (PRESERVED.some((p) => pathname === p || pathname.startsWith(`${p}/`))) {
     return false;
