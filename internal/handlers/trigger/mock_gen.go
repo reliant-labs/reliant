@@ -1834,14 +1834,15 @@ func (m *MockChats) GetChatRowCalls() []MockChatsGetChatRowCall {
 var _ Chats = (*MockChats)(nil)
 
 // forge:section MockGate
-// forge:hash=32ffb1bdf38ee0831540bf60a242c702520fdc34b3483498dbc66c1d27cc839f
+// forge:hash=877bd50cede611694151ff9ae5a74eed27303b6d72695fb72c422ec205c132fc
 
 // MockGate is a test mock for the featuregate.Gate interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockGate.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockGate.<Method>Func not set" error.
 type MockGate struct {
 	contractkit.Recorder
 	AllowedFunc        func(context.Context, featuregate.Feature, string, string) (bool, error)
@@ -1864,6 +1865,52 @@ func (m *MockGate) AllowedForUser(ctx context.Context, f featuregate.Feature, us
 		return m.AllowedForUserFunc(ctx, f, userID)
 	}
 	return false, contractkit.MockNotSet("MockGate", "AllowedForUser")
+}
+
+// MockGateAllowedCall is one recorded call of MockGate.Allowed, one
+// field per parameter.
+type MockGateAllowedCall struct {
+	Ctx    context.Context
+	F      featuregate.Feature
+	UserID string
+	OrgID  string
+}
+
+// AllowedCalls returns every recorded Allowed call, oldest first, with
+// its arguments typed. It reads the same log as Calls("Allowed").
+func (m *MockGate) AllowedCalls() []MockGateAllowedCall {
+	var out []MockGateAllowedCall
+	for _, c := range m.Recorder.Calls("Allowed") {
+		var r MockGateAllowedCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.F, _ = c.Args[1].(featuregate.Feature)
+		r.UserID, _ = c.Args[2].(string)
+		r.OrgID, _ = c.Args[3].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockGateAllowedForUserCall is one recorded call of MockGate.AllowedForUser, one
+// field per parameter.
+type MockGateAllowedForUserCall struct {
+	Ctx    context.Context
+	F      featuregate.Feature
+	UserID string
+}
+
+// AllowedForUserCalls returns every recorded AllowedForUser call, oldest first, with
+// its arguments typed. It reads the same log as Calls("AllowedForUser").
+func (m *MockGate) AllowedForUserCalls() []MockGateAllowedForUserCall {
+	var out []MockGateAllowedForUserCall
+	for _, c := range m.Recorder.Calls("AllowedForUser") {
+		var r MockGateAllowedForUserCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.F, _ = c.Args[1].(featuregate.Feature)
+		r.UserID, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
 }
 
 // Compile-time check.
