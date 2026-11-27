@@ -56,7 +56,7 @@ func unmarshalWorkflowConcurrency(node *yaml.Node) (*reliantv1.WorkflowConcurren
 		case "waiting":
 			waiting, ok := concurrencyWaiting[value.Value]
 			if value.Kind != yaml.ScalarNode || !ok {
-				return nil, fmt.Errorf("concurrency.waiting must be fifo or latest")
+				return nil, fmt.Errorf("concurrency.waiting must be fifo or latest, not %q", value.Value)
 			}
 			policy.Waiting = waiting
 		case "key":
