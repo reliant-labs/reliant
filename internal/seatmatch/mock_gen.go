@@ -16,14 +16,15 @@ import (
 )
 
 // forge:section MockService
-// forge:hash=db16e396e4923a09c64281c5f49058c42ba7cf49be1d55b9cbb85c962bc252ae
+// forge:hash=b013496f6f56805180f0700d90f977f484443d8c6e7c14f1a451bff8c3ad8cbf
 
 // MockService is a test mock for the Service interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockService.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockService.<Method>Func not set" error.
 type MockService struct {
 	contractkit.Recorder
 	MatchAccountFunc   func(context.Context, string, string) (Outcome, error)
@@ -48,18 +49,61 @@ func (m *MockService) MatchWorkspace(ctx context.Context, w core.OrgProviderWork
 	return 0, contractkit.MockNotSet("MockService", "MatchWorkspace")
 }
 
+// MockServiceMatchAccountCall is one recorded call of MockService.MatchAccount, one
+// field per parameter.
+type MockServiceMatchAccountCall struct {
+	Ctx       context.Context
+	UserID    string
+	AccountID string
+}
+
+// MatchAccountCalls returns every recorded MatchAccount call, oldest first, with
+// its arguments typed. It reads the same log as Calls("MatchAccount").
+func (m *MockService) MatchAccountCalls() []MockServiceMatchAccountCall {
+	var out []MockServiceMatchAccountCall
+	for _, c := range m.Recorder.Calls("MatchAccount") {
+		var r MockServiceMatchAccountCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.AccountID, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceMatchWorkspaceCall is one recorded call of MockService.MatchWorkspace, one
+// field per parameter.
+type MockServiceMatchWorkspaceCall struct {
+	Ctx context.Context
+	W   core.OrgProviderWorkspace
+}
+
+// MatchWorkspaceCalls returns every recorded MatchWorkspace call, oldest first, with
+// its arguments typed. It reads the same log as Calls("MatchWorkspace").
+func (m *MockService) MatchWorkspaceCalls() []MockServiceMatchWorkspaceCall {
+	var out []MockServiceMatchWorkspaceCall
+	for _, c := range m.Recorder.Calls("MatchWorkspace") {
+		var r MockServiceMatchWorkspaceCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.W, _ = c.Args[1].(core.OrgProviderWorkspace)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ Service = (*MockService)(nil)
 
 // forge:section MockStore
-// forge:hash=adf12922c778e73be26667dedf65eb2d4dd73269d898e23f8fa613253573cdfa
+// forge:hash=d6365f9e99ed13f9c0c8d453ca5e3113d5d03407a4dcf338b3efd77e3fcc3d52
 
 // MockStore is a test mock for the Store interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockStore.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockStore.<Method>Func not set" error.
 type MockStore struct {
 	contractkit.Recorder
 	ListProviderAccountsFunc     func(context.Context, string) ([]core.ProviderAccount, error)
@@ -114,18 +158,127 @@ func (m *MockStore) ClearWorkspaceSeat(ctx context.Context, orgID string, accoun
 	return false, contractkit.MockNotSet("MockStore", "ClearWorkspaceSeat")
 }
 
+// MockStoreListProviderAccountsCall is one recorded call of MockStore.ListProviderAccounts, one
+// field per parameter.
+type MockStoreListProviderAccountsCall struct {
+	Ctx    context.Context
+	UserID string
+}
+
+// ListProviderAccountsCalls returns every recorded ListProviderAccounts call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListProviderAccounts").
+func (m *MockStore) ListProviderAccountsCalls() []MockStoreListProviderAccountsCall {
+	var out []MockStoreListProviderAccountsCall
+	for _, c := range m.Recorder.Calls("ListProviderAccounts") {
+		var r MockStoreListProviderAccountsCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockStoreProviderWorkspaceBindingCall is one recorded call of MockStore.ProviderWorkspaceBinding, one
+// field per parameter.
+type MockStoreProviderWorkspaceBindingCall struct {
+	Ctx           context.Context
+	Provider      string
+	ExternalOrgID string
+}
+
+// ProviderWorkspaceBindingCalls returns every recorded ProviderWorkspaceBinding call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ProviderWorkspaceBinding").
+func (m *MockStore) ProviderWorkspaceBindingCalls() []MockStoreProviderWorkspaceBindingCall {
+	var out []MockStoreProviderWorkspaceBindingCall
+	for _, c := range m.Recorder.Calls("ProviderWorkspaceBinding") {
+		var r MockStoreProviderWorkspaceBindingCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Provider, _ = c.Args[1].(string)
+		r.ExternalOrgID, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockStoreListWorkspaceSignInsCall is one recorded call of MockStore.ListWorkspaceSignIns, one
+// field per parameter.
+type MockStoreListWorkspaceSignInsCall struct {
+	Ctx           context.Context
+	Provider      string
+	ExternalOrgID string
+}
+
+// ListWorkspaceSignInsCalls returns every recorded ListWorkspaceSignIns call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListWorkspaceSignIns").
+func (m *MockStore) ListWorkspaceSignInsCalls() []MockStoreListWorkspaceSignInsCall {
+	var out []MockStoreListWorkspaceSignInsCall
+	for _, c := range m.Recorder.Calls("ListWorkspaceSignIns") {
+		var r MockStoreListWorkspaceSignInsCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Provider, _ = c.Args[1].(string)
+		r.ExternalOrgID, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockStoreAttributeWorkspaceSeatCall is one recorded call of MockStore.AttributeWorkspaceSeat, one
+// field per parameter.
+type MockStoreAttributeWorkspaceSeatCall struct {
+	Ctx       context.Context
+	W         core.OrgProviderWorkspace
+	AccountID string
+}
+
+// AttributeWorkspaceSeatCalls returns every recorded AttributeWorkspaceSeat call, oldest first, with
+// its arguments typed. It reads the same log as Calls("AttributeWorkspaceSeat").
+func (m *MockStore) AttributeWorkspaceSeatCalls() []MockStoreAttributeWorkspaceSeatCall {
+	var out []MockStoreAttributeWorkspaceSeatCall
+	for _, c := range m.Recorder.Calls("AttributeWorkspaceSeat") {
+		var r MockStoreAttributeWorkspaceSeatCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.W, _ = c.Args[1].(core.OrgProviderWorkspace)
+		r.AccountID, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockStoreClearWorkspaceSeatCall is one recorded call of MockStore.ClearWorkspaceSeat, one
+// field per parameter.
+type MockStoreClearWorkspaceSeatCall struct {
+	Ctx       context.Context
+	OrgID     string
+	AccountID string
+}
+
+// ClearWorkspaceSeatCalls returns every recorded ClearWorkspaceSeat call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ClearWorkspaceSeat").
+func (m *MockStore) ClearWorkspaceSeatCalls() []MockStoreClearWorkspaceSeatCall {
+	var out []MockStoreClearWorkspaceSeatCall
+	for _, c := range m.Recorder.Calls("ClearWorkspaceSeat") {
+		var r MockStoreClearWorkspaceSeatCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.OrgID, _ = c.Args[1].(string)
+		r.AccountID, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ Store = (*MockStore)(nil)
 
 // forge:section MockMembers
-// forge:hash=8926b49f81cdd4ff06a524b2401fa03052508fab9235f3fad140f8a45d983d45
+// forge:hash=4c9d51dcda04778670e4bc85915ece6af15980399fdd5a6166d2aeaea8eb253a
 
 // MockMembers is a test mock for the Members interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockMembers.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockMembers.<Method>Func not set" error.
 type MockMembers struct {
 	contractkit.Recorder
 	IsMemberFunc func(context.Context, string, string) (bool, bool, error)
@@ -140,18 +293,41 @@ func (m *MockMembers) IsMember(ctx context.Context, userID string, orgID string)
 	return false, false, contractkit.MockNotSet("MockMembers", "IsMember")
 }
 
+// MockMembersIsMemberCall is one recorded call of MockMembers.IsMember, one
+// field per parameter.
+type MockMembersIsMemberCall struct {
+	Ctx    context.Context
+	UserID string
+	OrgID  string
+}
+
+// IsMemberCalls returns every recorded IsMember call, oldest first, with
+// its arguments typed. It reads the same log as Calls("IsMember").
+func (m *MockMembers) IsMemberCalls() []MockMembersIsMemberCall {
+	var out []MockMembersIsMemberCall
+	for _, c := range m.Recorder.Calls("IsMember") {
+		var r MockMembersIsMemberCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.OrgID, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ Members = (*MockMembers)(nil)
 
 // forge:section MockRollout
-// forge:hash=5034a5a7d2808a26c7724b064db41af8ddb03beec1814df8364e58d3dd11dfaa
+// forge:hash=30117fda841754183eefcb66d78812d5b0d7fcd898ffa7d6577a64a2cac1f225
 
 // MockRollout is a test mock for the Rollout interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockRollout.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockRollout.<Method>Func not set" error.
 type MockRollout struct {
 	contractkit.Recorder
 	GetProviderWorkspaceSeatsEnabledFunc func() bool
@@ -164,6 +340,22 @@ func (m *MockRollout) GetProviderWorkspaceSeatsEnabled() bool {
 		return m.GetProviderWorkspaceSeatsEnabledFunc()
 	}
 	return false
+}
+
+// MockRolloutGetProviderWorkspaceSeatsEnabledCall is one recorded call of MockRollout.GetProviderWorkspaceSeatsEnabled, one
+// field per parameter.
+type MockRolloutGetProviderWorkspaceSeatsEnabledCall struct {
+}
+
+// GetProviderWorkspaceSeatsEnabledCalls returns every recorded GetProviderWorkspaceSeatsEnabled call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetProviderWorkspaceSeatsEnabled").
+func (m *MockRollout) GetProviderWorkspaceSeatsEnabledCalls() []MockRolloutGetProviderWorkspaceSeatsEnabledCall {
+	var out []MockRolloutGetProviderWorkspaceSeatsEnabledCall
+	for range m.Recorder.Calls("GetProviderWorkspaceSeatsEnabled") {
+		var r MockRolloutGetProviderWorkspaceSeatsEnabledCall
+		out = append(out, r)
+	}
+	return out
 }
 
 // Compile-time check.

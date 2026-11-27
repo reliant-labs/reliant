@@ -18,14 +18,15 @@ import (
 )
 
 // forge:section MockService
-// forge:hash=b314e81504630d46ae5b5da8d2d898d542bfa1db0e091dfa9cc0e2bfc5f727bc
+// forge:hash=614c4447574958795aaa3155db316704803bf465f7c108a9a13d3c80780fd60c
 
 // MockService is a test mock for the Service interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockService.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockService.<Method>Func not set" error.
 type MockService struct {
 	contractkit.Recorder
 	CreateWorkflowDraftFunc                    func(context.Context, *core.WorkflowDraft) error
@@ -180,18 +181,353 @@ func (m *MockService) DeleteWorkflowDraftBySlug(ctx context.Context, userID stri
 	return contractkit.MockNotSet("MockService", "DeleteWorkflowDraftBySlug")
 }
 
+// MockServiceCreateWorkflowDraftCall is one recorded call of MockService.CreateWorkflowDraft, one
+// field per parameter.
+type MockServiceCreateWorkflowDraftCall struct {
+	Ctx   context.Context
+	Draft *core.WorkflowDraft
+}
+
+// CreateWorkflowDraftCalls returns every recorded CreateWorkflowDraft call, oldest first, with
+// its arguments typed. It reads the same log as Calls("CreateWorkflowDraft").
+func (m *MockService) CreateWorkflowDraftCalls() []MockServiceCreateWorkflowDraftCall {
+	var out []MockServiceCreateWorkflowDraftCall
+	for _, c := range m.Recorder.Calls("CreateWorkflowDraft") {
+		var r MockServiceCreateWorkflowDraftCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Draft, _ = c.Args[1].(*core.WorkflowDraft)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceUpsertWorkflowDraftCall is one recorded call of MockService.UpsertWorkflowDraft, one
+// field per parameter.
+type MockServiceUpsertWorkflowDraftCall struct {
+	Ctx   context.Context
+	Draft *core.WorkflowDraft
+}
+
+// UpsertWorkflowDraftCalls returns every recorded UpsertWorkflowDraft call, oldest first, with
+// its arguments typed. It reads the same log as Calls("UpsertWorkflowDraft").
+func (m *MockService) UpsertWorkflowDraftCalls() []MockServiceUpsertWorkflowDraftCall {
+	var out []MockServiceUpsertWorkflowDraftCall
+	for _, c := range m.Recorder.Calls("UpsertWorkflowDraft") {
+		var r MockServiceUpsertWorkflowDraftCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Draft, _ = c.Args[1].(*core.WorkflowDraft)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceGetWorkflowDraftCall is one recorded call of MockService.GetWorkflowDraft, one
+// field per parameter.
+type MockServiceGetWorkflowDraftCall struct {
+	Ctx context.Context
+	ID  string
+}
+
+// GetWorkflowDraftCalls returns every recorded GetWorkflowDraft call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetWorkflowDraft").
+func (m *MockService) GetWorkflowDraftCalls() []MockServiceGetWorkflowDraftCall {
+	var out []MockServiceGetWorkflowDraftCall
+	for _, c := range m.Recorder.Calls("GetWorkflowDraft") {
+		var r MockServiceGetWorkflowDraftCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceGetWorkflowDraftBySlugCall is one recorded call of MockService.GetWorkflowDraftBySlug, one
+// field per parameter.
+type MockServiceGetWorkflowDraftBySlugCall struct {
+	Ctx    context.Context
+	UserID string
+	Slug   string
+}
+
+// GetWorkflowDraftBySlugCalls returns every recorded GetWorkflowDraftBySlug call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetWorkflowDraftBySlug").
+func (m *MockService) GetWorkflowDraftBySlugCalls() []MockServiceGetWorkflowDraftBySlugCall {
+	var out []MockServiceGetWorkflowDraftBySlugCall
+	for _, c := range m.Recorder.Calls("GetWorkflowDraftBySlug") {
+		var r MockServiceGetWorkflowDraftBySlugCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.Slug, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceGetWorkflowDraftByNameCall is one recorded call of MockService.GetWorkflowDraftByName, one
+// field per parameter.
+type MockServiceGetWorkflowDraftByNameCall struct {
+	Ctx    context.Context
+	UserID string
+	Name   string
+}
+
+// GetWorkflowDraftByNameCalls returns every recorded GetWorkflowDraftByName call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetWorkflowDraftByName").
+func (m *MockService) GetWorkflowDraftByNameCalls() []MockServiceGetWorkflowDraftByNameCall {
+	var out []MockServiceGetWorkflowDraftByNameCall
+	for _, c := range m.Recorder.Calls("GetWorkflowDraftByName") {
+		var r MockServiceGetWorkflowDraftByNameCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.Name, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceGetUsableWorkflowBySlugCall is one recorded call of MockService.GetUsableWorkflowBySlug, one
+// field per parameter.
+type MockServiceGetUsableWorkflowBySlugCall struct {
+	Ctx    context.Context
+	UserID string
+	Slug   string
+}
+
+// GetUsableWorkflowBySlugCalls returns every recorded GetUsableWorkflowBySlug call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetUsableWorkflowBySlug").
+func (m *MockService) GetUsableWorkflowBySlugCalls() []MockServiceGetUsableWorkflowBySlugCall {
+	var out []MockServiceGetUsableWorkflowBySlugCall
+	for _, c := range m.Recorder.Calls("GetUsableWorkflowBySlug") {
+		var r MockServiceGetUsableWorkflowBySlugCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.Slug, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceGetWorkflowDraftsBySlugsCall is one recorded call of MockService.GetWorkflowDraftsBySlugs, one
+// field per parameter.
+type MockServiceGetWorkflowDraftsBySlugsCall struct {
+	Ctx    context.Context
+	UserID string
+	Slugs  []string
+}
+
+// GetWorkflowDraftsBySlugsCalls returns every recorded GetWorkflowDraftsBySlugs call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetWorkflowDraftsBySlugs").
+func (m *MockService) GetWorkflowDraftsBySlugsCalls() []MockServiceGetWorkflowDraftsBySlugsCall {
+	var out []MockServiceGetWorkflowDraftsBySlugsCall
+	for _, c := range m.Recorder.Calls("GetWorkflowDraftsBySlugs") {
+		var r MockServiceGetWorkflowDraftsBySlugsCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.Slugs, _ = c.Args[2].([]string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceListWorkflowDraftsByUserCall is one recorded call of MockService.ListWorkflowDraftsByUser, one
+// field per parameter.
+type MockServiceListWorkflowDraftsByUserCall struct {
+	Ctx    context.Context
+	UserID string
+}
+
+// ListWorkflowDraftsByUserCalls returns every recorded ListWorkflowDraftsByUser call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListWorkflowDraftsByUser").
+func (m *MockService) ListWorkflowDraftsByUserCalls() []MockServiceListWorkflowDraftsByUserCall {
+	var out []MockServiceListWorkflowDraftsByUserCall
+	for _, c := range m.Recorder.Calls("ListWorkflowDraftsByUser") {
+		var r MockServiceListWorkflowDraftsByUserCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceUpdateWorkflowDraftCall is one recorded call of MockService.UpdateWorkflowDraft, one
+// field per parameter.
+type MockServiceUpdateWorkflowDraftCall struct {
+	Ctx   context.Context
+	Draft *core.WorkflowDraft
+}
+
+// UpdateWorkflowDraftCalls returns every recorded UpdateWorkflowDraft call, oldest first, with
+// its arguments typed. It reads the same log as Calls("UpdateWorkflowDraft").
+func (m *MockService) UpdateWorkflowDraftCalls() []MockServiceUpdateWorkflowDraftCall {
+	var out []MockServiceUpdateWorkflowDraftCall
+	for _, c := range m.Recorder.Calls("UpdateWorkflowDraft") {
+		var r MockServiceUpdateWorkflowDraftCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Draft, _ = c.Args[1].(*core.WorkflowDraft)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceUpdateWorkflowDraftDefinitionCall is one recorded call of MockService.UpdateWorkflowDraftDefinition, one
+// field per parameter.
+type MockServiceUpdateWorkflowDraftDefinitionCall struct {
+	Ctx        context.Context
+	ID         string
+	Name       string
+	Slug       string
+	Definition string
+	Status     core.WorkflowDraftStatus
+}
+
+// UpdateWorkflowDraftDefinitionCalls returns every recorded UpdateWorkflowDraftDefinition call, oldest first, with
+// its arguments typed. It reads the same log as Calls("UpdateWorkflowDraftDefinition").
+func (m *MockService) UpdateWorkflowDraftDefinitionCalls() []MockServiceUpdateWorkflowDraftDefinitionCall {
+	var out []MockServiceUpdateWorkflowDraftDefinitionCall
+	for _, c := range m.Recorder.Calls("UpdateWorkflowDraftDefinition") {
+		var r MockServiceUpdateWorkflowDraftDefinitionCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ID, _ = c.Args[1].(string)
+		r.Name, _ = c.Args[2].(string)
+		r.Slug, _ = c.Args[3].(string)
+		r.Definition, _ = c.Args[4].(string)
+		r.Status, _ = c.Args[5].(core.WorkflowDraftStatus)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceUpdateWorkflowDraftDefinitionAtVersionCall is one recorded call of MockService.UpdateWorkflowDraftDefinitionAtVersion, one
+// field per parameter.
+type MockServiceUpdateWorkflowDraftDefinitionAtVersionCall struct {
+	Ctx        context.Context
+	ID         string
+	Version    int64
+	Name       string
+	Slug       string
+	Definition string
+	Status     core.WorkflowDraftStatus
+}
+
+// UpdateWorkflowDraftDefinitionAtVersionCalls returns every recorded UpdateWorkflowDraftDefinitionAtVersion call, oldest first, with
+// its arguments typed. It reads the same log as Calls("UpdateWorkflowDraftDefinitionAtVersion").
+func (m *MockService) UpdateWorkflowDraftDefinitionAtVersionCalls() []MockServiceUpdateWorkflowDraftDefinitionAtVersionCall {
+	var out []MockServiceUpdateWorkflowDraftDefinitionAtVersionCall
+	for _, c := range m.Recorder.Calls("UpdateWorkflowDraftDefinitionAtVersion") {
+		var r MockServiceUpdateWorkflowDraftDefinitionAtVersionCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ID, _ = c.Args[1].(string)
+		r.Version, _ = c.Args[2].(int64)
+		r.Name, _ = c.Args[3].(string)
+		r.Slug, _ = c.Args[4].(string)
+		r.Definition, _ = c.Args[5].(string)
+		r.Status, _ = c.Args[6].(core.WorkflowDraftStatus)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceSetWorkflowDraftStatusCall is one recorded call of MockService.SetWorkflowDraftStatus, one
+// field per parameter.
+type MockServiceSetWorkflowDraftStatusCall struct {
+	Ctx    context.Context
+	ID     string
+	Status core.WorkflowDraftStatus
+}
+
+// SetWorkflowDraftStatusCalls returns every recorded SetWorkflowDraftStatus call, oldest first, with
+// its arguments typed. It reads the same log as Calls("SetWorkflowDraftStatus").
+func (m *MockService) SetWorkflowDraftStatusCalls() []MockServiceSetWorkflowDraftStatusCall {
+	var out []MockServiceSetWorkflowDraftStatusCall
+	for _, c := range m.Recorder.Calls("SetWorkflowDraftStatus") {
+		var r MockServiceSetWorkflowDraftStatusCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ID, _ = c.Args[1].(string)
+		r.Status, _ = c.Args[2].(core.WorkflowDraftStatus)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceSetWorkflowDraftHiddenCall is one recorded call of MockService.SetWorkflowDraftHidden, one
+// field per parameter.
+type MockServiceSetWorkflowDraftHiddenCall struct {
+	Ctx      context.Context
+	ID       string
+	IsHidden bool
+}
+
+// SetWorkflowDraftHiddenCalls returns every recorded SetWorkflowDraftHidden call, oldest first, with
+// its arguments typed. It reads the same log as Calls("SetWorkflowDraftHidden").
+func (m *MockService) SetWorkflowDraftHiddenCalls() []MockServiceSetWorkflowDraftHiddenCall {
+	var out []MockServiceSetWorkflowDraftHiddenCall
+	for _, c := range m.Recorder.Calls("SetWorkflowDraftHidden") {
+		var r MockServiceSetWorkflowDraftHiddenCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ID, _ = c.Args[1].(string)
+		r.IsHidden, _ = c.Args[2].(bool)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceUpdateWorkflowForkedFromCall is one recorded call of MockService.UpdateWorkflowForkedFrom, one
+// field per parameter.
+type MockServiceUpdateWorkflowForkedFromCall struct {
+	Ctx        context.Context
+	DraftID    string
+	ForkedFrom string
+}
+
+// UpdateWorkflowForkedFromCalls returns every recorded UpdateWorkflowForkedFrom call, oldest first, with
+// its arguments typed. It reads the same log as Calls("UpdateWorkflowForkedFrom").
+func (m *MockService) UpdateWorkflowForkedFromCalls() []MockServiceUpdateWorkflowForkedFromCall {
+	var out []MockServiceUpdateWorkflowForkedFromCall
+	for _, c := range m.Recorder.Calls("UpdateWorkflowForkedFrom") {
+		var r MockServiceUpdateWorkflowForkedFromCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.DraftID, _ = c.Args[1].(string)
+		r.ForkedFrom, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceDeleteWorkflowDraftBySlugCall is one recorded call of MockService.DeleteWorkflowDraftBySlug, one
+// field per parameter.
+type MockServiceDeleteWorkflowDraftBySlugCall struct {
+	Ctx    context.Context
+	UserID string
+	Slug   string
+}
+
+// DeleteWorkflowDraftBySlugCalls returns every recorded DeleteWorkflowDraftBySlug call, oldest first, with
+// its arguments typed. It reads the same log as Calls("DeleteWorkflowDraftBySlug").
+func (m *MockService) DeleteWorkflowDraftBySlugCalls() []MockServiceDeleteWorkflowDraftBySlugCall {
+	var out []MockServiceDeleteWorkflowDraftBySlugCall
+	for _, c := range m.Recorder.Calls("DeleteWorkflowDraftBySlug") {
+		var r MockServiceDeleteWorkflowDraftBySlugCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.Slug, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ Service = (*MockService)(nil)
 
 // forge:section MockTxRunner
-// forge:hash=1a0ee09450a8c0c0c820b797730ecbfabb88f624601078e98bcecc809d6c34d9
+// forge:hash=1a9a9ed41b954ef2ab28e8326f76baa309a556ade16a586f99462bed4c992c21
 
 // MockTxRunner is a test mock for the TxRunner interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockTxRunner.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockTxRunner.<Method>Func not set" error.
 type MockTxRunner struct {
 	contractkit.Recorder
 	RunTxFunc func(context.Context, orm.TxPolicy, func(ctx context.Context) error) error
@@ -206,18 +542,41 @@ func (m *MockTxRunner) RunTx(p0 context.Context, policy orm.TxPolicy, fn func(ct
 	return contractkit.MockNotSet("MockTxRunner", "RunTx")
 }
 
+// MockTxRunnerRunTxCall is one recorded call of MockTxRunner.RunTx, one
+// field per parameter.
+type MockTxRunnerRunTxCall struct {
+	Ctx    context.Context
+	Policy orm.TxPolicy
+	Fn     func(ctx context.Context) error
+}
+
+// RunTxCalls returns every recorded RunTx call, oldest first, with
+// its arguments typed. It reads the same log as Calls("RunTx").
+func (m *MockTxRunner) RunTxCalls() []MockTxRunnerRunTxCall {
+	var out []MockTxRunnerRunTxCall
+	for _, c := range m.Recorder.Calls("RunTx") {
+		var r MockTxRunnerRunTxCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Policy, _ = c.Args[1].(orm.TxPolicy)
+		r.Fn, _ = c.Args[2].(func(ctx context.Context) error)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ TxRunner = (*MockTxRunner)(nil)
 
 // forge:section MockOrgLocks
-// forge:hash=e109aa077d75c3880877aa56c08b4c5de2e3e06248291bf681e23b9bd5410cc7
+// forge:hash=1f6db6eb90f87653a96fe498c6d6ce5c6e5174f77d3f5c4b4e3c7e77032c09e9
 
 // MockOrgLocks is a test mock for the OrgLocks interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockOrgLocks.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockOrgLocks.<Method>Func not set" error.
 type MockOrgLocks struct {
 	contractkit.Recorder
 	LockUserOrgsFunc func(context.Context, string, ...store.OrgRead) error
@@ -232,18 +591,41 @@ func (m *MockOrgLocks) LockUserOrgs(ctx context.Context, userID string, reads ..
 	return contractkit.MockNotSet("MockOrgLocks", "LockUserOrgs")
 }
 
+// MockOrgLocksLockUserOrgsCall is one recorded call of MockOrgLocks.LockUserOrgs, one
+// field per parameter.
+type MockOrgLocksLockUserOrgsCall struct {
+	Ctx    context.Context
+	UserID string
+	Reads  []store.OrgRead
+}
+
+// LockUserOrgsCalls returns every recorded LockUserOrgs call, oldest first, with
+// its arguments typed. It reads the same log as Calls("LockUserOrgs").
+func (m *MockOrgLocks) LockUserOrgsCalls() []MockOrgLocksLockUserOrgsCall {
+	var out []MockOrgLocksLockUserOrgsCall
+	for _, c := range m.Recorder.Calls("LockUserOrgs") {
+		var r MockOrgLocksLockUserOrgsCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.Reads, _ = c.Args[2].([]store.OrgRead)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ OrgLocks = (*MockOrgLocks)(nil)
 
 // forge:section MockUserUpdates
-// forge:hash=88d1f5b127e499234fc8de92ca631b8e88506f8fe3798add3765c857ae4ccc02
+// forge:hash=772f992d0b6d256c7fdb1af5e0755f53cef80528459dbbabb45fa9297ee5f1ff
 
 // MockUserUpdates is a test mock for the UserUpdates interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockUserUpdates.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockUserUpdates.<Method>Func not set" error.
 type MockUserUpdates struct {
 	contractkit.Recorder
 	CreateUserUpdateFunc func(context.Context, *core.UserUpdate) error
@@ -258,18 +640,39 @@ func (m *MockUserUpdates) CreateUserUpdate(ctx context.Context, update *core.Use
 	return contractkit.MockNotSet("MockUserUpdates", "CreateUserUpdate")
 }
 
+// MockUserUpdatesCreateUserUpdateCall is one recorded call of MockUserUpdates.CreateUserUpdate, one
+// field per parameter.
+type MockUserUpdatesCreateUserUpdateCall struct {
+	Ctx    context.Context
+	Update *core.UserUpdate
+}
+
+// CreateUserUpdateCalls returns every recorded CreateUserUpdate call, oldest first, with
+// its arguments typed. It reads the same log as Calls("CreateUserUpdate").
+func (m *MockUserUpdates) CreateUserUpdateCalls() []MockUserUpdatesCreateUserUpdateCall {
+	var out []MockUserUpdatesCreateUserUpdateCall
+	for _, c := range m.Recorder.Calls("CreateUserUpdate") {
+		var r MockUserUpdatesCreateUserUpdateCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Update, _ = c.Args[1].(*core.UserUpdate)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ UserUpdates = (*MockUserUpdates)(nil)
 
 // forge:section MockDrafts
-// forge:hash=3ee3ac5ef77fbb5587457197ebf0512cd59f9481ec0ec5d8c6976f74ba68f939
+// forge:hash=b5894d7d25256ec7a1eca4a2e49fcbbe00e08512dacf2e6639cd3365b42b5a17
 
 // MockDrafts is a test mock for the Drafts interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockDrafts.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockDrafts.<Method>Func not set" error.
 type MockDrafts struct {
 	contractkit.Recorder
 	InsertWorkflowDraftFunc        func(context.Context, *core.WorkflowDraft) error
@@ -442,6 +845,372 @@ func (m *MockDrafts) ListUserWorkflowDrafts(ctx context.Context, userID string) 
 		return m.ListUserWorkflowDraftsFunc(ctx, userID)
 	}
 	return nil, contractkit.MockNotSet("MockDrafts", "ListUserWorkflowDrafts")
+}
+
+// MockDraftsInsertWorkflowDraftCall is one recorded call of MockDrafts.InsertWorkflowDraft, one
+// field per parameter.
+type MockDraftsInsertWorkflowDraftCall struct {
+	Ctx context.Context
+	D   *core.WorkflowDraft
+}
+
+// InsertWorkflowDraftCalls returns every recorded InsertWorkflowDraft call, oldest first, with
+// its arguments typed. It reads the same log as Calls("InsertWorkflowDraft").
+func (m *MockDrafts) InsertWorkflowDraftCalls() []MockDraftsInsertWorkflowDraftCall {
+	var out []MockDraftsInsertWorkflowDraftCall
+	for _, c := range m.Recorder.Calls("InsertWorkflowDraft") {
+		var r MockDraftsInsertWorkflowDraftCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.D, _ = c.Args[1].(*core.WorkflowDraft)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockDraftsUpsertWorkflowDraftBySlugCall is one recorded call of MockDrafts.UpsertWorkflowDraftBySlug, one
+// field per parameter.
+type MockDraftsUpsertWorkflowDraftBySlugCall struct {
+	Ctx  context.Context
+	D    *core.WorkflowDraft
+	Over string
+}
+
+// UpsertWorkflowDraftBySlugCalls returns every recorded UpsertWorkflowDraftBySlug call, oldest first, with
+// its arguments typed. It reads the same log as Calls("UpsertWorkflowDraftBySlug").
+func (m *MockDrafts) UpsertWorkflowDraftBySlugCalls() []MockDraftsUpsertWorkflowDraftBySlugCall {
+	var out []MockDraftsUpsertWorkflowDraftBySlugCall
+	for _, c := range m.Recorder.Calls("UpsertWorkflowDraftBySlug") {
+		var r MockDraftsUpsertWorkflowDraftBySlugCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.D, _ = c.Args[1].(*core.WorkflowDraft)
+		r.Over, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockDraftsReplaceWorkflowDraftCall is one recorded call of MockDrafts.ReplaceWorkflowDraft, one
+// field per parameter.
+type MockDraftsReplaceWorkflowDraftCall struct {
+	Ctx context.Context
+	D   *core.WorkflowDraft
+}
+
+// ReplaceWorkflowDraftCalls returns every recorded ReplaceWorkflowDraft call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ReplaceWorkflowDraft").
+func (m *MockDrafts) ReplaceWorkflowDraftCalls() []MockDraftsReplaceWorkflowDraftCall {
+	var out []MockDraftsReplaceWorkflowDraftCall
+	for _, c := range m.Recorder.Calls("ReplaceWorkflowDraft") {
+		var r MockDraftsReplaceWorkflowDraftCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.D, _ = c.Args[1].(*core.WorkflowDraft)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockDraftsSetWorkflowDraftDefinitionCall is one recorded call of MockDrafts.SetWorkflowDraftDefinition, one
+// field per parameter.
+type MockDraftsSetWorkflowDraftDefinitionCall struct {
+	Ctx        context.Context
+	ID         string
+	Name       string
+	Slug       string
+	Definition string
+	Status     core.WorkflowDraftStatus
+}
+
+// SetWorkflowDraftDefinitionCalls returns every recorded SetWorkflowDraftDefinition call, oldest first, with
+// its arguments typed. It reads the same log as Calls("SetWorkflowDraftDefinition").
+func (m *MockDrafts) SetWorkflowDraftDefinitionCalls() []MockDraftsSetWorkflowDraftDefinitionCall {
+	var out []MockDraftsSetWorkflowDraftDefinitionCall
+	for _, c := range m.Recorder.Calls("SetWorkflowDraftDefinition") {
+		var r MockDraftsSetWorkflowDraftDefinitionCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ID, _ = c.Args[1].(string)
+		r.Name, _ = c.Args[2].(string)
+		r.Slug, _ = c.Args[3].(string)
+		r.Definition, _ = c.Args[4].(string)
+		r.Status, _ = c.Args[5].(core.WorkflowDraftStatus)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockDraftsSetWorkflowDraftStatusCall is one recorded call of MockDrafts.SetWorkflowDraftStatus, one
+// field per parameter.
+type MockDraftsSetWorkflowDraftStatusCall struct {
+	Ctx    context.Context
+	ID     string
+	Status core.WorkflowDraftStatus
+}
+
+// SetWorkflowDraftStatusCalls returns every recorded SetWorkflowDraftStatus call, oldest first, with
+// its arguments typed. It reads the same log as Calls("SetWorkflowDraftStatus").
+func (m *MockDrafts) SetWorkflowDraftStatusCalls() []MockDraftsSetWorkflowDraftStatusCall {
+	var out []MockDraftsSetWorkflowDraftStatusCall
+	for _, c := range m.Recorder.Calls("SetWorkflowDraftStatus") {
+		var r MockDraftsSetWorkflowDraftStatusCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ID, _ = c.Args[1].(string)
+		r.Status, _ = c.Args[2].(core.WorkflowDraftStatus)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockDraftsSetWorkflowDraftHiddenCall is one recorded call of MockDrafts.SetWorkflowDraftHidden, one
+// field per parameter.
+type MockDraftsSetWorkflowDraftHiddenCall struct {
+	Ctx    context.Context
+	ID     string
+	Hidden bool
+}
+
+// SetWorkflowDraftHiddenCalls returns every recorded SetWorkflowDraftHidden call, oldest first, with
+// its arguments typed. It reads the same log as Calls("SetWorkflowDraftHidden").
+func (m *MockDrafts) SetWorkflowDraftHiddenCalls() []MockDraftsSetWorkflowDraftHiddenCall {
+	var out []MockDraftsSetWorkflowDraftHiddenCall
+	for _, c := range m.Recorder.Calls("SetWorkflowDraftHidden") {
+		var r MockDraftsSetWorkflowDraftHiddenCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ID, _ = c.Args[1].(string)
+		r.Hidden, _ = c.Args[2].(bool)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockDraftsSetWorkflowDraftForkedFromCall is one recorded call of MockDrafts.SetWorkflowDraftForkedFrom, one
+// field per parameter.
+type MockDraftsSetWorkflowDraftForkedFromCall struct {
+	Ctx        context.Context
+	ID         string
+	ForkedFrom string
+}
+
+// SetWorkflowDraftForkedFromCalls returns every recorded SetWorkflowDraftForkedFrom call, oldest first, with
+// its arguments typed. It reads the same log as Calls("SetWorkflowDraftForkedFrom").
+func (m *MockDrafts) SetWorkflowDraftForkedFromCalls() []MockDraftsSetWorkflowDraftForkedFromCall {
+	var out []MockDraftsSetWorkflowDraftForkedFromCall
+	for _, c := range m.Recorder.Calls("SetWorkflowDraftForkedFrom") {
+		var r MockDraftsSetWorkflowDraftForkedFromCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ID, _ = c.Args[1].(string)
+		r.ForkedFrom, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockDraftsRemoveWorkflowDraftCall is one recorded call of MockDrafts.RemoveWorkflowDraft, one
+// field per parameter.
+type MockDraftsRemoveWorkflowDraftCall struct {
+	Ctx context.Context
+	ID  string
+}
+
+// RemoveWorkflowDraftCalls returns every recorded RemoveWorkflowDraft call, oldest first, with
+// its arguments typed. It reads the same log as Calls("RemoveWorkflowDraft").
+func (m *MockDrafts) RemoveWorkflowDraftCalls() []MockDraftsRemoveWorkflowDraftCall {
+	var out []MockDraftsRemoveWorkflowDraftCall
+	for _, c := range m.Recorder.Calls("RemoveWorkflowDraft") {
+		var r MockDraftsRemoveWorkflowDraftCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockDraftsLockWorkflowDraftCall is one recorded call of MockDrafts.LockWorkflowDraft, one
+// field per parameter.
+type MockDraftsLockWorkflowDraftCall struct {
+	Ctx context.Context
+	ID  string
+}
+
+// LockWorkflowDraftCalls returns every recorded LockWorkflowDraft call, oldest first, with
+// its arguments typed. It reads the same log as Calls("LockWorkflowDraft").
+func (m *MockDrafts) LockWorkflowDraftCalls() []MockDraftsLockWorkflowDraftCall {
+	var out []MockDraftsLockWorkflowDraftCall
+	for _, c := range m.Recorder.Calls("LockWorkflowDraft") {
+		var r MockDraftsLockWorkflowDraftCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockDraftsLockWorkflowDraftBySlugCall is one recorded call of MockDrafts.LockWorkflowDraftBySlug, one
+// field per parameter.
+type MockDraftsLockWorkflowDraftBySlugCall struct {
+	Ctx    context.Context
+	UserID string
+	Slug   string
+}
+
+// LockWorkflowDraftBySlugCalls returns every recorded LockWorkflowDraftBySlug call, oldest first, with
+// its arguments typed. It reads the same log as Calls("LockWorkflowDraftBySlug").
+func (m *MockDrafts) LockWorkflowDraftBySlugCalls() []MockDraftsLockWorkflowDraftBySlugCall {
+	var out []MockDraftsLockWorkflowDraftBySlugCall
+	for _, c := range m.Recorder.Calls("LockWorkflowDraftBySlug") {
+		var r MockDraftsLockWorkflowDraftBySlugCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.Slug, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockDraftsWorkflowDraftOwnerCall is one recorded call of MockDrafts.WorkflowDraftOwner, one
+// field per parameter.
+type MockDraftsWorkflowDraftOwnerCall struct {
+	Ctx context.Context
+	ID  string
+}
+
+// WorkflowDraftOwnerCalls returns every recorded WorkflowDraftOwner call, oldest first, with
+// its arguments typed. It reads the same log as Calls("WorkflowDraftOwner").
+func (m *MockDrafts) WorkflowDraftOwnerCalls() []MockDraftsWorkflowDraftOwnerCall {
+	var out []MockDraftsWorkflowDraftOwnerCall
+	for _, c := range m.Recorder.Calls("WorkflowDraftOwner") {
+		var r MockDraftsWorkflowDraftOwnerCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockDraftsLoadWorkflowDraftCall is one recorded call of MockDrafts.LoadWorkflowDraft, one
+// field per parameter.
+type MockDraftsLoadWorkflowDraftCall struct {
+	Ctx context.Context
+	ID  string
+}
+
+// LoadWorkflowDraftCalls returns every recorded LoadWorkflowDraft call, oldest first, with
+// its arguments typed. It reads the same log as Calls("LoadWorkflowDraft").
+func (m *MockDrafts) LoadWorkflowDraftCalls() []MockDraftsLoadWorkflowDraftCall {
+	var out []MockDraftsLoadWorkflowDraftCall
+	for _, c := range m.Recorder.Calls("LoadWorkflowDraft") {
+		var r MockDraftsLoadWorkflowDraftCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockDraftsFindWorkflowDraftBySlugCall is one recorded call of MockDrafts.FindWorkflowDraftBySlug, one
+// field per parameter.
+type MockDraftsFindWorkflowDraftBySlugCall struct {
+	Ctx    context.Context
+	UserID string
+	Slug   string
+}
+
+// FindWorkflowDraftBySlugCalls returns every recorded FindWorkflowDraftBySlug call, oldest first, with
+// its arguments typed. It reads the same log as Calls("FindWorkflowDraftBySlug").
+func (m *MockDrafts) FindWorkflowDraftBySlugCalls() []MockDraftsFindWorkflowDraftBySlugCall {
+	var out []MockDraftsFindWorkflowDraftBySlugCall
+	for _, c := range m.Recorder.Calls("FindWorkflowDraftBySlug") {
+		var r MockDraftsFindWorkflowDraftBySlugCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.Slug, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockDraftsFindWorkflowDraftByNameCall is one recorded call of MockDrafts.FindWorkflowDraftByName, one
+// field per parameter.
+type MockDraftsFindWorkflowDraftByNameCall struct {
+	Ctx    context.Context
+	UserID string
+	Name   string
+}
+
+// FindWorkflowDraftByNameCalls returns every recorded FindWorkflowDraftByName call, oldest first, with
+// its arguments typed. It reads the same log as Calls("FindWorkflowDraftByName").
+func (m *MockDrafts) FindWorkflowDraftByNameCalls() []MockDraftsFindWorkflowDraftByNameCall {
+	var out []MockDraftsFindWorkflowDraftByNameCall
+	for _, c := range m.Recorder.Calls("FindWorkflowDraftByName") {
+		var r MockDraftsFindWorkflowDraftByNameCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.Name, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockDraftsFindUsableWorkflowBySlugCall is one recorded call of MockDrafts.FindUsableWorkflowBySlug, one
+// field per parameter.
+type MockDraftsFindUsableWorkflowBySlugCall struct {
+	Ctx    context.Context
+	UserID string
+	Slug   string
+}
+
+// FindUsableWorkflowBySlugCalls returns every recorded FindUsableWorkflowBySlug call, oldest first, with
+// its arguments typed. It reads the same log as Calls("FindUsableWorkflowBySlug").
+func (m *MockDrafts) FindUsableWorkflowBySlugCalls() []MockDraftsFindUsableWorkflowBySlugCall {
+	var out []MockDraftsFindUsableWorkflowBySlugCall
+	for _, c := range m.Recorder.Calls("FindUsableWorkflowBySlug") {
+		var r MockDraftsFindUsableWorkflowBySlugCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.Slug, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockDraftsListWorkflowDraftsBySlugsCall is one recorded call of MockDrafts.ListWorkflowDraftsBySlugs, one
+// field per parameter.
+type MockDraftsListWorkflowDraftsBySlugsCall struct {
+	Ctx    context.Context
+	UserID string
+	Slugs  []string
+}
+
+// ListWorkflowDraftsBySlugsCalls returns every recorded ListWorkflowDraftsBySlugs call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListWorkflowDraftsBySlugs").
+func (m *MockDrafts) ListWorkflowDraftsBySlugsCalls() []MockDraftsListWorkflowDraftsBySlugsCall {
+	var out []MockDraftsListWorkflowDraftsBySlugsCall
+	for _, c := range m.Recorder.Calls("ListWorkflowDraftsBySlugs") {
+		var r MockDraftsListWorkflowDraftsBySlugsCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.Slugs, _ = c.Args[2].([]string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockDraftsListUserWorkflowDraftsCall is one recorded call of MockDrafts.ListUserWorkflowDrafts, one
+// field per parameter.
+type MockDraftsListUserWorkflowDraftsCall struct {
+	Ctx    context.Context
+	UserID string
+}
+
+// ListUserWorkflowDraftsCalls returns every recorded ListUserWorkflowDrafts call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListUserWorkflowDrafts").
+func (m *MockDrafts) ListUserWorkflowDraftsCalls() []MockDraftsListUserWorkflowDraftsCall {
+	var out []MockDraftsListUserWorkflowDraftsCall
+	for _, c := range m.Recorder.Calls("ListUserWorkflowDrafts") {
+		var r MockDraftsListUserWorkflowDraftsCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
 }
 
 // Compile-time check.

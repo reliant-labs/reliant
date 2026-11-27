@@ -31,6 +31,10 @@ type RunPlacements interface {
 	// RecordRunMachinePlacement records p unless its (workflow, scope)
 	// already has one, and returns the placement recorded.
 	RecordRunMachinePlacement(ctx context.Context, p *core.RunMachinePlacement) (*core.RunMachinePlacement, error)
+	// MoveRunMachinePlacement moves p's (workflow, scope) placement from
+	// fromDaemonID to p.DaemonID, and returns the placement recorded: the
+	// moved one, or the one a concurrent move left.
+	MoveRunMachinePlacement(ctx context.Context, p *core.RunMachinePlacement, fromDaemonID string) (*core.RunMachinePlacement, error)
 }
 
 // TxRunner runs fn in one transaction; the stores above join it through ctx.
@@ -105,12 +109,41 @@ func (p *RunPlacer) PlaceRun(ctx context.Context, req RunRequest) (PlaceRunOutpu
 	}
 	recorded, err := p.placements.GetRunMachinePlacement(ctx, req.WorkflowID, req.Scope)
 	switch {
-	case err == nil:
+	case err == nil && !req.excludes(recorded.DaemonID):
 		return p.answerRecorded(ctx, req, recorded), nil
+	case err == nil:
+		// The recorded member failed the node's preflight: the placement
+		// moves, keeping its identity, so a retried ask (the member it
+		// moved to is not excluded) answers where it went.
+		return p.placeOnPool(ctx, req, recorded.DaemonID)
 	case !errors.Is(err, core.ErrRunMachinePlacementNotFound):
 		return PlaceRunOutput{}, fmt.Errorf("read placement of %s/%q: %w", req.WorkflowID, req.Scope, err)
 	}
-	return p.placeOnPool(ctx, req)
+	return p.placeOnPool(ctx, req, "")
+}
+
+// excludes reports whether daemonID is one of the request's excluded members.
+func (r RunRequest) excludes(daemonID string) bool {
+	for _, id := range r.Exclude {
+		if id == daemonID {
+			return true
+		}
+	}
+	return false
+}
+
+// withoutExcluded is members minus the request's excluded ones.
+func (r RunRequest) withoutExcluded(members []Member) []Member {
+	if len(r.Exclude) == 0 {
+		return members
+	}
+	out := make([]Member, 0, len(members))
+	for _, m := range members {
+		if !r.excludes(m.DaemonID) {
+			out = append(out, m)
+		}
+	}
+	return out
 }
 
 func (r RunRequest) validate() error {
@@ -123,16 +156,24 @@ func (r RunRequest) validate() error {
 	return nil
 }
 
-func (p *RunPlacer) placeOnPool(ctx context.Context, req RunRequest) (PlaceRunOutput, error) {
+// placeOnPool places req on a member of its pool. from is the member its
+// recorded placement is on when that member is excluded ("" when nothing is
+// recorded): the placement moves from it instead of being recorded anew.
+func (p *RunPlacer) placeOnPool(ctx context.Context, req RunRequest, from string) (PlaceRunOutput, error) {
 	row, err := p.pools.GetMachinePoolByName(ctx, req.UserID, req.Pool)
 	if err != nil {
 		return PlaceRunOutput{}, fmt.Errorf("machine pool %q: %w", req.Pool, err)
 	}
 	pool := PoolFromCore(row)
 	for attempt := 1; attempt <= runPlaceAttempts; attempt++ {
-		members, err := membersOf(ctx, p.pools, row, req.ProjectID)
+		all, err := membersOf(ctx, p.pools, row, req.ProjectID)
 		if err != nil {
 			return PlaceRunOutput{}, err
+		}
+		members := req.withoutExcluded(all)
+		if len(all) > 0 && len(members) == 0 {
+			return named(PlaceRunOutput{Exhausted: true,
+				Reason: fmt.Sprintf("every member of pool %s (%d) failed this node's preflight", pool.Name, len(all))}, pool), nil
 		}
 		held, err := p.heldMembers(ctx, req, pool)
 		if err != nil {
@@ -140,7 +181,7 @@ func (p *RunPlacer) placeOnPool(ctx context.Context, req RunRequest) (PlaceRunOu
 		}
 		members = withoutOwnSlot(members, held)
 		if m, ok := preferHeld(pool, members, held); ok {
-			out, err := p.record(ctx, req, pool, m, p.chatSlotGuard(pool, m, req))
+			out, err := p.record(ctx, req, pool, m, p.chatSlotGuard(pool, m, req), from)
 			if errors.Is(err, errMemberBusy) {
 				continue
 			}
@@ -150,13 +191,13 @@ func (p *RunPlacer) placeOnPool(ctx context.Context, req RunRequest) (PlaceRunOu
 			// The chat's run is already on m: record it there, never split
 			// it from its checkout. The chat holds its slot already (live
 			// runs count chats), so there is no slot to take.
-			return p.record(ctx, req, pool, m, nil)
+			return p.record(ctx, req, pool, m, nil, from)
 		}
 		d := Decide(pool, members)
 		if d.Kind != Run {
 			return p.wait(ctx, pool, d), nil
 		}
-		out, err := p.record(ctx, req, pool, d.Member, p.chatSlotGuard(pool, d.Member, req))
+		out, err := p.record(ctx, req, pool, d.Member, p.chatSlotGuard(pool, d.Member, req), from)
 		if errors.Is(err, errMemberBusy) {
 			continue
 		}
@@ -270,12 +311,13 @@ func stickyMember(req RunRequest, pool Pool, members []Member) (Member, bool) {
 var errMemberBusy = errors.New(MemberBusy)
 
 // record takes m's slot (guard, nil for none) and records the placement in
-// one transaction. READ COMMITTED: the pool's row lock, which guard takes
-// first, is what orders concurrent placements, and under SERIALIZABLE the
-// loser of that race would fail instead of reading the winner's placement.
-// The record that comes back may be a concurrent ask's for the same
-// (workflow, scope): that one is the answer.
-func (p *RunPlacer) record(ctx context.Context, req RunRequest, pool Pool, m Member, guard func(context.Context) (string, error)) (PlaceRunOutput, error) {
+// one transaction — or, when from names the excluded member it is recorded
+// on, moves it from there to m. READ COMMITTED: the pool's row lock, which
+// guard takes first, is what orders concurrent placements, and under
+// SERIALIZABLE the loser of that race would fail instead of reading the
+// winner's placement. The record that comes back may be a concurrent ask's
+// for the same (workflow, scope): that one is the answer.
+func (p *RunPlacer) record(ctx context.Context, req RunRequest, pool Pool, m Member, guard func(context.Context) (string, error), from string) (PlaceRunOutput, error) {
 	var stored *core.RunMachinePlacement
 	err := p.tx.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
 		if guard != nil {
@@ -289,11 +331,16 @@ func (p *RunPlacer) record(ctx context.Context, req RunRequest, pool Pool, m Mem
 				return fmt.Errorf("place on %s of pool %s: %s", m.label(), pool.Name, reason)
 			}
 		}
-		var err error
-		stored, err = p.placements.RecordRunMachinePlacement(ctx, &core.RunMachinePlacement{
+		placement := &core.RunMachinePlacement{
 			WorkflowID: req.WorkflowID, Scope: req.Scope, UserID: req.UserID, ChatID: req.ChatID,
 			MachinePoolID: pool.ID, Selector: pool.Selector, DaemonID: m.DaemonID,
-		})
+		}
+		var err error
+		if from != "" {
+			stored, err = p.placements.MoveRunMachinePlacement(ctx, placement, from)
+		} else {
+			stored, err = p.placements.RecordRunMachinePlacement(ctx, placement)
+		}
 		return err
 	})
 	if err != nil {

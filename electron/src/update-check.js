@@ -14,6 +14,15 @@ function isUpdatePending(status) {
   return Boolean(status) && PENDING_TYPES.has(status.type);
 }
 
+// The update feed every install reads: `latest` (latest-mac.yml, latest.yml,
+// latest-linux*.yml on downloads.reliantlabs.io). A prerelease version once
+// chose the `alpha` channel, but nothing has published alpha since RC tags
+// became `rc/vX.Y.Z-rc.N`, so an install that picked it stopped updating. The
+// alpha feed files stay in the bucket for installs built before this change.
+function updateFeedFor(_version) {
+  return { channel: "latest", allowPrerelease: false };
+}
+
 // Once a download has started, a check would lose it: `checking-for-update`
 // resets main.js's download bookkeeping (including the path of a chunked
 // download that installUpdate needs), and electron-updater re-announces a
@@ -391,5 +400,6 @@ module.exports = {
   isUpdatePending,
   isUpgradeOverdue,
   nextUpdateState,
+  updateFeedFor,
   withDaemonUpgrade,
 };

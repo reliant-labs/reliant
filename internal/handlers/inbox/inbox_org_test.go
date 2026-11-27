@@ -113,7 +113,7 @@ func TestListInbox_LeavesOutAttentionIncidentsOfAnOrgTheCallerMayNotRead(t *test
 	orgOf := map[string]*string{"c-acme": org("acme"), "c-home": org("home"), "p-acme": org("acme"), "p-home": org("home")}
 	newSvc := func() *Service {
 		repo := newInflightRepo(0)
-		repo.ListTriggersFunc = func(context.Context, core.TriggerFilters) ([]*core.Trigger, error) { return nil, nil }
+		repo.notices.ListTriggersForUserFunc = func(context.Context, core.TriggerFilters) ([]*core.Trigger, error) { return nil, nil }
 		repo.chats.GetChatFunc = func(_ context.Context, id string) (*db.Chat, error) {
 			return &db.Chat{ID: id, UserID: "user-1", OrgID: orgOf[id]}, nil
 		}

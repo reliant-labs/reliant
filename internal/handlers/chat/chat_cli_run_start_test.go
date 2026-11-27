@@ -41,7 +41,7 @@ func TestStartChat_CLIRunRecordsCLIRunKindOutOfTheSidebar(t *testing.T) {
 	chatID := resp.Msg.GetChat().GetId()
 
 	assert.Equal(t, "cli.run", f.launchKind(t, chatID))
-	event, err := f.repo.GetTriggerEventByChatID(f.ctx, chatID)
+	event, err := store.GetTriggerEventByChatID(f.ctx, f.repo.ORM(), chatID)
 	require.NoError(t, err)
 	assert.Equal(t, core.TriggerEventKindCLIRun, event.Kind)
 	assert.Equal(t, chatID, event.DedupeKey, "attended: deduped on the chat id, like chat.start")

@@ -10,6 +10,9 @@ import (
 // store of a real *db.Repo. A role neither can fill stays nil, and the test
 // factory's mock answers it.
 func withRoles(d Deps) Deps {
+	if d.TriggerReads == nil {
+		d.TriggerReads = roleOf[TriggerReads](d.Repo, func(r *db.Repo) TriggerReads { return store.NewTriggerEventExtStore(r.ORM()) })
+	}
 	if d.Heads == nil {
 		d.Heads = roleOf[Heads](d.Repo, func(r *db.Repo) Heads { return store.NewChatUpdateExtStore(r.ORM()) })
 	}
@@ -35,6 +38,10 @@ func withRoles(d Deps) Deps {
 		d.SpawnCalls = roleOf[SpawnCalls](d.Repo, func(r *db.Repo) SpawnCalls { return store.NewToolCallExtStore(r.ORM()) })
 	}
 	return d
+}
+
+func fixtureTriggerReads(repo Repository) TriggerReads {
+	return roleOf[TriggerReads](repo, func(r *db.Repo) TriggerReads { return store.NewTriggerEventExtStore(r.ORM()) })
 }
 
 func roleOf[T any](repo Repository, fromDB func(*db.Repo) T) T {

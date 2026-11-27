@@ -70,6 +70,7 @@ type PreflightDaemonCheckOutput struct {
 // This fails fast with a clear error message if a daemon is required but not available.
 type PreflightDaemonCheckActivity struct {
 	repo         PreflightDaemonCheckStore
+	launches     LaunchEvents
 	rows         WorkspaceRows
 	toolExecutor toolexec.ToolExecutor
 	// pollInterval is how often a waiting slice re-checks the daemon; zero
@@ -83,9 +84,10 @@ type PreflightDaemonCheckActivity struct {
 const preflightPollInterval = 2 * time.Second
 
 // NewPreflightDaemonCheckActivity creates a new PreflightDaemonCheckActivity.
-func NewPreflightDaemonCheckActivity(repo PreflightDaemonCheckStore, rows WorkspaceRows, toolExecutor toolexec.ToolExecutor) *PreflightDaemonCheckActivity {
+func NewPreflightDaemonCheckActivity(repo PreflightDaemonCheckStore, launches LaunchEvents, rows WorkspaceRows, toolExecutor toolexec.ToolExecutor) *PreflightDaemonCheckActivity {
 	return &PreflightDaemonCheckActivity{
 		repo:         repo,
+		launches:     launches,
 		rows:         rows,
 		toolExecutor: toolExecutor,
 	}
@@ -173,7 +175,7 @@ func (a *PreflightDaemonCheckActivity) Execute(ctx context.Context, input Prefli
 	// not at all. The kind is the chat's launch event, the record of what
 	// started it.
 	attended := true
-	if ev, evErr := a.repo.GetTriggerEventByChatID(ctx, input.ChatID); evErr == nil && ev != nil &&
+	if ev, evErr := a.launches.GetTriggerEventByChatID(ctx, input.ChatID); evErr == nil && ev != nil &&
 		ev.Kind.Unattended() {
 		ctx = automationcred.Allow(ctx)
 		attended = false
