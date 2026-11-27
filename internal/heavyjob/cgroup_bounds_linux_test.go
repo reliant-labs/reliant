@@ -4,12 +4,124 @@
 package heavyjob
 
 import (
+	"fmt"
+	"io"
 	"maps"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 )
+
+// This helper holds a real kernel lease until killed by the parent test.
+func TestBoundsLeaseHelper(t *testing.T) {
+	root := os.Getenv("RELIANT_TEST_BOUNDS_ROOT")
+	if root == "" {
+		return
+	}
+	c := lowerBoundsAt(os.Getenv("RELIANT_TEST_BOUNDS_SELF"), root, bounds{weight: 25, memoryHigh: 12 << 30})
+	if c.lease == nil {
+		t.Fatal("no holder registered")
+	}
+	_, _ = os.Stdout.Write([]byte("ready\n"))
+	_, _ = io.Copy(io.Discard, os.Stdin)
+	c.release()
+}
+
+func TestBoundsLeasePrunesKilledHolder(t *testing.T) {
+	root := t.TempDir()
+	dir := boundsCgroup(t, root, cmdCgroup, "100", "max")
+	self := selfIn(t, cmdCgroup)
+	cmd := exec.Command(os.Args[0], "-test.run=^TestBoundsLeaseHelper$")
+	cmd.Env = append(os.Environ(), "RELIANT_TEST_BOUNDS_ROOT="+root, "RELIANT_TEST_BOUNDS_SELF="+self)
+	in, err := cmd.StdinPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer in.Close()
+	out, err := cmd.StdoutPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		_ = cmd.Process.Kill()
+		_ = cmd.Wait()
+	})
+	ready := make([]byte, len("ready\n"))
+	if _, err := io.ReadFull(out, ready); err != nil || string(ready) != "ready\n" {
+		t.Fatalf("helper not ready: %q, %v", ready, err)
+	}
+	c := lowerBoundsAt(self, root, bounds{weight: 25, memoryHigh: 12 << 30})
+	defer c.release()
+	if c.lease == nil {
+		t.Fatal("surviving holder not registered")
+	}
+	if err := cmd.Process.Kill(); err != nil {
+		t.Fatal(err)
+	}
+	_ = cmd.Wait() // the kernel has closed the dead holder's lease
+	c.release()
+	if got := readTrim(t, filepath.Join(dir, "cpu.weight")); got != "100" {
+		t.Fatalf("weight after survivor releases = %s, want 100", got)
+	}
+	if got := readTrim(t, filepath.Join(dir, "memory.high")); got != "max" {
+		t.Fatalf("memory.high after survivor releases = %s, want max", got)
+	}
+}
+
+func TestBoundsStateRejectsUntrustedDirectory(t *testing.T) {
+	t.Setenv("TMPDIR", t.TempDir())
+	root := filepath.Join(os.TempDir(), fmt.Sprintf("reliant-heavy-bounds-%d", os.Geteuid()))
+	target := t.TempDir()
+	if err := os.Symlink(target, root); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := readBoundsState("unused"); err == nil {
+		t.Fatal("accepted symlink directory")
+	}
+	if err := os.Remove(root); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(root, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := readBoundsState("unused"); err == nil {
+		t.Fatal("accepted non-private directory")
+	}
+	if err := os.Chmod(root, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	state, path, err := readBoundsState("unused")
+	if err != nil {
+		t.Fatal(err)
+	}
+	victim := filepath.Join(target, "victim")
+	if err := os.WriteFile(victim, []byte("keep"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(victim, path+".tmp"); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeBoundsState(path, state); err != nil {
+		t.Fatal(err)
+	}
+	if got := readTrim(t, victim); got != "keep" {
+		t.Fatalf("temporary symlink target overwritten: %q", got)
+	}
+	if err := os.Remove(path); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(victim, path); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := readBoundsState("unused"); err == nil {
+		t.Fatal("followed ledger symlink")
+	}
+}
 
 // boundsCgroup is a fake daemon command cgroup with a cpu.weight and a
 // memory.high reading weight and high ("" for a file the kernel did not make:

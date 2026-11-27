@@ -12,6 +12,8 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"golang.org/x/sys/unix"
 )
 
 // cgroupBounds lowers the cpu.weight and memory.high of the daemon's command
@@ -51,6 +53,8 @@ type cgroupBounds struct {
 	// lowered is each file written, with the value found and the value it
 	// read back after the write (the kernel rounds memory.high to a page).
 	lowered []loweredFile
+	// lease is flocked until release or process death (and is close-on-exec).
+	lease *os.File
 }
 
 type loweredFile struct{ name, was, now string }
@@ -81,6 +85,20 @@ func lowerBoundsAt(selfCgroup, fsRoot string, b bounds) *cgroupBounds {
 	if err != nil {
 		return c
 	}
+	if len(state.Holders) == 0 {
+		restoreBounds(dir, state)
+		state.Files = make(map[string][2]string)
+	}
+	lease, err := os.CreateTemp(filepath.Dir(path), "holder-*")
+	if err != nil {
+		return c
+	}
+	if err := unix.Flock(int(lease.Fd()), unix.LOCK_EX|unix.LOCK_NB); err != nil {
+		_ = lease.Close()
+		_ = os.Remove(lease.Name())
+		return c
+	}
+	c.lease = lease
 	c.dir = dir
 	if b.weight > 0 {
 		c.lower("cpu.weight", uint64(b.weight))
@@ -95,39 +113,94 @@ func lowerBoundsAt(selfCgroup, fsRoot string, b bounds) *cgroupBounds {
 			state.Files[f.name] = [2]string{f.was, f.now}
 		}
 	}
-	state.Holders++
+	state.Holders = append(state.Holders, filepath.Base(lease.Name()))
 	if err := writeBoundsState(path, state); err != nil {
 		for _, f := range c.lowered {
 			_ = writeCgroupFile(dir, f.name, f.was)
 		}
+		_ = lease.Close()
+		_ = os.Remove(lease.Name())
+		c.lease = nil
 		c.dir = ""
 	}
 	return c
 }
 
-// The flock protects both the interfaces and this cross-process holder count.
+// The cgroup flock protects the interfaces and ledger; each holder has a
+// separate kernel-held lease, automatically unlocked even on SIGKILL.
 // State lives outside cgroupfs, which cannot contain ordinary files.
 type boundsState struct {
-	Holders int
+	Holders []string
 	Files   map[string][2]string
+}
+
+func boundsStateRoot() (string, error) {
+	root := filepath.Join(os.TempDir(), fmt.Sprintf("reliant-heavy-bounds-%d", os.Geteuid()))
+	if err := os.Mkdir(root, 0o700); err != nil && !os.IsExist(err) {
+		return "", err
+	}
+	// Lstat must not accept a symlink, even one pointing to a private directory.
+	info, err := os.Lstat(root)
+	if err != nil {
+		return "", err
+	}
+	var st unix.Stat_t
+	if err := unix.Lstat(root, &st); err != nil {
+		return "", err
+	}
+	if !info.IsDir() || info.Mode().Perm() != 0o700 || st.Uid != uint32(os.Geteuid()) {
+		return "", fmt.Errorf("untrusted bounds directory %s", root)
+	}
+	return root, nil
 }
 
 func readBoundsState(dir string) (boundsState, string, error) {
 	state := boundsState{Files: make(map[string][2]string)}
-	root := filepath.Join(os.TempDir(), fmt.Sprintf("reliant-heavy-bounds-%d", os.Getuid()))
-	if err := os.MkdirAll(root, 0o700); err != nil {
+	root, err := boundsStateRoot()
+	if err != nil {
 		return state, "", err
 	}
 	path := filepath.Join(root, fmt.Sprintf("%x.json", sha256.Sum256([]byte(dir))))
-	data, err := os.ReadFile(path)
+	fd, err := unix.Open(path, unix.O_RDONLY|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0)
 	if os.IsNotExist(err) {
 		return state, path, nil
 	}
 	if err != nil {
 		return state, path, err
 	}
-	err = json.Unmarshal(data, &state)
-	return state, path, err
+	f := os.NewFile(uintptr(fd), path)
+	defer f.Close()
+	if err := json.NewDecoder(f).Decode(&state); err != nil {
+		return state, path, err
+	}
+	if state.Files == nil {
+		state.Files = make(map[string][2]string)
+	}
+	live := state.Holders[:0]
+	for _, name := range state.Holders {
+		if filepath.Base(name) != name || !strings.HasPrefix(name, "holder-") {
+			return state, path, fmt.Errorf("invalid bounds lease %q", name)
+		}
+		leasePath := filepath.Join(root, name)
+		fd, err := unix.Open(leasePath, unix.O_RDONLY|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0)
+		if os.IsNotExist(err) {
+			continue
+		}
+		if err != nil {
+			return state, path, err
+		}
+		err = unix.Flock(fd, unix.LOCK_EX|unix.LOCK_NB)
+		_ = unix.Close(fd)
+		if err == unix.EWOULDBLOCK {
+			live = append(live, name)
+		} else if err != nil {
+			return state, path, err
+		} else {
+			_ = os.Remove(leasePath)
+		}
+	}
+	state.Holders = live
+	return state, path, nil
 }
 
 func writeBoundsState(path string, state boundsState) error {
@@ -135,11 +208,22 @@ func writeBoundsState(path string, state boundsState) error {
 	if err != nil {
 		return err
 	}
-	// Rename under the lock so an interrupted write cannot truncate the ledger.
-	if err := os.WriteFile(path+".tmp", data, 0o600); err != nil {
+	// CreateTemp uses O_EXCL: neither a pre-planted symlink nor an interrupted
+	// writer's temporary file can be followed or truncated.
+	f, err := os.CreateTemp(filepath.Dir(path), ".bounds-*")
+	if err != nil {
 		return err
 	}
-	return os.Rename(path+".tmp", path)
+	defer os.Remove(f.Name())
+	_, writeErr := f.Write(data)
+	closeErr := f.Close()
+	if writeErr != nil {
+		return writeErr
+	}
+	if closeErr != nil {
+		return closeErr
+	}
+	return os.Rename(f.Name(), path)
 }
 
 // lower writes want to dir's interface file name when it reads higher ("max"
@@ -186,25 +270,33 @@ func (c *cgroupBounds) release() {
 		return
 	}
 	defer unlock()
+	if c.lease != nil {
+		_ = c.lease.Close()
+		_ = os.Remove(c.lease.Name())
+		c.lease = nil
+	}
 	state, path, err := readBoundsState(c.dir)
-	if err != nil || state.Holders < 1 {
+	if err != nil {
 		return
 	}
-	state.Holders--
-	if state.Holders > 0 {
+	if len(state.Holders) > 0 {
 		if writeBoundsState(path, state) == nil {
 			c.dir = ""
 		}
 		return
 	}
-	for name, values := range state.Files {
-		data, err := os.ReadFile(filepath.Join(c.dir, name))
-		if err != nil || strings.TrimSpace(string(data)) != values[1] {
-			continue
-		}
-		_ = writeCgroupFile(c.dir, name, values[0])
-	}
+	restoreBounds(c.dir, state)
 	_ = os.Remove(path)
 	c.dir = ""
 	c.lowered = nil
+}
+
+func restoreBounds(dir string, state boundsState) {
+	for name, values := range state.Files {
+		data, err := os.ReadFile(filepath.Join(dir, name))
+		if err != nil || strings.TrimSpace(string(data)) != values[1] {
+			continue
+		}
+		_ = writeCgroupFile(dir, name, values[0])
+	}
 }

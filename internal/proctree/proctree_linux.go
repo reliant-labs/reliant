@@ -76,7 +76,9 @@ func New(cfg Config) *Limiter {
 		logging.Warn("proctree: cannot enable the cpu controller for command cgroups; heavy commands are bounded by GOMAXPROCS alone", "error", err)
 	}
 	// Separately from cpu: a machine that delegates one and not the other
-	// keeps the one it has.
+	// keeps the one it has. RELIANT_HEAVY_MEMORY_HIGH=off does NOT undo
+	// controller adoption; see dev-docs/heavy-bounds-rollout.md for the
+	// daemon rollback and hierarchy recreation required for that.
 	if err := enableController(l.root, l.commands, "memory"); err != nil {
 		logging.Warn("proctree: cannot enable the memory controller for command cgroups; heavy commands run without a memory bound", "error", err)
 	}
