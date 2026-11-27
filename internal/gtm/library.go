@@ -60,14 +60,6 @@ func bankBusinessModel(m BusinessModel) string {
 	return toSlug(businessModelPrefix, string(m))
 }
 
-func bankBusinessModels(ms []BusinessModel) []string {
-	out := make([]string, 0, len(ms))
-	for _, m := range ms {
-		out = append(out, bankBusinessModel(m))
-	}
-	return out
-}
-
 // libraryEntry is a bank entry in domain terms.
 func libraryEntry(e library.Entry) LibraryEntry {
 	out := LibraryEntry{

@@ -31,15 +31,15 @@ func TestPGStoreR2(t *testing.T) {
 	t.Run("channels seed once, keys are unique per org", func(t *testing.T) {
 		res, err := svc.ListChannels(ctx, person, ListChannelsInput{})
 		require.NoError(t, err)
-		require.Len(t, res.Channels, len(DefaultChannels))
+		require.Len(t, res.Channels, len(DefaultChannels()))
 		again, err := svc.ListChannels(ctx, person, ListChannelsInput{})
 		require.NoError(t, err)
-		assert.Len(t, again.Channels, len(DefaultChannels))
-		rows := []*store.GtmChannel{seededChannelRow(orgA, DefaultChannels[0], now)}
+		assert.Len(t, again.Channels, len(DefaultChannels()))
+		rows := []*store.GtmChannel{seededChannelRow(orgA, DefaultChannels()[0], now)}
 		require.NoError(t, st.InTx(ctx, func(ctx context.Context) error { return st.SeedChannels(ctx, rows) }), "a re-seed skips held keys")
 		n, err := st.CountChannels(ctx, orgA)
 		require.NoError(t, err)
-		assert.Equal(t, int64(len(DefaultChannels)), n)
+		assert.Equal(t, int64(len(DefaultChannels())), n)
 
 		_, err = svc.CreateChannel(ctx, person, CreateChannelInput{Key: "blog", Name: "Blog", Mode: ChannelManual})
 		require.ErrorIs(t, err, ErrChannelExists)

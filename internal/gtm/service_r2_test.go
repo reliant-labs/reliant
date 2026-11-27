@@ -345,7 +345,7 @@ func TestChannels(t *testing.T) {
 		f := newFixture(t)
 		res, err := f.svc.ListChannels(ctx(), person, ListChannelsInput{})
 		require.NoError(t, err)
-		require.Len(t, res.Channels, len(DefaultChannels))
+		require.Len(t, res.Channels, len(DefaultChannels()))
 		keys := []string{}
 		for _, ch := range res.Channels {
 			keys = append(keys, ch.Key)
@@ -354,7 +354,7 @@ func TestChannels(t *testing.T) {
 			assert.Equal(t, ChannelActive, ch.Status)
 		}
 		assert.Equal(t, []string{"blog", "email", "hacker-news", "linkedin", "reddit", "x", "youtube"}, keys)
-		for _, d := range DefaultChannels {
+		for _, d := range DefaultChannels() {
 			assert.Equal(t, d.ChannelTypes, f.channel(t, d.Key).ChannelTypes, d.Key)
 		}
 		assert.Equal(t, []string{"forum", "community"}, f.channel(t, "reddit").ChannelTypes)
@@ -371,7 +371,7 @@ func TestChannels(t *testing.T) {
 		assert.Equal(t, 1, f.store.r2().seeds, "seeded once")
 		other, err := f.svc.ListChannels(ctx(), Actor{UserID: "u-b", OrgID: orgB, Kind: ActorPerson}, ListChannelsInput{})
 		require.NoError(t, err)
-		assert.Len(t, other.Channels, len(DefaultChannels), "every org gets its own")
+		assert.Len(t, other.Channels, len(DefaultChannels()), "every org gets its own")
 		manual, err := f.svc.ListChannels(ctx(), person, ListChannelsInput{Mode: ChannelManual})
 		require.NoError(t, err)
 		assert.Len(t, manual.Channels, 6)

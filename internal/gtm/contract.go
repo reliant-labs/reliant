@@ -147,7 +147,7 @@ type Service interface {
 	UpdateStrategy(ctx context.Context, actor Actor, in UpdateStrategyInput) (Strategy, error)
 
 	// ListChannels lists the org's channels by key, seeding the defaults
-	// (DefaultChannels) for an org that has none, idempotently.
+	// (DefaultChannels()) for an org that has none, idempotently.
 	ListChannels(ctx context.Context, actor Actor, in ListChannelsInput) (ListChannelsResult, error)
 	// GetChannel returns one channel, seeding as ListChannels does.
 	GetChannel(ctx context.Context, actor Actor, in GetChannelInput) (Channel, error)
