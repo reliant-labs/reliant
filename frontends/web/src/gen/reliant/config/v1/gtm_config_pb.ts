@@ -5,6 +5,7 @@
 
 import type { GenFile, GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
+import { file_buf_validate_validate } from "../../../buf/validate/validate_pb";
 import { file_forge_v1_forge } from "../../../forge/v1/forge_pb";
 import type { Message } from "@bufbuild/protobuf";
 
@@ -12,7 +13,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file reliant/config/v1/gtm_config.proto.
  */
 export const file_reliant_config_v1_gtm_config: GenFile = /*@__PURE__*/
-  fileDesc("CiJyZWxpYW50L2NvbmZpZy92MS9ndG1fY29uZmlnLnByb3RvEhFyZWxpYW50LmNvbmZpZy52MSK2AgoJR3RtQ29uZmlnEoUBCg9hbGxvd2VkX29yZ19pZHMYASADKAlCbILOGGgKE0dUTV9BTExPV0VEX09SR19JRFMqUUNvbW1hLXNlcGFyYXRlZCBvcmdhbml6YXRpb24gaWRzIEdUTSBpcyBlbmFibGVkIGZvciAobm9uZTogR1RNIGlzIG9mZiBldmVyeXdoZXJlKRKgAQoPYW5hbHl0aWNzX3Rva2VuGAIgASgJQoYBgs4YgQEKE0dUTV9BTkFMWVRJQ1NfVE9LRU4qZkNvbnRyb2wtcGxhbmUgYWNjZXNzIHRva2VuIChvYnM6cmVhZCwgb3JnLWJvdW5kKSBmb3IgR1RNJ3MgcHJvZHVjdC1hbmFseXRpY3MgcmVhZCAodW5zZXQ6IHVuYXZhaWxhYmxlKTABUAFCQFo+Z2l0aHViLmNvbS9yZWxpYW50LWxhYnMvcmVsaWFudC9nZW4vcmVsaWFudC9jb25maWcvdjE7Y29uZmlndjFiBnByb3RvMw", [file_forge_v1_forge]);
+  fileDesc("CiJyZWxpYW50L2NvbmZpZy92MS9ndG1fY29uZmlnLnByb3RvEhFyZWxpYW50LmNvbmZpZy52MSK2AgoJR3RtQ29uZmlnEoUBCg9hbGxvd2VkX29yZ19pZHMYASADKAlCbILOGGgKE0dUTV9BTExPV0VEX09SR19JRFMqUUNvbW1hLXNlcGFyYXRlZCBvcmdhbml6YXRpb24gaWRzIEdUTSBpcyBlbmFibGVkIGZvciAobm9uZTogR1RNIGlzIG9mZiBldmVyeXdoZXJlKRKgAQoPYW5hbHl0aWNzX3Rva2VuGAIgASgJQoYBgs4YgQEKE0dUTV9BTkFMWVRJQ1NfVE9LRU4qZkNvbnRyb2wtcGxhbmUgYWNjZXNzIHRva2VuIChvYnM6cmVhZCwgb3JnLWJvdW5kKSBmb3IgR1RNJ3MgcHJvZHVjdC1hbmFseXRpY3MgcmVhZCAodW5zZXQ6IHVuYXZhaWxhYmxlKTABUAEizAkKD0d0bUFzc2V0c0NvbmZpZxJ5CghlbmRwb2ludBgBIAEoCUJngs4YYwoTR1RNX0FTU0VUU19FTkRQT0lOVCpMR1RNIGFzc2V0cyBidWNrZXQ6IHRoZSBTMyBBUEkgYmFzZSBVUkwgdGhpcyBwcm9jZXNzIGRpYWxzIChmb3JnZS5idWNrZXRfZW52KRKrAQoPcHVibGljX2VuZHBvaW50GAIgASgJQpEBgs4YjAEKGkdUTV9BU1NFVFNfUFVCTElDX0VORFBPSU5UKm5HVE0gYXNzZXRzIGJ1Y2tldDogdGhlIFMzIEFQSSBiYXNlIFVSTCBhIGJyb3dzZXIgcmVhY2hlcywgd2hlbiBpdCBkaWZmZXJzIGZyb20gdGhlIGVuZHBvaW50IChmb3JnZS5idWNrZXRfZW52KRJnCgZyZWdpb24YAyABKAlCV4LOGFMKEUdUTV9BU1NFVFNfUkVHSU9OKj5HVE0gYXNzZXRzIGJ1Y2tldDogcmVnaW9uIChmb3JnZS5idWNrZXRfZW52OyB1bnNldDogdXMtZWFzdC0xKRJyCgZidWNrZXQYBCABKAlCYoLOGF4KEUdUTV9BU1NFVFNfQlVDS0VUKklHVE0gYXNzZXRzIGJ1Y2tldDogaXRzIG5hbWUgKGZvcmdlLmJ1Y2tldF9lbnY7IHVuc2V0OiBHVE0gYXNzZXRzIGFyZSBvZmYpEnEKDWFjY2Vzc19rZXlfaWQYBSABKAlCWoLOGFYKGEdUTV9BU1NFVFNfQUNDRVNTX0tFWV9JRCo2R1RNIGFzc2V0cyBidWNrZXQ6IFMzIGFjY2VzcyBrZXkgaWQgKGZvcmdlLmJ1Y2tldF9lbnYpMAFQARJ9ChFzZWNyZXRfYWNjZXNzX2tleRgGIAEoCUJigs4YXgocR1RNX0FTU0VUU19TRUNSRVRfQUNDRVNTX0tFWSo6R1RNIGFzc2V0cyBidWNrZXQ6IFMzIHNlY3JldCBhY2Nlc3Mga2V5IChmb3JnZS5idWNrZXRfZW52KTABUAESfAoKcGF0aF9zdHlsZRgHIAEoCEJogs4YZAoVR1RNX0FTU0VUU19QQVRIX1NUWUxFKktHVE0gYXNzZXRzIGJ1Y2tldDogcGF0aC1zdHlsZSBhZGRyZXNzaW5nIChmb3JnZS5idWNrZXRfZW52OyBNaW5JTyBuZWVkcyBpdCk69gG6SPIBGu8BChpndG1fYXNzZXRzX2J1Y2tldF9jb21wbGV0ZRJpR1RNX0FTU0VUU19CVUNLRVQgcmVxdWlyZXMgR1RNX0FTU0VUU19FTkRQT0lOVCwgR1RNX0FTU0VUU19BQ0NFU1NfS0VZX0lEIGFuZCBHVE1fQVNTRVRTX1NFQ1JFVF9BQ0NFU1NfS0VZGmZ0aGlzLmJ1Y2tldCA9PSAnJyB8fCAodGhpcy5lbmRwb2ludCAhPSAnJyAmJiB0aGlzLmFjY2Vzc19rZXlfaWQgIT0gJycgJiYgdGhpcy5zZWNyZXRfYWNjZXNzX2tleSAhPSAnJylKBAgIEAlKBAgJEApKBAgKEAtSD21heF9hc3NldF9ieXRlc1IWbWF4X2NvcGllZF9hc3NldF9ieXRlc1IPb3JnX3F1b3RhX2J5dGVzQkBaPmdpdGh1Yi5jb20vcmVsaWFudC1sYWJzL3JlbGlhbnQvZ2VuL3JlbGlhbnQvY29uZmlnL3YxO2NvbmZpZ3YxYgZwcm90bzM", [file_buf_validate_validate, file_forge_v1_forge]);
 
 /**
  * GtmConfig is who gets GTM (the go-to-market workspace) and how its
@@ -53,4 +54,81 @@ export type GtmConfig = Message<"reliant.config.v1.GtmConfig"> & {
  */
 export const GtmConfigSchema: GenMessage<GtmConfig> = /*@__PURE__*/
   messageDesc(file_reliant_config_v1_gtm_config, 0);
+
+/**
+ * GtmAssetsConfig is the bucket GTM's assets (the files attached to items and
+ * campaigns) live in. Their size and quota limits are internal/gtm's
+ * constants (MaxAssetBytes, MaxCopiedAssetBytes, MaxOrgAssetBytes), not
+ * settings. It is composed on ServerProcessConfig as gtm_assets (a block of
+ * its own: forge projects one level of config blocks), which every server
+ * role loads, but only the roles whose graph reads it (the API server and the
+ * worker) reach it, so no other role's env carries the bucket's credentials
+ * (pkg/config's gateway reach test). internal/gtm/assetstore opens it
+ * (assetstore.StoreFromConfig).
+ *
+ * Its leaves are forge/pkg/blobstore's S3Config, named as
+ * `forge.bucket_env("GTM_ASSETS", "gtm-assets")` names them, so a workload
+ * that binds that env reads the bucket with no other wiring: the dev MinIO,
+ * or in prod an S3-compatible bucket (GCS through an HMAC key). With no
+ * bucket, assets are off: every byte-touching GTM asset call fails closed
+ * (Unavailable), and nothing else changes.
+ *
+ * @generated from message reliant.config.v1.GtmAssetsConfig
+ */
+export type GtmAssetsConfig = Message<"reliant.config.v1.GtmAssetsConfig"> & {
+  /**
+   * The S3 API's base URL as this process reaches it, scheme included.
+   *
+   * @generated from field: string endpoint = 1;
+   */
+  endpoint: string;
+
+  /**
+   * The base URL a browser reaches the same service at, when it differs:
+   * presigned URLs are signed for this host. Unset: endpoint.
+   *
+   * @generated from field: string public_endpoint = 2;
+   */
+  publicEndpoint: string;
+
+  /**
+   * The bucket's region. Unset: us-east-1 (what MinIO and GCS accept).
+   *
+   * @generated from field: string region = 3;
+   */
+  region: string;
+
+  /**
+   * The bucket's real name. Unset: GTM assets are off.
+   *
+   * @generated from field: string bucket = 4;
+   */
+  bucket: string;
+
+  /**
+   * The S3 credentials (an HMAC key for GCS). Both are needed with a bucket.
+   *
+   * @generated from field: string access_key_id = 5;
+   */
+  accessKeyId: string;
+
+  /**
+   * @generated from field: string secret_access_key = 6;
+   */
+  secretAccessKey: string;
+
+  /**
+   * Address the bucket as <endpoint>/<bucket>/<key>; MinIO needs it.
+   *
+   * @generated from field: bool path_style = 7;
+   */
+  pathStyle: boolean;
+};
+
+/**
+ * Describes the message reliant.config.v1.GtmAssetsConfig.
+ * Use `create(GtmAssetsConfigSchema)` to create a new message.
+ */
+export const GtmAssetsConfigSchema: GenMessage<GtmAssetsConfig> = /*@__PURE__*/
+  messageDesc(file_reliant_config_v1_gtm_config, 1);
 

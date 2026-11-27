@@ -7,6 +7,7 @@
 package configv1
 
 import (
+	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	_ "github.com/reliant-labs/forge/pkg/forgepb"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
@@ -89,16 +90,151 @@ func (x *GtmConfig) GetAnalyticsToken() string {
 	return ""
 }
 
+// GtmAssetsConfig is the bucket GTM's assets (the files attached to items and
+// campaigns) live in. Their size and quota limits are internal/gtm's
+// constants (MaxAssetBytes, MaxCopiedAssetBytes, MaxOrgAssetBytes), not
+// settings. It is composed on ServerProcessConfig as gtm_assets (a block of
+// its own: forge projects one level of config blocks), which every server
+// role loads, but only the roles whose graph reads it (the API server and the
+// worker) reach it, so no other role's env carries the bucket's credentials
+// (pkg/config's gateway reach test). internal/gtm/assetstore opens it
+// (assetstore.StoreFromConfig).
+//
+// Its leaves are forge/pkg/blobstore's S3Config, named as
+// `forge.bucket_env("GTM_ASSETS", "gtm-assets")` names them, so a workload
+// that binds that env reads the bucket with no other wiring: the dev MinIO,
+// or in prod an S3-compatible bucket (GCS through an HMAC key). With no
+// bucket, assets are off: every byte-touching GTM asset call fails closed
+// (Unavailable), and nothing else changes.
+type GtmAssetsConfig struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The S3 API's base URL as this process reaches it, scheme included.
+	Endpoint string `protobuf:"bytes,1,opt,name=endpoint,proto3" json:"endpoint,omitempty"`
+	// The base URL a browser reaches the same service at, when it differs:
+	// presigned URLs are signed for this host. Unset: endpoint.
+	PublicEndpoint string `protobuf:"bytes,2,opt,name=public_endpoint,json=publicEndpoint,proto3" json:"public_endpoint,omitempty"`
+	// The bucket's region. Unset: us-east-1 (what MinIO and GCS accept).
+	Region string `protobuf:"bytes,3,opt,name=region,proto3" json:"region,omitempty"`
+	// The bucket's real name. Unset: GTM assets are off.
+	Bucket string `protobuf:"bytes,4,opt,name=bucket,proto3" json:"bucket,omitempty"`
+	// The S3 credentials (an HMAC key for GCS). Both are needed with a bucket.
+	AccessKeyId     string `protobuf:"bytes,5,opt,name=access_key_id,json=accessKeyId,proto3" json:"access_key_id,omitempty"`
+	SecretAccessKey string `protobuf:"bytes,6,opt,name=secret_access_key,json=secretAccessKey,proto3" json:"secret_access_key,omitempty"`
+	// Address the bucket as <endpoint>/<bucket>/<key>; MinIO needs it.
+	PathStyle     bool `protobuf:"varint,7,opt,name=path_style,json=pathStyle,proto3" json:"path_style,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GtmAssetsConfig) Reset() {
+	*x = GtmAssetsConfig{}
+	mi := &file_reliant_config_v1_gtm_config_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GtmAssetsConfig) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GtmAssetsConfig) ProtoMessage() {}
+
+func (x *GtmAssetsConfig) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_config_v1_gtm_config_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GtmAssetsConfig.ProtoReflect.Descriptor instead.
+func (*GtmAssetsConfig) Descriptor() ([]byte, []int) {
+	return file_reliant_config_v1_gtm_config_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *GtmAssetsConfig) GetEndpoint() string {
+	if x != nil {
+		return x.Endpoint
+	}
+	return ""
+}
+
+func (x *GtmAssetsConfig) GetPublicEndpoint() string {
+	if x != nil {
+		return x.PublicEndpoint
+	}
+	return ""
+}
+
+func (x *GtmAssetsConfig) GetRegion() string {
+	if x != nil {
+		return x.Region
+	}
+	return ""
+}
+
+func (x *GtmAssetsConfig) GetBucket() string {
+	if x != nil {
+		return x.Bucket
+	}
+	return ""
+}
+
+func (x *GtmAssetsConfig) GetAccessKeyId() string {
+	if x != nil {
+		return x.AccessKeyId
+	}
+	return ""
+}
+
+func (x *GtmAssetsConfig) GetSecretAccessKey() string {
+	if x != nil {
+		return x.SecretAccessKey
+	}
+	return ""
+}
+
+func (x *GtmAssetsConfig) GetPathStyle() bool {
+	if x != nil {
+		return x.PathStyle
+	}
+	return false
+}
+
 var File_reliant_config_v1_gtm_config_proto protoreflect.FileDescriptor
 
 const file_reliant_config_v1_gtm_config_proto_rawDesc = "" +
 	"\n" +
-	"\"reliant/config/v1/gtm_config.proto\x12\x11reliant.config.v1\x1a\x14forge/v1/forge.proto\"\xd5\x02\n" +
+	"\"reliant/config/v1/gtm_config.proto\x12\x11reliant.config.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\"\xd5\x02\n" +
 	"\tGtmConfig\x12\x94\x01\n" +
 	"\x0fallowed_org_ids\x18\x01 \x03(\tBl\x82\xce\x18h\n" +
 	"\x13GTM_ALLOWED_ORG_IDS*QComma-separated organization ids GTM is enabled for (none: GTM is off everywhere)R\rallowedOrgIds\x12\xb0\x01\n" +
 	"\x0fanalytics_token\x18\x02 \x01(\tB\x86\x01\x82\xce\x18\x81\x01\n" +
-	"\x13GTM_ANALYTICS_TOKEN*fControl-plane access token (obs:read, org-bound) for GTM's product-analytics read (unset: unavailable)0\x01P\x01R\x0eanalyticsTokenB@Z>github.com/reliant-labs/reliant/gen/reliant/config/v1;configv1b\x06proto3"
+	"\x13GTM_ANALYTICS_TOKEN*fControl-plane access token (obs:read, org-bound) for GTM's product-analytics read (unset: unavailable)0\x01P\x01R\x0eanalyticsToken\"\xa2\n" +
+	"\n" +
+	"\x0fGtmAssetsConfig\x12\x83\x01\n" +
+	"\bendpoint\x18\x01 \x01(\tBg\x82\xce\x18c\n" +
+	"\x13GTM_ASSETS_ENDPOINT*LGTM assets bucket: the S3 API base URL this process dials (forge.bucket_env)R\bendpoint\x12\xbb\x01\n" +
+	"\x0fpublic_endpoint\x18\x02 \x01(\tB\x91\x01\x82\xce\x18\x8c\x01\n" +
+	"\x1aGTM_ASSETS_PUBLIC_ENDPOINT*nGTM assets bucket: the S3 API base URL a browser reaches, when it differs from the endpoint (forge.bucket_env)R\x0epublicEndpoint\x12o\n" +
+	"\x06region\x18\x03 \x01(\tBW\x82\xce\x18S\n" +
+	"\x11GTM_ASSETS_REGION*>GTM assets bucket: region (forge.bucket_env; unset: us-east-1)R\x06region\x12z\n" +
+	"\x06bucket\x18\x04 \x01(\tBb\x82\xce\x18^\n" +
+	"\x11GTM_ASSETS_BUCKET*IGTM assets bucket: its name (forge.bucket_env; unset: GTM assets are off)R\x06bucket\x12~\n" +
+	"\raccess_key_id\x18\x05 \x01(\tBZ\x82\xce\x18V\n" +
+	"\x18GTM_ASSETS_ACCESS_KEY_ID*6GTM assets bucket: S3 access key id (forge.bucket_env)0\x01P\x01R\vaccessKeyId\x12\x8e\x01\n" +
+	"\x11secret_access_key\x18\x06 \x01(\tBb\x82\xce\x18^\n" +
+	"\x1cGTM_ASSETS_SECRET_ACCESS_KEY*:GTM assets bucket: S3 secret access key (forge.bucket_env)0\x01P\x01R\x0fsecretAccessKey\x12\x87\x01\n" +
+	"\n" +
+	"path_style\x18\a \x01(\bBh\x82\xce\x18d\n" +
+	"\x15GTM_ASSETS_PATH_STYLE*KGTM assets bucket: path-style addressing (forge.bucket_env; MinIO needs it)R\tpathStyle:\xf6\x01\xbaH\xf2\x01\x1a\xef\x01\n" +
+	"\x1agtm_assets_bucket_complete\x12iGTM_ASSETS_BUCKET requires GTM_ASSETS_ENDPOINT, GTM_ASSETS_ACCESS_KEY_ID and GTM_ASSETS_SECRET_ACCESS_KEY\x1afthis.bucket == '' || (this.endpoint != '' && this.access_key_id != '' && this.secret_access_key != '')J\x04\b\b\x10\tJ\x04\b\t\x10\n" +
+	"J\x04\b\n" +
+	"\x10\vR\x0fmax_asset_bytesR\x16max_copied_asset_bytesR\x0forg_quota_bytesB@Z>github.com/reliant-labs/reliant/gen/reliant/config/v1;configv1b\x06proto3"
 
 var (
 	file_reliant_config_v1_gtm_config_proto_rawDescOnce sync.Once
@@ -112,9 +248,10 @@ func file_reliant_config_v1_gtm_config_proto_rawDescGZIP() []byte {
 	return file_reliant_config_v1_gtm_config_proto_rawDescData
 }
 
-var file_reliant_config_v1_gtm_config_proto_msgTypes = make([]protoimpl.MessageInfo, 1)
+var file_reliant_config_v1_gtm_config_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
 var file_reliant_config_v1_gtm_config_proto_goTypes = []any{
-	(*GtmConfig)(nil), // 0: reliant.config.v1.GtmConfig
+	(*GtmConfig)(nil),       // 0: reliant.config.v1.GtmConfig
+	(*GtmAssetsConfig)(nil), // 1: reliant.config.v1.GtmAssetsConfig
 }
 var file_reliant_config_v1_gtm_config_proto_depIdxs = []int32{
 	0, // [0:0] is the sub-list for method output_type
@@ -135,7 +272,7 @@ func file_reliant_config_v1_gtm_config_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_reliant_config_v1_gtm_config_proto_rawDesc), len(file_reliant_config_v1_gtm_config_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   1,
+			NumMessages:   2,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

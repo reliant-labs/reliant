@@ -2,6 +2,7 @@ syntax = "proto3";
 
 package reliant.config.v1;
 
+import "buf/validate/validate.proto";
 import "forge/v1/forge.proto";
 
 option go_package = "github.com/reliant-labs/reliant/gen/reliant/config/v1;configv1";
@@ -33,4 +34,72 @@ message GtmConfig {
     optional: true
     description: "Control-plane access token (obs:read, org-bound) for GTM's product-analytics read (unset: unavailable)"
   }];
+}
+
+// GtmAssetsConfig is the bucket GTM's assets (the files attached to items and
+// campaigns) live in. Their size and quota limits are internal/gtm's
+// constants (MaxAssetBytes, MaxCopiedAssetBytes, MaxOrgAssetBytes), not
+// settings. It is composed on ServerProcessConfig as gtm_assets (a block of
+// its own: forge projects one level of config blocks), which every server
+// role loads, but only the roles whose graph reads it (the API server and the
+// worker) reach it, so no other role's env carries the bucket's credentials
+// (pkg/config's gateway reach test). internal/gtm/assetstore opens it
+// (assetstore.StoreFromConfig).
+//
+// Its leaves are forge/pkg/blobstore's S3Config, named as
+// `forge.bucket_env("GTM_ASSETS", "gtm-assets")` names them, so a workload
+// that binds that env reads the bucket with no other wiring: the dev MinIO,
+// or in prod an S3-compatible bucket (GCS through an HMAC key). With no
+// bucket, assets are off: every byte-touching GTM asset call fails closed
+// (Unavailable), and nothing else changes.
+message GtmAssetsConfig {
+  option (buf.validate.message).cel = {
+    id: "gtm_assets_bucket_complete"
+    message: "GTM_ASSETS_BUCKET requires GTM_ASSETS_ENDPOINT, GTM_ASSETS_ACCESS_KEY_ID and GTM_ASSETS_SECRET_ACCESS_KEY"
+    expression: "this.bucket == '' || (this.endpoint != '' && this.access_key_id != '' && this.secret_access_key != '')"
+  };
+
+  // The S3 API's base URL as this process reaches it, scheme included.
+  string endpoint = 1 [(forge.v1.config) = {
+    env_var: "GTM_ASSETS_ENDPOINT"
+    description: "GTM assets bucket: the S3 API base URL this process dials (forge.bucket_env)"
+  }];
+  // The base URL a browser reaches the same service at, when it differs:
+  // presigned URLs are signed for this host. Unset: endpoint.
+  string public_endpoint = 2 [(forge.v1.config) = {
+    env_var: "GTM_ASSETS_PUBLIC_ENDPOINT"
+    description: "GTM assets bucket: the S3 API base URL a browser reaches, when it differs from the endpoint (forge.bucket_env)"
+  }];
+  // The bucket's region. Unset: us-east-1 (what MinIO and GCS accept).
+  string region = 3 [(forge.v1.config) = {
+    env_var: "GTM_ASSETS_REGION"
+    description: "GTM assets bucket: region (forge.bucket_env; unset: us-east-1)"
+  }];
+  // The bucket's real name. Unset: GTM assets are off.
+  string bucket = 4 [(forge.v1.config) = {
+    env_var: "GTM_ASSETS_BUCKET"
+    description: "GTM assets bucket: its name (forge.bucket_env; unset: GTM assets are off)"
+  }];
+  // The S3 credentials (an HMAC key for GCS). Both are needed with a bucket.
+  string access_key_id = 5 [(forge.v1.config) = {
+    env_var: "GTM_ASSETS_ACCESS_KEY_ID"
+    sensitive: true
+    optional: true
+    description: "GTM assets bucket: S3 access key id (forge.bucket_env)"
+  }];
+  string secret_access_key = 6 [(forge.v1.config) = {
+    env_var: "GTM_ASSETS_SECRET_ACCESS_KEY"
+    sensitive: true
+    optional: true
+    description: "GTM assets bucket: S3 secret access key (forge.bucket_env)"
+  }];
+  // Address the bucket as <endpoint>/<bucket>/<key>; MinIO needs it.
+  bool path_style = 7 [(forge.v1.config) = {
+    env_var: "GTM_ASSETS_PATH_STYLE"
+    description: "GTM assets bucket: path-style addressing (forge.bucket_env; MinIO needs it)"
+  }];
+
+  // Removed: the size and quota limits are internal/gtm's constants.
+  reserved 8, 9, 10;
+  reserved "max_asset_bytes", "max_copied_asset_bytes", "org_quota_bytes";
 }
