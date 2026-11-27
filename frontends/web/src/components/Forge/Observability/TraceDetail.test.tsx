@@ -37,7 +37,7 @@ const span: Span = {
     "gen_ai.tool.call.arguments": "PRIVATE_TOOL_ARGUMENTS",
     "unexpected.sdk.field": "PRIVATE_UNKNOWN_CONTENT",
   },
-  resource: {},
+  resource: { "unexpected.resource.field": "PRIVATE_RESOURCE_CONTENT" },
   events: [{
     name: "PRIVATE_EVENT_NAME",
     timeMs: 1050,
@@ -72,6 +72,7 @@ describe("AI trace detail content safety", () => {
     // The ordinary waterfall remains an explicit way to inspect raw telemetry.
     fireEvent.click(screen.getByTestId("trace-lens-waterfall"));
     expect(screen.getByTestId("span-details").textContent).toContain("PRIVATE_STATUS_CONTENT");
+    expect(screen.getByTestId("span-details").textContent).toContain("PRIVATE_RESOURCE_CONTENT");
     fireEvent.click(screen.getByTestId("trace-lens-steps"));
     expect(container.innerHTML).not.toContain("PRIVATE_");
   });

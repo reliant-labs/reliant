@@ -387,7 +387,7 @@ function SpanDetails({
             </ul>
           </section>
         )}
-        <AttributeTable title="Resource" attributes={span.resource} />
+        {!metadataOnly && <AttributeTable title="Resource" attributes={span.resource} />}
       </div>
     </Card>
   );
