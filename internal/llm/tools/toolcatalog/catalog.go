@@ -15,7 +15,11 @@
 // quietly does nothing.
 package toolcatalog
 
-import "sort"
+import (
+	"sort"
+	"sync/atomic"
+	"testing"
+)
 
 // ToolParams describes one tool's bindable surface.
 type ToolParams struct {
@@ -97,4 +101,45 @@ func BindableNames(toolName string) []string {
 	}
 	sort.Strings(names)
 	return names
+}
+
+// featureGatedOverride replaces generatedFeatureGated for the length of a test
+// (GateForTest); nil uses the generated map.
+var featureGatedOverride atomic.Pointer[map[string]string]
+
+func featureGated() map[string]string {
+	if m := featureGatedOverride.Load(); m != nil {
+		return *m
+	}
+	return generatedFeatureGated
+}
+
+// FeatureGated reports whether a tool exists only for callers entitled to a
+// feature (tools.FeatureGate), and which. Such a tool still validates by its
+// exact name, so an entitled owner's workflow stays valid, but it is never
+// offered as a suggestion: to anyone else it does not exist.
+func FeatureGated(toolName string) (feature string, gated bool) {
+	feature, gated = featureGated()[toolName]
+	return feature, gated
+}
+
+// FeatureGatedTools is every gated tool name with its feature, a copy.
+func FeatureGatedTools() map[string]string {
+	out := make(map[string]string, len(featureGated()))
+	for name, feature := range featureGated() {
+		out[name] = feature
+	}
+	return out
+}
+
+// GateForTest marks toolName as gated behind feature for the length of a
+// test. It swaps process-wide state, so the test must not run in parallel.
+// tools.GateToolForTest calls it, so the registry and the catalog agree.
+func GateForTest(tb testing.TB, toolName, feature string) {
+	tb.Helper()
+	next := FeatureGatedTools()
+	next[toolName] = feature
+	prev := featureGatedOverride.Load()
+	featureGatedOverride.Store(&next)
+	tb.Cleanup(func() { featureGatedOverride.Store(prev) })
 }

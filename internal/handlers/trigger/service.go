@@ -17,6 +17,7 @@ import (
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	reliantv1connect "github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/controlplane"
+	"github.com/reliant-labs/reliant/internal/featuregate"
 	"github.com/reliant-labs/reliant/internal/gitcredentialclient"
 	"github.com/reliant-labs/reliant/internal/triggers"
 	"github.com/reliant-labs/reliant/pkg/config"
@@ -152,6 +153,13 @@ type Deps struct {
 	//
 	// forge:optional-dep
 	OrgRollout *configv1.OrgsConfig
+
+	// Gate decides whether an activation's approval card names a
+	// feature-gated tool (featuregate; tools.FeatureGate): only to an owner
+	// entitled to its feature in the activation's org. Without it no gated
+	// tool is named, exactly as if it did not exist.
+	// forge:optional-dep
+	Gate featuregate.Gate
 }
 
 // OrgGitHubApps names an org's linked GitHub App installations.

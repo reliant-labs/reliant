@@ -242,6 +242,12 @@ func (e *LocalToolExecutor) executeTool(
 
 	// Get tool from factory (project-scoped for MCP tools)
 	tool = toolsFactory.GetToolByName(toolName, toolContext.MCP)
+	// A feature-gated tool the turn's capability set does not entitle (or a
+	// call that carries no set) does not exist for this caller: it is not
+	// found, exactly as a name outside the registry is.
+	if tool != nil && tools.CapabilitiesFrom(ctx).HidesTool(toolName) {
+		tool = nil
+	}
 	if tool == nil {
 		return &ExecutionResult{
 			Success:      false,

@@ -370,6 +370,7 @@ func (g *Graph) newCatalog() (*catalog.Service, error) {
 		InputOptions:       g.InputOptions(),
 		IntegrationMethods: catalog.IntegrationMethodsFrom(g.APIConnections().Service),
 		Orgs:               g.OrgResolver(),
+		Gate:               nil, // optional — no provider
 	})
 }
 
@@ -1284,6 +1285,7 @@ func (g *Graph) newTrigger() (*trigger.Service, error) {
 		OrgGitHubApps: apps,
 		// Binding is off until every replica and the rollback target honour it.
 		OrgRollout: TriggerOrgRollout(g.ApiServerConfig),
+		Gate:       nil, // optional — no provider
 	})
 }
 

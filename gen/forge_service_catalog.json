@@ -58315,6 +58315,11 @@
             {
               "name": "spawn_depth_exhausted",
               "kind": "bool"
+            },
+            {
+              "name": "entitled_features",
+              "kind": "string",
+              "repeated": true
             }
           ],
           "reliant.v1.ToolResultMsg": [
@@ -64869,6 +64874,15 @@
     },
     {
       "consumer": "Catalog",
+      "field": "Gate",
+      "interface": "github.com/reliant-labs/reliant/internal/featuregate.Gate",
+      "methods": [],
+      "candidates": [],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "Catalog",
       "field": "InputOptions",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/catalog.InputOptions",
       "methods": [],
@@ -68317,6 +68331,15 @@
     },
     {
       "consumer": "Trigger",
+      "field": "Gate",
+      "interface": "github.com/reliant-labs/reliant/internal/featuregate.Gate",
+      "methods": [],
+      "candidates": [],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "Trigger",
       "field": "Intake",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/trigger.EventIntake",
       "methods": [],
@@ -69268,6 +69291,14 @@
     },
     {
       "code": "binding_unresolved",
+      "component": "Catalog.Gate",
+      "source": {
+        "path": "internal/handlers/catalog/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
       "component": "ChatTrace.Spans",
       "source": {
         "path": "internal/handlers/chat_trace/service.go",
@@ -69645,6 +69676,14 @@
     {
       "code": "binding_unresolved",
       "component": "Trigger.Fires",
+      "source": {
+        "path": "internal/handlers/trigger/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "Trigger.Gate",
       "source": {
         "path": "internal/handlers/trigger/service.go",
         "symbol": "New"

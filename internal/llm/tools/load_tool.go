@@ -97,7 +97,10 @@ func capabilitiesFor(rctx *rctx.ToolContext) *Capabilities {
 }
 
 // loadTag loads every registry tool carrying tag. Each tool goes through
-// loadTool, so loadable_tools and the permission ladder apply per tool.
+// loadTool, so loadable_tools and the permission ladder apply per tool. A
+// feature-gated tool the run's owner is not entitled to is dropped before the
+// list is built, so it is neither loaded nor named among the refusals: to
+// this caller it does not exist.
 func (t *loadToolTool) loadTag(rctx *rctx.ToolContext, caps *Capabilities, tag string) ToolResponse {
 	if _, known := TagDescriptions[ToolTag(tag)]; !known {
 		known := make([]string, 0, len(TagDescriptions))
@@ -110,6 +113,9 @@ func (t *loadToolTool) loadTag(rctx *rctx.ToolContext, caps *Capabilities, tag s
 
 	var loaded, already, refused, names []string
 	for _, def := range GetToolRegistry() {
+		if caps.notEntitled(def.Name) {
+			continue
+		}
 		for _, dt := range def.Tags {
 			if string(dt) == tag {
 				names = append(names, def.Name)
@@ -229,8 +235,9 @@ func (t *loadToolTool) searchTools(rctx *rctx.ToolContext, caps *Capabilities, q
 // Discovery must agree with enforcement (Capabilities.Searchable): a tool the
 // set could never grant — outside loadable_tools, needing a machine on a
 // no-machine run, an integration the owner has not connected, request_machine
-// anywhere — is left out, because advertising what loading will refuse teaches
-// the model to retry something that cannot work. A tool above the tier stays
+// anywhere, a feature-gated tool the owner is not entitled to — is left out,
+// because advertising what loading will refuse teaches the model to retry
+// something that cannot work. A tool above the tier stays
 // listed with that status, so the agent can tell the user why it cannot have it.
 func SearchTools(query string, caps *Capabilities) []ToolSearchResult {
 	q := strings.ToLower(query)
