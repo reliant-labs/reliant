@@ -1894,7 +1894,7 @@
           "output": "reliant.v1.ListOrphanedAutomationsResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -1904,7 +1904,7 @@
           "output": "reliant.v1.ListTriggerOffersResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -1933,7 +1933,8 @@
             "AuthRequired": true,
             "Errors": null,
             "Custom": true,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.ListOrphanedAutomationsRequest",
             "OutputTypeFQ": "reliant.v1.ListOrphanedAutomationsResponse",
             "InputProtoFile": "reliant/v1/automation_takeover.proto",
@@ -1993,7 +1994,8 @@
             "AuthRequired": true,
             "Errors": null,
             "Custom": true,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.ListTriggerOffersRequest",
             "OutputTypeFQ": "reliant.v1.ListTriggerOffersResponse",
             "InputProtoFile": "reliant/v1/automation_takeover.proto",
@@ -3788,7 +3790,7 @@
           "output": "reliant.v1.ListInputOptionsResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -4018,7 +4020,8 @@
             "ServerStreaming": false,
             "AuthRequired": true,
             "Errors": null,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.ListInputOptionsRequest",
             "OutputTypeFQ": "reliant.v1.ListInputOptionsResponse",
             "InputProtoFile": "reliant/v1/catalog.proto",
@@ -15273,7 +15276,7 @@
           "output": "reliant.v1.GetFileContentResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -15283,7 +15286,7 @@
           "output": "reliant.v1.GetFileMetadataResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -15293,7 +15296,7 @@
           "output": "reliant.v1.GetFilePreviewResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -15303,7 +15306,7 @@
           "output": "reliant.v1.GetFilePreviewInfoResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -15313,7 +15316,7 @@
           "output": "reliant.v1.GetFileTreeResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -15323,7 +15326,7 @@
           "output": "reliant.v1.ListDirectoryResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -15353,7 +15356,7 @@
           "output": "reliant.v1.SearchFilesResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         }
       ],
@@ -15371,7 +15374,8 @@
             "ServerStreaming": false,
             "AuthRequired": true,
             "Errors": null,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.GetFileTreeRequest",
             "OutputTypeFQ": "reliant.v1.GetFileTreeResponse",
             "InputProtoFile": "reliant/v1/filesystem.proto",
@@ -15388,7 +15392,8 @@
             "ServerStreaming": false,
             "AuthRequired": true,
             "Errors": null,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.GetFileContentRequest",
             "OutputTypeFQ": "reliant.v1.GetFileContentResponse",
             "InputProtoFile": "reliant/v1/filesystem.proto",
@@ -15424,7 +15429,8 @@
             "ServerStreaming": false,
             "AuthRequired": true,
             "Errors": null,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.GetFileMetadataRequest",
             "OutputTypeFQ": "reliant.v1.GetFileMetadataResponse",
             "InputProtoFile": "reliant/v1/filesystem.proto",
@@ -15441,7 +15447,8 @@
             "ServerStreaming": false,
             "AuthRequired": true,
             "Errors": null,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.GetFilePreviewInfoRequest",
             "OutputTypeFQ": "reliant.v1.GetFilePreviewInfoResponse",
             "InputProtoFile": "reliant/v1/filesystem.proto",
@@ -15458,7 +15465,8 @@
             "ServerStreaming": false,
             "AuthRequired": true,
             "Errors": null,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.GetFilePreviewRequest",
             "OutputTypeFQ": "reliant.v1.GetFilePreviewResponse",
             "InputProtoFile": "reliant/v1/filesystem.proto",
@@ -15532,7 +15540,8 @@
             "ServerStreaming": false,
             "AuthRequired": true,
             "Errors": null,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.SearchFilesRequest",
             "OutputTypeFQ": "reliant.v1.SearchFilesResponse",
             "InputProtoFile": "reliant/v1/filesystem.proto",
@@ -15568,7 +15577,8 @@
             "ServerStreaming": false,
             "AuthRequired": true,
             "Errors": null,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.ListDirectoryRequest",
             "OutputTypeFQ": "reliant.v1.ListDirectoryResponse",
             "InputProtoFile": "reliant/v1/filesystem.proto",
@@ -16969,7 +16979,7 @@
           "output": "reliant.v1.GetForgeEnvShapeResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -16979,7 +16989,7 @@
           "output": "reliant.v1.GetForgeEnvStatusResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -16989,7 +16999,7 @@
           "output": "reliant.v1.GetForgeTopologyResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -16999,7 +17009,7 @@
           "output": "reliant.v1.ListForgeSecretsResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -17067,7 +17077,8 @@
             "ServerStreaming": false,
             "AuthRequired": true,
             "Errors": null,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.GetForgeTopologyRequest",
             "OutputTypeFQ": "reliant.v1.GetForgeTopologyResponse",
             "InputProtoFile": "reliant/v1/forge.proto",
@@ -17103,7 +17114,8 @@
             "ServerStreaming": false,
             "AuthRequired": true,
             "Errors": null,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.ListForgeSecretsRequest",
             "OutputTypeFQ": "reliant.v1.ListForgeSecretsResponse",
             "InputProtoFile": "reliant/v1/forge.proto",
@@ -17120,7 +17132,8 @@
             "ServerStreaming": false,
             "AuthRequired": true,
             "Errors": null,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.GetForgeEnvStatusRequest",
             "OutputTypeFQ": "reliant.v1.GetForgeEnvStatusResponse",
             "InputProtoFile": "reliant/v1/forge.proto",
@@ -17137,7 +17150,8 @@
             "ServerStreaming": false,
             "AuthRequired": true,
             "Errors": null,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.GetForgeEnvShapeRequest",
             "OutputTypeFQ": "reliant.v1.GetForgeEnvShapeResponse",
             "InputProtoFile": "reliant/v1/forge.proto",
@@ -19759,7 +19773,7 @@
           "output": "reliant.v1.GetServerToolsResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -19893,7 +19907,8 @@
             "ServerStreaming": false,
             "AuthRequired": true,
             "Errors": null,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.GetServerToolsRequest",
             "OutputTypeFQ": "reliant.v1.GetServerToolsResponse",
             "InputProtoFile": "reliant/v1/mcp.proto",
@@ -26765,7 +26780,7 @@
           "output": "reliant.v1.GetProjectResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -27115,7 +27130,8 @@
             "AuthRequired": true,
             "Errors": null,
             "Custom": true,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.GetProjectRequest",
             "OutputTypeFQ": "reliant.v1.GetProjectResponse",
             "InputProtoFile": "reliant/v1/project.proto",
@@ -35041,7 +35057,7 @@
           "output": "reliant.v1.GetConfigHealthResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -35891,7 +35907,8 @@
             "ServerStreaming": false,
             "AuthRequired": true,
             "Errors": null,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.GetConfigHealthRequest",
             "OutputTypeFQ": "reliant.v1.GetConfigHealthResponse",
             "InputProtoFile": "reliant/v1/settings.proto",
@@ -38663,7 +38680,7 @@
           "output": "reliant.v1.ListSharedWorkflowDraftsResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -38835,7 +38852,8 @@
             "AuthRequired": true,
             "Errors": null,
             "Custom": true,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.ListSharedWorkflowDraftsRequest",
             "OutputTypeFQ": "reliant.v1.ListSharedWorkflowDraftsResponse",
             "InputProtoFile": "reliant/v1/sharing.proto",
@@ -53730,7 +53748,7 @@
           "output": "reliant.v1.GetWorktreeChangesResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -53740,7 +53758,7 @@
           "output": "reliant.v1.GetWorktreeCommitsResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -53750,7 +53768,7 @@
           "output": "reliant.v1.GetWorktreeGitStatusResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -53760,7 +53778,7 @@
           "output": "reliant.v1.GetWorktreePRResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -53800,7 +53818,7 @@
           "output": "reliant.v1.ListWorktreeRepoStatusesResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -53810,7 +53828,7 @@
           "output": "reliant.v1.ListWorktreesResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -54013,7 +54031,8 @@
             "AuthRequired": true,
             "Errors": null,
             "Custom": true,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.ListWorktreesRequest",
             "OutputTypeFQ": "reliant.v1.ListWorktreesResponse",
             "InputProtoFile": "reliant/v1/worktree.proto",
@@ -54235,7 +54254,8 @@
             "ServerStreaming": false,
             "AuthRequired": true,
             "Errors": null,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.GetWorktreeChangesRequest",
             "OutputTypeFQ": "reliant.v1.GetWorktreeChangesResponse",
             "InputProtoFile": "reliant/v1/worktree.proto",
@@ -54252,7 +54272,8 @@
             "ServerStreaming": false,
             "AuthRequired": true,
             "Errors": null,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.GetWorktreeGitStatusRequest",
             "OutputTypeFQ": "reliant.v1.GetWorktreeGitStatusResponse",
             "InputProtoFile": "reliant/v1/worktree.proto",
@@ -54269,7 +54290,8 @@
             "ServerStreaming": false,
             "AuthRequired": true,
             "Errors": null,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.GetWorktreeCommitsRequest",
             "OutputTypeFQ": "reliant.v1.GetWorktreeCommitsResponse",
             "InputProtoFile": "reliant/v1/worktree.proto",
@@ -54286,7 +54308,8 @@
             "ServerStreaming": false,
             "AuthRequired": true,
             "Errors": null,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.ListWorktreeRepoStatusesRequest",
             "OutputTypeFQ": "reliant.v1.ListWorktreeRepoStatusesResponse",
             "InputProtoFile": "reliant/v1/worktree.proto",
@@ -54425,7 +54448,8 @@
             "ServerStreaming": false,
             "AuthRequired": true,
             "Errors": null,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.GetWorktreePRRequest",
             "OutputTypeFQ": "reliant.v1.GetWorktreePRResponse",
             "InputProtoFile": "reliant/v1/worktree.proto",
