@@ -72,20 +72,29 @@ func New(cfg Config) *Limiter {
 	}
 	l.commands = commands
 	sweep(l.commands, false)
-	if err := enableCPU(l.root, l.commands); err != nil {
+	if err := enableController(l.root, l.commands, "cpu"); err != nil {
 		logging.Warn("proctree: cannot enable the cpu controller for command cgroups; heavy commands are bounded by GOMAXPROCS alone", "error", err)
+	}
+	// Separately from cpu: a machine that delegates one and not the other
+	// keeps the one it has. RELIANT_HEAVY_MEMORY_HIGH=off does NOT undo
+	// controller adoption; see dev-docs/heavy-bounds-rollout.md for the
+	// daemon rollback and hierarchy recreation required for that.
+	if err := enableController(l.root, l.commands, "memory"); err != nil {
+		logging.Warn("proctree: cannot enable the memory controller for command cgroups; heavy commands run without a memory bound", "error", err)
 	}
 	return l
 }
 
-// enableCPU enables the cpu controller for the command cgroups, so a heavy
-// command's slot wrapper can enable it in turn for a cgroup it makes under
-// its command cgroup, and cap that at its CPU share (cpu.max,
-// internal/heavyjob). Both levels hold no process of their own (the daemon is
-// in root's self/), as cgroup v2 requires.
-func enableCPU(root, commands string) error {
+// enableController enables controller ctl for the command cgroups. With cpu,
+// a heavy command's slot wrapper can enable it in turn for a cgroup it makes
+// under its command cgroup and cap that at its CPU share (cpu.max), and can
+// lower its command cgroup's cpu.weight against the other commands'; with
+// memory, it can bound its command cgroup's memory.high (internal/heavyjob).
+// Both levels hold no process of their own (the daemon is in root's self/),
+// as cgroup v2 requires.
+func enableController(root, commands, ctl string) error {
 	for _, dir := range []string{root, commands} {
-		if err := os.WriteFile(filepath.Join(dir, "cgroup.subtree_control"), []byte("+cpu"), 0); err != nil {
+		if err := os.WriteFile(filepath.Join(dir, "cgroup.subtree_control"), []byte("+"+ctl), 0); err != nil {
 			return fmt.Errorf("%s: %w", dir, err)
 		}
 	}

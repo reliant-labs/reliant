@@ -58,10 +58,16 @@ type Resolved struct {
 	Playbooks map[IncidentSource]string
 }
 
-// ResolvedGate is the gate with Runner, Pool and Timeout filled.
+// ResolvedGate is the gate with Runner, Pool, Timeout and Stages filled.
 type ResolvedGate struct {
+	// Run is the test stage's command, kept for readers of the gate as one
+	// command: the test stage's Command when it is on, else empty.
 	Run    string
 	Runner Runner
+	// Stages is every built-in stage in the order the gate runs them
+	// ([StageNames]): always four entries, each on, off or unavailable,
+	// with its source. Runner checks runs none, so all four are off.
+	Stages []ResolvedStage
 	// Pool is empty for runner checks. Which machines are in a pool is the
 	// org's state, not this file's: machines (the project's own, or cloud
 	// machines, priced like any other machine) that passed the gate
@@ -75,6 +81,9 @@ type ResolvedGate struct {
 	// ([ParseInfraPatterns]) and added to these.
 	InfraPatterns     []*regexp.Regexp
 	InfraPatternsFile string
+	// AllowUnisolated is gate.allow_unisolated: a pass outside an isolation
+	// boundary may land.
+	AllowUnisolated bool
 }
 
 type ResolvedQueue struct {
@@ -143,7 +152,8 @@ type ResolvedSweep struct {
 
 // Defaults returns the configuration a file with nothing but `version` and
 // `gate` resolves to, minus the gate command itself, which has no default
-// ([DetectGate] proposes one).
+// ([DetectGate] proposes one), for a project whose kind is not known: its
+// stages are [Project.DefaultStages] of the zero Project.
 func Defaults() Resolved {
 	sweepChecks := make([]SweepCheck, len(SweepBuiltins))
 	for i, b := range SweepBuiltins {
@@ -155,6 +165,7 @@ func Defaults() Resolved {
 			Runner:  RunnerMachine,
 			Pool:    DefaultGatePool,
 			Timeout: DefaultGateTimeout,
+			Stages:  Project{}.DefaultStages(),
 		},
 		Queue: ResolvedQueue{
 			BatchMax:   DefaultBatchMax,
@@ -188,8 +199,17 @@ func DefaultRelease() ResolvedRelease {
 	}
 }
 
-// Resolve validates c and applies every default.
+// Resolve validates c and applies every default, for a project whose kind is
+// not known: ResolveFor with the zero [Project]. Its lint and build stages
+// are unavailable unless the file overrides them; a caller that has the
+// repository's tree resolves with [Config.ResolveFor] and [DetectProject].
 func (c *Config) Resolve() (Resolved, error) {
+	return c.ResolveFor(Project{})
+}
+
+// ResolveFor validates c and applies every default, the gate stages' from
+// p's kind and facts (see [Project.DefaultStages]).
+func (c *Config) ResolveFor(p Project) (Resolved, error) {
 	if err := c.Validate(); err != nil {
 		return Resolved{}, err
 	}
@@ -197,7 +217,12 @@ func (c *Config) Resolve() (Resolved, error) {
 	if c.Check != nil {
 		r.Check = &Check{Run: c.Check.Run, Checks: slices.Clone(c.Check.Checks)}
 	}
-	r.Gate = resolveGate(c.Gate, r.Gate)
+	if c.Release != nil && len(c.Release.Envs) > 0 {
+		// The release chain's first env is the one the build stage builds
+		// and whose vuln_gate judges the scan.
+		p.ForgeEnv = c.Release.Envs[0].Name
+	}
+	r.Gate = resolveGate(c.Gate, r.Gate, p)
 	r.Generated = slices.Clone(c.Generated)
 	r.Regen = c.Regen
 	r.OwnerApproval = make([]OwnerApproval, len(c.OwnerApproval))
@@ -256,13 +281,17 @@ func (c *Config) Resolve() (Resolved, error) {
 	return r, nil
 }
 
-func resolveGate(g *Gate, def ResolvedGate) ResolvedGate {
+func resolveGate(g *Gate, def ResolvedGate, p Project) ResolvedGate {
 	out := ResolvedGate{
-		Run:               g.Run,
 		Runner:            or(g.Runner, effectiveRunner(g)),
 		Timeout:           def.Timeout,
 		Checks:            slices.Clone(g.Checks),
 		InfraPatternsFile: g.InfraPatternsFile,
+		AllowUnisolated:   g.AllowUnisolated != nil && *g.AllowUnisolated,
+	}
+	out.Stages = resolveStages(g, out.Runner, p)
+	if test := out.Stage(StageTest); test.State == StageOn {
+		out.Run = test.Command
 	}
 	if out.Runner == RunnerMachine {
 		out.Pool = or(g.Pool, def.Pool)

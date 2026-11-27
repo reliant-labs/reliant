@@ -45,6 +45,7 @@ import {
   wireScope,
 } from "../api";
 import { obsErrorKind, obsRetry } from "../errors";
+import { obsReadKey } from "../obsInterceptors";
 
 const client = {
   searchLogs: vi.fn(),
@@ -262,8 +263,8 @@ describe("traces and panels", () => {
     await queryPanel({ ...env, window, panel: { id: "fleet-now", title: "Fleet now", kind: "sql", signal: "traces", series: [], sql: "SELECT 1" }, services: [], stepSeconds: 0, dashboardId: "sandboxes" });
     const options = client.queryPanel.mock.calls[0][1];
     expect(options.headers).toEqual({ "Forge-Panel": "sandboxes/fleet-now" });
-    // the read scheduler's abort signal still rides along
-    expect(options.signal).toBeInstanceOf(AbortSignal);
+    // and the read's mark for the transport's read stage (obsInterceptors.ts) rides along
+    expect(options.contextValues.get(obsReadKey)).toEqual({ poll: false, priority: "visible" });
   });
 
   it("preserves SQL numeric column metadata separately from string group attributes", async () => {

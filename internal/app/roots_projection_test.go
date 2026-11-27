@@ -97,7 +97,9 @@ func TestKCLRootsDeployedCredentials(t *testing.T) {
 		// managed-identity credentials (ApiServerConfig, served on /auth/*).
 		"api":     append(append([]string{"JWT_JWKS_SNAPSHOT", "AUTH_API_KEY", "AUTH_DEV_JWT_SECRET", "IDP_BROKER_TOKEN", "IDP_LOGIN_POLICY"}, base...), integrations...),
 		"gateway": base,
-		"worker":  append(append([]string{}, base...), integrations...),
+		// GITHUB_QUEUE_APP_CALLER_SECRET: the merge queue's proof to
+		// control-plane that it is the worker (Queue App tokens).
+		"worker": append(append([]string{"GITHUB_QUEUE_APP_CALLER_SECRET"}, base...), integrations...),
 	}
 	for name, r := range roots {
 		t.Run(name, func(t *testing.T) {

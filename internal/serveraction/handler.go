@@ -50,6 +50,29 @@ type Request struct {
 	// Params is the node's rendered `with:`, already checked against
 	// Spec.Params.
 	Params map[string]any
+	// From is the node the call's `with: {from: <id>}` names, as the engine
+	// recorded it, or nil (no from, or no such node in the action's scope).
+	// An action that judges another node's work reads it here, never from
+	// Params: the author renders Params, the engine records From.
+	From *NodeRecord
+}
+
+// NodeRecord is a node of the run's graph as the engine recorded it.
+type NodeRecord struct {
+	// NodeID is the node's id in the action's scope.
+	NodeID string
+	// Type is the node's type as the run executes it ("run"; a review node
+	// runs as a "workflow" node).
+	Type string
+	// Role is the engine role its definition declares ("reviewer").
+	Role string
+	// Review is true only for an engine-owned review node: its output is the
+	// checked verdict, with the reviewer session it ran in.
+	Review bool
+	// Ran is true when the node has recorded an output.
+	Ran bool
+	// Output is that output, JSON-shaped.
+	Output map[string]any
 }
 
 // Invocation places a call in its run. Every field is the runtime's own

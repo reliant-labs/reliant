@@ -25,7 +25,7 @@ import { Code, ConnectError } from "@connectrpc/connect";
 import Link from "@/components/forge-ui/link";
 import Modal from "@/components/forge-ui/modal";
 import { useDashboardMutation } from "@/hooks/dashboard-queries";
-import type { ObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
+import type { ObservabilityContextApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
 import type { DashboardRef, DashboardSummary, SavedDashboard } from "@/services/controlPlane/observability/dashboardTypes";
 import type { Dashboard, Panel } from "@/services/controlPlane/observability/types";
 import { cn } from "@/lib/utils";
@@ -48,7 +48,7 @@ function isConflict(error: unknown): boolean {
  * save against that version. A conflict (someone saved in between) is retried
  * once against the version that won; a second one is the caller's to show.
  */
-export async function appendPanel(api: ObservabilityApi, input: { orgId: string; projectId: string; slug: string; panel: Panel; message: string }): Promise<SavedDashboard> {
+export async function appendPanel(api: Pick<ObservabilityContextApi, "getDashboard" | "saveDashboard">, input: { orgId: string; projectId: string; slug: string; panel: Panel; message: string }): Promise<SavedDashboard> {
   const ref: DashboardRef = { kind: "workspace", projectId: input.projectId, key: input.slug };
   for (let attempt = 0; ; attempt++) {
     const doc = await api.getDashboard({ orgId: input.orgId, ref });

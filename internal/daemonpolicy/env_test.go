@@ -105,6 +105,8 @@ var daemonConfigEnvPassedThrough = map[string]string{
 	"RELIANT_DISK_REFUSE_AT":                    "machine policy",
 	"RELIANT_HEAVY_COMMANDS":                    "machine policy",
 	"RELIANT_HEAVY_SHARE":                       "machine policy",
+	"RELIANT_HEAVY_CPU_WEIGHT":                  "machine policy",
+	"RELIANT_HEAVY_MEMORY_HIGH":                 "machine policy",
 	"RELIANT_COMMAND_THREADS":                   "machine policy",
 	"RELIANT_BACKGROUND_IDLE_REAP":              "machine policy",
 	"RELIANT_FETCH_ALLOW_PRIVATE_NETWORK":       "machine policy",

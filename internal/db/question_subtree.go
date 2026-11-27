@@ -65,7 +65,7 @@ func (r *Repo) WithdrawAsyncQuestion(ctx context.Context, chatID, threadID, ques
 		logging.WarnContext(ctx, "Failed to announce a withdrawn question", "questionID", closed.ID, "error", err)
 	}
 	if chat, err := store.GetChat(ctx, r.ORM(), closed.ChatID); err == nil && chat != nil {
-		if err := r.EmitUserRefetch(ctx, chat.UserID, RefetchInbox, RefetchOpts{ChatID: &closed.ChatID}); err != nil {
+		if err := r.UpdateWriter().EmitUserRefetch(ctx, chat.UserID, RefetchInbox, RefetchOpts{ChatID: &closed.ChatID}); err != nil {
 			logging.WarnContext(ctx, "Failed to tell the inbox a question was withdrawn", "questionID", closed.ID, "error", err)
 		}
 	}

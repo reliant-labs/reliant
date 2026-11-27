@@ -506,8 +506,9 @@ const (
 	//
 	// One constant, referenced by both the dispatch site and the reporter, is
 	// what keeps the reported denominator honest: change the ladder and the
-	// badge follows, with no second literal to forget.
-	stepActivityMaxAttempts int32 = 5
+	// badge follows, with no second literal to forget. The value is shared
+	// with activities through types.StepActivityMaxAttempts.
+	stepActivityMaxAttempts = activitytypes.StepActivityMaxAttempts
 
 	// routerActivityStartToClose is the router's own CallLLM dispatch timeout
 	// (router_executor.go). The router shares activityHeartbeatTimeout with
@@ -858,32 +859,11 @@ func (w *ActivityWrapper[I, O]) Execute(ctx context.Context, input I) (O, error)
 		"loopNodeID", inputInfo.LoopNodeID,
 		"loopIteration", inputInfo.LoopIteration)
 
-	// Belt-and-suspenders: if Temporal is executing AGENT work for this
-	// workflow, the workflow IS running. Ensure the DB agrees. This is a fast
-	// no-op when already marked Running, and self-heals stale status otherwise.
-	//
-	// Restricted to agent work for the same reason the stopped-run guard is.
-	// Lifecycle work runs precisely WHILE a run is stopped (that is how it
-	// resumes), and observability work reports on a run that may already have
-	// stopped — letting either one assert "this run is running" would undo a
-	// pause the user just asked for. Only agent work executing is real proof
-	// the run is live.
-	//
-	// Skipped when the context is already cancelled (pause/shutdown in
-	// progress), for the same reason.
-	if w.repo != nil && chatID != "" && ctx.Err() == nil && w.workKind == lifecycle.AgentWork {
-		w.repo.EnsureWorkflowRunning(ctx, workflowID, chatID)
-	}
-
-	// Track execution start time for duration calculation
 	startTime := time.Now()
 
-	// Emit node execution "started" event for UI streaming
-	w.emitNodeExecutionEvent(ctx, "started", false, stepID, inputInfo, activityType, chatID, workflowID, activityID, &startTime, nil, nil, nil, nil)
-
-	// Start heartbeat goroutine for fast cancellation detection.
-	// See activityHeartbeatInterval / activityHeartbeatTimeout for the cadence
-	// and the deadline it is sized against.
+	// Start heartbeating before any database work. Temporal's deadline is
+	// already ticking: even the liveness lookup before the handler can block
+	// longer than PreflightDaemonCheck's heartbeat timeout.
 	heartbeatCtx, cancelHeartbeat := context.WithCancel(ctx)
 	defer cancelHeartbeat() // Stop heartbeat when activity completes
 
@@ -1005,6 +985,26 @@ func (w *ActivityWrapper[I, O]) Execute(ctx context.Context, input I) (O, error)
 		}
 	})
 
+	// Belt-and-suspenders: if Temporal is executing AGENT work for this
+	// workflow, the workflow IS running. Ensure the DB agrees. This is a fast
+	// no-op when already marked Running, and self-heals stale status otherwise.
+	//
+	// Restricted to agent work for the same reason the stopped-run guard is.
+	// Lifecycle work runs precisely WHILE a run is stopped (that is how it
+	// resumes), and observability work reports on a run that may already have
+	// stopped — letting either one assert "this run is running" would undo a
+	// pause the user just asked for. Only agent work executing is real proof
+	// the run is live.
+	//
+	// Skipped when the context is already cancelled (pause/shutdown in
+	// progress), for the same reason.
+	if w.repo != nil && chatID != "" && ctx.Err() == nil && w.workKind == lifecycle.AgentWork {
+		w.repo.EnsureWorkflowRunning(ctx, workflowID, chatID)
+	}
+
+	// Emit node execution "started" event for UI streaming
+	w.emitNodeExecutionEvent(ctx, "started", false, stepID, inputInfo, activityType, chatID, workflowID, activityID, &startTime, nil, nil, nil, nil)
+
 	// Setup defer for panic recovery
 	var execErr error
 	defer func() {
@@ -1065,10 +1065,19 @@ func (w *ActivityWrapper[I, O]) Execute(ctx context.Context, input I) (O, error)
 		})
 	}
 
-	// Execute the typed activity directly - no conversion needed!
-	// Temporal already deserialized the input to type I
-	result, execErr := w.activity(ctx, input)
-	execErr = markTextOnlyUserError(execErr)
+	// Heartbeats and stop nudges can now cancel the context during the DB
+	// work above. Don't start agent work after a stop (preflight could wake
+	// a machine). Lifecycle and reporting handlers keep their cleanup paths.
+	var result O
+	if cause := context.Cause(ctx); cause != nil && w.workKind == lifecycle.AgentWork {
+		if realStopInstruction(cause) {
+			return zeroOutput, cause
+		}
+		execErr = cause // Let the existing shutdown and heartbeat-RPC retry handling run.
+	} else {
+		result, execErr = w.activity(ctx, input)
+		execErr = markTextOnlyUserError(execErr)
+	}
 
 	// Calculate execution duration
 	endTime := time.Now()
@@ -1482,6 +1491,7 @@ func resolveMaxAttempts(info activity.Info) int32 {
 	case "SaveMessage":
 		return inlineSaveMessageMaxAttempts
 	case PreflightRequirementsActivityName,
+		MachinePreflightActivityName,
 		"WorkflowError",
 		"ValidateThreadOwnership",
 		"WorkflowStatus",

@@ -47,6 +47,9 @@ message CLIConfig {
         path: ["models"]
       },
       {
+        path: ["pipeline"]
+      },
+      {
         path: ["preview"]
       },
       {

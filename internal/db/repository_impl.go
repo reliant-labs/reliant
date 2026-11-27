@@ -1574,21 +1574,46 @@ func (r *Repo) ListAttachedDaemonIDsForUser(ctx context.Context, userID string, 
 // project has no record. Prefer it (and GetProjectPresetsJSON) to
 // store.GetProjectConfigRecord whenever that column is all a caller needs: the
 // full row carries every indexed skill body and can run to tens of MB.
+//
+// A value this Repo read before is served again while the record is
+// unchanged (catalogColumnCache).
 func (r *Repo) GetProjectWorkflowsJSON(ctx context.Context, projectID string) (*string, error) {
 	if projectID == "" {
 		return nil, fmt.Errorf("project ID cannot be empty")
 	}
-	return store.GetProjectWorkflowsJSON(ctx, r.ORM(), projectID)
+	return r.projectConfigColumn(ctx, "project.workflows", projectID, store.GetProjectWorkflowsJSONVersioned)
 }
 
 // GetProjectPresetsJSON reads one column of the project config record: the
 // synced .reliant/presets. It returns svcerr.NotFound when the
-// project has no record.
+// project has no record. Cached as GetProjectWorkflowsJSON is.
 func (r *Repo) GetProjectPresetsJSON(ctx context.Context, projectID string) (*string, error) {
 	if projectID == "" {
 		return nil, fmt.Errorf("project ID cannot be empty")
 	}
-	return store.GetProjectPresetsJSON(ctx, r.ORM(), projectID)
+	return r.projectConfigColumn(ctx, "project.presets", projectID, store.GetProjectPresetsJSONVersioned)
+}
+
+// projectConfigColumn reads one JSON column of projectID's config record
+// through the catalog column cache, svcerr.NotFound when there is none.
+func (r *Repo) projectConfigColumn(ctx context.Context, column, projectID string,
+	versioned func(ctx context.Context, db orm.Context, projectID string) (*string, string, bool, error),
+) (*string, error) {
+	value, found, err := r.catalogColumns().read(ctx, catalogColumnKey{column: column, projectID: projectID}, catalogColumnReads{
+		version: func(ctx context.Context) (string, bool, error) {
+			return store.ProjectConfigVersion(ctx, r.ORM(), projectID)
+		},
+		versioned: func(ctx context.Context) (*string, string, bool, error) {
+			return versioned(ctx, r.ORM(), projectID)
+		},
+	}, r.fillsCatalogColumns(ctx))
+	if err != nil {
+		return nil, err
+	}
+	if !found {
+		return nil, store.MissingProjectConfig()
+	}
+	return value, nil
 }
 
 func (r *Repo) CreateWorktree(ctx context.Context, worktree *Worktree) error {

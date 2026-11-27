@@ -8,11 +8,34 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/reliant-labs/reliant/internal/gitcredentialclient"
 	"github.com/reliant-labs/reliant/internal/integrations/httpaction"
 	"github.com/reliant-labs/reliant/internal/integrations/provenance"
 )
+
+// rateLimitedCredential is the refusal for a token control-plane could not
+// mint because GitHub's rate limit on the token it checks with is spent:
+// transient with a known end. The message is control-plane's (whose limit,
+// and until when). The cause is a httpaction.RateLimitedError, so a workflow
+// step waits out the limit instead of failing at once; it wraps
+// control-plane's error, so the class (a user error, never our outage) still
+// holds. Nothing reached the action's provider, so the retry cannot repeat a
+// write.
+func rateLimitedCredential(err error) *httpaction.CredentialError {
+	msg := "GitHub's API rate limit is exhausted; try again later"
+	var wait time.Duration
+	var limited *gitcredentialclient.RateLimitedError
+	if errors.As(err, &limited) {
+		if limited.Message != "" {
+			msg = limited.Message
+		}
+		wait = limited.RetryAfter
+	}
+	return &httpaction.CredentialError{Code: httpaction.CodeUnavailable, Message: msg,
+		Err: httpaction.NewRateLimitedError(0, httpaction.RateLimitTokenMint, wait, wait > 0, err)}
+}
 
 // ActingCredential implements Service.
 func (b *broker) ActingCredential(ctx context.Context, ownerUserID string, req httpaction.CredentialRequest) (httpaction.Credential, error) {
@@ -93,15 +116,7 @@ func (b *broker) mintBot(ctx context.Context, ownerUserID, orgID, connID string,
 		return nil, &httpaction.CredentialError{Code: httpaction.CodeNeedsReauth,
 			Message: "GitHub needs to be reconnected: reconnect GitHub in Settings", Err: err}
 	case errors.Is(err, gitcredentialclient.ErrRateLimited):
-		// Transient with a known end. The cause keeps the class (a user
-		// error), so no log layer reports it as our outage, and the message
-		// is control-plane's: whose limit, and until when.
-		msg := "GitHub's API rate limit is exhausted; try again later"
-		var limited *gitcredentialclient.RateLimitedError
-		if errors.As(err, &limited) && limited.Message != "" {
-			msg = limited.Message
-		}
-		return nil, &httpaction.CredentialError{Code: httpaction.CodeUnavailable, Message: msg, Err: err}
+		return nil, rateLimitedCredential(err)
 	default:
 		b.logger.WarnContext(ctx, "minting a GitHub App installation token failed", "err", err)
 		return nil, &httpaction.CredentialError{Code: httpaction.CodeUnavailable,

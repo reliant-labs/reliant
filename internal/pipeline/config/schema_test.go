@@ -203,6 +203,7 @@ func TestSchemaKeysMatchTypes(t *testing.T) {
 		reflect.TypeFor[Consumer](), reflect.TypeFor[Queue](), reflect.TypeFor[Review](), reflect.TypeFor[Fix](),
 		reflect.TypeFor[Flake](), reflect.TypeFor[Release](), reflect.TypeFor[ReleaseEnv](), reflect.TypeFor[Strategy](),
 		reflect.TypeFor[RecurringJob](), reflect.TypeFor[Sweep](), reflect.TypeFor[SweepCheck](), reflect.TypeFor[Probe](),
+		reflect.TypeFor[Stages](), reflect.TypeFor[Stage](),
 	} {
 		def, ok := doc.Defs[typ.Name()]
 		if !ok {
@@ -214,7 +215,7 @@ func TestSchemaKeysMatchTypes(t *testing.T) {
 		}
 	}
 	// Every struct type the decoder knows is covered above.
-	if n := len(fieldCache); n != 17 {
+	if n := len(fieldCache); n != 19 {
 		t.Errorf("the decoder knows %d struct types; add the new ones to this test and to the schema", n)
 	}
 }
@@ -260,11 +261,30 @@ func TestSchemaEnumsMatchClosedSets(t *testing.T) {
 			t.Errorf("schema %s enum = %v, Go closed set = %v", c.where, c.got, c.want)
 		}
 	}
+	// gate.stages takes exactly the closed set of stages.
+	var stages struct {
+		Defs map[string]struct {
+			Properties map[string]json.RawMessage `json:"properties"`
+		} `json:"$defs"`
+	}
+	if err := json.Unmarshal(JSONSchema(), &stages); err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for k := range stages.Defs["Stages"].Properties {
+		got = append(got, k)
+	}
+	want := strs(StageNames)
+	slices.Sort(got)
+	slices.Sort(want)
+	if !slices.Equal(got, want) {
+		t.Errorf("schema Stages keys = %v, StageNames = %v", got, want)
+	}
 }
 
 // TestParserAndSchemaAgree pins the parser and the editor schema to one
 // contract for every field written as a string or a mapping (gate, check,
-// sweep checks, probes), for scalar types and for keys: each input is
+// gate stages, sweep checks, probes), for scalar types and for keys: each input is
 // accepted by both or refused by both. A case marked parserOnly is a rule
 // JSON Schema cannot state, so only the parser is held to it: a duplicate
 // key (JSON has no such thing; an editor sees the last value), a non-string
@@ -276,6 +296,7 @@ func TestParserAndSchemaAgree(t *testing.T) {
 	env := func(s string) string { return head + "gate: {run: x, env: " + s + "}\n" }
 	sweep := func(s string) string { return base + "sweep: {checks: [" + s + "]}\n" }
 	probes := func(s string) string { return base + "release: {envs: [{name: prod, probes: [" + s + "]}]}\n" }
+	stagesDoc := func(s string) string { return head + "gate: {stages: " + s + "}\n" }
 	cases := []struct {
 		name       string
 		doc        string
@@ -354,6 +375,35 @@ func TestParserAndSchemaAgree(t *testing.T) {
 		{"probe command empty run", probes("{name: smoke, run: \"\"}"), false, ""},
 		{"probe command integer name", probes("{name: 7, run: x}"), false, ""},
 		{"probe empty mapping", probes("{}"), false, ""},
+
+		// gate.stages: each stage is {run: <command>} or the exact
+		// string off; the test stage's command is written once.
+		{"stages valid", stagesDoc("{lint: {run: \"go vet ./...\"}, test: {run: \"go test ./...\"}, build: off}"), true, ""},
+		{"stages empty mapping", head + "gate: {run: x, stages: {}}\n", true, ""},
+		{"stages beside gate.run", head + "gate: {run: x, stages: {lint: off, sbom_scan: {run: scan.sh}}}\n", true, ""},
+		{"stage off", stagesDoc("{test: {run: x}, sbom_scan: off}"), true, ""},
+		{"stage quoted off", stagesDoc("{test: {run: x}, lint: \"off\"}"), true, ""},
+		{"test stage off without run", stagesDoc("{test: off}"), true, ""},
+		{"stage bad string", stagesDoc("{test: {run: x}, lint: \"go vet ./...\"}"), false, ""},
+		{"stage capitalised off", stagesDoc("{test: {run: x}, lint: Off}"), false, ""},
+		{"stage boolean", stagesDoc("{test: {run: x}, lint: false}"), false, ""},
+		{"stage integer", stagesDoc("{test: {run: x}, lint: 0}"), false, ""},
+		{"stage null", stagesDoc("{test: {run: x}, lint: null}"), false, ""},
+		{"stage list", stagesDoc("{test: {run: x}, lint: [a]}"), false, ""},
+		{"stage empty mapping", stagesDoc("{test: {run: x}, lint: {}}"), false, ""},
+		{"stage run empty", stagesDoc("{test: {run: x}, lint: {run: \"\"}}"), false, ""},
+		{"stage run integer", stagesDoc("{test: {run: x}, lint: {run: 1}}"), false, ""},
+		{"stage unknown key", stagesDoc("{test: {run: x}, lint: {run: y, timeout: 1m}}"), false, ""},
+		{"unknown stage", stagesDoc("{test: {run: x}, fmt: off}"), false, ""},
+		{"stages list", head + "gate: {run: x, stages: [lint]}\n", false, ""},
+		{"stages without a test command", stagesDoc("{lint: off}"), false, ""},
+		{"gate.run and stages.test", head + "gate: {run: x, stages: {test: {run: y}}}\n", false, ""},
+		{"gate.run and test stage off", head + "gate: {run: x, stages: {test: off}}\n", false, ""},
+		{"every stage off", stagesDoc("{lint: off, test: off, build: off, sbom_scan: off}"), false, ""},
+		{"stages on runner checks", head + "gate: {runner: checks, checks: [CI], stages: {lint: off}}\n", false, ""},
+		{"stages with only checks", head + "gate: {checks: [CI], stages: {test: {run: x}}}\n", true, ""},
+		{"stages on runner machine", head + "gate: {runner: machine, stages: {test: {run: x}}}\n", true, ""},
+		{"duplicate stage", stagesDoc("{test: {run: x}, lint: off, lint: off}"), false, "duplicate key"},
 
 		// Other string fields take only strings.
 		{"regen integer", base + "generated: [a]\nregen: 42\n", false, ""},
