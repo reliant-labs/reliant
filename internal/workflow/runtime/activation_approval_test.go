@@ -217,3 +217,61 @@ func TestActivationPreviewIsBounded(t *testing.T) {
 		})
 	}
 }
+
+// send_gtm_email is an activation call: attended, every call raises its card
+// (the preview always asks for one) and is bound to the approved hash;
+// unattended, it is refused without a card, whatever the preview says.
+func TestSendGtmEmailAlwaysNeedsACard(t *testing.T) {
+	require.True(t, isActivationCall(toolSendGtmEmail))
+	for _, unattended := range []bool{false, true} {
+		t.Run(map[bool]string{false: "attended", true: "unattended"}[unattended], func(t *testing.T) {
+			var suite temporaltest.WorkflowTestSuite
+			env := suite.NewTestWorkflowEnvironment()
+			creates := 0
+			var executed types.RuntimeContext
+			env.RegisterActivityWithOptions(func(_ context.Context, in types.AutomationApprovalInput) (types.AutomationApprovalPreview, error) {
+				require.Equal(t, toolSendGtmEmail, in.ToolName)
+				require.Equal(t, unattended, in.Unattended)
+				// A preview that (wrongly) offers a card to an unattended run
+				// is still refused by the runtime: nobody can approve it.
+				return types.AutomationApprovalPreview{Hash: "gtm_email:v1:abc", Title: "Send email “Launch” to 2 recipients?"}, nil
+			}, activity.RegisterOptions{Name: "AutomationApprovalPreview"})
+			env.RegisterActivityWithOptions(func(_ context.Context, in map[string]interface{}) (map[string]interface{}, error) {
+				creates++
+				require.Equal(t, "Send email “Launch” to 2 recipients?", in["title"])
+				require.Equal(t, toolSendGtmEmail, in["tool_name"])
+				return map[string]interface{}{"approval_id": "approval"}, nil
+			}, activity.RegisterOptions{Name: "ApprovalCreate"})
+			env.RegisterActivityWithOptions(func(context.Context, map[string]interface{}) (map[string]interface{}, error) {
+				return map[string]interface{}{"success": true}, nil
+			}, activity.RegisterOptions{Name: "ApprovalResolve"})
+			env.RegisterActivityWithOptions(func(_ context.Context, in types.ActivityInput) (map[string]interface{}, error) {
+				executed = in.Runtime
+				return map[string]interface{}{}, nil
+			}, activity.RegisterOptions{Name: "ExecuteTools"})
+			if !unattended {
+				env.RegisterDelayedCallback(func() {
+					env.SignalWorkflow("signal.approval.approval", map[string]interface{}{"status": "approved"})
+				}, time.Second)
+			}
+			env.ExecuteWorkflow(func(ctx workflow.Context) error {
+				ac := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{StartToCloseTimeout: time.Minute})
+				node := &pb.Node{Args: &pb.Node_ExecuteTools{ExecuteTools: &pb.ExecuteToolsArgs{
+					Capabilities:      &pb.ToolCapabilities{Offered: []string{toolSendGtmEmail}},
+					ResolvedToolCalls: []*pb.ToolCallMsg{{Id: "call", Name: toolSendGtmEmail, Input: `{"item_id":"item-1","expected_revision":3}`}},
+				}}}
+				return executeWithActivationApprovals(ctx, ac, types.RuntimeContext{ChatID: "chat", Thread: "thread"}, node, unattended).Get(ctx, nil)
+			})
+			require.NoError(t, env.GetWorkflowError())
+			if unattended {
+				require.Zero(t, creates)
+				require.Empty(t, executed.ActivationApprovals)
+				require.NotEmpty(t, executed.ActivationRefusals["call"])
+				return
+			}
+			require.Equal(t, 1, creates)
+			require.Equal(t, "gtm_email:v1:abc", executed.ActivationApprovals["call"])
+			require.Empty(t, executed.ActivationRefusals)
+		})
+	}
+}

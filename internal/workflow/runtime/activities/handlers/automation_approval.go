@@ -15,6 +15,12 @@ import (
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/schema"
 )
 
+// toolSendGtmEmail is the GTM email tool (internal/gtm/email).
+//
+// TODO(PR-7): tools.ToolSendGtmEmail replaces this literal once the tool is
+// registered.
+const toolSendGtmEmail = "send_gtm_email"
+
 // AutomationApprovalActivity previews through the exact tool factory that executes.
 type AutomationApprovalActivity struct {
 	factory  *tools.ToolsFactory
@@ -61,6 +67,11 @@ func (a *AutomationApprovalActivity) Execute(ctx context.Context, in types.Autom
 			subject = "Machine pool change"
 		case tools.ToolManageChange:
 			subject = "Forge Change"
+		case toolSendGtmEmail:
+			// The card itself leads with "Send email “<subject>” to <n>
+			// recipients?" (internal/gtm/email); a refusal has no card, and
+			// never quotes the email.
+			subject = "GTM email send"
 		case tools.ToolProposeConnection:
 			// Its refusals are written for the model whole: a status and
 			// what to do instead (connection_proposal_tool.go).

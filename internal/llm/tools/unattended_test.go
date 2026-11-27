@@ -69,6 +69,7 @@ func TestUnattendedWithholding_Categories(t *testing.T) {
 		ToolStartRun:       "other runs",
 		ToolSendToRun:      "other runs",
 		ToolControlRun:     "other runs",
+		toolSendGtmEmail:   "GTM emails",
 	}
 	for name, reason := range withheld {
 		assert.Contains(t, UnattendedWithholding(name), reason, name)
