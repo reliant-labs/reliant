@@ -10,7 +10,7 @@
 
 import { Code } from "@connectrpc/connect";
 import { useParams } from "@tanstack/react-router";
-import { Check, Pencil, X } from "lucide-react";
+import { Check, CheckCheck, Pencil, X } from "lucide-react";
 import { useState } from "react";
 
 import Button from "@/components/forge-ui/button";
@@ -29,9 +29,13 @@ import { GtmShell, useGtmOrgId } from "../shared/GtmShell";
 import { ItemDialog } from "../shared/ItemDialog";
 import { PersonOnlyTag } from "../shared/PersonAction";
 import { useGtmChannels } from "../shared/ItemDialog";
-import { Fields, formatAndChannel, formatDay, formatWhen, IDEA_KIND, IdeaStatusBadge, ItemStatusBadge, SourceTag } from "../shared/ui";
+import { Fields, formatAndChannel, formatDay, formatWhen, IDEA_KIND, IdeaStatusBadge, ItemStatusBadge, OutboundLink, SourceTag } from "../shared/ui";
 import { useGtmWriteError } from "../shared/writes";
 import { joinIdeaBody, splitIdeaBody } from "./ideaBody";
+import { InlineMarkdown } from "./inlineMarkdown";
+
+/** The most items read to find the ones made from this idea (ListItems' page limit). */
+const ITEMS_PAGE = 500;
 
 export function IdeaDetailPage() {
   return (
@@ -46,7 +50,7 @@ export function IdeaDetailView() {
   const { ideaId = "" } = useParams({ strict: false }) as { ideaId?: string };
   const ideaQ = useGetIdea({ orgId, id: ideaId }, { enabled: !!orgId && ideaId !== "" });
   const campaignsQ = useListCampaigns({ orgId, pageSize: 200 }, { enabled: !!orgId });
-  const itemsQ = useListItems({ orgId, pageSize: 500 }, { enabled: !!orgId });
+  const itemsQ = useListItems({ orgId, pageSize: ITEMS_PAGE }, { enabled: !!orgId });
   const [openItemId, setOpenItemId] = useState<string | null>(null);
 
   if (ideaId !== "" && ideaQ.isPending) return <SkeletonLoader variant="card" count={2} />;
@@ -103,12 +107,12 @@ export function IdeaDetailView() {
                 <ul className="space-y-3">
                   {idea.evidence.map((e, i) => (
                     <li key={`${e.title}-${i}`}>
-                      <span className="block whitespace-pre-wrap text-sm font-semibold text-ink">{e.summaryMd || "—"}</span>
+                      <span className="block whitespace-pre-wrap text-sm text-ink">{e.summaryMd ? <InlineMarkdown text={e.summaryMd} /> : "—"}</span>
                       <span className="block text-xs text-ink-muted">
                         {e.url ? (
-                          <Link href={e.url} className="underline underline-offset-2">
-                            {e.title}
-                          </Link>
+                          <OutboundLink url={e.url} className="underline underline-offset-2">
+                            {e.title || e.url}
+                          </OutboundLink>
                         ) : (
                           e.title
                         )}
@@ -135,6 +139,11 @@ export function IdeaDetailView() {
                   ))}
                 </ul>
               )}
+              {itemsQ.data?.nextPageToken ? (
+                <p className="mt-2 text-xs text-ink-muted" data-testid="gtm-idea-items-truncated">
+                  Looked through the newest {ITEMS_PAGE} posts and emails only; older ones made from this idea are not listed.
+                </p>
+              ) : null}
             </CardBody>
           </Card>
         </div>
@@ -176,7 +185,12 @@ function IdeaDecision({ idea }: { idea: GtmIdea }) {
     return (
       <div className="flex flex-wrap items-center gap-3 text-sm text-ink-muted">
         <span>{idea.status === GtmIdeaStatus.ACCEPTED ? "Accepted." : idea.status === GtmIdeaStatus.DONE ? "Done." : "Rejected."}</span>
-        <Button variant="ghost" size="sm" onClick={() => decide(GtmIdeaStatus.PROPOSED)} loading={pending === GtmIdeaStatus.PROPOSED}>
+        {idea.status === GtmIdeaStatus.ACCEPTED && (
+          <Button variant="outline" size="sm" leftIcon={<CheckCheck />} onClick={() => decide(GtmIdeaStatus.DONE)} loading={pending === GtmIdeaStatus.DONE} disabled={setStatus.isPending}>
+            Mark done
+          </Button>
+        )}
+        <Button variant="ghost" size="sm" onClick={() => decide(GtmIdeaStatus.PROPOSED)} loading={pending === GtmIdeaStatus.PROPOSED} disabled={setStatus.isPending}>
           Reopen
         </Button>
       </div>
