@@ -35,6 +35,7 @@ import (
 	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/reliant-labs/forge/pkg/serverkit"
 
+	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
 	"github.com/reliant-labs/reliant/internal/accountpurge"
 	"github.com/reliant-labs/reliant/internal/agentmailbox"
 	"github.com/reliant-labs/reliant/internal/agentruns"
@@ -2136,10 +2137,14 @@ func (g *Graph) newInternalControlPlane() (*InternalControlPlane, error) {
 // pipeline.enabled reaches the API server here (G4): off, every rpc refuses.
 func (g *Graph) newPipeline() (*pipeline.Service, error) {
 	return pipeline.New(pipeline.Deps{
-		Logger:          g.Log,
-		Config:          g.Cfg,
-		PipelineEnabled: g.ServerProcessConfig.GetPipeline().GetEnabled(),
-		Store:           g.Database(),
-		Now:             nil, // optional — no provider
+		Logger: g.Log,
+		Config: g.Cfg,
+		// Only the switch, never the whole pipeline block: the block also
+		// holds the worker's merge-queue caller secret
+		// (pipeline.github_queue_app_caller_secret), and the API root's
+		// config reach must not include it.
+		Pipeline: &configv1.PipelineConfig{Enabled: g.ServerProcessConfig.GetPipeline().GetEnabled()},
+		Store:    g.Database(),
+		Now:      nil, // optional — no provider
 	})
 }

@@ -39,7 +39,7 @@ const providerGitHub = "github"
 
 // enabled refuses every rpc while the pipeline.enabled switch is off.
 func (s *Service) enabled() error {
-	if s.deps.PipelineEnabled {
+	if s.deps.Pipeline.GetEnabled() {
 		return nil
 	}
 	return svcerr.WithReason(svcerr.FailedPrecondition(

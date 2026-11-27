@@ -13,6 +13,7 @@ import (
 
 	"connectrpc.com/connect"
 
+	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	reliantv1connect "github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -45,13 +46,12 @@ type Store interface {
 type Deps struct {
 	Logger *slog.Logger
 	Config *config.Config
-	// PipelineEnabled is the server's pipeline.enabled switch: every rpc is
-	// refused while it is off. Only the switch, not the whole pipeline
-	// block, so the API server's config reach does not include the worker's
-	// merge-queue secret (pipeline.github_queue_app_caller_secret).
+	// Pipeline is the server's pipeline switch: every rpc is refused while
+	// Enabled is off. nil is off. compose passes only Enabled, so the API
+	// server's config reach excludes the worker-only queue caller secret.
 	//
 	// forge:optional-dep
-	PipelineEnabled bool
+	Pipeline *configv1.PipelineConfig
 	// Store is the pipeline store layer, the projects and the access grants.
 	Store Store
 	// Now is the clock access freshness is judged by; nil is time.Now.
@@ -87,7 +87,7 @@ func New(deps Deps) (*Service, error) {
 	if err := deps.validateDeps(); err != nil {
 		return nil, err
 	}
-	if deps.PipelineEnabled {
+	if deps.Pipeline.GetEnabled() {
 		deps.Logger.Info("Reliant's PipelineService is ON (pipeline.enabled)")
 	}
 	return &Service{deps: deps}, nil

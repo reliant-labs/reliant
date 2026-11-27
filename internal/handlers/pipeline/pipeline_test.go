@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/authz"
@@ -74,11 +75,11 @@ func newEnv(t *testing.T, enabled bool) *env {
 		"org-2": {strayID: orgs.RoleAdmin},
 	}}}
 	e.svc = pipeline.NewTestPipeline(t, pipeline.WithPipelineDeps(pipeline.Deps{
-		Logger:          testkit.DiscardLogger(),
-		Config:          &config.Config{},
-		PipelineEnabled: enabled,
-		Store:           repo,
-		Now:             func() time.Time { return e.now },
+		Logger:   testkit.DiscardLogger(),
+		Config:   &config.Config{},
+		Pipeline: &configv1.PipelineConfig{Enabled: enabled},
+		Store:    repo,
+		Now:      func() time.Time { return e.now },
 	}))
 	e.project("p-ada", adminID, org)
 	e.project("p-ada-2", adminID, org)
