@@ -73,7 +73,7 @@ import { askUserQuestionItems } from "../Chat/askUserUtils";
 import { formatBytes } from "@/lib/formatBytes";
 import { consumerSummary, heavyRefused, pressuredVolume, reclaimSummary, volumeUsage } from "@/lib/machineDisk";
 import { driverDisplayName } from "@/hooks/catalog-models";
-import { isUnownedStorage, StorageAction, totalHeldBytes } from "./StorageAction";
+import { isUnownedStorage, keepEverythingNote, StorageAction, totalHeldBytes } from "./StorageAction";
 import { reclaimDetail, WorktreeReclaimAction } from "./WorktreeReclaimAction";
 import { MarkedWorktreeAction, markedDetail, markedTitle } from "./MarkedWorktreeAction";
 import { RecoveryAction } from "./RecoveryAction";
@@ -750,6 +750,8 @@ export function storageDetail(storage: InboxStorageData): string {
     const size = totalHeldBytes(storage.held);
     const noun = storage.held.length === 1 ? "workspace" : "workspaces";
     parts.push(`${storage.held.length} ${noun} kept${size > 0 ? ` (${formatBytes(size)})` : ""}`);
+    const byKeepSetting = keepEverythingNote(storage.held);
+    if (byKeepSetting) parts.push(byKeepSetting);
   }
   if (isUnownedStorage(storage)) {
     // online: whether any machine is connected to be asked for the folders.
