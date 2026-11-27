@@ -38,7 +38,7 @@ import Card from "@/components/forge-ui/card";
 import SkeletonLoader from "@/components/forge-ui/skeleton_loader";
 import Button from "@/components/forge-ui/button";
 import { useDashboardIndex } from "@/hooks/dashboard-queries";
-import { obsKeys, useMetric, useMetricCatalog, useMetricExemplars, useObservabilityOrg, useReleases } from "@/hooks/observability-queries";
+import { invalidateObsScope, useMetric, useMetricCatalog, useMetricExemplars, useObservabilityOrg, useReleases } from "@/hooks/observability-queries";
 import { useDebounce } from "@/hooks/useDebounce";
 import { cn } from "@/lib/utils";
 import type { DashboardRef } from "@/services/controlPlane/observability/dashboardTypes";
@@ -347,7 +347,7 @@ export function MetricsExplorer({ project, org: orgPlace, env, environments, sea
     if (groupBy.includes(field) || groupBy.length >= 3) return;
     onPanel({ ...state.panel, groupBy: [...groupBy, field] });
   };
-  const refresh = () => void queryClient.invalidateQueries({ queryKey: obsKeys.all(scope) });
+  const refresh = () => void invalidateObsScope(queryClient, scope);
 
   // ── Page-level states ──
   if (org.isLoading) return <ObsLoadingRows testId="metrics-org-loading" />;

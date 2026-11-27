@@ -65,6 +65,34 @@ type dirScan struct {
 	GitRoots []gitRoot
 }
 
+// without is s less the targets and git roots inside any of dirs.
+func (s dirScan) without(dirs []string) dirScan {
+	if len(dirs) == 0 {
+		return s
+	}
+	inside := func(p string) bool {
+		for _, d := range dirs {
+			if within(d, p) {
+				return true
+			}
+		}
+		return false
+	}
+	out := s
+	out.Targets, out.GitRoots = nil, nil
+	for _, t := range s.Targets {
+		if !inside(t) {
+			out.Targets = append(out.Targets, t)
+		}
+	}
+	for _, g := range s.GitRoots {
+		if !inside(g.Path) {
+			out.GitRoots = append(out.GitRoots, g)
+		}
+	}
+	return out
+}
+
 // unmeasured is why a scan cannot vouch for the directory, or "".
 func (s dirScan) unmeasured() string {
 	switch {
@@ -175,18 +203,6 @@ func isBuildOutput(p, name string) bool {
 	}
 	info, err := os.Lstat(filepath.Join(filepath.Dir(p), manifest))
 	return err == nil && info.Mode().IsRegular()
-}
-
-// enclosingGitRoot is the innermost git root that p is inside, or nil.
-func enclosingGitRoot(roots []gitRoot, p string) *gitRoot {
-	var best *gitRoot
-	for i := range roots {
-		r := &roots[i]
-		if within(r.Path, p) && (best == nil || len(r.Path) > len(best.Path)) {
-			best = r
-		}
-	}
-	return best
 }
 
 // within reports whether p is root or under it.

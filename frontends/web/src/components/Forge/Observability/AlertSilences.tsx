@@ -16,7 +16,9 @@ import { BellOff, Plus, Trash2 } from "lucide-react";
 import Card from "@/components/forge-ui/card";
 import Modal from "@/components/forge-ui/modal";
 import Button from "@/components/forge-ui/button";
-import { useAlertingMutation, useSilences } from "@/hooks/observability-queries";
+import { useAlertingWriteOptions, useSilences } from "@/hooks/observability-queries";
+import { useCreateSilence, useExpireSilence } from "@/hooks/controlplane/alerting-service-hooks_gen";
+import { createSilenceRequest } from "@/services/controlPlane/observability/alertingApi";
 import type { CreateSilenceInput, Matcher, Silence } from "@/services/controlPlane/observability/alertingTypes";
 import { alertingErrorKind, obsErrorMessage } from "@/services/controlPlane/observability/errors";
 import { cn } from "@/lib/utils";
@@ -52,7 +54,7 @@ export function AlertSilences({ orgId, readOnly, onDenied }: { orgId: string; re
   const [includeExpired, setIncludeExpired] = useState(false);
   const [creating, setCreating] = useState(false);
   const silences = useSilences(orgId, includeExpired);
-  const expire = useAlertingMutation(orgId, (api, org, id: string) => api.expireSilence(org, id));
+  const expire = useExpireSilence(useAlertingWriteOptions(orgId));
 
   if (silences.isLoading) return <ObsLoadingRows testId="obs-silences-loading" />;
   if (silences.error) return <ObsError error={silences.error} subject="this organization" onRetry={() => void silences.refetch()} />;
@@ -100,9 +102,9 @@ export function AlertSilences({ orgId, readOnly, onDenied }: { orgId: string; re
                 key={s.id}
                 silence={s}
                 readOnly={readOnly}
-                expiring={expire.isPending && expire.variables === s.id}
+                expiring={expire.isPending && expire.variables?.id === s.id}
                 onExpire={() =>
-                  expire.mutate(s.id, {
+                  expire.mutate({ orgId, id: s.id }, {
                     onError: (error) => {
                       if (alertingErrorKind(error) === "denied") onDenied();
                     },
@@ -201,7 +203,7 @@ export function SilenceDialog({
   const [minutes, setMinutes] = useState(DURATIONS[0][1]);
   const [comment, setComment] = useState("");
   const [problems, setProblems] = useState<string[]>([]);
-  const create = useAlertingMutation(orgId, (api, org, input: CreateSilenceInput) => api.createSilence(org, input));
+  const create = useCreateSilence(useAlertingWriteOptions(orgId));
   const commentId = useId();
   const durationId = useId();
 
@@ -211,7 +213,7 @@ export function SilenceDialog({
     const found = silenceProblems(input);
     setProblems(found);
     if (found.length) return;
-    create.mutate(input, {
+    create.mutate(createSilenceRequest(orgId, input), {
       onSuccess: onCreated,
       onError: (error) => {
         if (alertingErrorKind(error) === "denied") {

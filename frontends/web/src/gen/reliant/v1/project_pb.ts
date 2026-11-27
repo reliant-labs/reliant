@@ -3616,6 +3616,7 @@ export const ProjectService: GenService<{
   /**
    * GetProject retrieves a project by ID
    * forge:custom — checks the caller owns the project and reconciles its git flag with the daemon
+   * forge:lint-disable-next-line forge-idempotency-read-undeclared: writes as it reads: it reconciles the stored is_git_repo flag from a live daemon check and records TrackProjectOpened on every call
    *
    * @generated from rpc reliant.v1.ProjectService.GetProject
    */

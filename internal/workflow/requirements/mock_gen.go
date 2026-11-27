@@ -14,14 +14,15 @@ import (
 )
 
 // forge:section MockMachine
-// forge:hash=1ddb94bf7858f7ab28e549802c01f3b82055f10269457d9f844fc0b39ad74493
+// forge:hash=ccd574d50217e784951f4183a842edbcd6cd0ffbcdebae5d0ae2654244de2b20
 
 // MockMachine is a test mock for the Machine interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockMachine.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockMachine.<Method>Func not set" error.
 type MockMachine struct {
 	contractkit.Recorder
 	RunFunc func(context.Context, string) (string, int, error)
@@ -36,18 +37,39 @@ func (m *MockMachine) Run(ctx context.Context, command string) (string, int, err
 	return "", 0, contractkit.MockNotSet("MockMachine", "Run")
 }
 
+// MockMachineRunCall is one recorded call of MockMachine.Run, one
+// field per parameter.
+type MockMachineRunCall struct {
+	Ctx     context.Context
+	Command string
+}
+
+// RunCalls returns every recorded Run call, oldest first, with
+// its arguments typed. It reads the same log as Calls("Run").
+func (m *MockMachine) RunCalls() []MockMachineRunCall {
+	var out []MockMachineRunCall
+	for _, c := range m.Recorder.Calls("Run") {
+		var r MockMachineRunCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Command, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ Machine = (*MockMachine)(nil)
 
 // forge:section MockCredentials
-// forge:hash=2fc6e2b7686adeb9e065022e277e295b63595628bb7e5ce3c1f1d7120fe2eb7f
+// forge:hash=5285e831e7e60944091e53089165b38ff91e0edec381a45a1836a3a99d28ab3f
 
 // MockCredentials is a test mock for the Credentials interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockCredentials.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockCredentials.<Method>Func not set" error.
 type MockCredentials struct {
 	contractkit.Recorder
 	CheckFunc func(context.Context, string) error
@@ -60,6 +82,26 @@ func (m *MockCredentials) Check(ctx context.Context, integration string) error {
 		return m.CheckFunc(ctx, integration)
 	}
 	return contractkit.MockNotSet("MockCredentials", "Check")
+}
+
+// MockCredentialsCheckCall is one recorded call of MockCredentials.Check, one
+// field per parameter.
+type MockCredentialsCheckCall struct {
+	Ctx         context.Context
+	Integration string
+}
+
+// CheckCalls returns every recorded Check call, oldest first, with
+// its arguments typed. It reads the same log as Calls("Check").
+func (m *MockCredentials) CheckCalls() []MockCredentialsCheckCall {
+	var out []MockCredentialsCheckCall
+	for _, c := range m.Recorder.Calls("Check") {
+		var r MockCredentialsCheckCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Integration, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
 }
 
 // Compile-time check.

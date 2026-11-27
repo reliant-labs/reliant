@@ -16,14 +16,15 @@ import (
 )
 
 // forge:section MockService
-// forge:hash=2faaeca9b2d1a96ee93030b86e7d936980be13e12b359365cfbd0436af4d7a95
+// forge:hash=7f4369e6762f10232092d4791ca4fa78b977195fe9401e0806541a72cd7a9635
 
 // MockService is a test mock for the Service interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockService.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockService.<Method>Func not set" error.
 type MockService struct {
 	contractkit.Recorder
 	GetPlanByThreadIDFunc          func(context.Context, string) (*core.Plan, error)
@@ -108,18 +109,185 @@ func (m *MockService) DeleteTaskDependencyByPair(ctx context.Context, fromTaskID
 	return contractkit.MockNotSet("MockService", "DeleteTaskDependencyByPair")
 }
 
+// MockServiceGetPlanByThreadIDCall is one recorded call of MockService.GetPlanByThreadID, one
+// field per parameter.
+type MockServiceGetPlanByThreadIDCall struct {
+	Ctx      context.Context
+	ThreadID string
+}
+
+// GetPlanByThreadIDCalls returns every recorded GetPlanByThreadID call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetPlanByThreadID").
+func (m *MockService) GetPlanByThreadIDCalls() []MockServiceGetPlanByThreadIDCall {
+	var out []MockServiceGetPlanByThreadIDCall
+	for _, c := range m.Recorder.Calls("GetPlanByThreadID") {
+		var r MockServiceGetPlanByThreadIDCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ThreadID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceUpdatePlanCall is one recorded call of MockService.UpdatePlan, one
+// field per parameter.
+type MockServiceUpdatePlanCall struct {
+	Ctx  context.Context
+	Plan *core.Plan
+}
+
+// UpdatePlanCalls returns every recorded UpdatePlan call, oldest first, with
+// its arguments typed. It reads the same log as Calls("UpdatePlan").
+func (m *MockService) UpdatePlanCalls() []MockServiceUpdatePlanCall {
+	var out []MockServiceUpdatePlanCall
+	for _, c := range m.Recorder.Calls("UpdatePlan") {
+		var r MockServiceUpdatePlanCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Plan, _ = c.Args[1].(*core.Plan)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceUpdateTaskCall is one recorded call of MockService.UpdateTask, one
+// field per parameter.
+type MockServiceUpdateTaskCall struct {
+	Ctx  context.Context
+	Task *core.Task
+}
+
+// UpdateTaskCalls returns every recorded UpdateTask call, oldest first, with
+// its arguments typed. It reads the same log as Calls("UpdateTask").
+func (m *MockService) UpdateTaskCalls() []MockServiceUpdateTaskCall {
+	var out []MockServiceUpdateTaskCall
+	for _, c := range m.Recorder.Calls("UpdateTask") {
+		var r MockServiceUpdateTaskCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Task, _ = c.Args[1].(*core.Task)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceGetTaskByPositionCall is one recorded call of MockService.GetTaskByPosition, one
+// field per parameter.
+type MockServiceGetTaskByPositionCall struct {
+	Ctx      context.Context
+	PlanID   string
+	Position int
+}
+
+// GetTaskByPositionCalls returns every recorded GetTaskByPosition call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetTaskByPosition").
+func (m *MockService) GetTaskByPositionCalls() []MockServiceGetTaskByPositionCall {
+	var out []MockServiceGetTaskByPositionCall
+	for _, c := range m.Recorder.Calls("GetTaskByPosition") {
+		var r MockServiceGetTaskByPositionCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.PlanID, _ = c.Args[1].(string)
+		r.Position, _ = c.Args[2].(int)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceGetTaskStatsByPlanCall is one recorded call of MockService.GetTaskStatsByPlan, one
+// field per parameter.
+type MockServiceGetTaskStatsByPlanCall struct {
+	Ctx    context.Context
+	PlanID string
+}
+
+// GetTaskStatsByPlanCalls returns every recorded GetTaskStatsByPlan call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetTaskStatsByPlan").
+func (m *MockService) GetTaskStatsByPlanCalls() []MockServiceGetTaskStatsByPlanCall {
+	var out []MockServiceGetTaskStatsByPlanCall
+	for _, c := range m.Recorder.Calls("GetTaskStatsByPlan") {
+		var r MockServiceGetTaskStatsByPlanCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.PlanID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceCreateTaskDependencyCall is one recorded call of MockService.CreateTaskDependency, one
+// field per parameter.
+type MockServiceCreateTaskDependencyCall struct {
+	Ctx context.Context
+	Dep *core.TaskDependency
+}
+
+// CreateTaskDependencyCalls returns every recorded CreateTaskDependency call, oldest first, with
+// its arguments typed. It reads the same log as Calls("CreateTaskDependency").
+func (m *MockService) CreateTaskDependencyCalls() []MockServiceCreateTaskDependencyCall {
+	var out []MockServiceCreateTaskDependencyCall
+	for _, c := range m.Recorder.Calls("CreateTaskDependency") {
+		var r MockServiceCreateTaskDependencyCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Dep, _ = c.Args[1].(*core.TaskDependency)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceListDependenciesByPlanCall is one recorded call of MockService.ListDependenciesByPlan, one
+// field per parameter.
+type MockServiceListDependenciesByPlanCall struct {
+	Ctx    context.Context
+	PlanID string
+}
+
+// ListDependenciesByPlanCalls returns every recorded ListDependenciesByPlan call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListDependenciesByPlan").
+func (m *MockService) ListDependenciesByPlanCalls() []MockServiceListDependenciesByPlanCall {
+	var out []MockServiceListDependenciesByPlanCall
+	for _, c := range m.Recorder.Calls("ListDependenciesByPlan") {
+		var r MockServiceListDependenciesByPlanCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.PlanID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceDeleteTaskDependencyByPairCall is one recorded call of MockService.DeleteTaskDependencyByPair, one
+// field per parameter.
+type MockServiceDeleteTaskDependencyByPairCall struct {
+	Ctx        context.Context
+	FromTaskID string
+	ToTaskID   string
+	DepType    int32
+}
+
+// DeleteTaskDependencyByPairCalls returns every recorded DeleteTaskDependencyByPair call, oldest first, with
+// its arguments typed. It reads the same log as Calls("DeleteTaskDependencyByPair").
+func (m *MockService) DeleteTaskDependencyByPairCalls() []MockServiceDeleteTaskDependencyByPairCall {
+	var out []MockServiceDeleteTaskDependencyByPairCall
+	for _, c := range m.Recorder.Calls("DeleteTaskDependencyByPair") {
+		var r MockServiceDeleteTaskDependencyByPairCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.FromTaskID, _ = c.Args[1].(string)
+		r.ToTaskID, _ = c.Args[2].(string)
+		r.DepType, _ = c.Args[3].(int32)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ Service = (*MockService)(nil)
 
 // forge:section MockPlans
-// forge:hash=fd3f6376dcd09671639506beaa3e2ebbfd92720a258a44e621fe1ff4e5dcf422
+// forge:hash=9ed71cea789cd6c733e9f9cda7ac24eee7f7b8e7dc84a258f5ef0a4d88b3e537
 
 // MockPlans is a test mock for the Plans interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockPlans.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockPlans.<Method>Func not set" error.
 type MockPlans struct {
 	contractkit.Recorder
 	GetPlanByThreadIDFunc func(context.Context, string) (*core.Plan, error)
@@ -144,18 +312,59 @@ func (m *MockPlans) ReplacePlan(ctx context.Context, p *core.Plan) error {
 	return contractkit.MockNotSet("MockPlans", "ReplacePlan")
 }
 
+// MockPlansGetPlanByThreadIDCall is one recorded call of MockPlans.GetPlanByThreadID, one
+// field per parameter.
+type MockPlansGetPlanByThreadIDCall struct {
+	Ctx      context.Context
+	ThreadID string
+}
+
+// GetPlanByThreadIDCalls returns every recorded GetPlanByThreadID call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetPlanByThreadID").
+func (m *MockPlans) GetPlanByThreadIDCalls() []MockPlansGetPlanByThreadIDCall {
+	var out []MockPlansGetPlanByThreadIDCall
+	for _, c := range m.Recorder.Calls("GetPlanByThreadID") {
+		var r MockPlansGetPlanByThreadIDCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ThreadID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockPlansReplacePlanCall is one recorded call of MockPlans.ReplacePlan, one
+// field per parameter.
+type MockPlansReplacePlanCall struct {
+	Ctx context.Context
+	P   *core.Plan
+}
+
+// ReplacePlanCalls returns every recorded ReplacePlan call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ReplacePlan").
+func (m *MockPlans) ReplacePlanCalls() []MockPlansReplacePlanCall {
+	var out []MockPlansReplacePlanCall
+	for _, c := range m.Recorder.Calls("ReplacePlan") {
+		var r MockPlansReplacePlanCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.P, _ = c.Args[1].(*core.Plan)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ Plans = (*MockPlans)(nil)
 
 // forge:section MockTasks
-// forge:hash=ddfff55bb6440cf3d57f8730d0b5fa9e69731dc169a0109f99b5e36bba456333
+// forge:hash=15e9e1ddbef480730777b1064ff029714a5638237dc9c93bf9aa3a2793e2f1de
 
 // MockTasks is a test mock for the Tasks interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockTasks.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockTasks.<Method>Func not set" error.
 type MockTasks struct {
 	contractkit.Recorder
 	ListTasksByPlanFunc func(context.Context, string) ([]*core.Task, error)
@@ -180,18 +389,59 @@ func (m *MockTasks) ReplaceTask(ctx context.Context, t *core.Task) error {
 	return contractkit.MockNotSet("MockTasks", "ReplaceTask")
 }
 
+// MockTasksListTasksByPlanCall is one recorded call of MockTasks.ListTasksByPlan, one
+// field per parameter.
+type MockTasksListTasksByPlanCall struct {
+	Ctx    context.Context
+	PlanID string
+}
+
+// ListTasksByPlanCalls returns every recorded ListTasksByPlan call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListTasksByPlan").
+func (m *MockTasks) ListTasksByPlanCalls() []MockTasksListTasksByPlanCall {
+	var out []MockTasksListTasksByPlanCall
+	for _, c := range m.Recorder.Calls("ListTasksByPlan") {
+		var r MockTasksListTasksByPlanCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.PlanID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockTasksReplaceTaskCall is one recorded call of MockTasks.ReplaceTask, one
+// field per parameter.
+type MockTasksReplaceTaskCall struct {
+	Ctx context.Context
+	T   *core.Task
+}
+
+// ReplaceTaskCalls returns every recorded ReplaceTask call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ReplaceTask").
+func (m *MockTasks) ReplaceTaskCalls() []MockTasksReplaceTaskCall {
+	var out []MockTasksReplaceTaskCall
+	for _, c := range m.Recorder.Calls("ReplaceTask") {
+		var r MockTasksReplaceTaskCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.T, _ = c.Args[1].(*core.Task)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ Tasks = (*MockTasks)(nil)
 
 // forge:section MockDependencies
-// forge:hash=f4bdd02147ef2e2819279e29ebcaa49b7a8eb6ce960386d25a3960b8749c256b
+// forge:hash=5385329590c4dd4407ccc884ba5973940a7c81aadbbd897ba94ce74b92108e10
 
 // MockDependencies is a test mock for the Dependencies interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockDependencies.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockDependencies.<Method>Func not set" error.
 type MockDependencies struct {
 	contractkit.Recorder
 	InsertTaskDependencyFunc       func(context.Context, *core.TaskDependency) error
@@ -224,6 +474,70 @@ func (m *MockDependencies) DeleteTaskDependencyByPair(ctx context.Context, fromT
 		return m.DeleteTaskDependencyByPairFunc(ctx, fromTaskID, toTaskID, depType)
 	}
 	return contractkit.MockNotSet("MockDependencies", "DeleteTaskDependencyByPair")
+}
+
+// MockDependenciesInsertTaskDependencyCall is one recorded call of MockDependencies.InsertTaskDependency, one
+// field per parameter.
+type MockDependenciesInsertTaskDependencyCall struct {
+	Ctx context.Context
+	D   *core.TaskDependency
+}
+
+// InsertTaskDependencyCalls returns every recorded InsertTaskDependency call, oldest first, with
+// its arguments typed. It reads the same log as Calls("InsertTaskDependency").
+func (m *MockDependencies) InsertTaskDependencyCalls() []MockDependenciesInsertTaskDependencyCall {
+	var out []MockDependenciesInsertTaskDependencyCall
+	for _, c := range m.Recorder.Calls("InsertTaskDependency") {
+		var r MockDependenciesInsertTaskDependencyCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.D, _ = c.Args[1].(*core.TaskDependency)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockDependenciesListDependenciesByPlanCall is one recorded call of MockDependencies.ListDependenciesByPlan, one
+// field per parameter.
+type MockDependenciesListDependenciesByPlanCall struct {
+	Ctx    context.Context
+	PlanID string
+}
+
+// ListDependenciesByPlanCalls returns every recorded ListDependenciesByPlan call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListDependenciesByPlan").
+func (m *MockDependencies) ListDependenciesByPlanCalls() []MockDependenciesListDependenciesByPlanCall {
+	var out []MockDependenciesListDependenciesByPlanCall
+	for _, c := range m.Recorder.Calls("ListDependenciesByPlan") {
+		var r MockDependenciesListDependenciesByPlanCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.PlanID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockDependenciesDeleteTaskDependencyByPairCall is one recorded call of MockDependencies.DeleteTaskDependencyByPair, one
+// field per parameter.
+type MockDependenciesDeleteTaskDependencyByPairCall struct {
+	Ctx        context.Context
+	FromTaskID string
+	ToTaskID   string
+	DepType    int32
+}
+
+// DeleteTaskDependencyByPairCalls returns every recorded DeleteTaskDependencyByPair call, oldest first, with
+// its arguments typed. It reads the same log as Calls("DeleteTaskDependencyByPair").
+func (m *MockDependencies) DeleteTaskDependencyByPairCalls() []MockDependenciesDeleteTaskDependencyByPairCall {
+	var out []MockDependenciesDeleteTaskDependencyByPairCall
+	for _, c := range m.Recorder.Calls("DeleteTaskDependencyByPair") {
+		var r MockDependenciesDeleteTaskDependencyByPairCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.FromTaskID, _ = c.Args[1].(string)
+		r.ToTaskID, _ = c.Args[2].(string)
+		r.DepType, _ = c.Args[3].(int32)
+		out = append(out, r)
+	}
+	return out
 }
 
 // Compile-time check.

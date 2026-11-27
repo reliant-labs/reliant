@@ -422,6 +422,7 @@ func newHarness(t *testing.T, llmScript *ScriptedLLM, opts ...HarnessOption) *Ha
 		Logger:           slog.Default(),
 		Config:           &typedconfig.Config{},
 		Repo:             s.Repo,
+		TriggerReads:     store.NewTriggerEventExtStore(s.Repo.ORM()),
 		Chats:            chataccess.NewFromORM(s.Repo.ORM()),
 		ChatRows:         store.NewChatExtStore(s.Repo.ORM()),
 		ChatViews:        store.NewChatsWithActivityExtStore(s.Repo.ORM()),

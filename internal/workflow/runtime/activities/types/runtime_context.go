@@ -198,6 +198,15 @@ type RuntimeContext struct {
 	// loads. Set on call_llm nodes; empty for a run with no pin.
 	CatalogPin string `json:"catalog_pin,omitempty"`
 
+	// ServerActionFrom is the node a Reliant server action's `with: {from:
+	// <id>}` names, as the engine holds it: its declared type and role from
+	// the definition the run executes, and the output it recorded. A
+	// verdict-writing action reads the reviewer's verdict here, never from
+	// its own `with:`, which the workflow's author renders. Set on server
+	// action nodes only, and only when the named node is in the action's
+	// own scope.
+	ServerActionFrom *ServerActionFrom `json:"server_action_from,omitempty"`
+
 	// Project context
 	ProjectPath string `json:"project_path,omitempty"`
 
@@ -261,6 +270,26 @@ type DaemonSelector struct {
 	// workflow or node configures. Only a session pin yields to a branch
 	// workspace's owner (toolDaemonSelector).
 	Session bool `json:"session,omitempty"`
+}
+
+// ServerActionFrom is a node of the run's graph as the engine recorded it,
+// for the server action that names it (RuntimeContext.ServerActionFrom).
+type ServerActionFrom struct {
+	// NodeID is the node's id in the action's scope.
+	NodeID string `json:"node_id"`
+	// Type is the node's type as the run executes it: a review node is a
+	// workflow node by then (model.LowerReviewNode).
+	Type string `json:"type,omitempty"`
+	// Role is the engine role the definition gives it (model.RoleReviewer).
+	Role string `json:"role,omitempty"`
+	// Review is true only for an engine-owned review node
+	// (model.IsLoweredReviewNode): its output is the checked verdict and the
+	// reviewer session it ran in.
+	Review bool `json:"review,omitempty"`
+	// Ran is true when the node has an output in this scope.
+	Ran bool `json:"ran,omitempty"`
+	// Output is the node's recorded output; nil when it has not run.
+	Output map[string]interface{} `json:"output,omitempty"`
 }
 
 // SpawnConfig holds the configuration for spawning child workflows.

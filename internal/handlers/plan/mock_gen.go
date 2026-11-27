@@ -16,14 +16,15 @@ import (
 )
 
 // forge:section MockPlanStore
-// forge:hash=048aa6c7749d21fc7e2cc13a3ce1f92dfa8a00a78ec678f61ef30b060d7e86b0
+// forge:hash=25459898b8f333269a6aa3530a1a867d584384136273d359d601b5bc04f3237f
 
 // MockPlanStore is a test mock for the PlanStore interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockPlanStore.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockPlanStore.<Method>Func not set" error.
 type MockPlanStore struct {
 	contractkit.Recorder
 	GetPlanFunc           func(context.Context, string) (*core.Plan, error)
@@ -48,18 +49,59 @@ func (m *MockPlanStore) ListPlansByChatID(ctx context.Context, chatID string) ([
 	return nil, contractkit.MockNotSet("MockPlanStore", "ListPlansByChatID")
 }
 
+// MockPlanStoreGetPlanCall is one recorded call of MockPlanStore.GetPlan, one
+// field per parameter.
+type MockPlanStoreGetPlanCall struct {
+	Ctx context.Context
+	ID  string
+}
+
+// GetPlanCalls returns every recorded GetPlan call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetPlan").
+func (m *MockPlanStore) GetPlanCalls() []MockPlanStoreGetPlanCall {
+	var out []MockPlanStoreGetPlanCall
+	for _, c := range m.Recorder.Calls("GetPlan") {
+		var r MockPlanStoreGetPlanCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockPlanStoreListPlansByChatIDCall is one recorded call of MockPlanStore.ListPlansByChatID, one
+// field per parameter.
+type MockPlanStoreListPlansByChatIDCall struct {
+	Ctx    context.Context
+	ChatID string
+}
+
+// ListPlansByChatIDCalls returns every recorded ListPlansByChatID call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListPlansByChatID").
+func (m *MockPlanStore) ListPlansByChatIDCalls() []MockPlanStoreListPlansByChatIDCall {
+	var out []MockPlanStoreListPlansByChatIDCall
+	for _, c := range m.Recorder.Calls("ListPlansByChatID") {
+		var r MockPlanStoreListPlansByChatIDCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ChatID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ PlanStore = (*MockPlanStore)(nil)
 
 // forge:section MockTaskStore
-// forge:hash=1b541ce1820ecc50141bd3ef51a03cb6d963707dddbbb806c7ac6e7bb34b73f1
+// forge:hash=dba944e66a68f67b91e76acd8fba32b19629c030dbc4445d5b8f2f03f1ecaf1e
 
 // MockTaskStore is a test mock for the TaskStore interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockTaskStore.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockTaskStore.<Method>Func not set" error.
 type MockTaskStore struct {
 	contractkit.Recorder
 	ListTasksByPlanFunc func(context.Context, string) ([]*core.Task, error)
@@ -74,18 +116,39 @@ func (m *MockTaskStore) ListTasksByPlan(ctx context.Context, planID string) ([]*
 	return nil, contractkit.MockNotSet("MockTaskStore", "ListTasksByPlan")
 }
 
+// MockTaskStoreListTasksByPlanCall is one recorded call of MockTaskStore.ListTasksByPlan, one
+// field per parameter.
+type MockTaskStoreListTasksByPlanCall struct {
+	Ctx    context.Context
+	PlanID string
+}
+
+// ListTasksByPlanCalls returns every recorded ListTasksByPlan call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListTasksByPlan").
+func (m *MockTaskStore) ListTasksByPlanCalls() []MockTaskStoreListTasksByPlanCall {
+	var out []MockTaskStoreListTasksByPlanCall
+	for _, c := range m.Recorder.Calls("ListTasksByPlan") {
+		var r MockTaskStoreListTasksByPlanCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.PlanID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ TaskStore = (*MockTaskStore)(nil)
 
 // forge:section MockThreadStore
-// forge:hash=292dcda31c1877784c4581cd06fe8635c70b6bbef7abf05a314d61c777ce5999
+// forge:hash=af99abc87ab95899b2d0be2f9f69c8b90e52b091e6316140d3aa6bd7958d75b8
 
 // MockThreadStore is a test mock for the ThreadStore interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockThreadStore.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockThreadStore.<Method>Func not set" error.
 type MockThreadStore struct {
 	contractkit.Recorder
 	GetThreadFunc func(context.Context, string) (*core.Thread, error)
@@ -100,18 +163,39 @@ func (m *MockThreadStore) GetThread(ctx context.Context, id string) (*core.Threa
 	return nil, contractkit.MockNotSet("MockThreadStore", "GetThread")
 }
 
+// MockThreadStoreGetThreadCall is one recorded call of MockThreadStore.GetThread, one
+// field per parameter.
+type MockThreadStoreGetThreadCall struct {
+	Ctx context.Context
+	ID  string
+}
+
+// GetThreadCalls returns every recorded GetThread call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetThread").
+func (m *MockThreadStore) GetThreadCalls() []MockThreadStoreGetThreadCall {
+	var out []MockThreadStoreGetThreadCall
+	for _, c := range m.Recorder.Calls("GetThread") {
+		var r MockThreadStoreGetThreadCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ ThreadStore = (*MockThreadStore)(nil)
 
 // forge:section MockChatStore
-// forge:hash=d6fff48ac89f64f404353ca8f9e9ab7659ea7deac3fae5d32bb1ffd25ab971d9
+// forge:hash=9a9e62d16ee30f778f8aeb2ea51a75ba4990cae5fdc1d8934dbfb83806eed4d5
 
 // MockChatStore is a test mock for the ChatStore interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockChatStore.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockChatStore.<Method>Func not set" error.
 type MockChatStore struct {
 	contractkit.Recorder
 	GetChatRowFunc func(context.Context, string) (*core.ChatRow, error)
@@ -126,18 +210,39 @@ func (m *MockChatStore) GetChatRow(ctx context.Context, id string) (*core.ChatRo
 	return nil, contractkit.MockNotSet("MockChatStore", "GetChatRow")
 }
 
+// MockChatStoreGetChatRowCall is one recorded call of MockChatStore.GetChatRow, one
+// field per parameter.
+type MockChatStoreGetChatRowCall struct {
+	Ctx context.Context
+	ID  string
+}
+
+// GetChatRowCalls returns every recorded GetChatRow call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetChatRow").
+func (m *MockChatStore) GetChatRowCalls() []MockChatStoreGetChatRowCall {
+	var out []MockChatStoreGetChatRowCall
+	for _, c := range m.Recorder.Calls("GetChatRow") {
+		var r MockChatStoreGetChatRowCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ ChatStore = (*MockChatStore)(nil)
 
 // forge:section MockChatRefetcher
-// forge:hash=ad400a551d5d75fb314d68bf81355edef206dd20cb343eb20b12f6c1ca8006ea
+// forge:hash=57fabaa82705a248ce06a1db1ce0403adfb4d9db1f110439da293f2630415a2f
 
 // MockChatRefetcher is a test mock for the ChatRefetcher interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockChatRefetcher.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockChatRefetcher.<Method>Func not set" error.
 type MockChatRefetcher struct {
 	contractkit.Recorder
 	EmitChatRefetchFunc func(context.Context, string, core.RefetchType) error
@@ -150,6 +255,28 @@ func (m *MockChatRefetcher) EmitChatRefetch(ctx context.Context, chatID string, 
 		return m.EmitChatRefetchFunc(ctx, chatID, refetchType)
 	}
 	return contractkit.MockNotSet("MockChatRefetcher", "EmitChatRefetch")
+}
+
+// MockChatRefetcherEmitChatRefetchCall is one recorded call of MockChatRefetcher.EmitChatRefetch, one
+// field per parameter.
+type MockChatRefetcherEmitChatRefetchCall struct {
+	Ctx         context.Context
+	ChatID      string
+	RefetchType core.RefetchType
+}
+
+// EmitChatRefetchCalls returns every recorded EmitChatRefetch call, oldest first, with
+// its arguments typed. It reads the same log as Calls("EmitChatRefetch").
+func (m *MockChatRefetcher) EmitChatRefetchCalls() []MockChatRefetcherEmitChatRefetchCall {
+	var out []MockChatRefetcherEmitChatRefetchCall
+	for _, c := range m.Recorder.Calls("EmitChatRefetch") {
+		var r MockChatRefetcherEmitChatRefetchCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ChatID, _ = c.Args[1].(string)
+		r.RefetchType, _ = c.Args[2].(core.RefetchType)
+		out = append(out, r)
+	}
+	return out
 }
 
 // Compile-time check.

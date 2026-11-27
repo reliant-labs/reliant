@@ -79,6 +79,9 @@ func TestPipelineTablesConstraints(t *testing.T) {
 		return err
 	}
 	for _, via := range core.AllPipelineChangedVia {
+		if via == core.PipelineChangedViaConfig {
+			continue // config changes only a gate stage: TestPipelineSettingChangesGateStages
+		}
 		require.NoError(t, insertChange("change-"+string(via), string(via)), "changed_via %q", via)
 	}
 	err = insertChange("change-api", "api")

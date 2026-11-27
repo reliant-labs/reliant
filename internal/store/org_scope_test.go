@@ -246,13 +246,13 @@ func TestOrgOfTriggersSavedWorkflowsAndRuns(t *testing.T) {
 			t.Fatalf("CreateTrigger(%s): %v", tr.ID, err)
 		}
 	}
-	got, err := env.Repo.GetTrigger(ctx, "t-acme")
+	got, err := store.GetTrigger(ctx, env.Repo.ORM(), "t-acme")
 	if err != nil || got.OrgID == nil || *got.OrgID != "acme" {
 		t.Fatalf("GetTrigger org = %v, %v; want acme", got, err)
 	}
 	triggerIDs := func(scope *core.OrgScope) []string {
 		t.Helper()
-		ts, err := env.Repo.ListTriggers(ctx, core.TriggerFilters{UserID: user, Org: scope})
+		ts, err := store.ListTriggersForUser(ctx, env.Repo.ORM(), core.TriggerFilters{UserID: user, Org: scope})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -328,7 +328,7 @@ func TestOrgOfTriggersSavedWorkflowsAndRuns(t *testing.T) {
 	if err := env.Repo.AssignUnassignedOrg(ctx, user, "home"); err != nil {
 		t.Fatalf("AssignUnassignedOrg: %v", err)
 	}
-	if tr, _ := env.Repo.GetTrigger(ctx, "t-legacy"); tr.OrgID == nil || *tr.OrgID != "acme" {
+	if tr, _ := store.GetTrigger(ctx, env.Repo.ORM(), "t-legacy"); tr.OrgID == nil || *tr.OrgID != "acme" {
 		t.Fatalf("legacy trigger org = %v, want its project's (acme)", tr.OrgID)
 	}
 	if d, _ := env.Repo.GetWorkflowDraft(ctx, "d-legacy"); d.OrgID == nil || *d.OrgID != "home" {
@@ -457,7 +457,7 @@ func TestAssignUnassignedOrg_TriggersWaitForTheirProject(t *testing.T) {
 	}
 	triggerOrg := func() *string {
 		t.Helper()
-		got, err := env.Repo.GetTrigger(ctx, "t-held")
+		got, err := store.GetTrigger(ctx, env.Repo.ORM(), "t-held")
 		if err != nil {
 			t.Fatal(err)
 		}
