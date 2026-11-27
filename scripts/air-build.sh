@@ -107,8 +107,8 @@ shift 2
 #
 # -ldflags is one flag whose last occurrence replaces every earlier one (and
 # GOFLAGS'), so -w is merged into the last -ldflags among the flags, never
-# passed as a second one that would drop its -X stamps; one that already says
-# -w (a forge that adds it to $FORGE_GO_BUILD_FLAGS itself) is left as it is.
+# passed as a second one that would drop its -X stamps. Repeating -w is safe;
+# append it even if an unrelated linker option's value contains that text.
 # An -ldflags in GOFLAGS is the user's choice, so with none on the command
 # line nothing is added.
 if [ "${FORGE_DEV_DWARF:-}" != 1 ]; then
@@ -133,10 +133,7 @@ if [ "${FORGE_DEV_DWARF:-}" != 1 ]; then
       a=$1
       shift
       if [ $i -eq "$last" ]; then
-        case " $a " in
-          *" -w "* | *=-w" "*) ;;
-          *) a="$a -w" ;;
-        esac
+        a="$a -w"
       fi
       set -- "$@" "$a"
     done
