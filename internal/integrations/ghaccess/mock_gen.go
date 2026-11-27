@@ -17,14 +17,15 @@ import (
 )
 
 // forge:section MockTokenSource
-// forge:hash=8edb3b769d8207be1f0fccfa2d1c00ba8d91812073819fdea5fcf665126b2e31
+// forge:hash=f84f5282958e8adc7a125f1d5d77d5b59895848b8181ffa226f52281257b4124
 
 // MockTokenSource is a test mock for the TokenSource interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockTokenSource.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockTokenSource.<Method>Func not set" error.
 type MockTokenSource struct {
 	contractkit.Recorder
 	TokenFunc func(context.Context, string) (string, error)
@@ -39,18 +40,39 @@ func (m *MockTokenSource) Token(ctx context.Context, userID string) (string, err
 	return "", contractkit.MockNotSet("MockTokenSource", "Token")
 }
 
+// MockTokenSourceTokenCall is one recorded call of MockTokenSource.Token, one
+// field per parameter.
+type MockTokenSourceTokenCall struct {
+	Ctx    context.Context
+	UserID string
+}
+
+// TokenCalls returns every recorded Token call, oldest first, with
+// its arguments typed. It reads the same log as Calls("Token").
+func (m *MockTokenSource) TokenCalls() []MockTokenSourceTokenCall {
+	var out []MockTokenSourceTokenCall
+	for _, c := range m.Recorder.Calls("Token") {
+		var r MockTokenSourceTokenCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ TokenSource = (*MockTokenSource)(nil)
 
 // forge:section MockGrants
-// forge:hash=88ad5d926a66dc21cff178cde3c510b3063f8d13edd0f113073fd90b24ae2aa9
+// forge:hash=b6f5f5a86feb0b5a6f1401789fc6bccea9e80c7c1b0ae80f41e58b59523cc11a
 
 // MockGrants is a test mock for the Grants interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockGrants.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockGrants.<Method>Func not set" error.
 type MockGrants struct {
 	contractkit.Recorder
 	ReplaceIntegrationAccessFunc func(context.Context, string, string, string, time.Time, []core.IntegrationAccessGrant) error
@@ -75,18 +97,67 @@ func (m *MockGrants) PruneIntegrationAccess(ctx context.Context, before time.Tim
 	return 0, contractkit.MockNotSet("MockGrants", "PruneIntegrationAccess")
 }
 
+// MockGrantsReplaceIntegrationAccessCall is one recorded call of MockGrants.ReplaceIntegrationAccess, one
+// field per parameter.
+type MockGrantsReplaceIntegrationAccessCall struct {
+	Ctx           context.Context
+	UserID        string
+	IntegrationID string
+	SubjectID     string
+	At            time.Time
+	Grants        []core.IntegrationAccessGrant
+}
+
+// ReplaceIntegrationAccessCalls returns every recorded ReplaceIntegrationAccess call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ReplaceIntegrationAccess").
+func (m *MockGrants) ReplaceIntegrationAccessCalls() []MockGrantsReplaceIntegrationAccessCall {
+	var out []MockGrantsReplaceIntegrationAccessCall
+	for _, c := range m.Recorder.Calls("ReplaceIntegrationAccess") {
+		var r MockGrantsReplaceIntegrationAccessCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.IntegrationID, _ = c.Args[2].(string)
+		r.SubjectID, _ = c.Args[3].(string)
+		r.At, _ = c.Args[4].(time.Time)
+		r.Grants, _ = c.Args[5].([]core.IntegrationAccessGrant)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockGrantsPruneIntegrationAccessCall is one recorded call of MockGrants.PruneIntegrationAccess, one
+// field per parameter.
+type MockGrantsPruneIntegrationAccessCall struct {
+	Ctx    context.Context
+	Before time.Time
+}
+
+// PruneIntegrationAccessCalls returns every recorded PruneIntegrationAccess call, oldest first, with
+// its arguments typed. It reads the same log as Calls("PruneIntegrationAccess").
+func (m *MockGrants) PruneIntegrationAccessCalls() []MockGrantsPruneIntegrationAccessCall {
+	var out []MockGrantsPruneIntegrationAccessCall
+	for _, c := range m.Recorder.Calls("PruneIntegrationAccess") {
+		var r MockGrantsPruneIntegrationAccessCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Before, _ = c.Args[1].(time.Time)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ Grants = (*MockGrants)(nil)
 
 // forge:section MockRefreshes
-// forge:hash=6ea7263802417fbb19dd47e6e5a9363af028062121f8f5c8a1c9b1c9f3f9f455
+// forge:hash=2a0ca6cfda7ff6bbe4805eeafe9736827887dd4faeb139b3ca2d1c5f08bd0aef
 
 // MockRefreshes is a test mock for the Refreshes interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockRefreshes.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockRefreshes.<Method>Func not set" error.
 type MockRefreshes struct {
 	contractkit.Recorder
 	ListIntegrationTriggerOwnersFunc   func(context.Context, string) ([]string, error)
@@ -119,6 +190,82 @@ func (m *MockRefreshes) FinishIntegrationAccessRefresh(ctx context.Context, user
 		return m.FinishIntegrationAccessRefreshFunc(ctx, userID, integrationID, at, ok, lastError)
 	}
 	return contractkit.MockNotSet("MockRefreshes", "FinishIntegrationAccessRefresh")
+}
+
+// MockRefreshesListIntegrationTriggerOwnersCall is one recorded call of MockRefreshes.ListIntegrationTriggerOwners, one
+// field per parameter.
+type MockRefreshesListIntegrationTriggerOwnersCall struct {
+	Ctx         context.Context
+	Integration string
+}
+
+// ListIntegrationTriggerOwnersCalls returns every recorded ListIntegrationTriggerOwners call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListIntegrationTriggerOwners").
+func (m *MockRefreshes) ListIntegrationTriggerOwnersCalls() []MockRefreshesListIntegrationTriggerOwnersCall {
+	var out []MockRefreshesListIntegrationTriggerOwnersCall
+	for _, c := range m.Recorder.Calls("ListIntegrationTriggerOwners") {
+		var r MockRefreshesListIntegrationTriggerOwnersCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Integration, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockRefreshesClaimIntegrationAccessRefreshCall is one recorded call of MockRefreshes.ClaimIntegrationAccessRefresh, one
+// field per parameter.
+type MockRefreshesClaimIntegrationAccessRefreshCall struct {
+	Ctx           context.Context
+	UserID        string
+	IntegrationID string
+	Now           time.Time
+	LeaseUntil    time.Time
+	DueBefore     time.Time
+}
+
+// ClaimIntegrationAccessRefreshCalls returns every recorded ClaimIntegrationAccessRefresh call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ClaimIntegrationAccessRefresh").
+func (m *MockRefreshes) ClaimIntegrationAccessRefreshCalls() []MockRefreshesClaimIntegrationAccessRefreshCall {
+	var out []MockRefreshesClaimIntegrationAccessRefreshCall
+	for _, c := range m.Recorder.Calls("ClaimIntegrationAccessRefresh") {
+		var r MockRefreshesClaimIntegrationAccessRefreshCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.IntegrationID, _ = c.Args[2].(string)
+		r.Now, _ = c.Args[3].(time.Time)
+		r.LeaseUntil, _ = c.Args[4].(time.Time)
+		r.DueBefore, _ = c.Args[5].(time.Time)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockRefreshesFinishIntegrationAccessRefreshCall is one recorded call of MockRefreshes.FinishIntegrationAccessRefresh, one
+// field per parameter.
+type MockRefreshesFinishIntegrationAccessRefreshCall struct {
+	Ctx           context.Context
+	UserID        string
+	IntegrationID string
+	At            time.Time
+	Ok            bool
+	LastError     string
+}
+
+// FinishIntegrationAccessRefreshCalls returns every recorded FinishIntegrationAccessRefresh call, oldest first, with
+// its arguments typed. It reads the same log as Calls("FinishIntegrationAccessRefresh").
+func (m *MockRefreshes) FinishIntegrationAccessRefreshCalls() []MockRefreshesFinishIntegrationAccessRefreshCall {
+	var out []MockRefreshesFinishIntegrationAccessRefreshCall
+	for _, c := range m.Recorder.Calls("FinishIntegrationAccessRefresh") {
+		var r MockRefreshesFinishIntegrationAccessRefreshCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.IntegrationID, _ = c.Args[2].(string)
+		r.At, _ = c.Args[3].(time.Time)
+		r.Ok, _ = c.Args[4].(bool)
+		r.LastError, _ = c.Args[5].(string)
+		out = append(out, r)
+	}
+	return out
 }
 
 // Compile-time check.

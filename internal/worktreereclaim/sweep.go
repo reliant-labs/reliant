@@ -365,11 +365,19 @@ func (r *Reclaimer) SweepMachine(ctx context.Context, opts SweepOptions) SweepRe
 			deep = append(deep, i)
 		}
 	}
+	// The verdicts of earlier passes, and the order that reaches every
+	// worktree within two passes (sweep_verdicts.go). A pass acting on
+	// approvals looks afresh at the few it was asked about.
+	var verdicts *verdictCache
+	if !opts.ApprovedOnly {
+		verdicts = loadVerdicts(dir)
+		orderDeep(deep, entries, activity, lastByKey(dir), verdicts, opts.Pressure)
+	}
 	consumed := map[string]bool{}
 	var consumedMu sync.Mutex
 	jobs := make(chan int)
 	var wg sync.WaitGroup
-	for range sweepWorkers {
+	for range sweepWorkerCount(opts.Pressure) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -379,7 +387,7 @@ func (r *Reclaimer) SweepMachine(ctx context.Context, opts SweepOptions) SweepRe
 					e.Class, e.Outcome, e.Detail = ClassHeld, OutcomeSweepDeferred, DetailNotReached
 					continue
 				}
-				r.evaluateDeep(ctx, e, opts)
+				r.evaluateDeepWith(ctx, e, opts, verdicts)
 				if ctx.Err() != nil && e.Class == ClassHeld && e.Reason == ReasonUnverified {
 					e.Outcome, e.Detail = OutcomeSweepDeferred, DetailTimedOut
 					continue
@@ -399,6 +407,8 @@ func (r *Reclaimer) SweepMachine(ctx context.Context, opts SweepOptions) SweepRe
 	}
 	close(jobs)
 	wg.Wait()
+	verdicts.keepUnvisited(r.now())
+	verdicts.save()
 	if opts.Pressure {
 		// Largest first under pressure, for the report's reader too.
 		sort.SliceStable(entries, func(a, b int) bool { return entries[a].Bytes > entries[b].Bytes })
@@ -566,7 +576,7 @@ func (r *Reclaimer) precheckInto(ctx context.Context, e *SweepEntry, opts SweepO
 		e.hold(ReasonLocked, fmt.Sprintf("locked by something other than Reliant (%q)", e.Lock))
 		return
 	case e.Lock != "":
-		if p, _ := parseLock(e.Lock); p.Archived {
+		if p, _ := parseLock(e.Lock); p.Archived && archiveProtocolOwns(p.Fence, now) {
 			e.hold(ReasonArchiveProtocol, "an archived Reliant workspace; its own clean-up removes it")
 			return
 		}
@@ -610,9 +620,34 @@ func (r *Reclaimer) precheckInto(ctx context.Context, e *SweepEntry, opts SweepO
 	}
 }
 
+// ArchiveProtocolGrace is how long the machine sweep leaves an archived
+// Reliant workspace to the server's archive protocol (worktreesweep), which
+// retires it whole within hours when it can. Past it, the sweep judges each
+// of its checkouts like any other: clean, pushed and idle is captured and
+// reclaimed (worktree.ensure restores it if the row is revived), work only it
+// holds is proposed for approval. Before, an archived checkout was left to the
+// protocol for good, and a protocol hold that never cleared (used after its
+// archive, a stopped retirement) kept it on disk forever: 197 of 1223
+// checkouts on one machine, 2026-11-25.
+const ArchiveProtocolGrace = 6 * time.Hour
+
+// archiveProtocolOwns reports whether an archive fence is recent enough that
+// the server's protocol still owns the workspace. A fence that carries no
+// time is the protocol's for good: nothing says how long it has had it.
+func archiveProtocolOwns(fence string, now time.Time) bool {
+	at, ok := archiveTime(fence)
+	return !ok || now.Sub(at) < ArchiveProtocolGrace
+}
+
 // evaluateDeep is evaluate after a precheck that settled nothing: the walk
 // of the files, the ignored data, the capture envelope and the git verdict.
 func (r *Reclaimer) evaluateDeep(ctx context.Context, e *SweepEntry, opts SweepOptions) {
+	r.evaluateDeepWith(ctx, e, opts, nil)
+}
+
+// evaluateDeepWith is evaluateDeep reusing, and recording, the verdicts that
+// keep a checkout (verdictCache). The walk and the idle check always run.
+func (r *Reclaimer) evaluateDeepWith(ctx context.Context, e *SweepEntry, opts SweepOptions, cache *verdictCache) {
 	now := r.now()
 	last := e.LastActivity
 	sc := scanCheckout(ctx, e.Path)
@@ -637,49 +672,86 @@ func (r *Reclaimer) evaluateDeep(ctx context.Context, e *SweepEntry, opts SweepO
 		e.hold(ReasonRecentlyActive, fmt.Sprintf("a file changed %s ago", idle.Round(time.Minute)))
 		return
 	}
-	if v := dataHold(ctx, e.Path, nil); !v.safe() {
-		e.hold(v.Reason, v.Detail)
+	stamp := verdictStamp(ctx, e, sc.Newest)
+	if c, ok := cache.get(e, stamp, now); ok {
+		r.applyVerdict(ctx, e, opts, idle, c, sc.Newest, cache)
 		return
+	}
+	v := r.judge(ctx, e, opts)
+	v.Stamp, v.At = stamp, now
+	r.applyVerdict(ctx, e, opts, idle, v, sc.Newest, cache)
+}
+
+// judge runs the checks of evaluateDeep that read the checkout's state
+// (ignored data, the capture envelope, hidden index flags, git), and returns
+// the verdict: Reason "" is clean and pushed.
+func (r *Reclaimer) judge(ctx context.Context, e *SweepEntry, opts SweepOptions) cachedVerdict {
+	if v := dataHold(ctx, e.Path, nil); !v.safe() {
+		return cachedVerdict{Reason: v.Reason, Detail: v.Detail}
 	}
 	if _, _, err := untrackedEnvelope(ctx, e.Path, opts.Capture); err != nil {
 		if strings.Contains(err.Error(), errCaptureEnvelope.Error()) {
-			e.hold(ReasonTooLarge, err.Error())
-		} else {
-			e.hold(ReasonUnverified, err.Error())
+			return cachedVerdict{Reason: ReasonTooLarge, Detail: err.Error()}
 		}
-		return
+		return cachedVerdict{Reason: ReasonUnverified, Detail: err.Error()}
 	}
 	// Edits behind skip-worktree or assume-unchanged are invisible to git
 	// status and git add, so neither the fingerprint nor a capture could
 	// hold them: such a checkout is held, whatever else it holds.
 	if hidden := hiddenFlags(ctx, e.Path); hidden != "" {
-		e.hold(ReasonDirty, hidden+"; never proposed, a capture cannot see edits behind these flags")
-		return
+		return cachedVerdict{Reason: ReasonDirty, Detail: hidden + "; never proposed, a capture cannot see edits behind these flags", Fingerprint: hiddenHold}
 	}
-	e.Base = defaultBase(ctx, e.Path)
-	v := classifyCheckout(ctx, e.Path, e.Base, nil, e.RowID, r.sweepProbe(opts))
+	base := defaultBase(ctx, e.Path)
+	v := classifyCheckout(ctx, e.Path, base, nil, e.RowID, r.sweepProbe(opts))
+	return cachedVerdict{Reason: v.Reason, Detail: v.Detail, Base: base}
+}
+
+// hiddenHold marks a cached dirty verdict that came from hidden index flags:
+// held, never proposed.
+const hiddenHold = "hidden"
+
+// applyVerdict sets e from a verdict, measuring what a proposal needs (its
+// work, its fingerprint, its size) when the verdict is fresh, and records a
+// fresh one that keeps the checkout in cache.
+func (r *Reclaimer) applyVerdict(ctx context.Context, e *SweepEntry, opts SweepOptions, idle time.Duration, v cachedVerdict, newest time.Time, cache *verdictCache) {
+	e.Base = v.Base
 	switch v.Reason {
 	case "":
 		e.Class, e.Reason, e.Detail = ClassAutoSafe, "", "clean, HEAD on a remote, idle "+idle.Round(time.Hour).String()
+		e.Bytes = r.cachedSize(ctx, e.Path)
+		return
 	case ReasonDirty, ReasonUnpushed, ReasonUnreachable:
+		if v.Fingerprint == hiddenHold {
+			e.hold(v.Reason, v.Detail)
+			cache.put(e, v)
+			return
+		}
 		if idle < opts.ApprovalIdle {
 			e.hold(ReasonRecentlyActive, fmt.Sprintf("%s; proposed for approval once idle %s (idle %s)", v.Detail, opts.ApprovalIdle.Round(time.Hour), idle.Round(time.Hour)))
+			cache.put(e, v)
 			return
+		}
+		if v.Fingerprint == "" {
+			fp, err := fingerprint(ctx, e.Path, e.Path, newest)
+			if err != nil {
+				e.hold(ReasonUnverified, err.Error())
+				return
+			}
+			v.Fingerprint = fp
+			v.Work = workSummary(ctx, e.Path)
+			v.UnpushedCount = unpushedCount(ctx, e.Path)
+			v.Bytes = r.cachedSize(ctx, e.Path)
 		}
 		e.Class, e.Reason, e.Detail = ClassNeedsApproval, v.Reason, v.Detail
-		e.Work = workSummary(ctx, e.Path)
-		e.UnpushedCount = unpushedCount(ctx, e.Path)
-		fp, err := fingerprint(ctx, e.Path, e.Path, sc.Newest)
-		if err != nil {
-			e.hold(ReasonUnverified, err.Error())
-			return
-		}
-		e.Fingerprint = fp
+		e.Work, e.UnpushedCount, e.Fingerprint, e.Bytes = v.Work, v.UnpushedCount, v.Fingerprint, v.Bytes
+		cache.put(e, v)
 	default:
 		e.hold(v.Reason, v.Detail)
-		return
+		if cacheable(v.Reason) && v.Bytes == 0 {
+			v.Bytes = r.cachedSize(ctx, e.Path)
+		}
+		cache.put(e, v)
 	}
-	e.Bytes = r.cachedSize(ctx, e.Path)
 }
 
 // decide acts on an evaluated entry according to the mode and the

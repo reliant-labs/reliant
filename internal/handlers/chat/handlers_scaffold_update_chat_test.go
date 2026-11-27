@@ -16,7 +16,7 @@ import (
 func TestUpdateChat_Generated(t *testing.T) {
 	t.Parallel()
 
-	svc := chat.NewTestChat(t, chat.WithChatDeps(chat.Deps{Repo: newChatRepo(), Chats: chataccesstest.For(newChatRepo())}))
+	svc := chat.NewTestChat(t, chat.WithChatDeps(chat.Deps{TriggerReads: &chat.MockTriggerReads{}, Repo: newChatRepo(), Chats: chataccesstest.For(newChatRepo())}))
 
 	tdd.RunRPCCases(t, []tdd.RPCCase[pb.UpdateChatRequest, pb.UpdateChatResponse]{
 		{

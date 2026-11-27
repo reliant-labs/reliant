@@ -1,0 +1,19 @@
+name: reports_every_action
+description: "The sweep acts and its report is the run's message: each PR with its one action, check and reason."
+events:
+  - node: sweep
+    output:
+      is_error: false
+      content: "PR sweep: 3 open PR(s) looked at, 2 finding(s)\n- acme/app#7: close (superseded) superseded by #9\n- acme/app#8: finish (stale_pr) nothing has happened for 30 hours and nothing is due"
+      data:
+        looked: 3
+        counts: {finish: 1, close: 1, ask: 0}
+        findings:
+          - {check: superseded, record_id: rec-7, pr: "acme/app#7", action: close, reason: "superseded by #9", shadow: true}
+          - {check: stale_pr, record_id: rec-8, pr: "acme/app#8", action: finish, reason: "nothing has happened for 30 hours and nothing is due", shadow: true}
+expect:
+  outcome: completed
+  completed: [sweep, report]
+  messages:
+    report:
+      content_contains: ["acme/app#7: close (superseded)", "acme/app#8: finish (stale_pr)"]

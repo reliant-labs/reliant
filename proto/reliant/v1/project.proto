@@ -35,7 +35,11 @@ service ProjectService {
 
   // GetProject retrieves a project by ID
   // forge:custom — checks the caller owns the project and reconciles its git flag with the daemon
-  rpc GetProject(GetProjectRequest) returns (GetProjectResponse) {}
+  // Declared NO_SIDE_EFFECTS though it refreshes the cached is_git_repo flag from the daemon (an idempotent cache repair): the repair is idempotent and
+  // no reliant client enables Connect's useHttpGet, so nothing caches or replays it.
+  rpc GetProject(GetProjectRequest) returns (GetProjectResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // UpdateProject updates an existing project
   // forge:custom — a partial update the caller's ownership check gates

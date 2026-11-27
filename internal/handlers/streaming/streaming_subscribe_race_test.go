@@ -187,7 +187,7 @@ func TestStreamChatUpdates_ChatUpdatePublishedDuringSnapshotIsNotLost(t *testing
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = deltaHub.Close() })
 
-	svc := NewTestStreaming(t, WithStreamingDeps(withRoles(Deps{Repo: repo, Deltas: deltaHub, UserUpdates: userHub, ChatUpdates: chatHub})))
+	svc := NewTestStreaming(t, WithStreamingDeps(withRoles(Deps{TriggerReads: fixtureTriggerReads(repo), Repo: repo, Deltas: deltaHub, UserUpdates: userHub, ChatUpdates: chatHub})))
 
 	client := streamingTestClient(t, svc)
 

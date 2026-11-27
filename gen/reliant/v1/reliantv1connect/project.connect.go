@@ -152,6 +152,8 @@ type ProjectServiceClient interface {
 	ListProjects(context.Context, *connect.Request[v1.ListProjectsRequest]) (*connect.Response[v1.ListProjectsResponse], error)
 	// GetProject retrieves a project by ID
 	// forge:custom — checks the caller owns the project and reconciles its git flag with the daemon
+	// Declared NO_SIDE_EFFECTS though it refreshes the cached is_git_repo flag from the daemon (an idempotent cache repair): the repair is idempotent and
+	// no reliant client enables Connect's useHttpGet, so nothing caches or replays it.
 	GetProject(context.Context, *connect.Request[v1.GetProjectRequest]) (*connect.Response[v1.GetProjectResponse], error)
 	// UpdateProject updates an existing project
 	// forge:custom — a partial update the caller's ownership check gates
@@ -375,6 +377,7 @@ func NewProjectServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			httpClient,
 			baseURL+ProjectServiceGetProjectProcedure,
 			connect.WithSchema(projectServiceMethods.ByName("GetProject")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		updateProject: connect.NewClient[v1.UpdateProjectRequest, v1.UpdateProjectResponse](
@@ -811,6 +814,8 @@ type ProjectServiceHandler interface {
 	ListProjects(context.Context, *connect.Request[v1.ListProjectsRequest]) (*connect.Response[v1.ListProjectsResponse], error)
 	// GetProject retrieves a project by ID
 	// forge:custom — checks the caller owns the project and reconciles its git flag with the daemon
+	// Declared NO_SIDE_EFFECTS though it refreshes the cached is_git_repo flag from the daemon (an idempotent cache repair): the repair is idempotent and
+	// no reliant client enables Connect's useHttpGet, so nothing caches or replays it.
 	GetProject(context.Context, *connect.Request[v1.GetProjectRequest]) (*connect.Response[v1.GetProjectResponse], error)
 	// UpdateProject updates an existing project
 	// forge:custom — a partial update the caller's ownership check gates
@@ -1030,6 +1035,7 @@ func NewProjectServiceHandler(svc ProjectServiceHandler, opts ...connect.Handler
 		ProjectServiceGetProjectProcedure,
 		svc.GetProject,
 		connect.WithSchema(projectServiceMethods.ByName("GetProject")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	projectServiceUpdateProjectHandler := connect.NewUnaryHandler(

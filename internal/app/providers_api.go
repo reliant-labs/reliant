@@ -71,6 +71,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/queueddelivery"
 	"github.com/reliant-labs/reliant/internal/readguard"
 	"github.com/reliant-labs/reliant/internal/runenv"
+	"github.com/reliant-labs/reliant/internal/runs"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/temporal"
 	"github.com/reliant-labs/reliant/internal/temporal/claimcheck"
@@ -1006,7 +1007,7 @@ func NewTriggerInbound(d TriggerInboundDeps) (*webhook.Inbound, error) {
 		triggers.NewIntake(triggers.NewStores(repo), d.Temporal.Client, v2workflow.SharedTaskQueue).
 			WithWorkflows(triggers.LaunchWorkflows{Repo: repo}).
 			WithPoolCatalogs(machinepool.Catalogs{R: store.NewMachinePoolExtStore(repo.ORM())}).
-			WithEnrichers(triggers.NewOriginEnricher(newWriteLedger(repo), repo, d.Integrations.GitHubAppSlug)),
+			WithEnrichers(triggers.NewOriginEnricher(newWriteLedger(repo), store.NewTriggerEventExtStore(repo.ORM()), d.Integrations.GitHubAppSlug)),
 		d.Pollers, d.Vault, d.Integrations.PublicURL).
 		WithDeliveryInbox(ws).
 		WithConnectionSecrets(d.Connections.Tokens).
@@ -1383,6 +1384,25 @@ type WorkflowReconcilerDeps struct {
 	// Activity is where a held run's still-running background work is
 	// published as machine activity, so a suspend does not kill it.
 	Activity *daemonstate.Publisher
+	// Reconciler is ServerProcessConfig.reconciler: its stall_watchdog
+	// switch (off, report, enforce).
+	Reconciler *configv1.ReconcilerConfig
+	// Runs is the run lifecycle the stall watchdog's enforce mode stops a
+	// stalled execution through (TerminateExecution).
+	Runs *runs.Service
+}
+
+// ReconcilerStallWatchdog is the reconciler's stall watchdog mode, as
+// NewWorkflowReconciler hands it on: reconciler.stall_watchdog, off when
+// unset. The config's allowed values already refuse anything else; a value
+// that still does not parse stays off.
+func ReconcilerStallWatchdog(cfg *configv1.ReconcilerConfig) reconciliation.StallWatchdogMode {
+	mode, err := reconciliation.ParseStallWatchdogMode(cfg.GetStallWatchdog())
+	if err != nil {
+		slog.Default().Error("Invalid reconciler.stall_watchdog; the stall watchdog stays off", "error", err)
+		return reconciliation.StallWatchdogOff
+	}
+	return mode
 }
 
 // approvalSweepStore is what the reconciler's approval sweep reads (the ext
@@ -1418,6 +1438,11 @@ func (s approvalSweepStore) AnnounceApprovalResolution(ctx context.Context, a *d
 func NewWorkflowReconciler(d WorkflowReconcilerDeps) (*WorkflowReconciler, error) {
 	cfg := reconciliation.DefaultConfig()
 	cfg.Namespace = d.Namespace
+	cfg.StallWatchdog = ReconcilerStallWatchdog(d.Reconciler)
+	var terminator reconciliation.RunTerminator
+	if d.Runs != nil {
+		terminator = d.Runs
+	}
 	r := reconciliation.New(reconciliation.Deps{
 		Store:     d.DB,
 		Chats:     store.NewChatsWithActivityExtStore(d.DB.ORM()),
@@ -1430,6 +1455,10 @@ func NewWorkflowReconciler(d WorkflowReconcilerDeps) (*WorkflowReconciler, error
 		Config:    cfg,
 		Workflows: store.NewWorkflowExtStore(d.DB.ORM()),
 		Daemons:   store.NewDaemonExtStore(d.DB.ORM()),
+		// The stall watchdog's (stall_watchdog.go); inert while it is off.
+		Runs:          terminator,
+		Observations:  d.DB,
+		DataConverter: d.Temporal.DataConverter,
 	})
 	r.SetResetGuard(d.ResetGuard)
 	r.SetApprovals(approvalSweepStore{reads: store.NewApprovalExtStore(d.DB.ORM()), closer: approvalclose.NewFromRepo(d.DB)})
@@ -1864,5 +1893,5 @@ type OrgPolicyAttendanceDeps struct {
 // call made for a chat is scoped with, so the preview of the automations
 // policy counts exactly the chats it will govern.
 func NewOrgPolicyAttendance(d OrgPolicyAttendanceDeps) (org_policy_impact.ChatAttendance, error) {
-	return handlers.Attendance{Store: tools.WithChats(d.Store)}, nil
+	return handlers.Attendance{Store: tools.WithChats(d.Store), Triggers: handlers.NewTriggerReads(d.Store.ORM())}, nil
 }

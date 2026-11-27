@@ -12,6 +12,7 @@ import (
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // A trigger may now have no machine, but only by saying so: an empty daemon_id
@@ -88,7 +89,7 @@ func TestCreateTrigger_NoMachineAcceptsAServerOnlyWorkflow(t *testing.T) {
 	assert.True(t, got.GetNoMachine())
 	assert.Empty(t, got.GetDaemonId())
 
-	stored, err := env.repo.GetTrigger(context.Background(), got.GetId())
+	stored, err := store.GetTrigger(context.Background(), env.repo.ORM(), got.GetId())
 	require.NoError(t, err)
 	assert.True(t, stored.NoMachine)
 	assert.Empty(t, stored.DaemonID)

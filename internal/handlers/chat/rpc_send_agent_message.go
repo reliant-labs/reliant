@@ -473,7 +473,7 @@ func (s *Service) startRunForQueuedRow(ctx context.Context, chat *db.Chat, threa
 		WorkflowName: *chat.WorkflowName,
 		Inputs:       inputs,
 		ExecContext:  execContext,
-		Trigger:      launch.LoadChatTrigger(ctx, s.deps.Repo, chat.ID),
+		Trigger:      launch.LoadChatTrigger(ctx, s.triggerReads(), chat.ID),
 		Resume:       resumeWholeChatInput(nil),
 	})
 	if err != nil {
