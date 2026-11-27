@@ -118,7 +118,7 @@ func TestReleaseGateAssemblesEitherPartition(t *testing.T) {
 				}
 				// The part's cover profile, beside its record: 3 of each go
 				// part's 4 statements covered, or none of them.
-				if p.name == "go" && !(tc.cover == "missing" && i == lastGo) {
+				if p.name == "go" && (tc.cover != "missing" || i != lastGo) {
 					hit := 1
 					if tc.cover == "low" {
 						hit = 0
