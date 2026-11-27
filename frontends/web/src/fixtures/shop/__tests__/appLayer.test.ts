@@ -30,6 +30,7 @@ import { ChatService, ListMessagesResponseSchema } from "@/gen/reliant/v1/chat_p
 import { ConnectorService } from "@/gen/reliant/v1/connector_pb";
 import { DaemonRegistryService } from "@/gen/reliant/v1/daemon_registry_pb";
 import { ForgeService } from "@/gen/reliant/v1/forge_pb";
+import { GtmService } from "@/gen/reliant/v1/gtm_pb";
 import { InboxItemKind, InboxService } from "@/gen/reliant/v1/inbox_pb";
 import { MCPService } from "@/gen/reliant/v1/mcp_pb";
 import { PresetService } from "@/gen/reliant/v1/preset_pb";
@@ -66,7 +67,7 @@ const FIXED_NOW = Date.UTC(2026, 10, 18, 15, 30);
 const SERVICES: DescService[] = [
   ApprovalService, AttachmentService, CatalogService, ChatService, DaemonRegistryService, ForgeService, MCPService, ProjectService, QuestionService, RunService,
   SettingsService, StreamingService, TriggerService, WorkflowService, WorktreeService, BillingService, UserService, ObservabilityBillingService,
-  BackgroundService, ConnectorService, InboxService, PresetService, ProviderAccountService, SharingService, SystemService,
+  BackgroundService, ConnectorService, InboxService, PresetService, ProviderAccountService, SharingService, SystemService, GtmService,
   DaemonService, LLMGatewayService, OrganizationService, GitCredentialService,
 ];
 const METHODS = new Map<string, DescMethod>(SERVICES.flatMap((s) => s.methods.map((m) => [`${s.typeName}/${m.name}`, m] as const)));
@@ -85,6 +86,8 @@ const RELIANT_KEYS = [
   "StreamingService/StreamChatUpdates", "StreamingService/StreamUserUpdates", "TriggerService/ListTriggers", "WorkflowService/ListWorkflows",
   "WorktreeService/GetWorktree", "WorktreeService/ListWorktrees",
 ].map((k) => `reliant.v1.${k}`);
+/** GtmService: its reads and in-memory writes are exercised in gtm.test.ts, which asks each with a request that names the sample org. */
+const GTM_KEYS = GtmService.methods.map((m) => `reliant.v1.GtmService/${m.name}`);
 const CONTROL_PLANE_KEYS = [
   ...["GetCurrentUserBillingEmail", "GetCurrentUserComputeEligibility", "GetCurrentUserComputeSubscription", "GetCurrentUserComputeUsage",
     "GetCurrentUserReliantOverview", "GetCurrentUserSubscription", "GetCurrentUserWalletOverview", "GetProjectCost", "GetStorageUsage",
@@ -140,7 +143,7 @@ beforeEach(() => resetDemoNowForTests());
 describe("the app layer", () => {
   it("answers exactly the app's keys, each naming a real rpc", () => {
     const keys = Object.keys(appLayerScenarioHandlers()).sort();
-    expect(keys).toEqual([...RELIANT_KEYS, ...CONTROL_PLANE_KEYS].sort());
+    expect(keys).toEqual([...RELIANT_KEYS, ...CONTROL_PLANE_KEYS, ...GTM_KEYS].sort());
     for (const key of keys) expect(METHODS.has(key), key).toBe(true);
     expect(RELIANT_KEYS).toHaveLength(49);
   });
@@ -178,7 +181,7 @@ describe("the app layer", () => {
 
   it("answers its named side-effecting and bearer-link reads under readOnly: true, and refuses a write", async () => {
     const strict = createFixtureTransport({ pack: shopAppPack({ now: FIXED_NOW }), now: demoNow, readOnly: true, readOnlyMessage: SHOP_READ_ONLY_MESSAGE });
-    for (const key of APP_LAYER_ANSWERS) {
+    for (const key of APP_LAYER_ANSWERS.filter((k) => !GTM_KEYS.includes(k))) {
       const method = METHODS.get(key)!;
       const res = await strict.unary(method as DescMethodUnary, undefined, undefined, undefined, create(method.input, REQUESTS[key] as never), undefined);
       expectWireSafe(method.output, res.message);

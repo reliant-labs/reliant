@@ -16,6 +16,7 @@ import type { MockHandlers } from "@reliantlabs/forge-web-runtime/mock-transport
 import { chatHandlers } from "./chats";
 import { daemonHandlers } from "./daemons";
 import { forgeHandlers } from "./forge";
+import { gtmHandlers } from "./gtm";
 import { inboxHandlers } from "./inbox";
 import { projectHandlers } from "./projects";
 import { providerAccountHandlers } from "./providerAccounts";
@@ -38,6 +39,7 @@ export function reliantScenarioHandlers(): MockHandlers {
     ...streamingHandlers(),
     ...workflowHandlers(),
     ...inboxHandlers(),
+    ...gtmHandlers(),
     ...providerAccountHandlers(),
     ...systemHandlers(),
   };

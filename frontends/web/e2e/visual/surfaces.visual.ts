@@ -55,7 +55,7 @@ const KNOWN_REFUSALS: Record<string, { why: string; surfaces?: string[]; except?
     why: 'projectStore touches the selected project on every selection, fire-and-forget (hooks/project-queries touchProject; reliant#3458)',
     except: [
       'projects', 'projects-project-page', 'billing', 'usage', 'hosting', 'shell-usage-billing', 'shell-settings (desktop)',
-      'shell-inbox (desktop)', 'shell-apps', 'shell-connectors', 'shell-empty-cta', 'shell-daemonless-home (desktop)',
+      'shell-inbox (desktop)', 'gtm-strategy', 'gtm-strategy-library', 'gtm-channels', 'gtm-ideas', 'gtm-campaigns', 'gtm-calendar', 'gtm-positioning', 'shell-apps', 'shell-connectors', 'shell-empty-cta', 'shell-daemonless-home (desktop)',
       'observability-overview', 'settings-appearance', 'settings-org-github',
     ],
     // The desktop daemonless home sends Alex to Projects; a project selected
@@ -696,6 +696,58 @@ const SURFACES: Surface[] = [
     path: '/inbox',
     on: ['desktop', 'mobile'],
     ready: (page) => page.getByRole('heading', { name: 'Inbox' }).first(),
+  },
+  {
+    // The GTM area (components/Gtm, sample pack in src/fixtures/shop/handlers/reliant/gtm.ts):
+    // each page waits on a sample record that only its own read can supply.
+    name: 'gtm-strategy',
+    path: '/gtm/strategy',
+    on: ['desktop', 'mobile'],
+    ready: (page) => page.getByText('Subscriber-led growth this half').first(),
+  },
+  {
+    // The strategy library: real idea-bank entries that fit the sample org's
+    // business (it opens on "fits my business"); the first of them by category.
+    name: 'gtm-strategy-library',
+    path: '/gtm/strategy?view=library',
+    on: ['desktop', 'mobile'],
+    ready: (page) => page.getByText('Annual prepay discount').first(),
+  },
+  {
+    name: 'gtm-channels',
+    path: '/gtm/channels',
+    on: ['desktop', 'mobile'],
+    ready: (page) => page.getByText('Podcast guest spots').first(),
+  },
+  {
+    name: 'gtm-ideas',
+    path: '/gtm/ideas',
+    on: ['desktop', 'mobile'],
+    ready: (page) => page.getByText('Explain roast dates in one post').first(),
+  },
+  {
+    name: 'gtm-campaigns',
+    path: '/gtm/campaigns',
+    on: ['desktop', 'mobile'],
+    ready: (page) => page.getByText('Weekly Box launch').first(),
+  },
+  {
+    // The sample's Show HN item is dated today, so it is on the month grid at
+    // desktop width and first in the phone's agenda, which is the only place it
+    // is legible at 390px. The agenda shows below 768px (max-width: 767px).
+    name: 'gtm-calendar',
+    path: '/gtm/calendar',
+    on: ['desktop', 'mobile'],
+    ready: (page) =>
+      page.viewportSize()!.width <= 767
+        ? page.getByTestId('gtm-calendar-agenda').getByText('Show HN: the grind-size calculator we built for subscribers')
+        : page.getByText('Show HN: the grind-size calculator we built for subscribers').first(),
+  },
+  {
+    name: 'gtm-positioning',
+    path: '/gtm/positioning',
+    on: ['desktop', 'mobile'],
+    ready: (page) => page.getByText('Home brewers').first(),
   },
   {
     name: 'shell-workflows',
