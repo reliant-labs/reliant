@@ -28,4 +28,4 @@ allowBuilds:
   electron: true
   electron-winstaller: false
 minimumReleaseAgeExclude:
-  - '@reliantlabs/forge-web-runtime@0.14.0'
+  - '@reliantlabs/forge-web-runtime@0.14.1'
