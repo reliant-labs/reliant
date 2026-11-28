@@ -1,6 +1,8 @@
-//go:build linux
+// Copyright (c) 2026 Reliant Labs
 
-package worktreereclaim
+// Package openat2test lets the reclaim packages' tests skip on a host that
+// lacks the syscalls their safe inspection is built on.
+package openat2test
 
 import (
 	"errors"
@@ -13,12 +15,12 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// openat2Missing probes, once per test binary, the two syscalls the reaper's
-// safe inspection is built on: openat2 (RESOLVE_* path resolution) and
-// renameat2 (RENAME_NOREPLACE). It reports why the host lacks one only when
-// the kernel or a seccomp/sandbox profile answers ENOSYS; any other result is
-// nil, so a real defect still fails the test that hits it.
-var openat2Missing = sync.OnceValue(func() error {
+// Missing probes, once per test binary, the two syscalls the reaper's safe
+// inspection is built on: openat2 (RESOLVE_* path resolution) and renameat2
+// (RENAME_NOREPLACE). It reports why the host lacks one only when the kernel
+// or a seccomp/sandbox profile answers ENOSYS; any other result is nil, so a
+// real defect still fails the test that hits it.
+var Missing = sync.OnceValue(func() error {
 	dir, err := os.MkdirTemp("", "worktreereclaim-openat2-probe-")
 	if err != nil {
 		return nil
@@ -41,14 +43,14 @@ var openat2Missing = sync.OnceValue(func() error {
 	return nil
 })
 
-// requireOpenat2 skips a test that needs openat2 or renameat2 on a host whose
-// kernel or sandbox does not implement them (some CI runners' seccomp profiles
-// answer ENOSYS). The host is missing a resource, so the test skips rather
-// than fails. The reaper itself fails closed there: every inspection errors
-// and the worktree is held, never deleted.
-func requireOpenat2(t testing.TB) {
+// Require skips a test that needs openat2 or renameat2 on a host whose kernel
+// or sandbox does not implement them (some CI runners' seccomp profiles answer
+// ENOSYS). The host is missing a resource, so the test skips rather than
+// fails. The reaper itself fails closed there: every inspection errors and
+// the worktree is held, never deleted.
+func Require(t testing.TB) {
 	t.Helper()
-	if err := openat2Missing(); err != nil {
+	if err := Missing(); err != nil {
 		t.Skipf("host lacks openat2 (ENOSYS): %v; the reaper holds every worktree on this host, and this test needs the syscall", err)
 	}
 }

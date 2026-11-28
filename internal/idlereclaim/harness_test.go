@@ -13,6 +13,8 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/reliant-labs/reliant/internal/worktreereclaim/openat2test"
 )
 
 const day = 24 * time.Hour
@@ -38,6 +40,10 @@ type harness struct {
 
 func newHarness(t *testing.T) *harness {
 	t.Helper()
+	// Every strip and removal goes through worktreereclaim's openat2-based
+	// inspection and renameat2 quarantine; on a host that answers ENOSYS the
+	// reclaimer holds everything, so no harness test can see its outcome.
+	openat2test.Require(t)
 	base := t.TempDir()
 	h := &harness{t: t, now: harnessEpoch, busy: map[string]bool{}, scratchUse: map[string]time.Time{}, chatUse: map[string]time.Time{}}
 	state := filepath.Join(base, "state")
