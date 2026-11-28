@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -11,9 +12,11 @@ import (
 	"github.com/stretchr/testify/require"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
+	"google.golang.org/protobuf/proto"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
+	"github.com/reliant-labs/reliant/internal/db"
 )
 
 // TestStreamChatUpdates_BinaryConnectWire exercises the production chat stream
@@ -66,4 +69,44 @@ func TestStreamChatUpdates_BinaryConnectWire(t *testing.T) {
 		}
 	}
 	t.Fatalf("binary Connect stream ended before heartbeat: %v", stream.Err())
+}
+
+type wireSizedRepo struct {
+	catchupChatRepo
+	payload string
+}
+
+func (r wireSizedRepo) SnapshotUpdateHeads(context.Context, string) ([]db.ChatUpdate, string, error) {
+	return []db.ChatUpdate{{UpdateType: reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_WORKFLOW_STATUS, Data: []byte(r.payload)}}, "fixture", nil
+}
+
+// A quiet stream must deliver both initial frames without relying on a later
+// heartbeat or EOF to flush them. This tests direct HTTP/2, not a browser or
+// an edge proxy. The deadline is a failure bound, not a latency assertion.
+func TestStreamChatUpdates_BinaryConnectQuietInitialSync(t *testing.T) {
+	// Synthetic update data approximates the observed uncompressed sizes; it
+	// does not recreate their contents or browser-side decoding cost.
+	repo := wireSizedRepo{catchupChatRepo: newCatchupChatRepo(42), payload: `{"data":"` + strings.Repeat("x", 650000) + `"}`}
+	svc := NewTestStreaming(t, WithStreamingDeps(withRoles(Deps{Repo: repo, Deltas: noopHub{}})))
+	svc.heartbeatInterval = time.Hour
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	started := time.Now()
+	stream, err := streamingTestClient(t, svc).StreamChatUpdates(ctx, connect.NewRequest(&reliantv1.StreamChatUpdatesRequest{
+		ChatId: raceTestChatID,
+	}))
+	require.NoError(t, err)
+	defer stream.Close()
+
+	require.True(t, stream.Receive(), "snapshot not readable on open quiet stream: %v", stream.Err())
+	snapshot := stream.Msg()
+	require.NotNil(t, snapshot.GetSnapshot())
+	require.Equal(t, int64(42), snapshot.GetSnapshot().GetLatestSequence())
+	t.Logf("snapshot decoded after %s, protobuf bytes=%d", time.Since(started), proto.Size(snapshot))
+
+	require.True(t, stream.Receive(), "caught_up not readable on open quiet stream: %v", stream.Err())
+	caughtUp := stream.Msg().GetCaughtUp()
+	require.NotNil(t, caughtUp)
+	require.Equal(t, int64(42), caughtUp.GetLatestSequence())
+	t.Logf("caught_up decoded after %s; heartbeat interval=%s", time.Since(started), svc.heartbeatInterval)
 }
