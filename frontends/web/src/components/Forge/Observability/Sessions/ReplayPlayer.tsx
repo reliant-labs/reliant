@@ -50,7 +50,11 @@ import { AlertTriangle, EyeOff, FastForward, Pause, Play, RefreshCw, Video } fro
 import Button from "@/components/forge-ui/button";
 import Status from "@/components/forge-ui/status";
 import Tag from "@/components/forge-ui/tag";
-import { useObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
+import { RumService } from "@/gen/controlplane/services/rum/v1/rum_pb";
+import { connectClient } from "@/lib/connect";
+import { useClient } from "@/lib/transportScope";
+import { obsCall } from "@/services/controlPlane/observability/obsInterceptors";
+import { mapReplayPage, replayRequest } from "@/services/controlPlane/observability/rumApi";
 import { useObsQuotaState } from "@/services/controlPlane/observability/ObsQuotaContext";
 import { quotaOf } from "@/services/controlPlane/observability/quota";
 import { ObsAsOf, ObsWillLoad } from "../ObsStates";
@@ -153,7 +157,8 @@ function clamp(value: number, min: number, max: number): number {
 
 export function ReplayPlayer(props: ReplayPlayerProps) {
   const { session, seek, markers = [] } = props;
-  const api = useObservabilityApi();
+  // RumService on the nearest TransportScope's transport (the sample app's), else the app's.
+  const rum = useClient(RumService, connectClient(RumService));
   const quota = useObsQuotaState();
   const mountRef = useRef<HTMLDivElement>(null);
   const frameRef = useRef<HTMLDivElement>(null);
@@ -168,9 +173,9 @@ export function ReplayPlayer(props: ReplayPlayerProps) {
   // What the session's feed is built from, read once per session: a parent
   // re-render (a new scope object, `live` flipping as the clock moves) must
   // not tear down a recording that is playing.
-  const argsRef = useRef({ api, props });
+  const argsRef = useRef({ rum, props });
   useEffect(() => {
-    argsRef.current = { api, props };
+    argsRef.current = { rum, props };
   });
 
   const [attempt, setAttempt] = useState(0);
@@ -219,7 +224,7 @@ export function ReplayPlayer(props: ReplayPlayerProps) {
 
   // One feed and one Replayer per session (and per retry of a failed load).
   useEffect(() => {
-    const { api: rpc, props: initial } = argsRef.current;
+    const { rum: client, props: initial } = argsRef.current;
     const loadReplayer = initial.loadReplayer ?? loadRrwebReplayer;
     let disposed = false;
     const abort = new AbortController();
@@ -297,13 +302,14 @@ export function ReplayPlayer(props: ReplayPlayerProps) {
     const feedInstance = new ReplayFeed({
       ...initial.feedTiming,
       live: initial.live,
+      // obsCall in the same expression as the rpc: a poll's mark (runAsPoll) holds only while the fetch starts.
       fetchPage: (pageToken) =>
-        rpc.getSessionReplay({
-          ...initial.scope,
-          sessionId: initial.session.sessionId,
-          maxBytes: initial.pageBytes ?? REPLAY_PAGE_BYTES,
-          pageToken,
-        }, { signal: abort.signal }),
+        client
+          .getSessionReplay(
+            replayRequest({ ...initial.scope, sessionId: initial.session.sessionId, maxBytes: initial.pageBytes ?? REPLAY_PAGE_BYTES, pageToken }),
+            obsCall({ signal: abort.signal })
+          )
+          .then(mapReplayPage),
       onEvents: (events) => {
         const replayer = replayerRef.current;
         if (!replayer) {

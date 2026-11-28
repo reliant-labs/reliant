@@ -6,23 +6,46 @@
  * paged, buffered ahead of the playhead and, for a session still being
  * recorded, polled; Sessions/replayFeed.ts owns that.
  *
+ * The list, a session and its timeline are RumService's generated reads,
+ * keyed by their request (rumServiceKeys). The list sends its preset as a
+ * window relative to the server's clock (RumTimeRange.relative), so its
+ * request and key stay put while "the last hour" moves, and a Refresh re-reads
+ * the hour as of now.
+ *
  * The list pages by the server's token, and the token lives in the URL
  * (Sessions/SessionsView.tsx), so a page is a link. The token is bound to the
  * filters and NOT to the window, so "the last hour" re-resolving between page
  * one and page two cannot invalidate it: page two continues after the last
- * session page one showed.
+ * session page one showed. That is why a page of the list sends the preset,
+ * not page one's effective_time_range: a linked page two has no page one.
  */
 
-import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
-import { keepPreviousInOrgSegment } from "@/lib/orgScope";
+import { useQuery, type InfiniteData, type QueryFunctionContext } from "@tanstack/react-query";
+import type { MessageInitShape } from "@bufbuild/protobuf";
+import { requestKey } from "@reliantlabs/forge-web-runtime/service-hooks";
+import { scopedClient } from "@reliantlabs/forge-web-runtime/transport-scope";
 
-import { FilterUnsupportedError, obsRetryDelay, rumRetry } from "@/services/controlPlane/observability/errors";
+import { ListSessionsRequestSchema, RumService, type GetSessionTimelineResponse, type ListSessionsResponse } from "@/gen/controlplane/services/rum/v1/rum_pb";
 import { useListFrontendReplay } from "@/hooks/controlplane/observability-service-hooks_gen";
+import { rumServiceKeys, rumServiceQueries, useGetSession, useGetSessionTimelineInfinite } from "@/hooks/controlplane/rum-service-hooks_gen";
+import { connectClient } from "@/lib/connect";
+import { keepPreviousInOrg } from "@/lib/orgScope";
+import { relativeWindow } from "@/services/controlPlane/observability/api";
+import { FilterUnsupportedError, obsRetryDelay, rumRetry } from "@/services/controlPlane/observability/errors";
 import { frontendReplayRequest, toFrontendReplayList } from "@/services/controlPlane/observability/frontendReplayApi";
 import { obsCall } from "@/services/controlPlane/observability/obsInterceptors";
-import { useObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
+import {
+  listSessionsRequest,
+  mapSessionSummary,
+  sessionRequest,
+  timelineRequest,
+  toSession,
+  toSessionList,
+  toTimeline,
+  type SessionsQuery,
+} from "@/services/controlPlane/observability/rumApi";
 import type { RumScope, SessionList, SessionSummary, Timeline } from "@/services/controlPlane/observability/rumTypes";
-import { resolveWindow, type RangePreset } from "@/services/controlPlane/observability/window";
+import { rangeMs, type RangePreset } from "@/services/controlPlane/observability/window";
 
 export interface SessionFilters {
   range: RangePreset;
@@ -41,18 +64,18 @@ export interface SessionFilters {
 export const SESSION_PAGE_SIZE = 25;
 export const TIMELINE_PAGE_SIZE = 500;
 
-function scopeKey(scope: RumScope | null) {
-  return [scope?.orgId ?? "", scope?.projectId ?? "", scope?.envIds ?? []] as const;
-}
+/** The request of a read that is disabled because there is no scope yet: it is never sent. */
+const NO_SCOPE: RumScope = { orgId: "", envIds: [] };
 
-/** One root for every session read, so the panel's Refresh re-reads all of them. */
-export const sessionKeys = {
-  root: () => ["observability", "sessions"] as const,
-  list: (scope: RumScope | null, filters: SessionFilters) => [...sessionKeys.root(), "list", ...scopeKey(scope), filters] as const,
-  detail: (scope: RumScope | null, sessionId: string) => [...sessionKeys.root(), "detail", ...scopeKey(scope), sessionId] as const,
-  timeline: (scope: RumScope | null, sessionId: string) => [...sessionKeys.root(), "timeline", ...scopeKey(scope), sessionId] as const,
-  replayEvidence: (scope: RumScope | null, envIds: readonly string[]) => [...sessionKeys.root(), "replay-evidence", ...scopeKey(scope), envIds] as const,
-};
+/**
+ * The call options of every session read: the read marked, at the moment it
+ * starts, as a poll, a prefetch or a person's read, for the control-plane
+ * transport's read stage (obsInterceptors.ts).
+ */
+const obsRead = () => obsCall();
+
+/** The client a hand-written read calls: its QueryClient's TransportScope's, else the app's (as a generated read's). */
+const rumClientOf = scopedClient(RumService, connectClient(RumService));
 
 /**
  * Do not let sessions returned without a requested filter appear narrowed.
@@ -69,67 +92,68 @@ function assertSessionFiltersApplied(filters: SessionFilters, result: SessionLis
 
 /** One page of the scope's sessions. The previous page stays on screen while the next one loads. */
 export function useSessions(scope: RumScope | null, filters: SessionFilters) {
-  const api = useObservabilityApi();
+  const generated = rumServiceQueries.listSessions(
+    listSessionsRequest({
+      ...(scope ?? NO_SCOPE),
+      services: filters.service ? [filters.service] : [],
+      window: relativeWindow(rangeMs(filters.range)),
+      hasError: filters.hasError,
+      hasReplay: true,
+      userId: filters.userId,
+      pathContains: filters.pathContains,
+      browser: filters.browser,
+      os: filters.os,
+      frontendVersion: filters.frontendVersion,
+      pageSize: SESSION_PAGE_SIZE,
+      pageToken: filters.pageToken,
+    }),
+    {
+      select: toSessionList,
+      enabled: !!scope,
+      // The previous page, but never another org's (lib/orgScope).
+      placeholderData: keepPreviousInOrg(scope?.orgId ?? null),
+      staleTime: 30_000,
+      retry: rumRetry, retryDelay: obsRetryDelay,
+      callOptions: obsRead,
+    }
+  );
+  // The filter check fails the FETCH, as a server refusing the filter would:
+  // in `select` its error would leave the previous filters' rows on screen.
+  const fetchPage = generated.queryFn as unknown as (context: QueryFunctionContext) => Promise<ListSessionsResponse>;
   return useQuery({
-    queryKey: sessionKeys.list(scope, filters),
-    queryFn: async ({ signal }): Promise<SessionList> => {
-      const result = await api.listSessions({
-        ...(scope as RumScope),
-        services: filters.service ? [filters.service] : [],
-        window: resolveWindow(filters.range),
-        hasError: filters.hasError,
-        // Only sessions with a replay exist as sessions: one with nothing to
-        // watch (a hidden window's background requests) is never listed. The
-        // control plane enforces it too; asking for it keeps an older one honest.
-        hasReplay: true,
-        userId: filters.userId,
-        pathContains: filters.pathContains,
-        browser: filters.browser,
-        os: filters.os,
-        frontendVersion: filters.frontendVersion,
-        pageSize: SESSION_PAGE_SIZE,
-        pageToken: filters.pageToken,
-      }, { signal });
-      assertSessionFiltersApplied(filters, result);
-      return result;
+    ...generated,
+    queryFn: async (context) => {
+      const res = await fetchPage(context);
+      assertSessionFiltersApplied(filters, toSessionList(res));
+      return res;
     },
-    enabled: !!scope,
-    // The previous page, but never another org's (lib/orgScope).
-    placeholderData: keepPreviousInOrgSegment(scope?.orgId ?? null),
-    staleTime: 30_000,
-    retry: rumRetry, retryDelay: obsRetryDelay,
   });
 }
 
 /** One session's summary. */
 export function useSession(scope: RumScope | null, sessionId: string | undefined) {
-  const api = useObservabilityApi();
-  return useQuery({
-    queryKey: sessionKeys.detail(scope, sessionId ?? ""),
-    queryFn: ({ signal }) => api.getSession({ ...(scope as RumScope), sessionId: sessionId as string }, { signal }),
+  return useGetSession(sessionRequest({ ...(scope ?? NO_SCOPE), sessionId: sessionId ?? "" }), {
+    select: toSession,
     enabled: !!scope && !!sessionId,
     staleTime: 30_000,
     retry: rumRetry, retryDelay: obsRetryDelay,
+    callOptions: obsRead,
   });
+}
+
+/** Every page of a timeline, as the console's model. */
+function toTimelinePages(data: InfiniteData<GetSessionTimelineResponse, string>): InfiniteData<Timeline, string> {
+  return { pages: data.pages.map(toTimeline), pageParams: data.pageParams };
 }
 
 /** One session's timeline, oldest first, a page at a time. */
 export function useSessionTimeline(scope: RumScope | null, sessionId: string | undefined) {
-  const api = useObservabilityApi();
-  return useInfiniteQuery({
-    queryKey: sessionKeys.timeline(scope, sessionId ?? ""),
-    queryFn: ({ pageParam, signal }): Promise<Timeline> =>
-      api.getSessionTimeline({
-        ...(scope as RumScope),
-        sessionId: sessionId as string,
-        pageSize: TIMELINE_PAGE_SIZE,
-        pageToken: pageParam ?? undefined,
-      }, { signal }),
-    initialPageParam: null as string | null,
-    getNextPageParam: (last) => last.nextPageToken || undefined,
+  return useGetSessionTimelineInfinite(timelineRequest({ ...(scope ?? NO_SCOPE), sessionId: sessionId ?? "", pageSize: TIMELINE_PAGE_SIZE }), {
+    select: toTimelinePages,
     enabled: !!scope && !!sessionId,
     staleTime: 30_000,
     retry: rumRetry, retryDelay: obsRetryDelay,
+    callOptions: obsRead,
   });
 }
 
@@ -170,32 +194,38 @@ export interface ReplayEvidencePages {
  * first, following the server's page token up to REPLAY_EVIDENCE_MAX_PAGES:
  * what reconciles a frontend whose runtime config reads "off" but that still
  * records through the build flag (ListFrontendReplay cannot see a flag baked
- * into the bundle). One window for every page, as the token requires.
+ * into the bundle). One window for every page, as the token requires: page
+ * one sends the preset (relative), and every later page sends the absolute
+ * range page one read (effective_time_range) with its token.
+ *
+ * Hand-written on the scope's client (rumClientOf), because one query follows
+ * many pages; keyed under rumServiceKeys.listSessions by its first page's
+ * request, so a Refresh and the org switch's purge reach it with the list.
  */
 export function useReplayEvidence(scope: RumScope | null, envIds: readonly string[], enabled = true) {
-  const api = useObservabilityApi();
+  const query: SessionsQuery = {
+    ...(scope ?? NO_SCOPE),
+    envIds: [...envIds],
+    services: [],
+    window: relativeWindow(rangeMs(REPLAY_EVIDENCE_RANGE)),
+    hasError: false,
+    hasReplay: true,
+    userId: "",
+    pathContains: "",
+    pageSize: REPLAY_EVIDENCE_PAGE_SIZE,
+  };
+  const first = listSessionsRequest(query);
   return useQuery({
-    queryKey: sessionKeys.replayEvidence(scope, envIds),
-    queryFn: async ({ signal }): Promise<ReplayEvidencePages> => {
-      const window = resolveWindow(REPLAY_EVIDENCE_RANGE);
+    queryKey: [...rumServiceKeys.listSessions.all, requestKey(ListSessionsRequestSchema, first), "replay-evidence"],
+    queryFn: async (context): Promise<ReplayEvidencePages> => {
+      const client = rumClientOf(context);
       const sessions: SessionSummary[] = [];
-      let pageToken: string | undefined;
+      let request: MessageInitShape<typeof ListSessionsRequestSchema> = first;
       for (let page = 0; page < REPLAY_EVIDENCE_MAX_PAGES; page++) {
-        const result = await api.listSessions({
-          ...(scope as RumScope),
-          envIds: [...envIds],
-          services: [],
-          window,
-          hasError: false,
-          hasReplay: true,
-          userId: "",
-          pathContains: "",
-          pageSize: REPLAY_EVIDENCE_PAGE_SIZE,
-          pageToken,
-        }, { signal });
-        sessions.push(...result.sessions);
-        if (!result.nextPageToken) return { sessions, complete: true };
-        pageToken = result.nextPageToken;
+        const res = await client.listSessions(request, obsCall({ signal: context.signal }));
+        sessions.push(...res.sessions.map(mapSessionSummary));
+        if (!res.nextPageToken) return { sessions, complete: true };
+        request = listSessionsRequest({ ...query, pageToken: res.nextPageToken }, res.effectiveTimeRange);
       }
       return { sessions, complete: false };
     },

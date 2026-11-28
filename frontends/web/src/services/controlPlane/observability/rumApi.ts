@@ -28,21 +28,28 @@
  */
 
 import type { Transport } from "@connectrpc/connect";
-import { create } from "@bufbuild/protobuf";
+import type { MessageInitShape } from "@bufbuild/protobuf";
 import { base64Decode } from "@bufbuild/protobuf/wire";
-import { TimestampSchema, type Timestamp } from "@bufbuild/protobuf/wkt";
 
 import {
   RumService,
   SessionTimelineKind as WireKind,
+  type GetSessionReplayRequestSchema,
   type GetSessionReplayResponse,
+  type GetSessionRequestSchema,
+  type GetSessionResponse,
+  type GetSessionTimelineRequestSchema,
+  type GetSessionTimelineResponse,
+  type ListSessionsRequestSchema,
+  type ListSessionsResponse,
+  type RumTimeRange,
   type SessionSummary as WireSummary,
   type SessionTimelineEntry as WireEntry,
 } from "@/gen/controlplane/services/rum/v1/rum_pb";
 
 import { getControlPlaneClient } from "../client";
 import { obsCall } from "./obsInterceptors";
-import { msOf } from "./api";
+import { msOf, wireTimeRange, type ObsWindow, type WithObsWindow } from "./api";
 import { countOf } from "./issuesApi";
 import type {
   ListSessionsRequest,
@@ -58,27 +65,73 @@ import type {
   TimelineKind,
   TimelineRequest,
 } from "./rumTypes";
-import type { TimeWindow } from "./types";
 import { mapClient } from "./client";
 
 function client(transport?: Transport) {
   return getControlPlaneClient(RumService, transport);
 }
 
-function timestamp(ms: number): Timestamp {
-  const seconds = Math.floor(ms / 1000);
-  return create(TimestampSchema, { seconds: BigInt(seconds), nanos: Math.round((ms - seconds * 1000) * 1e6) });
-}
-
-/** The wire scope. A session read sends no window, so the server finds the session itself. */
-export function wireRumScope(scope: RumScope, window?: TimeWindow) {
+/**
+ * The wire scope. A session read sends no window, so the server finds the
+ * session itself. A list's window is absolute, or relative to the server's
+ * clock (RumTimeRange.relative), which it resolves when it answers.
+ */
+export function wireRumScope(scope: RumScope, window?: ObsWindow) {
   return {
     orgId: scope.orgId,
     projectId: scope.projectId || undefined,
     envIds: scope.envIds,
     services: scope.services ?? [],
-    timeRange: window ? { start: timestamp(window.startMs), end: timestamp(window.endMs) } : undefined,
+    timeRange: window ? wireTimeRange(window) : undefined,
   };
+}
+
+/** A ListSessionsRequest whose window may be relative: what the generated read sends. */
+export type SessionsQuery = WithObsWindow<ListSessionsRequest>;
+
+/**
+ * `range`, when given, is sent instead of the window: the absolute range an
+ * earlier page read (its effective_time_range), which is how a client pages a
+ * relative window so every page reads the same range.
+ */
+export function listSessionsRequest(req: SessionsQuery, range?: RumTimeRange): MessageInitShape<typeof ListSessionsRequestSchema> {
+  return {
+    scope: range ? { ...wireRumScope(req), timeRange: range } : wireRumScope(req, req.window),
+    hasError: req.hasError,
+    hasReplay: req.hasReplay,
+    userId: req.userId,
+    pathContains: req.pathContains,
+    browser: req.browser || undefined,
+    os: req.os || undefined,
+    frontendVersion: req.frontendVersion || undefined,
+    pageSize: req.pageSize ?? 0,
+    pageToken: req.pageToken ?? "",
+  };
+}
+
+export function toSessionList(res: ListSessionsResponse): SessionList {
+  return { sessions: res.sessions.map(mapSessionSummary), nextPageToken: res.nextPageToken };
+}
+
+export function sessionRequest(req: SessionRequest): MessageInitShape<typeof GetSessionRequestSchema> {
+  return { scope: wireRumScope(req), sessionId: req.sessionId };
+}
+
+export function toSession(res: GetSessionResponse): SessionSummary {
+  if (!res.session) throw new Error("GetSession answered without a session");
+  return mapSessionSummary(res.session);
+}
+
+export function timelineRequest(req: TimelineRequest): MessageInitShape<typeof GetSessionTimelineRequestSchema> {
+  return { scope: wireRumScope(req), sessionId: req.sessionId, pageSize: req.pageSize ?? 0, pageToken: req.pageToken ?? "" };
+}
+
+export function toTimeline(res: GetSessionTimelineResponse): Timeline {
+  return { entries: res.entries.map(mapTimelineEntry), nextPageToken: res.nextPageToken };
+}
+
+export function replayRequest(req: ReplayRequest): MessageInitShape<typeof GetSessionReplayRequestSchema> {
+  return { scope: wireRumScope(req), sessionId: req.sessionId, maxBytes: req.maxBytes ?? 0, pageToken: req.pageToken ?? "" };
 }
 
 export function mapSessionSummary(s: WireSummary): SessionSummary {
@@ -202,46 +255,20 @@ export async function mapReplayPage(res: GetSessionReplayResponse): Promise<Repl
 
 /** One page of the sessions that started in the window, newest first. */
 export async function listSessions(req: ListSessionsRequest, options: { signal?: AbortSignal } = {}, transport?: Transport): Promise<SessionList> {
-  const res = await client(transport).listSessions({
-    scope: wireRumScope(req, req.window),
-    hasError: req.hasError,
-    hasReplay: req.hasReplay,
-    userId: req.userId,
-    pathContains: req.pathContains,
-    browser: req.browser || undefined,
-    os: req.os || undefined,
-    frontendVersion: req.frontendVersion || undefined,
-    pageSize: req.pageSize ?? 0,
-    pageToken: req.pageToken ?? "",
-  }, obsCall(options));
-  return { sessions: res.sessions.map(mapSessionSummary), nextPageToken: res.nextPageToken };
+  return toSessionList(await client(transport).listSessions(listSessionsRequest(req), obsCall(options)));
 }
 
 /** One session's summary. NotFound when the scope cannot see it. */
 export async function getSession(req: SessionRequest, options: { signal?: AbortSignal } = {}, transport?: Transport): Promise<SessionSummary> {
-  const res = await client(transport).getSession({ scope: wireRumScope(req), sessionId: req.sessionId }, obsCall(options));
-  if (!res.session) throw new Error("GetSession answered without a session");
-  return mapSessionSummary(res.session);
+  return toSession(await client(transport).getSession(sessionRequest(req), obsCall(options)));
 }
 
 /** One page of a session's timeline, oldest first. */
 export async function getSessionTimeline(req: TimelineRequest, options: { signal?: AbortSignal } = {}, transport?: Transport): Promise<Timeline> {
-  const res = await client(transport).getSessionTimeline({
-    scope: wireRumScope(req),
-    sessionId: req.sessionId,
-    pageSize: req.pageSize ?? 0,
-    pageToken: req.pageToken ?? "",
-  }, obsCall(options));
-  return { entries: res.entries.map(mapTimelineEntry), nextPageToken: res.nextPageToken };
+  return toTimeline(await client(transport).getSessionTimeline(timelineRequest(req), obsCall(options)));
 }
 
 /** One byte-bounded page of a session's rrweb events, parsed. */
 export async function getSessionReplay(req: ReplayRequest, options: { signal?: AbortSignal } = {}, transport?: Transport): Promise<ReplayPage> {
-  const res = await client(transport).getSessionReplay({
-    scope: wireRumScope(req),
-    sessionId: req.sessionId,
-    maxBytes: req.maxBytes ?? 0,
-    pageToken: req.pageToken ?? "",
-  }, obsCall(options));
-  return mapReplayPage(res);
+  return mapReplayPage(await client(transport).getSessionReplay(replayRequest(req), obsCall(options)));
 }

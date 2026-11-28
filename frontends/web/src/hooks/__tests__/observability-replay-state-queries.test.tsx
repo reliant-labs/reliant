@@ -5,8 +5,8 @@
  * useFrontendReplay asks ListFrontendReplay for the scope and is not retried
  * on a control plane without it; useReplayEvidence looks for replays over the
  * last 7 days in only the environments it is given, following the page token
- * up to 10 pages, and asks nothing when it is given none. The evidence sits under sessionKeys.root() and the frontends'
- * read is a generated one (listFrontendReplay), so Refresh re-reads both.
+ * up to 10 pages, and asks nothing when it is given none. The evidence sits under RumService's listSessions
+ * key and the frontends' read is a generated one (listFrontendReplay), so Refresh re-reads both.
  */
 
 import { renderHook, waitFor } from "@testing-library/react";
@@ -20,7 +20,10 @@ import { ObservabilityFixtures } from "@/test/observabilityFixtures";
 import type { RumScope } from "@/services/controlPlane/observability/rumTypes";
 import { createTestQueryClient } from "@/test/renderWithQuery";
 
-import { REPLAY_EVIDENCE_MAX_PAGES, REPLAY_EVIDENCE_PAGE_SIZE, sessionKeys, useFrontendReplay, useReplayEvidence } from "../observability-session-queries";
+import { rumServiceKeys } from "@/hooks/controlplane/rum-service-hooks_gen";
+import { keyNamesOrg } from "@/lib/orgScope";
+
+import { REPLAY_EVIDENCE_MAX_PAGES, REPLAY_EVIDENCE_PAGE_SIZE, useFrontendReplay, useReplayEvidence } from "../observability-session-queries";
 
 const scope: RumScope = { orgId: "org-1", projectId: "shop", envIds: ["env-prod", "env-staging"], services: [] };
 
@@ -34,11 +37,15 @@ function setup(api: ObservabilityApi) {
   return { client, wrapper };
 }
 
-describe("sessionKeys", () => {
-  it("put the replay evidence under the sessions root, keyed by the scope", () => {
-    const root = sessionKeys.root();
-    expect(sessionKeys.replayEvidence(scope, ["env-prod"]).slice(0, root.length)).toEqual([...root]);
-    expect(sessionKeys.replayEvidence(scope, ["env-prod"])).not.toEqual(sessionKeys.replayEvidence(scope, ["env-staging"]));
+describe("the replay evidence's key", () => {
+  it("sits under RumService's listSessions, names the org, and is one per environment set", async () => {
+    const { client, wrapper } = setup(createFixtureApi());
+    const prod = renderHook(() => useReplayEvidence(scope, ["env-prod"]), { wrapper });
+    const staging = renderHook(() => useReplayEvidence(scope, ["env-staging"]), { wrapper });
+    await waitFor(() => expect(prod.result.current.isSuccess && staging.result.current.isSuccess).toBe(true));
+    const keys = client.getQueryCache().findAll({ queryKey: rumServiceKeys.listSessions.all }).map((q) => q.queryKey);
+    expect(keys).toHaveLength(2);
+    expect(keys.every((key) => keyNamesOrg(key, "org-1"))).toBe(true);
   });
 });
 

@@ -39,7 +39,8 @@ import { useAuthStore } from "@/store/authStore";
 import { observabilityServiceKeys } from "@/hooks/controlplane/observability-service-hooks_gen";
 import { relativeWindow } from "@/services/controlPlane/observability/api";
 import { metricCatalogRequest } from "@/services/controlPlane/observability/metricsApi";
-import { sessionKeys } from "@/hooks/observability-session-queries";
+import { rumServiceKeys } from "@/hooks/controlplane/rum-service-hooks_gen";
+import { listSessionsRequest } from "@/services/controlPlane/observability/rumApi";
 import { forgeCloudKeys } from "@/hooks/forge-queries";
 import { getOrgScope, keepPreviousInOrg, keepPreviousInOrgSegment, keyNamesOrg, resetAfterLeavingOrg } from "../orgScope";
 
@@ -240,12 +241,21 @@ describe("org-scoped product lists", () => {
 
   it("keeps an observability answer only in its org, and never when the scope becomes null", () => {
     const kept = { rows: 1 };
-    // The sessions list's key: the org is a plain string segment, not a request field.
-    const sessionsA = { queryKey: sessionKeys.list({ orgId: "org-a", envIds: [] }, {} as never) as readonly unknown[] };
-    expect(keepPreviousInOrgSegment("org-a")(kept, sessionsA)).toBe(kept);
-    expect(keepPreviousInOrgSegment("org-b")(kept, sessionsA)).toBeUndefined();
+    // A hand-written observability key: the org is a plain string segment, not a request field.
+    const panelA = { queryKey: ["observability", "org-a", "", [], [], false, "panel"] as readonly unknown[] };
+    expect(keepPreviousInOrgSegment("org-a")(kept, panelA)).toBe(kept);
+    expect(keepPreviousInOrgSegment("org-b")(kept, panelA)).toBeUndefined();
     // An empty app selection (MetricsExplorerPage) makes the scope null: A's rows must go.
-    expect(keepPreviousInOrgSegment(null)(kept, sessionsA)).toBeUndefined();
+    expect(keepPreviousInOrgSegment(null)(kept, panelA)).toBeUndefined();
+    // The sessions list's generated key: the org is in its request's RumScope.
+    const sessionsA = {
+      queryKey: rumServiceKeys.listSessions(
+        listSessionsRequest({ orgId: "org-a", envIds: [], window: relativeWindow(3_600_000), hasError: false, hasReplay: true, userId: "", pathContains: "" })
+      ),
+    };
+    expect(keepPreviousInOrg("org-a")(kept, sessionsA)).toBe(kept);
+    expect(keepPreviousInOrg("org-b")(kept, sessionsA)).toBeUndefined();
+    expect(keyNamesOrg(sessionsA.queryKey, "org-a")).toBe(true);
     // The metric catalog's generated key: the org is in its request's QueryScope.
     const catalogA = { queryKey: observabilityServiceKeys.listMetrics(metricCatalogRequest({ orgId: "org-a", envIds: [], filters: [], window: relativeWindow(3_600_000) })) };
     expect(keepPreviousInOrg("org-a")(kept, catalogA)).toBe(kept);

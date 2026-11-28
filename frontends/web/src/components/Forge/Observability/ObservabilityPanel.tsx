@@ -46,7 +46,7 @@ import { RefreshCw } from "lucide-react";
 import Button from "@/components/forge-ui/button";
 import { observabilityServiceKeys } from "@/hooks/controlplane/observability-service-hooks_gen";
 import { activityKeys, deliveryKeys, invalidateObsScope, issueKeys, useObservabilityOrg, useServiceOverview } from "@/hooks/observability-queries";
-import { sessionKeys } from "@/hooks/observability-session-queries";
+import { rumServiceKeys } from "@/hooks/controlplane/rum-service-hooks_gen";
 import type { Promotion } from "@/services/controlPlane/observability/deliveryTypes";
 import type { ObsScope } from "@/services/controlPlane/observability/types";
 import { obsErrorKind } from "@/services/controlPlane/observability/errors";
@@ -250,7 +250,7 @@ export default function ObservabilityPanel({ place, search, navigate }: Observab
           void queryClient.invalidateQueries({ queryKey: observabilityServiceKeys.listFrontendReplay.all });
           void queryClient.invalidateQueries({ queryKey: issueKeys.root() });
           void queryClient.invalidateQueries({ queryKey: activityKeys.root() });
-          void queryClient.invalidateQueries({ queryKey: sessionKeys.root() });
+          void queryClient.invalidateQueries({ queryKey: rumServiceKeys.all });
         }}
         leftIcon={<RefreshCw className="h-3.5 w-3.5" />}
         data-testid="obs-refresh"
