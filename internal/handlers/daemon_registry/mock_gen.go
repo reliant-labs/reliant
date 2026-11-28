@@ -20,14 +20,15 @@ import (
 )
 
 // forge:section MockRepository
-// forge:hash=70d2273540eefde296ba71f3e2c5b0be5d4999b4319bb67b93b58251ea1af02c
+// forge:hash=85c231c1820d9671a1f18d29a1b80f7bb6e75d40ddaa9332fb645a6b39fa21d9
 
 // MockRepository is a test mock for the Repository interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockRepository.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockRepository.<Method>Func not set" error.
 type MockRepository struct {
 	contractkit.Recorder
 	GetDaemonFunc                         func(context.Context, string) (*db.Daemon, error)
@@ -92,18 +93,143 @@ func (m *MockRepository) SetDefaultDaemon(ctx context.Context, userID string, da
 	return contractkit.MockNotSet("MockRepository", "SetDefaultDaemon")
 }
 
+// MockRepositoryGetDaemonCall is one recorded call of MockRepository.GetDaemon, one
+// field per parameter.
+type MockRepositoryGetDaemonCall struct {
+	Ctx context.Context
+	ID  string
+}
+
+// GetDaemonCalls returns every recorded GetDaemon call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetDaemon").
+func (m *MockRepository) GetDaemonCalls() []MockRepositoryGetDaemonCall {
+	var out []MockRepositoryGetDaemonCall
+	for _, c := range m.Recorder.Calls("GetDaemon") {
+		var r MockRepositoryGetDaemonCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockRepositoryListDaemonsByUserIDCall is one recorded call of MockRepository.ListDaemonsByUserID, one
+// field per parameter.
+type MockRepositoryListDaemonsByUserIDCall struct {
+	Ctx    context.Context
+	UserID string
+}
+
+// ListDaemonsByUserIDCalls returns every recorded ListDaemonsByUserID call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListDaemonsByUserID").
+func (m *MockRepository) ListDaemonsByUserIDCalls() []MockRepositoryListDaemonsByUserIDCall {
+	var out []MockRepositoryListDaemonsByUserIDCall
+	for _, c := range m.Recorder.Calls("ListDaemonsByUserID") {
+		var r MockRepositoryListDaemonsByUserIDCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockRepositoryListFreshDaemonAttachmentsForUserCall is one recorded call of MockRepository.ListFreshDaemonAttachmentsForUser, one
+// field per parameter.
+type MockRepositoryListFreshDaemonAttachmentsForUserCall struct {
+	Ctx            context.Context
+	UserID         string
+	StaleThreshold time.Duration
+}
+
+// ListFreshDaemonAttachmentsForUserCalls returns every recorded ListFreshDaemonAttachmentsForUser call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListFreshDaemonAttachmentsForUser").
+func (m *MockRepository) ListFreshDaemonAttachmentsForUserCalls() []MockRepositoryListFreshDaemonAttachmentsForUserCall {
+	var out []MockRepositoryListFreshDaemonAttachmentsForUserCall
+	for _, c := range m.Recorder.Calls("ListFreshDaemonAttachmentsForUser") {
+		var r MockRepositoryListFreshDaemonAttachmentsForUserCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.StaleThreshold, _ = c.Args[2].(time.Duration)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockRepositoryListDaemonLocalModelsCall is one recorded call of MockRepository.ListDaemonLocalModels, one
+// field per parameter.
+type MockRepositoryListDaemonLocalModelsCall struct {
+	Ctx    context.Context
+	UserID string
+}
+
+// ListDaemonLocalModelsCalls returns every recorded ListDaemonLocalModels call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListDaemonLocalModels").
+func (m *MockRepository) ListDaemonLocalModelsCalls() []MockRepositoryListDaemonLocalModelsCall {
+	var out []MockRepositoryListDaemonLocalModelsCall
+	for _, c := range m.Recorder.Calls("ListDaemonLocalModels") {
+		var r MockRepositoryListDaemonLocalModelsCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockRepositoryListDaemonStorageStateCall is one recorded call of MockRepository.ListDaemonStorageState, one
+// field per parameter.
+type MockRepositoryListDaemonStorageStateCall struct {
+	Ctx    context.Context
+	UserID string
+}
+
+// ListDaemonStorageStateCalls returns every recorded ListDaemonStorageState call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListDaemonStorageState").
+func (m *MockRepository) ListDaemonStorageStateCalls() []MockRepositoryListDaemonStorageStateCall {
+	var out []MockRepositoryListDaemonStorageStateCall
+	for _, c := range m.Recorder.Calls("ListDaemonStorageState") {
+		var r MockRepositoryListDaemonStorageStateCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockRepositorySetDefaultDaemonCall is one recorded call of MockRepository.SetDefaultDaemon, one
+// field per parameter.
+type MockRepositorySetDefaultDaemonCall struct {
+	Ctx      context.Context
+	UserID   string
+	DaemonID string
+}
+
+// SetDefaultDaemonCalls returns every recorded SetDefaultDaemon call, oldest first, with
+// its arguments typed. It reads the same log as Calls("SetDefaultDaemon").
+func (m *MockRepository) SetDefaultDaemonCalls() []MockRepositorySetDefaultDaemonCall {
+	var out []MockRepositorySetDefaultDaemonCall
+	for _, c := range m.Recorder.Calls("SetDefaultDaemon") {
+		var r MockRepositorySetDefaultDaemonCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.DaemonID, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ Repository = (*MockRepository)(nil)
 
 // forge:section MockPools
-// forge:hash=546d278923972a504eb48292fbe9b9a812cd02b7563e5c6f7547fdd0162f1299
+// forge:hash=077b181377158fa97174d8fdd993586f50c17875881ca1ef086d76916a09b1e9
 
 // MockPools is a test mock for the Pools interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockPools.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockPools.<Method>Func not set" error.
 type MockPools struct {
 	contractkit.Recorder
 	SetDaemonLabelsFunc         func(context.Context, string, string, map[string]string) (bool, error)
@@ -158,18 +284,131 @@ func (m *MockPools) ListMachinePoolMembers(ctx context.Context, pool *core.Machi
 	return nil, contractkit.MockNotSet("MockPools", "ListMachinePoolMembers")
 }
 
+// MockPoolsSetDaemonLabelsCall is one recorded call of MockPools.SetDaemonLabels, one
+// field per parameter.
+type MockPoolsSetDaemonLabelsCall struct {
+	Ctx      context.Context
+	UserID   string
+	DaemonID string
+	Labels   map[string]string
+}
+
+// SetDaemonLabelsCalls returns every recorded SetDaemonLabels call, oldest first, with
+// its arguments typed. It reads the same log as Calls("SetDaemonLabels").
+func (m *MockPools) SetDaemonLabelsCalls() []MockPoolsSetDaemonLabelsCall {
+	var out []MockPoolsSetDaemonLabelsCall
+	for _, c := range m.Recorder.Calls("SetDaemonLabels") {
+		var r MockPoolsSetDaemonLabelsCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.DaemonID, _ = c.Args[2].(string)
+		r.Labels, _ = c.Args[3].(map[string]string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockPoolsListMachinePoolsForUserCall is one recorded call of MockPools.ListMachinePoolsForUser, one
+// field per parameter.
+type MockPoolsListMachinePoolsForUserCall struct {
+	Ctx    context.Context
+	UserID string
+}
+
+// ListMachinePoolsForUserCalls returns every recorded ListMachinePoolsForUser call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListMachinePoolsForUser").
+func (m *MockPools) ListMachinePoolsForUserCalls() []MockPoolsListMachinePoolsForUserCall {
+	var out []MockPoolsListMachinePoolsForUserCall
+	for _, c := range m.Recorder.Calls("ListMachinePoolsForUser") {
+		var r MockPoolsListMachinePoolsForUserCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockPoolsPutMachinePoolCall is one recorded call of MockPools.PutMachinePool, one
+// field per parameter.
+type MockPoolsPutMachinePoolCall struct {
+	Ctx   context.Context
+	P     *core.MachinePool
+	NewID string
+	Now   time.Time
+}
+
+// PutMachinePoolCalls returns every recorded PutMachinePool call, oldest first, with
+// its arguments typed. It reads the same log as Calls("PutMachinePool").
+func (m *MockPools) PutMachinePoolCalls() []MockPoolsPutMachinePoolCall {
+	var out []MockPoolsPutMachinePoolCall
+	for _, c := range m.Recorder.Calls("PutMachinePool") {
+		var r MockPoolsPutMachinePoolCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.P, _ = c.Args[1].(*core.MachinePool)
+		r.NewID, _ = c.Args[2].(string)
+		r.Now, _ = c.Args[3].(time.Time)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockPoolsDeleteMachinePoolByNameCall is one recorded call of MockPools.DeleteMachinePoolByName, one
+// field per parameter.
+type MockPoolsDeleteMachinePoolByNameCall struct {
+	Ctx    context.Context
+	UserID string
+	Name   string
+}
+
+// DeleteMachinePoolByNameCalls returns every recorded DeleteMachinePoolByName call, oldest first, with
+// its arguments typed. It reads the same log as Calls("DeleteMachinePoolByName").
+func (m *MockPools) DeleteMachinePoolByNameCalls() []MockPoolsDeleteMachinePoolByNameCall {
+	var out []MockPoolsDeleteMachinePoolByNameCall
+	for _, c := range m.Recorder.Calls("DeleteMachinePoolByName") {
+		var r MockPoolsDeleteMachinePoolByNameCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.Name, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockPoolsListMachinePoolMembersCall is one recorded call of MockPools.ListMachinePoolMembers, one
+// field per parameter.
+type MockPoolsListMachinePoolMembersCall struct {
+	Ctx       context.Context
+	Pool      *core.MachinePool
+	ProjectID string
+}
+
+// ListMachinePoolMembersCalls returns every recorded ListMachinePoolMembers call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListMachinePoolMembers").
+func (m *MockPools) ListMachinePoolMembersCalls() []MockPoolsListMachinePoolMembersCall {
+	var out []MockPoolsListMachinePoolMembersCall
+	for _, c := range m.Recorder.Calls("ListMachinePoolMembers") {
+		var r MockPoolsListMachinePoolMembersCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Pool, _ = c.Args[1].(*core.MachinePool)
+		r.ProjectID, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ Pools = (*MockPools)(nil)
 
 // forge:section MockMirror
-// forge:hash=d89145264ab636838de3e7bbb30a2a60e384cdfb467a8d29bc308b8173da3e59
+// forge:hash=bbe3b8ba5c731dd54770301b9b6383c182c34355668abb8e9756aa5f4622d4a7
 
 // MockMirror is a test mock for the Mirror interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockMirror.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockMirror.<Method>Func not set" error.
 type MockMirror struct {
 	contractkit.Recorder
 	UpsertDaemonIdentityFunc func(context.Context, core.DaemonIdentity) (bool, error)
@@ -184,18 +423,39 @@ func (m *MockMirror) UpsertDaemonIdentity(ctx context.Context, id core.DaemonIde
 	return false, contractkit.MockNotSet("MockMirror", "UpsertDaemonIdentity")
 }
 
+// MockMirrorUpsertDaemonIdentityCall is one recorded call of MockMirror.UpsertDaemonIdentity, one
+// field per parameter.
+type MockMirrorUpsertDaemonIdentityCall struct {
+	Ctx context.Context
+	ID  core.DaemonIdentity
+}
+
+// UpsertDaemonIdentityCalls returns every recorded UpsertDaemonIdentity call, oldest first, with
+// its arguments typed. It reads the same log as Calls("UpsertDaemonIdentity").
+func (m *MockMirror) UpsertDaemonIdentityCalls() []MockMirrorUpsertDaemonIdentityCall {
+	var out []MockMirrorUpsertDaemonIdentityCall
+	for _, c := range m.Recorder.Calls("UpsertDaemonIdentity") {
+		var r MockMirrorUpsertDaemonIdentityCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ID, _ = c.Args[1].(core.DaemonIdentity)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ Mirror = (*MockMirror)(nil)
 
 // forge:section MockMachineNames
-// forge:hash=a078b2e25c969ec6891b3df00c21422e9cb31e1e53fa9b3ee3de7f723f48d06f
+// forge:hash=abf928b7ea0025163f944ad3de1cf027d2d78c1518108d03911737746a09c58d
 
 // MockMachineNames is a test mock for the MachineNames interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockMachineNames.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockMachineNames.<Method>Func not set" error.
 type MockMachineNames struct {
 	contractkit.Recorder
 	RenameDaemonFunc func(context.Context, string, string, string) error
@@ -210,18 +470,43 @@ func (m *MockMachineNames) RenameDaemon(ctx context.Context, jwt string, daemonI
 	return contractkit.MockNotSet("MockMachineNames", "RenameDaemon")
 }
 
+// MockMachineNamesRenameDaemonCall is one recorded call of MockMachineNames.RenameDaemon, one
+// field per parameter.
+type MockMachineNamesRenameDaemonCall struct {
+	Ctx      context.Context
+	Jwt      string
+	DaemonID string
+	Name     string
+}
+
+// RenameDaemonCalls returns every recorded RenameDaemon call, oldest first, with
+// its arguments typed. It reads the same log as Calls("RenameDaemon").
+func (m *MockMachineNames) RenameDaemonCalls() []MockMachineNamesRenameDaemonCall {
+	var out []MockMachineNamesRenameDaemonCall
+	for _, c := range m.Recorder.Calls("RenameDaemon") {
+		var r MockMachineNamesRenameDaemonCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Jwt, _ = c.Args[1].(string)
+		r.DaemonID, _ = c.Args[2].(string)
+		r.Name, _ = c.Args[3].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ MachineNames = (*MockMachineNames)(nil)
 
 // forge:section MockMemberIdleTimeouts
-// forge:hash=00242c71561baec70331544b53bf4d223e72f4da79901155a401374274a74a10
+// forge:hash=8ba42d90f41ecc15ab999cc7b067c6d8e9cde9af1303169262674e23365e8c79
 
 // MockMemberIdleTimeouts is a test mock for the MemberIdleTimeouts interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockMemberIdleTimeouts.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockMemberIdleTimeouts.<Method>Func not set" error.
 type MockMemberIdleTimeouts struct {
 	contractkit.Recorder
 	SetDaemonIdleTimeoutFunc func(context.Context, string, string, string) error
@@ -236,18 +521,43 @@ func (m *MockMemberIdleTimeouts) SetDaemonIdleTimeout(ctx context.Context, jwt s
 	return contractkit.MockNotSet("MockMemberIdleTimeouts", "SetDaemonIdleTimeout")
 }
 
+// MockMemberIdleTimeoutsSetDaemonIdleTimeoutCall is one recorded call of MockMemberIdleTimeouts.SetDaemonIdleTimeout, one
+// field per parameter.
+type MockMemberIdleTimeoutsSetDaemonIdleTimeoutCall struct {
+	Ctx         context.Context
+	Jwt         string
+	DaemonID    string
+	IdleTimeout string
+}
+
+// SetDaemonIdleTimeoutCalls returns every recorded SetDaemonIdleTimeout call, oldest first, with
+// its arguments typed. It reads the same log as Calls("SetDaemonIdleTimeout").
+func (m *MockMemberIdleTimeouts) SetDaemonIdleTimeoutCalls() []MockMemberIdleTimeoutsSetDaemonIdleTimeoutCall {
+	var out []MockMemberIdleTimeoutsSetDaemonIdleTimeoutCall
+	for _, c := range m.Recorder.Calls("SetDaemonIdleTimeout") {
+		var r MockMemberIdleTimeoutsSetDaemonIdleTimeoutCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Jwt, _ = c.Args[1].(string)
+		r.DaemonID, _ = c.Args[2].(string)
+		r.IdleTimeout, _ = c.Args[3].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ MemberIdleTimeouts = (*MockMemberIdleTimeouts)(nil)
 
 // forge:section MockRouter
-// forge:hash=1b9757d9b709772581f47376106c8e2cbc3ae513f179986fd8ee62aff7b8b2e6
+// forge:hash=b420a15e4c57025c6b581439fe9baeb42947fddc548855e514df86d47d9e3613
 
 // MockRouter is a test mock for the Router interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockRouter.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockRouter.<Method>Func not set" error.
 type MockRouter struct {
 	contractkit.Recorder
 	IsDaemonOnlineFunc            func(context.Context, string, *toolexec.DaemonSelector) (bool, error)
@@ -280,6 +590,78 @@ func (m *MockRouter) RefreshLocalModels(ctx context.Context, userID string, daem
 		return m.RefreshLocalModelsFunc(ctx, userID, daemonID)
 	}
 	return nil, contractkit.MockNotSet("MockRouter", "RefreshLocalModels")
+}
+
+// MockRouterIsDaemonOnlineCall is one recorded call of MockRouter.IsDaemonOnline, one
+// field per parameter.
+type MockRouterIsDaemonOnlineCall struct {
+	Ctx      context.Context
+	UserID   string
+	Selector *toolexec.DaemonSelector
+}
+
+// IsDaemonOnlineCalls returns every recorded IsDaemonOnline call, oldest first, with
+// its arguments typed. It reads the same log as Calls("IsDaemonOnline").
+func (m *MockRouter) IsDaemonOnlineCalls() []MockRouterIsDaemonOnlineCall {
+	var out []MockRouterIsDaemonOnlineCall
+	for _, c := range m.Recorder.Calls("IsDaemonOnline") {
+		var r MockRouterIsDaemonOnlineCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.Selector, _ = c.Args[2].(*toolexec.DaemonSelector)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockRouterSendDaemonCommandToDaemonCall is one recorded call of MockRouter.SendDaemonCommandToDaemon, one
+// field per parameter.
+type MockRouterSendDaemonCommandToDaemonCall struct {
+	Ctx         context.Context
+	UserID      string
+	DaemonID    string
+	CommandType string
+	Payload     []byte
+	TimeoutMs   int32
+}
+
+// SendDaemonCommandToDaemonCalls returns every recorded SendDaemonCommandToDaemon call, oldest first, with
+// its arguments typed. It reads the same log as Calls("SendDaemonCommandToDaemon").
+func (m *MockRouter) SendDaemonCommandToDaemonCalls() []MockRouterSendDaemonCommandToDaemonCall {
+	var out []MockRouterSendDaemonCommandToDaemonCall
+	for _, c := range m.Recorder.Calls("SendDaemonCommandToDaemon") {
+		var r MockRouterSendDaemonCommandToDaemonCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.DaemonID, _ = c.Args[2].(string)
+		r.CommandType, _ = c.Args[3].(string)
+		r.Payload, _ = c.Args[4].([]byte)
+		r.TimeoutMs, _ = c.Args[5].(int32)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockRouterRefreshLocalModelsCall is one recorded call of MockRouter.RefreshLocalModels, one
+// field per parameter.
+type MockRouterRefreshLocalModelsCall struct {
+	Ctx      context.Context
+	UserID   string
+	DaemonID string
+}
+
+// RefreshLocalModelsCalls returns every recorded RefreshLocalModels call, oldest first, with
+// its arguments typed. It reads the same log as Calls("RefreshLocalModels").
+func (m *MockRouter) RefreshLocalModelsCalls() []MockRouterRefreshLocalModelsCall {
+	var out []MockRouterRefreshLocalModelsCall
+	for _, c := range m.Recorder.Calls("RefreshLocalModels") {
+		var r MockRouterRefreshLocalModelsCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.DaemonID, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
 }
 
 // Compile-time check.

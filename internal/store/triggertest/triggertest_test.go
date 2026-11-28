@@ -26,7 +26,7 @@ func TestCreateAndUpdateRecordTheirChange(t *testing.T) {
 	tr.Message = "edited"
 	require.NoError(t, triggertest.Update(ctx, env.Repo, tr))
 
-	got, err := env.Repo.GetTrigger(ctx, "tt-1")
+	got, err := store.GetTrigger(ctx, env.Repo.ORM(), "tt-1")
 	require.NoError(t, err)
 	require.Equal(t, "edited", got.Message)
 	changes, err := store.TriggerChanges(ctx, env.Repo.ORM(), storetest.SeedUserID, "tt-1")

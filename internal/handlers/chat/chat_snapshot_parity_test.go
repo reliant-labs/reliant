@@ -122,16 +122,17 @@ func chatSnapshotOverStream(t *testing.T, repo *db.Repo, userID, chatID string) 
 	t.Helper()
 
 	svc, err := streaming.New(streaming.Deps{
-		Logger:     slog.Default(),
-		Config:     &typedconfig.Config{},
-		Repo:       repo,
-		ChatRows:   store.NewChatExtStore(repo.ORM()),
-		Senders:    store.NewThreadExtStore(repo.ORM()),
-		Heads:      store.NewChatUpdateExtStore(repo.ORM()),
-		UserLog:    store.NewUserUpdateExtStore(repo.ORM()),
-		OrgFeed:    store.NewOrgUpdateExtStore(repo.ORM()),
-		Siblings:   store.NewMessageExtStore(repo.ORM()),
-		SpawnCalls: store.NewToolCallExtStore(repo.ORM()),
+		Logger:       slog.Default(),
+		Config:       &typedconfig.Config{},
+		Repo:         repo,
+		TriggerReads: store.NewTriggerEventExtStore(repo.ORM()),
+		ChatRows:     store.NewChatExtStore(repo.ORM()),
+		Senders:      store.NewThreadExtStore(repo.ORM()),
+		Heads:        store.NewChatUpdateExtStore(repo.ORM()),
+		UserLog:      store.NewUserUpdateExtStore(repo.ORM()),
+		OrgFeed:      store.NewOrgUpdateExtStore(repo.ORM()),
+		Siblings:     store.NewMessageExtStore(repo.ORM()),
+		SpawnCalls:   store.NewToolCallExtStore(repo.ORM()),
 	})
 	require.NoError(t, err)
 

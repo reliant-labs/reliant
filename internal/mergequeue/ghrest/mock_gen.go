@@ -16,14 +16,15 @@ import (
 )
 
 // forge:section MockService
-// forge:hash=37280ff1c8e33886ce01860738fb0acd441827b1d97fc51ad17350480abaf65b
+// forge:hash=7fc5e39529d851513a3dd557ab0d3751ba051964a738b32b21537487753ba788
 
 // MockService is a test mock for the Service interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockService.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockService.<Method>Func not set" error.
 type MockService struct {
 	contractkit.Recorder
 	GetRefFunc             func(context.Context, ghport.Repo, string) (ghport.Ref, error)
@@ -35,7 +36,6 @@ type MockService struct {
 	CreateCheckRunFunc     func(context.Context, ghport.Repo, ghport.CreateCheckRun) (ghport.CheckRun, error)
 	UpdateCheckRunFunc     func(context.Context, ghport.Repo, int64, ghport.UpdateCheckRun) (ghport.CheckRun, error)
 	ListCheckRunsFunc      func(context.Context, ghport.Repo, string, ghport.ListCheckRuns) ([]ghport.CheckRun, error)
-	GetContentsFunc        func(context.Context, ghport.Repo, string, string) ([]byte, error)
 	GetCommitFunc          func(context.Context, ghport.Repo, string) (ghport.Commit, error)
 	CreateCommitFunc       func(context.Context, ghport.Repo, ghport.NewCommit) (ghport.Commit, error)
 	CreateIssueCommentFunc func(context.Context, ghport.Repo, int, string) (ghport.IssueComment, error)
@@ -123,15 +123,6 @@ func (m *MockService) ListCheckRuns(ctx context.Context, repo ghport.Repo, sha s
 	return nil, contractkit.MockNotSet("MockService", "ListCheckRuns")
 }
 
-// GetContents records the call and delegates to GetContentsFunc when set.
-func (m *MockService) GetContents(ctx context.Context, repo ghport.Repo, path string, ref string) ([]byte, error) {
-	m.Recorder.Record("GetContents", ctx, repo, path, ref)
-	if m.GetContentsFunc != nil {
-		return m.GetContentsFunc(ctx, repo, path, ref)
-	}
-	return nil, contractkit.MockNotSet("MockService", "GetContents")
-}
-
 // GetCommit records the call and delegates to GetCommitFunc when set.
 func (m *MockService) GetCommit(ctx context.Context, repo ghport.Repo, sha string) (ghport.Commit, error) {
 	m.Recorder.Record("GetCommit", ctx, repo, sha)
@@ -166,6 +157,306 @@ func (m *MockService) ListIssueComments(ctx context.Context, repo ghport.Repo, n
 		return m.ListIssueCommentsFunc(ctx, repo, number)
 	}
 	return nil, contractkit.MockNotSet("MockService", "ListIssueComments")
+}
+
+// MockServiceGetRefCall is one recorded call of MockService.GetRef, one
+// field per parameter.
+type MockServiceGetRefCall struct {
+	Ctx  context.Context
+	Repo ghport.Repo
+	Ref  string
+}
+
+// GetRefCalls returns every recorded GetRef call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetRef").
+func (m *MockService) GetRefCalls() []MockServiceGetRefCall {
+	var out []MockServiceGetRefCall
+	for _, c := range m.Recorder.Calls("GetRef") {
+		var r MockServiceGetRefCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Repo, _ = c.Args[1].(ghport.Repo)
+		r.Ref, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceCreateRefCall is one recorded call of MockService.CreateRef, one
+// field per parameter.
+type MockServiceCreateRefCall struct {
+	Ctx  context.Context
+	Repo ghport.Repo
+	Ref  string
+	Sha  string
+}
+
+// CreateRefCalls returns every recorded CreateRef call, oldest first, with
+// its arguments typed. It reads the same log as Calls("CreateRef").
+func (m *MockService) CreateRefCalls() []MockServiceCreateRefCall {
+	var out []MockServiceCreateRefCall
+	for _, c := range m.Recorder.Calls("CreateRef") {
+		var r MockServiceCreateRefCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Repo, _ = c.Args[1].(ghport.Repo)
+		r.Ref, _ = c.Args[2].(string)
+		r.Sha, _ = c.Args[3].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceUpdateRefCall is one recorded call of MockService.UpdateRef, one
+// field per parameter.
+type MockServiceUpdateRefCall struct {
+	Ctx   context.Context
+	Repo  ghport.Repo
+	Ref   string
+	Sha   string
+	Force bool
+}
+
+// UpdateRefCalls returns every recorded UpdateRef call, oldest first, with
+// its arguments typed. It reads the same log as Calls("UpdateRef").
+func (m *MockService) UpdateRefCalls() []MockServiceUpdateRefCall {
+	var out []MockServiceUpdateRefCall
+	for _, c := range m.Recorder.Calls("UpdateRef") {
+		var r MockServiceUpdateRefCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Repo, _ = c.Args[1].(ghport.Repo)
+		r.Ref, _ = c.Args[2].(string)
+		r.Sha, _ = c.Args[3].(string)
+		r.Force, _ = c.Args[4].(bool)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceDeleteRefCall is one recorded call of MockService.DeleteRef, one
+// field per parameter.
+type MockServiceDeleteRefCall struct {
+	Ctx  context.Context
+	Repo ghport.Repo
+	Ref  string
+}
+
+// DeleteRefCalls returns every recorded DeleteRef call, oldest first, with
+// its arguments typed. It reads the same log as Calls("DeleteRef").
+func (m *MockService) DeleteRefCalls() []MockServiceDeleteRefCall {
+	var out []MockServiceDeleteRefCall
+	for _, c := range m.Recorder.Calls("DeleteRef") {
+		var r MockServiceDeleteRefCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Repo, _ = c.Args[1].(ghport.Repo)
+		r.Ref, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceGetPullRequestCall is one recorded call of MockService.GetPullRequest, one
+// field per parameter.
+type MockServiceGetPullRequestCall struct {
+	Ctx    context.Context
+	Repo   ghport.Repo
+	Number int
+}
+
+// GetPullRequestCalls returns every recorded GetPullRequest call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetPullRequest").
+func (m *MockService) GetPullRequestCalls() []MockServiceGetPullRequestCall {
+	var out []MockServiceGetPullRequestCall
+	for _, c := range m.Recorder.Calls("GetPullRequest") {
+		var r MockServiceGetPullRequestCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Repo, _ = c.Args[1].(ghport.Repo)
+		r.Number, _ = c.Args[2].(int)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceMergePullRequestCall is one recorded call of MockService.MergePullRequest, one
+// field per parameter.
+type MockServiceMergePullRequestCall struct {
+	Ctx    context.Context
+	Repo   ghport.Repo
+	Number int
+	Req    ghport.MergeRequest
+}
+
+// MergePullRequestCalls returns every recorded MergePullRequest call, oldest first, with
+// its arguments typed. It reads the same log as Calls("MergePullRequest").
+func (m *MockService) MergePullRequestCalls() []MockServiceMergePullRequestCall {
+	var out []MockServiceMergePullRequestCall
+	for _, c := range m.Recorder.Calls("MergePullRequest") {
+		var r MockServiceMergePullRequestCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Repo, _ = c.Args[1].(ghport.Repo)
+		r.Number, _ = c.Args[2].(int)
+		r.Req, _ = c.Args[3].(ghport.MergeRequest)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceCreateCheckRunCall is one recorded call of MockService.CreateCheckRun, one
+// field per parameter.
+type MockServiceCreateCheckRunCall struct {
+	Ctx  context.Context
+	Repo ghport.Repo
+	In   ghport.CreateCheckRun
+}
+
+// CreateCheckRunCalls returns every recorded CreateCheckRun call, oldest first, with
+// its arguments typed. It reads the same log as Calls("CreateCheckRun").
+func (m *MockService) CreateCheckRunCalls() []MockServiceCreateCheckRunCall {
+	var out []MockServiceCreateCheckRunCall
+	for _, c := range m.Recorder.Calls("CreateCheckRun") {
+		var r MockServiceCreateCheckRunCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Repo, _ = c.Args[1].(ghport.Repo)
+		r.In, _ = c.Args[2].(ghport.CreateCheckRun)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceUpdateCheckRunCall is one recorded call of MockService.UpdateCheckRun, one
+// field per parameter.
+type MockServiceUpdateCheckRunCall struct {
+	Ctx  context.Context
+	Repo ghport.Repo
+	ID   int64
+	In   ghport.UpdateCheckRun
+}
+
+// UpdateCheckRunCalls returns every recorded UpdateCheckRun call, oldest first, with
+// its arguments typed. It reads the same log as Calls("UpdateCheckRun").
+func (m *MockService) UpdateCheckRunCalls() []MockServiceUpdateCheckRunCall {
+	var out []MockServiceUpdateCheckRunCall
+	for _, c := range m.Recorder.Calls("UpdateCheckRun") {
+		var r MockServiceUpdateCheckRunCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Repo, _ = c.Args[1].(ghport.Repo)
+		r.ID, _ = c.Args[2].(int64)
+		r.In, _ = c.Args[3].(ghport.UpdateCheckRun)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceListCheckRunsCall is one recorded call of MockService.ListCheckRuns, one
+// field per parameter.
+type MockServiceListCheckRunsCall struct {
+	Ctx  context.Context
+	Repo ghport.Repo
+	Sha  string
+	Opts ghport.ListCheckRuns
+}
+
+// ListCheckRunsCalls returns every recorded ListCheckRuns call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListCheckRuns").
+func (m *MockService) ListCheckRunsCalls() []MockServiceListCheckRunsCall {
+	var out []MockServiceListCheckRunsCall
+	for _, c := range m.Recorder.Calls("ListCheckRuns") {
+		var r MockServiceListCheckRunsCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Repo, _ = c.Args[1].(ghport.Repo)
+		r.Sha, _ = c.Args[2].(string)
+		r.Opts, _ = c.Args[3].(ghport.ListCheckRuns)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceGetCommitCall is one recorded call of MockService.GetCommit, one
+// field per parameter.
+type MockServiceGetCommitCall struct {
+	Ctx  context.Context
+	Repo ghport.Repo
+	Sha  string
+}
+
+// GetCommitCalls returns every recorded GetCommit call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetCommit").
+func (m *MockService) GetCommitCalls() []MockServiceGetCommitCall {
+	var out []MockServiceGetCommitCall
+	for _, c := range m.Recorder.Calls("GetCommit") {
+		var r MockServiceGetCommitCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Repo, _ = c.Args[1].(ghport.Repo)
+		r.Sha, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceCreateCommitCall is one recorded call of MockService.CreateCommit, one
+// field per parameter.
+type MockServiceCreateCommitCall struct {
+	Ctx  context.Context
+	Repo ghport.Repo
+	In   ghport.NewCommit
+}
+
+// CreateCommitCalls returns every recorded CreateCommit call, oldest first, with
+// its arguments typed. It reads the same log as Calls("CreateCommit").
+func (m *MockService) CreateCommitCalls() []MockServiceCreateCommitCall {
+	var out []MockServiceCreateCommitCall
+	for _, c := range m.Recorder.Calls("CreateCommit") {
+		var r MockServiceCreateCommitCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Repo, _ = c.Args[1].(ghport.Repo)
+		r.In, _ = c.Args[2].(ghport.NewCommit)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceCreateIssueCommentCall is one recorded call of MockService.CreateIssueComment, one
+// field per parameter.
+type MockServiceCreateIssueCommentCall struct {
+	Ctx    context.Context
+	Repo   ghport.Repo
+	Number int
+	Body   string
+}
+
+// CreateIssueCommentCalls returns every recorded CreateIssueComment call, oldest first, with
+// its arguments typed. It reads the same log as Calls("CreateIssueComment").
+func (m *MockService) CreateIssueCommentCalls() []MockServiceCreateIssueCommentCall {
+	var out []MockServiceCreateIssueCommentCall
+	for _, c := range m.Recorder.Calls("CreateIssueComment") {
+		var r MockServiceCreateIssueCommentCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Repo, _ = c.Args[1].(ghport.Repo)
+		r.Number, _ = c.Args[2].(int)
+		r.Body, _ = c.Args[3].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceListIssueCommentsCall is one recorded call of MockService.ListIssueComments, one
+// field per parameter.
+type MockServiceListIssueCommentsCall struct {
+	Ctx    context.Context
+	Repo   ghport.Repo
+	Number int
+}
+
+// ListIssueCommentsCalls returns every recorded ListIssueComments call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListIssueComments").
+func (m *MockService) ListIssueCommentsCalls() []MockServiceListIssueCommentsCall {
+	var out []MockServiceListIssueCommentsCall
+	for _, c := range m.Recorder.Calls("ListIssueComments") {
+		var r MockServiceListIssueCommentsCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Repo, _ = c.Args[1].(ghport.Repo)
+		r.Number, _ = c.Args[2].(int)
+		out = append(out, r)
+	}
+	return out
 }
 
 // Compile-time check.

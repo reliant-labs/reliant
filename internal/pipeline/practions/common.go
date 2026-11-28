@@ -217,6 +217,10 @@ type attemptDetail struct {
 	Risk        string            `json:"risk,omitempty"`
 	RiskReasons []string          `json:"risk_reasons,omitempty"`
 	Files       map[string]string `json:"files,omitempty"`
+	// FilesUnknown: no gate pool daemon listed the head's files, so Files
+	// is empty for want of a list, not because nothing changed. The
+	// verdict's owner decisions then match every path (fail closed).
+	FilesUnknown bool `json:"files_unknown,omitempty"`
 
 	Blockers []prpolicy.Finding `json:"blockers,omitempty"`
 	Evidence map[string]any     `json:"evidence,omitempty"`
@@ -365,6 +369,18 @@ func requiredDecisions(cfg config.Resolved, head string, paths []string) []core.
 		out = append(out, core.PipelineDecisionKind(d.Kind))
 	}
 	return out
+}
+
+// requiredDecisionsAnyPath is requiredDecisions for a head whose changed
+// paths are not known: an owner_approval entry gated on paths requires its
+// decision as though a path matched, so an unknown diff never skips one.
+func requiredDecisionsAnyPath(cfg config.Resolved, head string) []core.PipelineDecisionKind {
+	approvals := slices.Clone(cfg.OwnerApproval)
+	for i := range approvals {
+		approvals[i].Paths = nil
+	}
+	cfg.OwnerApproval = approvals
+	return requiredDecisions(cfg, head, nil)
 }
 
 func diffPaths(d prpolicy.Diff) []string {

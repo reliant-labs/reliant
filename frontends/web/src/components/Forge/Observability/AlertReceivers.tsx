@@ -21,7 +21,9 @@ import { AlertTriangle, Bell, Globe, Lock, Mail, MessageSquare, Pencil, Plus, Se
 import Card from "@/components/forge-ui/card";
 import Modal from "@/components/forge-ui/modal";
 import Button from "@/components/forge-ui/button";
-import { useAlertingMutation, useReceivers } from "@/hooks/observability-queries";
+import { useAlertingWriteOptions, useReceivers } from "@/hooks/observability-queries";
+import { useCreateReceiver, useDeleteReceiver, useTestReceiver, useUpdateReceiver } from "@/hooks/controlplane/alerting-service-hooks_gen";
+import { createReceiverRequest, testReceiverResultOf, updateReceiverRequest } from "@/services/controlPlane/observability/alertingApi";
 import type {
   CreateReceiverInput,
   DeclaredAlertRoute,
@@ -317,8 +319,9 @@ function ReceiverRow({
   const [confirming, setConfirming] = useState(false);
   const [result, setResult] = useState<TestReceiverResult | null>(null);
   const [problem, setProblem] = useState("");
-  const test = useAlertingMutation(orgId, (api, org, id: string) => api.testReceiver(org, id));
-  const remove = useAlertingMutation(orgId, (api, org, id: string) => api.deleteReceiver(org, id));
+  const writeOptions = useAlertingWriteOptions(orgId);
+  const test = useTestReceiver(writeOptions);
+  const remove = useDeleteReceiver(writeOptions);
   const Icon = TYPE_ICON[receiver.type];
   const builtIn = receiver.type === "inapp";
   const fail = (error: Error, what: string) => {
@@ -371,7 +374,7 @@ function ReceiverRow({
             onClick={() => {
               setProblem("");
               setResult(null);
-              test.mutate(receiver.id, { onSuccess: setResult, onError: (e) => fail(e, "Sending a test") });
+              test.mutate({ orgId, id: receiver.id }, { onSuccess: (res) => setResult(testReceiverResultOf(res)), onError: (e) => fail(e, "Sending a test") });
             }}
             data-testid={`obs-receiver-test-${receiver.name}`}
           >
@@ -389,7 +392,7 @@ function ReceiverRow({
                   disabled={remove.isPending}
                   loading={remove.isPending}
                   onClick={() =>
-                    remove.mutate(receiver.id, {
+                    remove.mutate({ orgId, id: receiver.id }, {
                       onError: (e) => {
                         setConfirming(false);
                         fail(e, "Deleting a receiver");
@@ -468,10 +471,9 @@ function ReceiverDialog({
     secret: "",
   }));
   const [problems, setProblems] = useState<string[]>([]);
-  const create = useAlertingMutation(orgId, (api, org, input: CreateReceiverInput) => api.createReceiver(org, input));
-  const update = useAlertingMutation(orgId, (api, org, input: { id: string; settings: Record<string, string>; secret: string }) =>
-    api.updateReceiver(org, input)
-  );
+  const writeOptions = useAlertingWriteOptions(orgId);
+  const create = useCreateReceiver(writeOptions);
+  const update = useUpdateReceiver(writeOptions);
   const pending = create.isPending || update.isPending;
   const nameId = useId();
   const typeId = useId();
@@ -499,9 +501,9 @@ function ReceiverDialog({
     setProblems(found);
     if (found.length) return;
     if (current) {
-      update.mutate({ id: current.id, settings: formSettings(form, current.settings), secret: form.secret.trim() }, { onSuccess: onClose, onError });
+      update.mutate(updateReceiverRequest(orgId, { id: current.id, settings: formSettings(form, current.settings), secret: form.secret.trim() }), { onSuccess: onClose, onError });
     } else {
-      create.mutate({ name: form.name, type: form.type, settings: formSettings(form), secret: form.secret.trim() }, { onSuccess: onClose, onError });
+      create.mutate(createReceiverRequest(orgId, { name: form.name, type: form.type, settings: formSettings(form), secret: form.secret.trim() }), { onSuccess: onClose, onError });
     }
   };
 

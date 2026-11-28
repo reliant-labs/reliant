@@ -469,7 +469,12 @@ func TestTypecheckPinnedTscRejectsInvalidSource(t *testing.T) {
 		t.Fatalf("typecheck = %q, want tsc -b", got)
 	}
 	root := scriptFixture(t, "web-typecheck.sh")
-	compiler := filepath.Join(repoRoot, "frontends/web/node_modules/typescript/bin/tsc")
+	// Absolute: repoRoot is relative to this package, and the fixture links to
+	// the compiler from a temporary directory, where a relative target dangles.
+	compiler, err := filepath.Abs(filepath.Join(repoRoot, "frontends/web/node_modules/typescript/bin/tsc"))
+	if err != nil {
+		t.Fatal(err)
+	}
 	if _, err := os.Stat(compiler); os.IsNotExist(err) {
 		t.Skip("install frontends/web dependencies to run the pinned TypeScript regression")
 	} else if err != nil {

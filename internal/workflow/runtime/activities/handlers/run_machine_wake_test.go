@@ -85,7 +85,7 @@ func TestRunMachineWake_AStaleSessionPinWakesTheWorkspaceOwner(t *testing.T) {
 			want string
 		}{{stale, owner}, {configured, "cicd"}, {nil, owner}} {
 			router := newPerMachineWakeRouter(map[string]bool{pin: true})
-			a := NewMachineResumeWakeActivity(repo, workspaceRowsOf(repo), toolexec.NewRemoteExecutor(router))
+			a := NewMachineResumeWakeActivity(repo, NewTriggerReads(repo.ORM()), workspaceRowsOf(repo), toolexec.NewRemoteExecutor(router))
 			a.pollInterval = 5 * time.Millisecond
 			out := runResumeWake(t, a, MachineResumeWakeInput{ChatID: chatID, DaemonSelector: tc.sel, WaitSeconds: 5})
 			assert.True(t, out.Ready)
@@ -99,7 +99,7 @@ func TestRunMachineWake_AStaleSessionPinWakesTheWorkspaceOwner(t *testing.T) {
 			want string
 		}{{stale, owner}, {configured, "cicd"}} {
 			router := newPerMachineWakeRouter(map[string]bool{pin: true})
-			a := NewPreflightDaemonCheckActivity(repo, workspaceRowsOf(repo), toolexec.NewRemoteExecutor(router))
+			a := NewPreflightDaemonCheckActivity(repo, NewTriggerReads(repo.ORM()), workspaceRowsOf(repo), toolexec.NewRemoteExecutor(router))
 			a.pollInterval = 5 * time.Millisecond
 			env := (&temporaltest.WorkflowTestSuite{}).NewTestActivityEnvironment()
 			env.RegisterActivity(a.Execute)

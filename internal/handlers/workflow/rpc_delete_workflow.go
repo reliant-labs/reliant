@@ -92,7 +92,7 @@ func plural(n int) string {
 // gone. One whose project still syncs a workflow of that name keeps working
 // (it resolves to the project's), so it stays.
 func (s *Service) automationsOfDeletedWorkflow(ctx context.Context, userID, slug string) ([]*core.Trigger, error) {
-	all, err := s.deps.Repo.ListTriggers(ctx, core.TriggerFilters{UserID: userID})
+	all, err := s.deps.Triggers.ListTriggersForUser(ctx, core.TriggerFilters{UserID: userID})
 	if err != nil {
 		return nil, fmt.Errorf("list automations: %w", err)
 	}

@@ -14,7 +14,9 @@
 # builds), make one link between them, and all get that one file; a failed
 # build exits non-zero and leaves the shared binary and every delivered copy
 # intact, and the next caller tries again; a lock holder killed mid-build does
-# not wedge the next caller. No step waits a fixed time: each polls for the
+# not wedge the next caller; -w is merged into the last -ldflags (or added as
+# -ldflags=-w), safely repeated if already present, and left out under
+# FORGE_DEV_DWARF=1 or when GOFLAGS has the only -ldflags. No step waits a fixed time: each polls for the
 # event it needs, with a deadline.
 #
 # The same file lives in control-plane and reliant; change both together.
@@ -64,7 +66,7 @@ chmod +x "$T/bin/go"
 # A PATH without Homebrew, so macOS takes /usr/bin/lockf and Linux flock(1).
 export PATH="$T/bin:/usr/bin:/bin"
 export AIR_BUILD_DIR="$T/air"
-unset AIR_BUILD_LOCKED
+unset AIR_BUILD_LOCKED GOFLAGS FORGE_DEV_DWARF
 shared="$T/air/cmd_app/bin"
 lockpath="$T/air/cmd_app/lock"
 
@@ -189,13 +191,47 @@ ok "a lock holder killed mid-build does not wedge the next caller"
 # Flags after the output path reach go build, before -o: the air configs
 # pass $FORGE_GO_BUILD_FLAGS there (forge env up's cover build). Without
 # any, the build is the plain one.
-[ "$(cat "$T/argv")" = "build -trimpath -buildvcs=false -o $T/air/cmd_app/bin ./cmd/app" ] ||
+[ "$(cat "$T/argv")" = "build -trimpath -buildvcs=false -ldflags=-w -o $T/air/cmd_app/bin ./cmd/app" ] ||
   FAIL "a caller with no flags ran: go $(cat "$T/argv")"
 (cd "$R" && sh scripts/air-build.sh ./cmd/app tmp/h/app -cover -covermode=atomic -coverpkg=example.com/app/...) >"$T/out" 2>&1 ||
   { FAIL "a caller with build flags failed"; cat "$T/out"; }
-[ "$(cat "$T/argv")" = "build -trimpath -buildvcs=false -cover -covermode=atomic -coverpkg=example.com/app/... -o $T/air/cmd_app/bin ./cmd/app" ] ||
+[ "$(cat "$T/argv")" = "build -trimpath -buildvcs=false -cover -covermode=atomic -coverpkg=example.com/app/... -ldflags=-w -o $T/air/cmd_app/bin ./cmd/app" ] ||
   FAIL "build flags did not reach go build: go $(cat "$T/argv")"
 ok "flags after the output path reach go build"
+
+# -w (no DWARF) is merged into the last -ldflags, never passed as a second
+# one, which would replace the first and drop its -X stamps.
+# ldflags_case <label> <want argv between -buildvcs=false and -o> <flags...>
+# (GOFLAGS= or FORGE_DEV_DWARF= before the call sets it for that case alone)
+ldflags_case() {
+  local label=$1 want=$2 got
+  shift 2
+  # One word per line, so a value with spaces shows as one flag.
+  cat >"$T/bin/go" <<EOF
+#!/bin/sh
+printf '%s\n' "\$@" >"$T/words"
+while [ "\$1" != -o ]; do shift; done
+echo bin >"\$2"
+EOF
+  (cd "$R" && sh scripts/air-build.sh ./cmd/app tmp/i/app "$@") >"$T/out" 2>&1 ||
+    { FAIL "$label: the build failed"; cat "$T/out"; return; }
+  got=$(sed -n '/^-buildvcs=false$/,/^-o$/p' "$T/words" | sed '1d;$d' | paste -sd'|' -)
+  [ "$got" = "$want" ] || FAIL "$label: go build got '$got', want '$want'"
+  ok "$label"
+}
+ldflags_case "no flags: -ldflags=-w" "-ldflags=-w"
+ldflags_case "-w is merged into an -ldflags=" "-trimpath|-ldflags=-X a.b=c -w" -trimpath "-ldflags=-X a.b=c"
+ldflags_case "-w is merged into an -ldflags <value>" "-ldflags|-X a.b=c -w" -ldflags "-X a.b=c"
+ldflags_case "-w joins the last of two -ldflags" "-ldflags=-s|-ldflags=-X a.b=c -w" -ldflags=-s "-ldflags=-X a.b=c"
+# The build script deliberately appends -w even when it is already present:
+# repetition is safe, and matching text could instead be a linker option value.
+ldflags_case "an existing -w safely receives another -w" "-ldflags=-w -w" -ldflags=-w
+ldflags_case "a merged -w safely receives another -w" "-ldflags=-X a.b=c -w -w" "-ldflags=-X a.b=c -w"
+ldflags_case "-w in a linker option value does not suppress -w" "-ldflags=-X a.b=-w -w" "-ldflags=-X a.b=-w"
+GOFLAGS="-trimpath -ldflags=-s" ldflags_case "an -ldflags in GOFLAGS wins over the default" ""
+GOFLAGS="-ldflags=-s" ldflags_case "a command-line -ldflags still gets -w over GOFLAGS'" "-ldflags=-X a.b=c -w" "-ldflags=-X a.b=c"
+FORGE_DEV_DWARF=1 ldflags_case "FORGE_DEV_DWARF=1 keeps DWARF" "-cover" -cover
+FORGE_DEV_DWARF=1 ldflags_case "FORGE_DEV_DWARF=1 leaves an -ldflags alone" "-ldflags=-X a.b=c" "-ldflags=-X a.b=c"
 
 rc=0
 (cd "$R" && sh scripts/air-build.sh) >/dev/null 2>&1 || rc=$?

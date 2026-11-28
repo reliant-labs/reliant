@@ -731,7 +731,14 @@ func (g *Graph) newMergeQueue() (*MergeQueue, error) {
 		// names them (pkg/config Roots).
 		Pipeline:     g.ServerProcessConfig.GetPipeline(),
 		ControlPlane: g.ServerProcessConfig.GetControlPlane(),
-		DataDir:      g.ServerProcessConfig.GetDataDir(),
+	})
+}
+
+func (g *Graph) newPipelineConfigRefresh() (*PipelineConfigRefresh, error) {
+	return NewPipelineConfigRefresh(PipelineConfigRefreshDeps{
+		DB:       g.Database(),
+		Router:   g.WorkerDaemonRouter(),
+		Pipeline: g.ServerProcessConfig.GetPipeline(),
 	})
 }
 
@@ -1141,6 +1148,10 @@ func (g *Graph) newAccount() (*account.Service, error) {
 
 // newApproval constructs the approval handler (internal/handlers/approval).
 func (g *Graph) newApproval() (*approval.Service, error) {
+	capabilityGrants, err := pipelineGrants(g.Database())
+	if err != nil {
+		return nil, err
+	}
 	return approval.New(approval.Deps{
 		Logger:      g.Log,
 		Config:      g.Cfg,
@@ -1148,6 +1159,7 @@ func (g *Graph) newApproval() (*approval.Service, error) {
 		Chats:       store.NewChatExtStore(g.Database().ORM()),
 		Signals:     g.PauseService(),
 		Connections: g.APIConnections().Service,
+		Grants:      capabilityGrants,
 	})
 }
 
@@ -1225,6 +1237,7 @@ func (g *Graph) newChat() (*chat.Service, error) {
 		Logger:           g.Log,
 		Config:           g.Cfg,
 		Repo:             g.Database(),
+		TriggerReads:     store.NewTriggerEventExtStore(g.Database().ORM()),
 		Chats:            chataccess.NewFromORM(g.Database().ORM()),
 		ChatRows:         store.NewChatExtStore(g.Database().ORM()),
 		ChatViews:        store.NewChatsWithActivityExtStore(g.Database().ORM()),
@@ -1628,21 +1641,22 @@ func (g *Graph) newSettings() (*settings.Service, error) {
 // newStreaming constructs the streaming handler (internal/handlers/streaming).
 func (g *Graph) newStreaming() (*streaminghandler.Service, error) {
 	return streaminghandler.New(streaminghandler.Deps{
-		Logger:      g.Log,
-		Config:      g.Cfg,
-		Repo:        g.Database(),
-		ChatRows:    store.NewChatExtStore(g.Database().ORM()),
-		Senders:     store.NewThreadExtStore(g.Database().ORM()),
-		Projects:    store.NewProjectExtStore(g.Database().ORM()),
-		SpawnCalls:  store.NewToolCallExtStore(g.Database().ORM()),
-		Heads:       store.NewChatUpdateExtStore(g.Database().ORM()),
-		UserLog:     store.NewUserUpdateExtStore(g.Database().ORM()),
-		OrgFeed:     store.NewOrgUpdateExtStore(g.Database().ORM()),
-		Siblings:    store.NewMessageExtStore(g.Database().ORM()),
-		Deltas:      g.StreamingHub().Hub,
-		UserUpdates: g.UserUpdateHub(),
-		ChatUpdates: g.ChatUpdateHub(),
-		Orgs:        g.OrgResolver(),
+		Logger:       g.Log,
+		Config:       g.Cfg,
+		Repo:         g.Database(),
+		TriggerReads: store.NewTriggerEventExtStore(g.Database().ORM()),
+		ChatRows:     store.NewChatExtStore(g.Database().ORM()),
+		Senders:      store.NewThreadExtStore(g.Database().ORM()),
+		Projects:     store.NewProjectExtStore(g.Database().ORM()),
+		SpawnCalls:   store.NewToolCallExtStore(g.Database().ORM()),
+		Heads:        store.NewChatUpdateExtStore(g.Database().ORM()),
+		UserLog:      store.NewUserUpdateExtStore(g.Database().ORM()),
+		OrgFeed:      store.NewOrgUpdateExtStore(g.Database().ORM()),
+		Siblings:     store.NewMessageExtStore(g.Database().ORM()),
+		Deltas:       g.StreamingHub().Hub,
+		UserUpdates:  g.UserUpdateHub(),
+		ChatUpdates:  g.ChatUpdateHub(),
+		Orgs:         g.OrgResolver(),
 	})
 }
 
@@ -1782,12 +1796,12 @@ func (g *Graph) newSharing() (*sharing.Service, error) {
 // trigger handler does the adopting, re-validating it as its new owner.
 func (g *Graph) newAutomationTakeover() (*automation_takeover.Service, error) {
 	return automation_takeover.New(automation_takeover.Deps{
-		Logger:   g.Log,
-		Config:   g.Cfg,
-		Repo:     g.Database(),
-		Offers:   g.Triggerowner(),
-		Triggers: g.Trigger(),
-		Now:      nil, // optional — no provider
+		Logger:       g.Log,
+		Config:       g.Cfg,
+		TriggerReads: store.NewTriggerExtStore(g.Database().ORM()),
+		Offers:       g.Triggerowner(),
+		Triggers:     g.Trigger(),
+		Now:          nil, // optional — no provider
 	})
 }
 
@@ -1967,7 +1981,10 @@ func (g *Graph) newWorkflowCheckSyncer() (*workflowcheck.Syncer, error) {
 // (internal/handlers/coverage_source): a covered file's source, read from
 // GitHub with the viewer's own token once control-plane confirms a retained
 // coverage report names it. Without a control plane, or without a way to
-// read GitHub as the viewer, every read is NOT_YET_AVAILABLE.
+// read GitHub as the viewer, every read is NOT_YET_AVAILABLE. A read, never
+// a checkout or a build: the owner allowed it on the API server
+// (2026-11-27), bounded in memory (ghblobs.MaxBytes per blob, a bounded
+// number in flight, the handler's capped cache).
 func (g *Graph) newCoverageSource() (*coverage_source.Service, error) {
 	blobs, err := CoverageSourceBlobs(g.Database(), g.CredentialsConnectionvault(), g.Vault(), g.ServerProcessConfig.GetControlPlane(), g.IntegrationSettings())
 	if err != nil {
@@ -2136,6 +2153,10 @@ func (g *Graph) newInternalControlPlane() (*InternalControlPlane, error) {
 // newPipeline constructs the pipeline handler (internal/handlers/pipeline).
 // pipeline.enabled reaches the API server here (G4): off, every rpc refuses.
 func (g *Graph) newPipeline() (*pipeline.Service, error) {
+	capabilityGrants, err := pipelineGrants(g.Database())
+	if err != nil {
+		return nil, err
+	}
 	return pipeline.New(pipeline.Deps{
 		Logger: g.Log,
 		Config: g.Cfg,
@@ -2146,5 +2167,6 @@ func (g *Graph) newPipeline() (*pipeline.Service, error) {
 		Pipeline: &configv1.PipelineConfig{Enabled: g.ServerProcessConfig.GetPipeline().GetEnabled()},
 		Store:    g.Database(),
 		Now:      nil, // optional — no provider
+		Grants:   capabilityGrants,
 	})
 }
