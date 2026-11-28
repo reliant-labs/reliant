@@ -340,6 +340,61 @@ func TestChatListAndSearch(t *testing.T) {
 	}
 }
 
+func TestLiveBoundThreadRunUsesWorkflowBindingNotTimestamp(t *testing.T) {
+	t.Parallel()
+	env := storetest.New(t)
+	ctx := context.Background()
+	at := time.Now().UTC().Truncate(time.Microsecond).Add(-time.Hour)
+	if err := store.InsertWorktree(ctx, env.ORM, newWorktree("bound-wt", "bound-wt", "feat/bound", at)); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.InsertChat(ctx, env.ORM, convChat("bound-chat", at)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.InsertThread(ctx, env.ORM, &core.Thread{
+		ID: "bound-thread", ChatID: "bound-chat", Origin: core.ThreadOriginSpawn,
+		WorktreeID: convStr("bound-wt"), CreatedAt: at,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	// A resumed run can carry an earlier writer-supplied timestamp and an
+	// ID that sorts before the historical run. Neither determines ownership.
+	for _, run := range []struct {
+		id string
+		at time.Time
+	}{{"z-historical", at.Add(time.Minute)}, {"a-resumed", at}} {
+		if _, err := env.SQL.Exec(`INSERT INTO workflows (id, chat_id, workflow_name, thread, created_at, state, stop_reason)
+			VALUES ($1, 'bound-chat', 'wf', 'bound-thread', $2, $3, $4)`,
+			run.id, run.at, int32(core.WorkflowStateStopped), int32(core.StopReasonCompleted)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := store.UpdateThreadWorkflow(ctx, env.ORM, "bound-thread", "a-resumed"); err != nil {
+		t.Fatal(err)
+	}
+	for _, status := range []core.WorkflowStatus{
+		{State: core.WorkflowStatePending},
+		core.Active(),
+		{State: core.WorkflowStateStopped, StopReason: core.StopReasonPaused},
+	} {
+		if err := store.UpdateWorkflowStatus(ctx, env.ORM, "a-resumed", status); err != nil {
+			t.Fatal(err)
+		}
+		got, err := store.GetLiveBoundThreadRunForWorktree(ctx, env.ORM, "bound-wt")
+		if err != nil || got == nil || got.WorkflowID != "a-resumed" || got.ThreadID != "bound-thread" || got.Status != status {
+			t.Fatalf("bound run at %+v = %+v, %v; want a-resumed", status, got, err)
+		}
+	}
+	if err := store.UpdateWorkflowStatus(ctx, env.ORM, "a-resumed", core.WorkflowStatus{
+		State: core.WorkflowStateStopped, StopReason: core.StopReasonCompleted,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := store.GetLiveBoundThreadRunForWorktree(ctx, env.ORM, "bound-wt"); err != nil || got != nil {
+		t.Fatalf("completed bound run = %+v, %v; want nil", got, err)
+	}
+}
+
 func convStr(s string) *string { return &s }
 
 func without(ids []string, drop string) []string {

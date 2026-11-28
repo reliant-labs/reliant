@@ -19,11 +19,14 @@ import (
 // fakeStore is an in-memory Store, so these tests exercise the sweep's
 // scheduling and bookkeeping without a database or a filesystem.
 type fakeStore struct {
-	mu         sync.Mutex
-	rows       map[string]*core.ReclaimCandidate
-	order      []string
-	chats      []*core.Chat
-	chatErr    error
+	mu      sync.Mutex
+	rows    map[string]*core.ReclaimCandidate
+	order   []string
+	chats   []*core.Chat
+	chatErr error
+	// threadRuns is each worktree's live bound sub-agent run
+	// (GetLiveBoundThreadRunForWorktree).
+	threadRuns map[string]*core.BoundThreadRun
 	archiveErr error
 	archived   []string
 	daemon     string
@@ -121,6 +124,9 @@ func (f *fakeStore) GetLiveChatIDForWorktree(_ context.Context, id string) (stri
 		}
 	}
 	return "", nil
+}
+func (f *fakeStore) GetLiveBoundThreadRunForWorktree(_ context.Context, id string) (*core.BoundThreadRun, error) {
+	return f.threadRuns[id], nil
 }
 func (f *fakeStore) ArchiveWorktree(_ context.Context, id string) error {
 	if f.archiveErr != nil {
@@ -433,6 +439,16 @@ func TestAutoArchive_ALiveChatKeepsTheWorktree(t *testing.T) {
 	store, _, s := autoEnv(t, AutoArchiveOn, []*core.Chat{{ID: "c", WorktreeID: &id}})
 	require.NoError(t, s.Sweep(context.Background()))
 	assert.Empty(t, store.archived, "a worktree a live chat is bound to is never archived")
+}
+
+func TestAutoArchive_ALiveSubAgentKeepsTheWorktree(t *testing.T) {
+	t.Parallel()
+
+	store, _, s := autoEnv(t, AutoArchiveOn, nil)
+	store.threadRuns = map[string]*core.BoundThreadRun{"done": {ThreadID: "t", WorkflowID: "w", Status: core.Paused()}}
+	require.NoError(t, s.Sweep(context.Background()))
+	assert.Empty(t, store.archived, "a worktree a live sub-agent run is bound to is never archived")
+	assert.EqualValues(t, 1, s.blockedByChat.Load())
 }
 
 func TestAutoArchive_MoreThan1000UnrelatedChatsDoNotBlock(t *testing.T) {

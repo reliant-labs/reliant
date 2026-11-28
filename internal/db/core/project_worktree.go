@@ -356,6 +356,17 @@ type WorktreeRunActivity struct {
 	LastActive time.Time
 }
 
+// BoundThreadRun is a thread bound to a worktree (threads.worktree_id: a
+// sub-agent spawned into it) whose own latest run is live: pending, active,
+// or paused awaiting a resume. A hand-made archive or removal of the worktree
+// is refused while one exists (owner decision, 2026-11-27): the sub-agent is
+// still working there. ThreadID is the agent_id spawn_stop takes.
+type BoundThreadRun struct {
+	ThreadID   string
+	WorkflowID string
+	Status     WorkflowStatus
+}
+
 // CleaningNow reports whether a clean-up is genuinely running: flagged, and its
 // deadline not yet passed.
 func (m *CleanupMetadata) CleaningNow(now time.Time) bool {

@@ -535,6 +535,7 @@ type worktreeStore interface {
 	workspacecreate.Store
 	repopkg.AdoptStore
 	GetLiveChatIDForWorktree(ctx context.Context, worktreeID string) (string, error)
+	GetLiveBoundThreadRunForWorktree(ctx context.Context, worktreeID string) (*core.BoundThreadRun, error)
 	ListReposByProject(ctx context.Context, projectID string) ([]*core.Repo, error)
 	ListWorktrees(ctx context.Context, filters db.WorktreeFilters) ([]*db.Worktree, error)
 }

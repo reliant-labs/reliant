@@ -3,6 +3,7 @@ package worktree_reclaim
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -86,6 +87,18 @@ func (s *Service) sendApprovals(ctx context.Context, userID, daemonID string, de
 				continue
 			case chat != "":
 				refuse(results[i], "live_chat", "a chat is still open in this workspace; archive the chat to remove it")
+				continue
+			}
+			// A sub-agent spawned into the workspace binds its thread, not a
+			// chat. While its run is live it is working there (owner,
+			// 2026-11-27); a finished one does not block.
+			run, err := s.deps.Repo.GetLiveBoundThreadRunForWorktree(ctx, p.GetRowId())
+			switch {
+			case err != nil:
+				refuse(results[i], "unverified", "could not check whether a sub-agent is still working in it; approve again")
+				continue
+			case run != nil:
+				refuse(results[i], "in_use", fmt.Sprintf("sub-agent %s is still %s in this workspace (run %s); stop it, or let it finish, then approve again", run.ThreadID, run.Status.Label(), run.WorkflowID))
 				continue
 			}
 		}

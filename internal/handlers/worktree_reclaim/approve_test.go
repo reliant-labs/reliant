@@ -80,6 +80,23 @@ func withLiveChats(r *machineStub, rows ...string) *machineStub {
 		}
 		return "", nil
 	}
+	if r.GetLiveBoundThreadRunForWorktreeFunc == nil {
+		r.GetLiveBoundThreadRunForWorktreeFunc = func(context.Context, string) (*core.BoundThreadRun, error) { return nil, nil }
+	}
+	return r
+}
+
+// withLiveSubAgents makes the repo report a live sub-agent run for these
+// workspace rows.
+func withLiveSubAgents(r *machineStub, rows ...string) *machineStub {
+	r.GetLiveBoundThreadRunForWorktreeFunc = func(_ context.Context, id string) (*core.BoundThreadRun, error) {
+		for _, row := range rows {
+			if row == id {
+				return &core.BoundThreadRun{ThreadID: "thread-" + id, WorkflowID: "run-" + id, Status: core.Paused()}, nil
+			}
+		}
+		return nil, nil
+	}
 	return r
 }
 
@@ -144,6 +161,29 @@ func TestDecideWorktreeReclaim_LiveChatIsRefused(t *testing.T) {
 	assert.True(t, got.Results[0].Recorded)
 	assert.Equal(t, removalRefused, got.Results[0].Removal)
 	assert.Equal(t, "live_chat", got.Results[0].RemovalReason)
+}
+
+// A Reliant workspace a sub-agent is still working in (its run active or
+// paused) is never sent for removal either (owner, 2026-11-27), and only that
+// item of the batch is refused: the others still go to the machine.
+func TestDecideWorktreeReclaim_LiveSubAgentIsRefusedAlone(t *testing.T) {
+	t.Parallel()
+	m := &machineSender{}
+	repo := withLiveSubAgents(withLiveChats(machineRepo(t, true, workspaceProposal("a", "fa", "row-a"), workspaceProposal("b", "fb", "row-b"))), "row-a")
+	got, err := decide(t, repo, m, testUser,
+		&pb.WorktreeReclaimDecision{Key: "a", Fingerprint: "fa", Approve: true},
+		&pb.WorktreeReclaimDecision{Key: "b", Fingerprint: "fb", Approve: true},
+	)
+	require.NoError(t, err)
+	assert.Equal(t, []string{decideCommand, approveCommand}, m.commands)
+	require.Len(t, m.approved, 1)
+	assert.Equal(t, []approveItem{{Key: "b", Fingerprint: "fb", Path: "/w/b"}}, m.approved[0].Approvals)
+	assert.True(t, got.Results[0].Recorded)
+	assert.Equal(t, removalRefused, got.Results[0].Removal)
+	assert.Equal(t, "in_use", got.Results[0].RemovalReason)
+	assert.Contains(t, got.Results[0].RemovalDetail, "sub-agent thread-row-a is still paused")
+	assert.Contains(t, got.Results[0].RemovalDetail, "run-row-a")
+	assert.Equal(t, removalRemoving, got.Results[1].Removal)
 }
 
 // The machine's own refusals (and removals) come back per approval.
