@@ -564,7 +564,7 @@ func (m *MockTriggerReads) GetTriggerEventByChatIDCalls() []MockTriggerReadsGetT
 var _ TriggerReads = (*MockTriggerReads)(nil)
 
 // forge:section MockRepository
-// forge:hash=8166ca1417a9bad7d8f356661c87b39f7a0592f910ee0de35e75ba0817cbce8e
+// forge:hash=322f98da971d5aec1d5914df7fae7c780a75071e364928093263e5505daa6b17
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -605,9 +605,8 @@ type MockRepository struct {
 	GetToolCallFunc                                          func(context.Context, string) (*db.ToolCall, error)
 	ListContentBlocksByIDsFunc                               func(context.Context, []string) ([]*db.MessageContentBlock, error)
 	ListMessagesByIDsFunc                                    func(context.Context, []string) ([]*db.Message, error)
-	CreatePlanFunc                                           func(context.Context, *db.Plan) error
-	CreateTaskFunc                                           func(context.Context, *db.Task) error
 	ListPlansByChatIDFunc                                    func(context.Context, string) ([]*db.Plan, error)
+	CopyChatPlansToThreadFunc                                func(context.Context, string, string) (int, int, error)
 	ListTasksByPlanFunc                                      func(context.Context, string) ([]*db.Task, error)
 	CopyChatPlansFunc                                        func(context.Context, string, string) error
 	GetStepExecutionsForChatFunc                             func(context.Context, string) ([]*db.ChatStepExecution, error)
@@ -971,24 +970,6 @@ func (m *MockRepository) ListMessagesByIDs(ctx context.Context, ids []string) ([
 	return nil, contractkit.MockNotSet("MockRepository", "ListMessagesByIDs")
 }
 
-// CreatePlan records the call and delegates to CreatePlanFunc when set.
-func (m *MockRepository) CreatePlan(ctx context.Context, plan *db.Plan) error {
-	m.Recorder.Record("CreatePlan", ctx, plan)
-	if m.CreatePlanFunc != nil {
-		return m.CreatePlanFunc(ctx, plan)
-	}
-	return contractkit.MockNotSet("MockRepository", "CreatePlan")
-}
-
-// CreateTask records the call and delegates to CreateTaskFunc when set.
-func (m *MockRepository) CreateTask(ctx context.Context, task *db.Task) error {
-	m.Recorder.Record("CreateTask", ctx, task)
-	if m.CreateTaskFunc != nil {
-		return m.CreateTaskFunc(ctx, task)
-	}
-	return contractkit.MockNotSet("MockRepository", "CreateTask")
-}
-
 // ListPlansByChatID records the call and delegates to ListPlansByChatIDFunc when set.
 func (m *MockRepository) ListPlansByChatID(ctx context.Context, chatID string) ([]*db.Plan, error) {
 	m.Recorder.Record("ListPlansByChatID", ctx, chatID)
@@ -996,6 +977,15 @@ func (m *MockRepository) ListPlansByChatID(ctx context.Context, chatID string) (
 		return m.ListPlansByChatIDFunc(ctx, chatID)
 	}
 	return nil, contractkit.MockNotSet("MockRepository", "ListPlansByChatID")
+}
+
+// CopyChatPlansToThread records the call and delegates to CopyChatPlansToThreadFunc when set.
+func (m *MockRepository) CopyChatPlansToThread(ctx context.Context, sourceChatID string, targetThreadID string) (int, int, error) {
+	m.Recorder.Record("CopyChatPlansToThread", ctx, sourceChatID, targetThreadID)
+	if m.CopyChatPlansToThreadFunc != nil {
+		return m.CopyChatPlansToThreadFunc(ctx, sourceChatID, targetThreadID)
+	}
+	return 0, 0, contractkit.MockNotSet("MockRepository", "CopyChatPlansToThread")
 }
 
 // ListTasksByPlan records the call and delegates to ListTasksByPlanFunc when set.
@@ -2459,46 +2449,6 @@ func (m *MockRepository) ListMessagesByIDsCalls() []MockRepositoryListMessagesBy
 	return out
 }
 
-// MockRepositoryCreatePlanCall is one recorded call of MockRepository.CreatePlan, one
-// field per parameter.
-type MockRepositoryCreatePlanCall struct {
-	Ctx  context.Context
-	Plan *db.Plan
-}
-
-// CreatePlanCalls returns every recorded CreatePlan call, oldest first, with
-// its arguments typed. It reads the same log as Calls("CreatePlan").
-func (m *MockRepository) CreatePlanCalls() []MockRepositoryCreatePlanCall {
-	var out []MockRepositoryCreatePlanCall
-	for _, c := range m.Recorder.Calls("CreatePlan") {
-		var r MockRepositoryCreatePlanCall
-		r.Ctx, _ = c.Args[0].(context.Context)
-		r.Plan, _ = c.Args[1].(*db.Plan)
-		out = append(out, r)
-	}
-	return out
-}
-
-// MockRepositoryCreateTaskCall is one recorded call of MockRepository.CreateTask, one
-// field per parameter.
-type MockRepositoryCreateTaskCall struct {
-	Ctx  context.Context
-	Task *db.Task
-}
-
-// CreateTaskCalls returns every recorded CreateTask call, oldest first, with
-// its arguments typed. It reads the same log as Calls("CreateTask").
-func (m *MockRepository) CreateTaskCalls() []MockRepositoryCreateTaskCall {
-	var out []MockRepositoryCreateTaskCall
-	for _, c := range m.Recorder.Calls("CreateTask") {
-		var r MockRepositoryCreateTaskCall
-		r.Ctx, _ = c.Args[0].(context.Context)
-		r.Task, _ = c.Args[1].(*db.Task)
-		out = append(out, r)
-	}
-	return out
-}
-
 // MockRepositoryListPlansByChatIDCall is one recorded call of MockRepository.ListPlansByChatID, one
 // field per parameter.
 type MockRepositoryListPlansByChatIDCall struct {
@@ -2514,6 +2464,28 @@ func (m *MockRepository) ListPlansByChatIDCalls() []MockRepositoryListPlansByCha
 		var r MockRepositoryListPlansByChatIDCall
 		r.Ctx, _ = c.Args[0].(context.Context)
 		r.ChatID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockRepositoryCopyChatPlansToThreadCall is one recorded call of MockRepository.CopyChatPlansToThread, one
+// field per parameter.
+type MockRepositoryCopyChatPlansToThreadCall struct {
+	Ctx            context.Context
+	SourceChatID   string
+	TargetThreadID string
+}
+
+// CopyChatPlansToThreadCalls returns every recorded CopyChatPlansToThread call, oldest first, with
+// its arguments typed. It reads the same log as Calls("CopyChatPlansToThread").
+func (m *MockRepository) CopyChatPlansToThreadCalls() []MockRepositoryCopyChatPlansToThreadCall {
+	var out []MockRepositoryCopyChatPlansToThreadCall
+	for _, c := range m.Recorder.Calls("CopyChatPlansToThread") {
+		var r MockRepositoryCopyChatPlansToThreadCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.SourceChatID, _ = c.Args[1].(string)
+		r.TargetThreadID, _ = c.Args[2].(string)
 		out = append(out, r)
 	}
 	return out

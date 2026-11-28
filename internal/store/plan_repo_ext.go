@@ -121,6 +121,73 @@ func ListPlansByChatID(ctx context.Context, db orm.Context, chatID string) ([]*c
 	return plansToCore(rows), nil
 }
 
+// copyChatPlansToThreadSQL copies every plan of a chat (?0), with its tasks,
+// onto one thread (?1), in ONE statement however many there are.
+//
+// Each copy gets a fresh id; a task's parent_task_id is mapped to the copy of
+// its parent when the parent is in the same plan, and is NULL otherwise. Plans
+// and tasks start over at the given statuses (?2, ?3). What is copied is the
+// plan's title, description and complexity and the task's title, description
+// and position: project, metadata, assignee and completion are not, and
+// neither are task dependencies.
+//
+// The copies are stamped with the statement's time, a microsecond apart in
+// the order of the source plans' created_at, so the newest source plan's copy
+// is the newest plan on the thread.
+//
+// Both source CTEs are MATERIALIZED (each is read twice, and carries a
+// volatile gen_random_uuid()), so every row's new id is drawn once and the
+// task inserts see the same plan ids the plan inserts wrote. tasks.plan_id and
+// tasks.parent_task_id carry no foreign key, so the order of the two inserts
+// does not matter.
+const copyChatPlansToThreadSQL = `
+WITH src_plans AS MATERIALIZED (
+    SELECT p.id, p.title, p.description, p.complexity,
+           gen_random_uuid()::text AS new_id,
+           now() + (row_number() OVER (ORDER BY p.created_at, p.id)) * interval '1 microsecond' AS stamped_at
+      FROM plans p
+      JOIN threads th ON th.id = p.thread_id
+     WHERE th.chat_id = ?0
+),
+src_tasks AS MATERIALIZED (
+    SELECT t.id, t.plan_id, t.parent_task_id, t.title, t.description, t.position,
+           gen_random_uuid()::text AS new_id
+      FROM tasks t
+     WHERE t.plan_id IN (SELECT id FROM src_plans)
+),
+new_plans AS (
+    INSERT INTO plans (id, thread_id, title, description, status, complexity, created_at, updated_at)
+    SELECT new_id, ?1, title, description, ?2, complexity, stamped_at, stamped_at
+      FROM src_plans
+    RETURNING 1
+),
+new_tasks AS (
+    INSERT INTO tasks (id, plan_id, parent_task_id, title, description, status, position, created_at, updated_at)
+    SELECT st.new_id, sp.new_id, parent.new_id, st.title, st.description, ?3, st.position, now(), now()
+      FROM src_tasks st
+      JOIN src_plans sp ON sp.id = st.plan_id
+      LEFT JOIN src_tasks parent ON parent.id = st.parent_task_id AND parent.plan_id = st.plan_id
+    RETURNING 1
+)
+SELECT (SELECT count(*) FROM new_plans) AS plans,
+       (SELECT count(*) FROM new_tasks) AS tasks`
+
+// CopyChatPlansToThread copies the plans of every thread of sourceChatID, and
+// their tasks, onto targetThreadID, reset to planStatus and taskStatus
+// (copyChatPlansToThreadSQL says exactly what is copied), and returns how many
+// plans and tasks it wrote. It is one statement, so the copy is of one
+// snapshot of the source and costs one round trip however large the plan.
+func CopyChatPlansToThread(ctx context.Context, db orm.Context, sourceChatID, targetThreadID string, planStatus, taskStatus int32) (plans, tasks int, err error) {
+	var counts struct {
+		Plans int `bun:"plans"`
+		Tasks int `bun:"tasks"`
+	}
+	if err := db.Bun().NewRaw(copyChatPlansToThreadSQL, sourceChatID, targetThreadID, planStatus, taskStatus).Scan(ctx, &counts); err != nil {
+		return 0, 0, fmt.Errorf("failed to copy the chat's plans: %w", err)
+	}
+	return counts.Plans, counts.Tasks, nil
+}
+
 // copyChatPlansSQL copies every plan of a chat (all its threads, as
 // ListPlansByChatID reads them) and every task of those plans onto one
 // thread, in one statement.

@@ -131,9 +131,11 @@ type Repository interface {
 	ListMessagesByIDs(ctx context.Context, ids []string) ([]*db.Message, error)
 
 	// Plans and their tasks.
-	CreatePlan(ctx context.Context, plan *db.Plan) error
-	CreateTask(ctx context.Context, task *db.Task) error
 	ListPlansByChatID(ctx context.Context, chatID string) ([]*db.Plan, error)
+	// CopyChatPlansToThread copies every plan of a chat, with its tasks, onto
+	// one thread as pending, in one statement (a branch inherits its source
+	// chat's plans).
+	CopyChatPlansToThread(ctx context.Context, sourceChatID, targetThreadID string) (plans, tasks int, err error)
 	ListTasksByPlan(ctx context.Context, planID string) ([]*db.Task, error)
 	// CopyChatPlans gives toThreadID a pending copy of every plan of
 	// fromChatID, with their tasks, in one statement (BranchChat).

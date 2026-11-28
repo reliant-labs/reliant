@@ -307,22 +307,28 @@ func (s *Service) BranchChat(
 	// failure leaves no orphan chat, no thread-less chat, no half-copied
 	// plan, and no announcement for a chat that doesn't exist.
 	//
-	// READ COMMITTED, because nothing here is a read-check-write that
-	// SERIALIZABLE's proof protects. The chat, workflow, thread, plan and
-	// note rows are new ids nobody else can write. What is read is history
-	// before the fork point (the forked messages, the inherited sub-agents)
-	// and the source chat's selection, projects and plans, each copied by one
-	// statement. The note's context window is the new thread's own. The
-	// shared writes are counter upserts on one row each (the message
-	// ordinals, the chat's and the user's update streams) and the workflow
-	// admission's chat and worktree row locks, which a lock keeps correct, not
-	// a snapshot (CreateWorkflowWithThread, store.AllocateMessageOrder and
-	// CreateUserUpdate document each).
-	// SERIALIZABLE turned any concurrent write to the user's update stream (a
-	// running chat writes it all the time) into 40001 "could not serialize
-	// access due to concurrent update" on the user counter, and the whole
-	// branch was retried: prod trace 82a3f948 ran six attempts in 10.75s, and
-	// the client gave up at 10s (obs issue 4bd143b9).
+	// READ COMMITTED, because the transaction's invariant is atomicity, not a
+	// serializable read of the source chat, and everything it writes is held
+	// correct by a lock or a single statement:
+	//   - every row it inserts is new (fresh ids for the chat, its workflow,
+	//     thread, context window, plans, tasks and note), so no two writers
+	//     race for one;
+	//   - the rows it shares with the live source chat are counters and
+	//     admission rows whose protocol is a row lock: creating the chat and
+	//     its workflow locks the worktree row FOR NO KEY UPDATE and bumps its
+	//     activity_generation (the source chat's worktree, as a rule), and
+	//     the chat_created update bumps the user's update_stream_counters
+	//     row, which every update the worker emits for this user bumps too;
+	//   - each read of the source (its selection, projects, plans and tasks)
+	//     is one statement, so it copies one snapshot.
+	// Under SERIALIZABLE a branch of a chat the worker was writing to failed
+	// on every attempt: a shared row bumped after the snapshot failed with
+	// 40001 "could not serialize access due to concurrent update", and the
+	// per-plan task reads (each a full scan of tasks, so a predicate lock on
+	// all of it) with "read/write dependencies"; seven attempts outlasted
+	// the client's deadline (prod trace 82a3f94880658230b94f738a9c7c066f).
+	// READ COMMITTED waits for the row lock and goes on. The attempt budget
+	// absorbs what it can still raise: a deadlock, or a 23505.
 	branchTx := orm.ReadCommitted.WithMaxAttempts(orm.DefaultTxMaxAttempts)
 	if err := s.deps.Repo.RunTx(ctx, branchTx, func(txCtx context.Context) error {
 		if err := s.deps.Repo.CreateChat(txCtx, branchChat); err != nil {
@@ -352,10 +358,19 @@ func (s *Service) BranchChat(
 			}
 		}
 
-		// Copy plans and tasks from source chat to branched thread, reset
-		// to pending, in one statement.
-		if err := s.deps.Repo.CopyChatPlans(txCtx, sourceChatID, branchWorkflowID); err != nil {
+		// Copy the source chat's plans and tasks to the branched thread, as
+		// pending, in one statement however many there are.
+		plans, tasks, err := s.deps.Repo.CopyChatPlansToThread(txCtx, sourceChatID, branchWorkflowID)
+		if err != nil {
 			return fmt.Errorf("failed to copy plan to branched chat: %w", err)
+		}
+		if plans > 0 {
+			logging.DebugContext(ctx, "Copied plans and tasks to branched chat",
+				"sourceChatID", sourceChatID,
+				"planCount", plans,
+				"taskCount", tasks,
+				"targetThreadID", branchWorkflowID,
+			)
 		}
 
 		// NOTE: branch_snapshot is no longer created here.

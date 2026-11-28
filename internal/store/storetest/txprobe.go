@@ -34,9 +34,10 @@ type TxProbe struct {
 	ORM  *orm.Client
 	Repo *db.Repo
 
-	mu       sync.Mutex
-	levels   []string
-	sqlState []string
+	mu         sync.Mutex
+	levels     []string
+	sqlState   []string
+	statements int
 }
 
 // Probe opens a TxProbe on e's database. It is closed when the test ends.
@@ -78,16 +79,28 @@ func (p *TxProbe) SQLStates() []string {
 	return append([]string(nil), p.sqlState...)
 }
 
+// Statements is how many statements were sent since the last Reset, BEGIN
+// and COMMIT included: a round-trip count, for a test that holds a path's
+// query count independent of the size of its data.
+func (p *TxProbe) Statements() int {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.statements
+}
+
 // Reset forgets everything recorded so far.
 func (p *TxProbe) Reset() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	p.levels, p.sqlState = nil, nil
+	p.levels, p.sqlState, p.statements = nil, nil, 0
 }
 
 type probeTracer struct{ p *TxProbe }
 
 func (t probeTracer) TraceQueryStart(ctx context.Context, _ *pgx.Conn, data pgx.TraceQueryStartData) context.Context {
+	t.p.mu.Lock()
+	t.p.statements++
+	t.p.mu.Unlock()
 	q := strings.ToLower(strings.TrimSpace(data.SQL))
 	if q != "begin" && !strings.HasPrefix(q, "begin ") {
 		return ctx
