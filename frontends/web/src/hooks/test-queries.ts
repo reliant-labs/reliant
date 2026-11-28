@@ -161,15 +161,20 @@ export interface CoverageQuery {
 /** One path's coverage and its children. `null` query: nothing is fetched. */
 export function useCoverage(project: string, query: CoverageQuery | null) {
   const org = useOrgScope();
+  const options = testsServiceQueries.getCoverage(coverageRequest({ orgId: org.orgId, project, ...(query ?? { target: { gitCommit: "" }, path: "" }) }), {
+    enabled: !!project && !!query && orgQueryEnabled(org),
+    // Do not carry a previous selection through null: QueryObserver retains
+    // its last successful query even after observing a disabled empty key.
+    ...SETTLED,
+    select: coverageTreeOf,
+  });
   return useQuery(
     inOrg(
-      testsServiceQueries.getCoverage(coverageRequest({ orgId: org.orgId, project, ...(query ?? { target: { gitCommit: "" }, path: "" }) }), {
-        enabled: !!project && !!query && orgQueryEnabled(org),
-        // Only an answer read in this org: every request names it (generated key).
-        placeholderData: keepPreviousInOrg(org.orgId),
-        ...SETTLED,
-        select: coverageTreeOf,
-      }),
+      {
+        ...options,
+        // A disabled selection is not a request, even one with default fields.
+        queryKey: query ? options.queryKey : ["tests-coverage-disabled", org.orgId, project],
+      },
       org
     )
   );
