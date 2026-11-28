@@ -11,8 +11,8 @@ import { HostingBudgetEditor } from "../HostingBudgetEditor";
 import { validateHostingBudget } from "../hostingBudget";
 import { hostingBillingKeys } from "../hostingBillingQueries";
 
-const mocks = vi.hoisted(() => ({ client: {} as Record<string, unknown> }));
-vi.mock("@/services/controlPlane/client", () => ({ getControlPlaneClient: () => mocks.client }));
+const listUsageBillingBudgetVersions = vi.fn();
+const setUsageBillingBudget = vi.fn();
 
 const versions = [
   { version: 0n, infraBudgetCents: 5000n, actorUserId: "u1", actorEmail: "ada@example.com", policyVersion: "p1", source: "checkout_consent", agreementId: "a1", current: false },
@@ -31,9 +31,9 @@ mount.render = (cache: QueryClient, props: Partial<Parameters<typeof HostingBudg
   );
 
 beforeEach(() => {
-  const history = vi.fn().mockResolvedValue({ versions });
-  mocks.client = { listUsageBillingBudgetVersions: history, setUsageBillingBudget: vi.fn().mockResolvedValue({}) };
-  setTransport(mockTransport(billingHandlers({ listUsageBillingBudgetVersions: history })));
+  listUsageBillingBudgetVersions.mockReset().mockResolvedValue({ versions });
+  setUsageBillingBudget.mockReset().mockResolvedValue({});
+  setTransport(mockTransport(billingHandlers({ listUsageBillingBudgetVersions, setUsageBillingBudget })));
 });
 afterEach(() => setTransport(null));
 
@@ -67,17 +67,17 @@ describe("HostingBudgetEditor", () => {
     fireEvent.change(screen.getByLabelText(/New monthly budget/), { target: { value: "120" } });
     fireEvent.click(screen.getByRole("button", { name: "Save budget" }));
     expect(await screen.findByRole("alert")).toHaveTextContent(/Agree to the usage billing policy/);
-    expect(mocks.client.setUsageBillingBudget).not.toHaveBeenCalled();
+    expect(setUsageBillingBudget).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("checkbox"));
     fireEvent.click(screen.getByRole("button", { name: "Save budget" }));
     await waitFor(() =>
-      expect(mocks.client.setUsageBillingBudget).toHaveBeenCalledWith({
+      expect(setUsageBillingBudget).toHaveBeenCalledWith(expect.objectContaining({
         orgId: "org-a",
         infraBudgetCents: 12000n,
         policyVersion: "p1",
         consent: true,
         expectedCurrentVersion: 1n,
-      }),
+      })),
     );
     expect(await screen.findByText(/Budget set to \$120.00 a month/)).toBeInTheDocument();
   });
@@ -93,11 +93,11 @@ describe("HostingBudgetEditor", () => {
     fireEvent.click(screen.getByRole("checkbox"));
     fireEvent.click(screen.getByRole("button", { name: "Save budget" }));
     expect(await screen.findByRole("alert")).toHaveTextContent(/\$10,000 or less/);
-    expect(mocks.client.setUsageBillingBudget).not.toHaveBeenCalled();
+    expect(setUsageBillingBudget).not.toHaveBeenCalled();
 
     fireEvent.change(input, { target: { value: "10000.00" } });
     fireEvent.click(screen.getByRole("button", { name: "Save budget" }));
-    await waitFor(() => expect(mocks.client.setUsageBillingBudget).toHaveBeenCalledWith(expect.objectContaining({ infraBudgetCents: 1_000_000n })));
+    await waitFor(() => expect(setUsageBillingBudget).toHaveBeenCalledWith(expect.objectContaining({ infraBudgetCents: 1_000_000n })));
   });
 
   it("warns that lowering below this month's spend pauses deploys at once", async () => {
@@ -109,7 +109,7 @@ describe("HostingBudgetEditor", () => {
   });
 
   it("says when someone else changed it first", async () => {
-    (mocks.client.setUsageBillingBudget as ReturnType<typeof vi.fn>).mockRejectedValue(new ConnectError("budget changed: expected version 1, current 2", Code.FailedPrecondition));
+    setUsageBillingBudget.mockRejectedValue(new ConnectError("budget changed: expected version 1, current 2", Code.FailedPrecondition));
     mount();
     await screen.findByTestId("hosting-budget-history");
     fireEvent.click(screen.getByTestId("hosting-budget-change"));
@@ -134,12 +134,12 @@ describe("HostingBudgetEditor", () => {
     fireEvent.change(screen.getByLabelText(/New monthly budget/), { target: { value: "120" } });
     fireEvent.click(screen.getByRole("checkbox"));
     fireEvent.click(screen.getByRole("button", { name: "Save budget" }));
-    await waitFor(() => expect(mocks.client.setUsageBillingBudget).toHaveBeenCalledWith(expect.objectContaining({ expectedCurrentVersion: 1n })));
+    await waitFor(() => expect(setUsageBillingBudget).toHaveBeenCalledWith(expect.objectContaining({ expectedCurrentVersion: 1n })));
   });
 
   it("offers no change until the history has loaded, so a save always carries its version", async () => {
     let resolve!: (v: unknown) => void;
-    (mocks.client.listUsageBillingBudgetVersions as ReturnType<typeof vi.fn>).mockReturnValue(new Promise((r) => { resolve = r; }));
+    listUsageBillingBudgetVersions.mockReturnValue(new Promise((r) => { resolve = r; }));
     mount();
     const change = screen.getByTestId("hosting-budget-change");
     expect(change).toBeDisabled();
@@ -147,7 +147,7 @@ describe("HostingBudgetEditor", () => {
     expect(screen.queryByLabelText(/New monthly budget/)).not.toBeInTheDocument();
     await act(async () => resolve({ versions }));
     await waitFor(() => expect(screen.getByTestId("hosting-budget-change")).toBeEnabled());
-    expect(mocks.client.setUsageBillingBudget).not.toHaveBeenCalled();
+    expect(setUsageBillingBudget).not.toHaveBeenCalled();
   });
 
   it("is read-only, without a change button, before the server serves budget versions", async () => {
