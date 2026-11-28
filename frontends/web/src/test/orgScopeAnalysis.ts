@@ -489,7 +489,7 @@ export class OrgScopeAnalysis {
           if (this.namesOrg(fn.node, fn.file, depth + 1)) found = true;
         } else if (ts.isPropertyAccessExpression(callee)) {
           // `api.getRelease(…)` on an api nothing here can resolve: what the
-          // receiver was made from (`useReleasesApi(org.orgId)`) says.
+          // receiver was made from (`useSomeApi(org.orgId)`) says.
           visit(callee.expression);
         }
         // The arguments still count; a resolved callee was judged by its body alone.

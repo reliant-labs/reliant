@@ -25,6 +25,7 @@ vi.mock("../../lib/connect", () => ({
 
 vi.mock("../../lib/chatOpenInteraction", () => ({
   markChatOpen: vi.fn(),
+  recordingChatOpen: vi.fn(),
   noteChatOpenSync: vi.fn(),
 }));
 

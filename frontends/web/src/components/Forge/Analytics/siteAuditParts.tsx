@@ -16,6 +16,7 @@ import Button from "@/components/forge-ui/button";
 import Card from "@/components/forge-ui/card";
 import Status from "@/components/forge-ui/status";
 import { cn } from "@/lib/utils";
+import { useObservabilityOrg } from "@/hooks/observability-queries";
 
 import { VariableSelect } from "../Observability/Dashboards/parts";
 import { formatAgo, formatIn } from "../Observability/format";
@@ -31,12 +32,12 @@ const STROKE: Record<Rating, string> = { good: "stroke-success", ni: "stroke-war
 
 const CATEGORY_LABEL: Record<AuditCategory, string> = { seo: "SEO score", accessibility: "Accessibility score" };
 
-/** Which hosted static site the view audits; drawn only when the project has two or more. */
-export function AuditSitePicker({ sites, target, onChange }: { sites: readonly AuditSite[]; target: AuditTarget; onChange: (frontend: string) => void }) {
-  if (sites.length < 2) return null;
-  const value = target.kind === "site" || target.kind === "not-in-env" ? target.frontend : "";
-  const options = [...(value ? [] : [{ value: "", label: "Choose a site" }]), ...sites.map((site) => ({ value: site.frontend, label: site.frontend }))];
-  return <VariableSelect id="site-insights-audit-site" label="site" value={value} options={options} onChange={(next) => next && onChange(next)} />;
+/** Which hosted static site the view audits; also lets an invalid selection recover. */
+export function AuditSitePicker({ sites, target, onChange }: { sites: readonly AuditSite[]; target: AuditTarget; onChange: (frontend: string | undefined) => void }) {
+  if (sites.length < 2 && target.kind !== "not-static" && target.kind !== "not-in-env") return null;
+  const value = target.kind === "site" || target.kind === "not-in-env" ? target.frontend : target.kind === "not-static" ? target.site : "";
+  const options = [{ value: "", label: "All sites" }, ...(target.kind === "not-static" ? [{ value, label: value }] : []), ...sites.map((site) => ({ value: site.frontend, label: site.frontend }))];
+  return <VariableSelect id="site-insights-audit-site" label="site" value={value} options={options} onChange={(next) => onChange(next || undefined)} />;
 }
 
 /** A score as a coloured ring (the Speed view's gauge). */
@@ -154,6 +155,7 @@ export const RERUN_READ_ONLY_WORDS = "In a live project an audit runs after ever
  */
 export function RerunButton({ audit, envId, frontend }: { audit: SiteAudit | undefined; envId: string; frontend: string }) {
   const run = useRunSiteAudit();
+  const { orgId } = useObservabilityOrg();
   const readOnly = useObsReadOnly();
   if (readOnly.readOnly) {
     return (
@@ -176,8 +178,8 @@ export function RerunButton({ audit, envId, frontend }: { audit: SiteAudit | und
         size="sm"
         leftIcon={<RefreshCw />}
         loading={run.isPending}
-        disabled={busy || spent}
-        onClick={() => run.mutate({ environmentId: envId, frontend })}
+        disabled={busy || spent || !orgId}
+        onClick={() => orgId && run.mutate({ environmentId: envId, frontend, orgId })}
         title={spent && quota?.resetsAtMs ? `Re-runs reset ${formatIn(quota.resetsAtMs)}` : undefined}
       >
         Re-run

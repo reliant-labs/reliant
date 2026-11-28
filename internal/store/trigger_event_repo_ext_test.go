@@ -402,6 +402,21 @@ func TestTriggerFiringQueries(t *testing.T) {
 	if f := full["trg-f1"][0].Event; f.Payload["n"] != float64(1) || f.Sender == nil {
 		t.Fatalf("RecentTriggerFirings(f1-live) = %+v, want its payload and sender", f)
 	}
+	// Only the newest firing is shown (last_event), so only it carries a
+	// body: the older ones are judged, never rendered, and decoding every
+	// body was most of ListTriggers' CPU in prod.
+	if len(full["trg-f1"]) < 2 {
+		t.Fatalf("RecentTriggerFirings(trg-f1) = %d firings, want several", len(full["trg-f1"]))
+	}
+	for _, f := range full["trg-f1"][1:] {
+		if len(f.Event.Payload) != 0 || f.Event.Sender != nil || f.Event.Origin != nil || f.Event.Definition != nil {
+			t.Fatalf("RecentTriggerFirings(%s) = payload %v, sender %v, origin %v, definition %v; want the body on the newest firing only",
+				f.Event.ID, f.Event.Payload, f.Event.Sender, f.Event.Origin, f.Event.Definition)
+		}
+		if f.Event.Outcome == "" || f.Event.OccurredAt.IsZero() {
+			t.Fatalf("RecentTriggerFirings(%s) = %+v, want its outcome columns", f.Event.ID, f.Event)
+		}
+	}
 	outcomes, _ := store.RecentTriggerOutcomes(ctx, env.ORM, storetest.SeedUserID, triggerIDs, 50)
 	for name, read := range map[string]map[string][]*core.TriggerEventWithRun{"RecentTriggerOutcomes": outcomes, "FiringsSinceLastSuccess": since} {
 		if len(read["trg-f1"]) == 0 {

@@ -2,7 +2,8 @@
 
 /**
  * Renders the Overview or a workload the way the console does — a query
- * client, the ObservabilityApi and ReleasesApi seams (fixtures), and URL state
+ * client, the ObservabilityApi seam and the fixture ledger served as
+ * DeployService (ReleasesFixtureScope), and URL state
  * held in component state so a test can click and assert on what changed.
  * Every test file mocks `@tanstack/react-router`'s useNavigate (forge-ui Link
  * needs it).
@@ -10,18 +11,16 @@
 
 import { useState, type ComponentProps, type ReactElement } from "react";
 import { render, type RenderResult } from "@testing-library/react";
-import { QueryClientProvider } from "@tanstack/react-query";
 import { vi } from "vitest";
 
 import type { DomainsState } from "@/hooks/forge-domain-queries";
 import { createTestQueryClient } from "@/test/renderWithQuery";
-import { type ObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
-import { ObservabilityFixtures } from "@/test/observabilityFixtures";
-import { ReleasesApiProvider } from "@/services/forge/ReleasesApiContext";
+import type { ObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
 import { RepoMetaProvider, type RepoMetaApi } from "@/services/forge/RepoMetaContext";
 import { VulnerabilityApiProvider, type VulnerabilityApi } from "@/services/controlPlane/vulnerabilities/VulnerabilityApiContext";
 
 import { createReleasesFixtureApi } from "../../Releases/__fixtures__/releaseFixtures";
+import { ReleasesTestScope } from "../../Releases/__tests__/releasesTestUtils";
 import { fixtureVulnerabilityApi } from "../../Security/fixtures";
 import { OverviewHome, type HostedByEnv, type OverviewRollback, type OverviewSearch } from "../OverviewHome";
 import { WorkloadDetail, type HostedObservation, type WorkloadActions, type WorkloadDetailSearch } from "../WorkloadDetail";
@@ -41,15 +40,11 @@ export function WorkloadsProviders({
   children: ReactElement;
 }) {
   return (
-    <QueryClientProvider client={createTestQueryClient()}>
-      <ObservabilityFixtures api={obs}>
-        <ReleasesApiProvider api={createReleasesFixtureApi()}>
-          <VulnerabilityApiProvider api={vulns}>
-            <RepoMetaProvider api={repoMeta}>{children}</RepoMetaProvider>
-          </VulnerabilityApiProvider>
-        </ReleasesApiProvider>
-      </ObservabilityFixtures>
-    </QueryClientProvider>
+    <ReleasesTestScope api={createReleasesFixtureApi()} obs={obs} client={createTestQueryClient()}>
+      <VulnerabilityApiProvider api={vulns}>
+        <RepoMetaProvider api={repoMeta}>{children}</RepoMetaProvider>
+      </VulnerabilityApiProvider>
+    </ReleasesTestScope>
   );
 }
 

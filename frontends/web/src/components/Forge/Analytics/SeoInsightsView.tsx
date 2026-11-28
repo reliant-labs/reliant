@@ -80,7 +80,7 @@ export function SeoInsightsView() {
 
 /** The view over one finished audit. */
 export function SeoInsightsBody({ audit, target }: { audit: SiteAudit; target: Extract<AuditTarget, { kind: "site" }> }) {
-  const checks = useMemo(() => siteChecks(audit), [audit]);
+  const checks = useMemo(() => siteChecks(audit, target.preview), [audit, target.preview]);
   const routes = useMemo(() => seoRoutes(audit), [audit]);
   const links = useMemo(() => brokenLinks(audit), [audit]);
   const covered = new Set(checks.flatMap((check) => check.findings));
