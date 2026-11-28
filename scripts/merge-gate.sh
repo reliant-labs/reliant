@@ -182,60 +182,35 @@ slot_wait=$(( t0 - ${MG_SLOT_T0:-$t0} ))
 
 # ── the gate's CPU budget ─────────────────────────────────────────────────
 # Every Go command, go test binary, golangci and vitest otherwise sizes itself
-# to the whole machine, and the gate runs six of them at once. So the gate
-# gets a share of the machine, and each concurrent phase a part of that: the
-# test phase (the longest) half for Go and half for vitest, the others a
-# quarter. The share is forge's hostslot.DefaultShare for the heavy-slot
-# holders running when the gate starts (this gate's own slot among them):
+# to the whole machine (32 threads each), and the gate runs six of them at
+# once in one slot of eight: at a host load of 150 every gate was CPU-starved,
+# tsc (one thread) included. So the gate gets the cores the host has free, but
+# never less than half the machine (a floor of twice a slot's share measured
+# slower: lint's contract lane alone ran 75s at GOMAXPROCS=2 against 41s for
+# all its lanes uncapped, on a host where every other job takes all 32), and
+# each concurrent phase a part of that: the test phase (the longest) half for
+# Go and half for vitest, the others a quarter. MG_CPUS=<n> overrides it.
 #
-#   min(CPUs, max(2, min(3·CPUs / (2·busy), memory GiB / (2.5·busy))))
-#
-# so a gate alone keeps the machine and one among three others gets its
-# part. It replaced a floor of half the machine plus the idle cores, under
-# which three gates on 48 CPUs each took 24 or more (forge#3023 for the
-# formula's measurements; newer forges export it as GOMAXPROCS to every slot
-# holder, which then wins below).
-#
-# In order: MG_CPUS=<n>; a positive GOMAXPROCS already in the environment (a
-# forge slot holder or the reliant daemon's heavy-command wrapper exported
-# the share); else the share above, of the machine as the tightest cgroup
-# cpu.max on the path sees it — a container's quota, or the daemon's
-# heavy-command cgroup (internal/heavyjob): sized to nproc, a gate under a
-# 4-CPU cap ran half=24 Go processes on 4 CPUs. Never more than that machine.
+# Inside a CPU quota — a container's, or the reliant daemon's heavy-command
+# cgroup when an agent's command line wraps the gate (cpu.max at the slot's
+# share, internal/heavyjob) — the machine is that quota, not nproc: sized to
+# nproc, a gate under a 4-CPU cap ran half=24 Go processes on 4 CPUs.
 cpus=$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)
-cpu_src="$cpus CPUs (nproc)"
 cg=$(sed -n 's/^0:://p' /proc/self/cgroup 2>/dev/null)
 while [ -n "$cg" ]; do
   # cpu.max is "<quota> <period>", or "max <period>" for none.
   read -r q p 2>/dev/null <"/sys/fs/cgroup$cg/cpu.max" || q=max
-  case "$q" in ''|max|*[!0-9]*) ;; *) [ "${p:-0}" -gt 0 ] && [ $(( q / p )) -lt "$cpus" ] && cpus=$(( q / p > 0 ? q / p : 1 )) && cpu_src="$cpus CPUs (cgroup cpu.max)" ;; esac
+  case "$q" in ''|max|*[!0-9]*) ;; *) [ "${p:-0}" -gt 0 ] && [ $(( q / p )) -lt "$cpus" ] && cpus=$(( q / p > 0 ? q / p : 1 )) ;; esac
   [ "$cg" = / ] && break
   cg=$(dirname "$cg")
 done
-# Memory: the smaller of physical memory and the cgroup's memory.max, in GiB
-# (MG_MEM_GIB overrides it; 0 when unknown, which drops the memory term).
-mem_kib=$(awk '/^MemTotal:/ { print $2 }' /proc/meminfo 2>/dev/null)
-[ -n "$mem_kib" ] || mem_kib=$(( $(sysctl -n hw.memsize 2>/dev/null || echo 0) / 1024 ))
-cg_max=$(cat /sys/fs/cgroup/memory.max 2>/dev/null || echo max)
-case "$cg_max" in ''|max|*[!0-9]*) ;; *) [ $(( cg_max / 1024 )) -lt "$mem_kib" ] && mem_kib=$(( cg_max / 1024 )) ;; esac
-mem_gib=${MG_MEM_GIB:-$(( mem_kib / 1048576 ))}
-# busy: the heavy-slot holders now. Unreadable (no forge with machine slots,
-# or no jq) means the gate took no slot either and cannot see the other
-# gates: assume 3, which is half the machine, the old floor.
-holders=$( { "${slotforge[@]}" machine slot status --class heavy --json | jq -e '.holders | length'; } 2>/dev/null) || holders=
-case "$holders" in ''|*[!0-9]*) busy=3 busy_src="heavy-slot holders unreadable, assumed 3" ;; *) busy=$(( holders > 0 ? holders : 1 )) busy_src="$busy heavy holders" ;; esac
-share=$(( 3 * cpus / (2 * busy) ))
-[ "$mem_gib" -gt 0 ] && [ $(( mem_gib * 2 / (5 * busy) )) -lt "$share" ] && share=$(( mem_gib * 2 / (5 * busy) ))
-[ "$share" -ge 2 ] || share=2
-case "${GOMAXPROCS:-}" in ''|0|*[!0-9]*) gomaxprocs= ;; *) gomaxprocs=$GOMAXPROCS ;; esac
-if [ -n "${MG_CPUS:-}" ]; then gate_cpus=$MG_CPUS cpu_why="MG_CPUS"
-elif [ -n "$gomaxprocs" ]; then gate_cpus=$gomaxprocs cpu_why="GOMAXPROCS from the environment"
-else gate_cpus=$share cpu_why="share of $cpu_src, ${mem_gib} GiB among $busy_src"
-fi
+load=$(cut -d' ' -f1 /proc/loadavg 2>/dev/null | cut -d. -f1); load=${load:-0}
+share=$(( cpus / 2 )); [ "$share" -ge 4 ] || share=4
+free=$(( cpus - load ))
+gate_cpus=${MG_CPUS:-$(( free > share ? free : share ))}
 [ "$gate_cpus" -le "$cpus" ] || gate_cpus=$cpus
 half=$(( gate_cpus / 2 )); [ "$half" -ge 2 ] || half=2
 quarter=$(( gate_cpus / 4 )); [ "$quarter" -ge 2 ] || quarter=2
-echo "merge-gate: CPU budget $gate_cpus ($cpu_why)" >&2
 
 # ── the gate's memory budget ──────────────────────────────────────────────
 # Cores are not the only limit. Measured on reliant#1772 (208 files, a proto
@@ -246,8 +221,13 @@ echo "merge-gate: CPU budget $gate_cpus ($cpu_why)" >&2
 # received a shutdown signal"), and the job sat until its timeout. So on a
 # host under MG_GEN_ALONE_GIB (default 32) forge generate runs FIRST and alone,
 # with the whole CPU budget, and the other phases start once it is done; on
-# a bigger host it still runs beside them. mem_gib is the CPU budget's,
-# above (MG_MEM_GIB=<n> overrides it).
+# a bigger host it still runs beside them. MG_MEM_GIB=<n> overrides the
+# detected size (the smaller of physical memory and the cgroup's memory.max).
+mem_kib=$(awk '/^MemTotal:/ { print $2 }' /proc/meminfo 2>/dev/null)
+[ -n "$mem_kib" ] || mem_kib=$(( $(sysctl -n hw.memsize 2>/dev/null || echo 0) / 1024 ))
+cg_max=$(cat /sys/fs/cgroup/memory.max 2>/dev/null || echo max)
+case "$cg_max" in ''|max|*[!0-9]*) ;; *) [ $(( cg_max / 1024 )) -lt "$mem_kib" ] && mem_kib=$(( cg_max / 1024 )) ;; esac
+mem_gib=${MG_MEM_GIB:-$(( mem_kib / 1048576 ))}
 gen_alone=0
 # 0 means the size is unknown: keep the concurrent default.
 [ "$mem_gib" -gt 0 ] && [ "$mem_gib" -lt "${MG_GEN_ALONE_GIB:-32}" ] && gen_alone=1
