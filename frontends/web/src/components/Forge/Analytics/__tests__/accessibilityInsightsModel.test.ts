@@ -47,6 +47,15 @@ describe("a11yIssues", () => {
     expect(a11yIssues(story(), "/checkout")).toEqual([]);
   });
 
+  it("uses the rule id when accessibility help and fix are empty", () => {
+    const audit = siteAuditOf(
+      create(GetSiteAuditResponseSchema, {
+        findings: [{ category: SiteAuditCategory.ACCESSIBILITY, code: "a11y_violation", route: "/", ref: "image-alt", evidence: { help: "" }, fix: "" }],
+      })
+    );
+    expect(a11yIssues(audit)).toEqual([expect.objectContaining({ rule: "image-alt", help: "image-alt" })]);
+  });
+
   it("takes a rule's worst impact across routes, and counts the elements the audit did not keep", () => {
     const audit = siteAuditOf(
       create(GetSiteAuditResponseSchema, {

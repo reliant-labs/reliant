@@ -199,7 +199,7 @@ export function a11yIssues(audit: SiteAudit, route?: string): A11yIssue[] {
     const impact = impactOf(f);
     let issue = byRule.get(rule);
     if (!issue) {
-      issue = { rule, help: f.evidence.help || f.fix, impact, group: groupOf(f), wcag: wcagLabels(f.evidence.wcag ?? ""), helpUrl: helpUrlOf(f), routes: [], nodes: [], omitted: 0 };
+      issue = { rule, help: f.evidence.help || rule, impact, group: groupOf(f), wcag: wcagLabels(f.evidence.wcag ?? ""), helpUrl: helpUrlOf(f), routes: [], nodes: [], omitted: 0 };
       byRule.set(rule, issue);
     }
     if (IMPACT_RANK[impact] < IMPACT_RANK[issue.impact]) issue.impact = impact;
