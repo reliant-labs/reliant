@@ -195,6 +195,7 @@ func TestFormatAskUserTaskResponse(t *testing.T) {
 		{"an older client's freetext", "reply", `{"answers":[{"question":"Sign in","selected":[],"freetext":"did it"}]}`, "Task: Sign in\nThe user replied: did it"},
 		{"nothing marked", "reply", `{"answers":[{"question":"Sign in","selected":[]}]}`, "Task: Sign in\nThe user did not mark it."},
 		{"continue", "continue", ``, "The user continued without marking the task done or not done."},
+		{"continue with stale task marks", "continue", `{"answers":[{"question":"Sign in","selected":["Done"]}]}`, "The user continued without marking the task done or not done."},
 		{"chat reply", "reply", ``, "The user replied via chat message instead of marking the task. Check the conversation for their response."},
 		{"plain text", "reply", `all done`, "all done"},
 	} {

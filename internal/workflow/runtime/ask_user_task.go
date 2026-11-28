@@ -52,7 +52,7 @@ func formatAskUserResult(action, responseData string, task bool) string {
 // the model: each item's text and whether it was done, with the user's note
 // or reason.
 func formatAskUserTaskResponse(action, responseData string) string {
-	if action == "continue" && responseData == "" {
+	if action == "continue" {
 		return "The user continued without marking the task done or not done."
 	}
 	if responseData == "" {
