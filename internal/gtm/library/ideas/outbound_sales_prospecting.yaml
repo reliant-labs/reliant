@@ -1,0 +1,322 @@
+# Outbound sales and prospecting: reaching specific people before they come
+# to you. Early on this is founder-led and high-touch; volume comes later.
+entries:
+  - key: founder-led-sales-first-customers
+    category: outbound_sales_prospecting
+    name: Founder-led sales for the first customers
+    summary: >-
+      The founder personally sells to the first 10 to 50 customers: picks a
+      narrow segment, writes every message, runs every call, and onboards each
+      customer by hand. Keep notes on every objection, the words buyers use,
+      and why each deal closed or did not.
+    why_it_works: >-
+      Nobody else can sell an unproven product with the founder's conviction
+      or change the product in response to a call. What the founder learns
+      becomes the sales playbook, the positioning and the roadmap.
+    fits:
+      business_types: [b2b_saas, developer_tools, agency_services, hardware, marketplace]
+    stages: [pre_launch, launch, early_traction]
+    objective: conversion
+    effort: high
+    cost: free
+    signal_days: 21
+    tailor_questions:
+      - Which narrow segment has the most painful version of the problem?
+      - How many hours a week can the founder give to selling?
+      - What does the founder need to hear in a call to know a buyer is a fit?
+      - Where will objections and buyer language be written down?
+    suggested_workflow: >-
+      After every sales call, turn the founder's notes or transcript into a
+      structured record (pains, objections, exact phrases, next step), update
+      the deal list, and at the end of each week summarise its recurring
+      objections and phrases for the founder.
+    channel_types: [outbound, email]
+    kpis: [customers closed by the founder, call-to-close rate, recurring objections logged]
+
+  - key: warm-intro-mapping
+    category: outbound_sales_prospecting
+    name: Map the network for warm introductions
+    summary: >-
+      List the 50 to 100 companies most likely to buy, then work out who in
+      the team's, investors' and customers' networks knows someone there. Ask
+      for specific introductions with a short, forwardable note the
+      introducer can send as is.
+    why_it_works: >-
+      A warm introduction is answered many times more often than a cold
+      message and arrives with borrowed trust. Making the ask specific and the
+      note forwardable removes the work for the person introducing.
+    fits:
+      business_types: [b2b_saas, developer_tools, agency_services, hardware]
+    stages: [pre_launch, launch, early_traction, growth]
+    objective: acquisition
+    effort: medium
+    cost: free
+    signal_days: 14
+    tailor_questions:
+      - Which companies are on the target list, and why each one?
+      - Who among investors, advisors and customers is well connected in the target industry?
+      - What does the forwardable note say in three sentences?
+    suggested_workflow: >-
+      For each target company, look up shared connections from the team's
+      exported contact lists, draft a forwardable introduction note per
+      connector, and track each ask from request to meeting.
+    channel_types: [outbound, email]
+    kpis: [introductions requested, introductions made, meetings from introductions]
+
+  - key: trigger-based-outbound
+    category: outbound_sales_prospecting
+    name: Trigger-based outbound
+    summary: >-
+      Contact prospects only when a public event makes the problem urgent: a
+      new hire into the buying role, a funding round, a job posting that
+      mentions the problem, an expansion, or a regulatory change. Refer to
+      the trigger in the first line. Follow the law for unsolicited
+      messages. Source contacts lawfully and never buy lists. Identify the
+      sender, with a postal address where the law requires it. Include a
+      working unsubscribe in every email and honour it at once. Some
+      countries require prior consent even for business email, so check the
+      rules for each recipient's country before contacting anyone.
+    why_it_works: >-
+      Timing matters more than copy. A message that arrives right after a
+      change, and shows the sender noticed it, is relevant in a way a generic
+      sequence never is.
+    fits:
+      business_types: [b2b_saas, developer_tools, agency_services]
+    stages: [early_traction, growth, scale]
+    objective: acquisition
+    effort: medium
+    cost: low
+    signal_days: 21
+    tailor_questions:
+      - Which events have preceded the best deals so far?
+      - Where can those events be observed publicly?
+      - Who is the right person to contact when each trigger fires?
+      - Which countries are recipients in, and what do their rules require (prior consent, opt-out, sender identification)?
+    suggested_workflow: >-
+      Daily, scan the chosen public sources (job boards, funding announcements,
+      company news), only where each site's terms allow it, for the defined
+      triggers at companies that match the target profile. Add each match
+      with the trigger and a suggested first line to a review queue for a
+      person to approve and send. Skip anyone who has unsubscribed or whose
+      country requires consent that has not been given.
+    channel_types: [outbound, email, social]
+    kpis: [reply rate on trigger messages, meetings booked, triggers acted on per week]
+
+  - key: personal-screen-recordings
+    category: outbound_sales_prospecting
+    name: Short personalised screen recordings
+    summary: >-
+      For a short list of high-value prospects, record a one to two minute
+      video that shows their own website, product or public work and points
+      out one specific, fixable opportunity, then send it with a one-line
+      note.
+    why_it_works: >-
+      A recording made for one person cannot be mistaken for spam, and showing
+      real work on their problem demonstrates competence before the first
+      call.
+    fits:
+      business_types: [agency_services, b2b_saas, developer_tools]
+    stages: [launch, early_traction, growth]
+    objective: acquisition
+    effort: high
+    cost: free
+    signal_days: 14
+    tailor_questions:
+      - What could be spotted about a prospect's business in five minutes that they would care about?
+      - Which prospects are valuable enough to justify a personal recording?
+      - What single next step should the recording ask for?
+    channel_types: [outbound, video, email]
+    kpis: [view rate, reply rate, meetings booked per ten recordings]
+
+  - key: handwritten-notes-and-gifts
+    category: outbound_sales_prospecting
+    name: Handwritten notes and thoughtful gifts
+    summary: >-
+      Send a handwritten note, sometimes with a small, relevant gift such as a
+      useful book, to a very short list of key prospects, new customers or
+      people who helped. Make it personal and do not ask for anything in the
+      same note.
+    why_it_works: >-
+      Physical mail is rare, so it gets opened and remembered. Asking for
+      nothing makes the gesture feel sincere, and the goodwill shows up later
+      as replies, renewals and referrals.
+    fits:
+      business_types: [b2b_saas, agency_services, local_business, hardware]
+    stages: [launch, early_traction, growth, scale]
+    objective: acquisition
+    effort: medium
+    cost: low
+    signal_days: 30
+    tailor_questions:
+      - Which twenty relationships would most change the business this quarter?
+      - What small gift would be genuinely useful to these people?
+      - Who writes the notes, and can they keep them personal?
+    channel_types: [outbound]
+    kpis: [notes sent, replies or meetings after a note, renewals and referrals from recipients]
+
+  - key: account-based-plays-top-accounts
+    category: outbound_sales_prospecting
+    name: Account-based plays for the top accounts
+    summary: >-
+      Pick the 10 to 25 accounts that would matter most, research each one's
+      priorities and buying group, and run a coordinated plan per account:
+      tailored content, introductions to several people, an invitation to an
+      event, and an executive message from the founder.
+    why_it_works: >-
+      Large deals are decided by groups, not individuals. Treating each top
+      account as its own market reaches the whole buying group with relevant
+      messages, which raises both win rate and deal size.
+    fits:
+      business_types: [b2b_saas, developer_tools, agency_services, hardware]
+      business_models: [subscription, usage_based, services]
+    stages: [growth, scale]
+    objective: conversion
+    effort: high
+    cost: medium
+    signal_days: 60
+    tailor_questions:
+      - Which accounts would change the business if they became customers?
+      - Who is in each account's buying group, and what does each person care about?
+      - What does the team know about each account's priorities this year?
+      - Which assets (a case study, a benchmark, an event) are strongest for these accounts?
+    suggested_workflow: >-
+      For each target account, keep a one-page brief updated weekly with
+      public news, hiring and any contact with the team, and remind the
+      account owner of the next planned touch and of any account with no
+      contact for three weeks.
+    channel_types: [outbound, email, events]
+    kpis: [engaged contacts per account, meetings with target accounts, pipeline from target accounts]
+
+  - key: design-partner-recruitment
+    category: outbound_sales_prospecting
+    name: Recruit design partners before launch
+    summary: >-
+      Before launch, recruit five to ten design partners who have the problem
+      badly. Agree in writing what each side commits: early access and
+      influence over the roadmap for them; regular feedback calls, real usage
+      and, if it works, a paid contract and a reference for the business.
+    why_it_works: >-
+      Design partners de-risk the product and the sales story at once. They
+      shape what gets built, prove that someone will use it, and become the
+      first case studies.
+    fits:
+      business_types: [b2b_saas, developer_tools, hardware, marketplace]
+    stages: [pre_launch]
+    objective: research
+    effort: high
+    cost: free
+    signal_days: 30
+    tailor_questions:
+      - Which kind of company feels the problem most acutely?
+      - What will a design partner get that makes the time worthwhile?
+      - What would make a design partner convert to a paid contract at launch?
+    channel_types: [outbound, email]
+    kpis: [design partners signed, weekly active design partners, partners converting to paid]
+
+  - key: social-selling-founder-posts
+    category: outbound_sales_prospecting
+    name: Social selling on a professional social network
+    summary: >-
+      The founder posts a few times a week on a professional social network
+      about the problem, lessons and customer stories, comments thoughtfully on
+      posts by target buyers, and starts direct conversations only with people
+      who engage.
+    why_it_works: >-
+      Regular, useful posts make the founder familiar before any outreach,
+      and starting from engagement turns cold outreach into a warm
+      conversation with people who already showed interest.
+    fits:
+      business_types: [b2b_saas, developer_tools, agency_services]
+    stages: [pre_launch, launch, early_traction, growth]
+    objective: awareness
+    effort: medium
+    cost: free
+    signal_days: 30
+    tailor_questions:
+      - What does the founder know that target buyers would find useful?
+      - Which buyers and voices in the space should the founder engage with each week?
+      - How many posts a week can the founder sustain for three months?
+    suggested_workflow: >-
+      Each week, draft three post ideas from the founder's recent calls,
+      notes and lessons in the founder's own voice, and list the people who
+      engaged with last week's posts and match the target profile, for the
+      founder to review and act on.
+    channel_types: [social, outbound]
+    kpis: [engagement from target buyers, conversations started, meetings from social]
+
+  - key: narrow-segment-cold-email
+    category: outbound_sales_prospecting
+    name: Cold email to one narrow segment
+    summary: >-
+      Write a short cold email to one narrowly defined segment (one role, one
+      industry, one company size) that names a specific problem they have,
+      shows a result for a similar company, and asks a low-commitment
+      question. Send in small batches and rewrite based on replies. Follow
+      the law for unsolicited email. Source contacts lawfully and never buy
+      lists. Identify the sender, with a postal address where the law
+      requires it. Include a clear unsubscribe in every email and honour it
+      at once. Some countries require prior consent even for business email;
+      in those, do not send without it.
+    why_it_works: >-
+      Cold email works when it is relevant, and relevance comes from
+      narrowness. Small batches protect sender reputation and give fast
+      feedback on which problem statement resonates.
+    fits:
+      business_types: [b2b_saas, developer_tools, agency_services]
+    stages: [launch, early_traction, growth]
+    objective: acquisition
+    effort: medium
+    cost: low
+    signal_days: 14
+    tailor_questions:
+      - Which segment is narrow enough that one email fits all of them?
+      - What result has the product delivered for a company like theirs?
+      - What low-commitment question can the reader answer in one line?
+      - What sending volume keeps the domain's reputation healthy?
+      - Which countries are recipients in, and what do their rules require (prior consent, opt-out, sender identification)?
+    suggested_workflow: >-
+      For each batch of lawfully sourced prospects in the segment, drop
+      anyone who has unsubscribed or whose country requires consent that has
+      not been given, draft personalised first lines from public information,
+      and hold the batch for a person to approve. Send in small daily volumes
+      with the sender's identification and an unsubscribe link in every
+      email, stop the sequence on any reply or unsubscribe, and report reply
+      rates per message version weekly.
+    channel_types: [email, outbound]
+    kpis: [positive reply rate, meetings booked, bounce and spam complaint rate]
+
+  - key: marketplace-cold-start-one-niche
+    category: outbound_sales_prospecting
+    name: Start a marketplace in one city or niche with hand-recruited supply
+    summary: >-
+      Launch a marketplace in a single city or a single narrow niche, and
+      recruit the first sellers or providers one by one: contact them
+      personally, create their listings for them, and guarantee early
+      demand where possible (for example by bringing the first buyers
+      yourself). Open the next city or niche only once buyers there reliably
+      find what they want.
+    why_it_works: >-
+      A marketplace is only useful once each side finds enough of the other.
+      Concentrating on one place or niche reaches that density with far less
+      supply, and doing the first listings by hand removes the effort that
+      stops sellers joining an empty marketplace.
+    fits:
+      business_types: [marketplace]
+      business_models: [marketplace]
+    stages: [pre_launch, launch, early_traction]
+    objective: acquisition
+    effort: high
+    cost: low
+    signal_days: 30
+    tailor_questions:
+      - Which city or niche has buyers with the most urgent need and sellers who are easy to reach?
+      - How many active sellers does a buyer need to see for the marketplace to feel useful there?
+      - What can the team do by hand for the first sellers (listings, photos, pricing) that later becomes self-serve?
+      - Where will the first buyers come from while supply is still small?
+    suggested_workflow: >-
+      Keep a list of candidate sellers in the launch city or niche with their
+      contact status; each week, list sellers not yet contacted and follow-ups
+      that are due for a person to work through, and report listings live,
+      buyer searches with no good result, and first sales.
+    channel_types: [outbound, marketplace, email]
+    kpis: [active sellers in the launch niche, share of buyer searches with a good match, time to first sale per seller]
