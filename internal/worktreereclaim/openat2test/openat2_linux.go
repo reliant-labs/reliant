@@ -15,12 +15,16 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// Missing probes, once per test binary, the two syscalls the reaper's safe
+// Missing reports why the host lacks one of the two
+// syscalls the reaper's safe inspection is built on, or nil (probe).
+func Missing() error { return probe() }
+
+// probe checks, once per test binary, the two syscalls the reaper's safe
 // inspection is built on: openat2 (RESOLVE_* path resolution) and renameat2
 // (RENAME_NOREPLACE). It reports why the host lacks one only when the kernel
 // or a seccomp/sandbox profile answers ENOSYS; any other result is nil, so a
 // real defect still fails the test that hits it.
-var Missing = sync.OnceValue(func() error {
+var probe = sync.OnceValue(func() error {
 	dir, err := os.MkdirTemp("", "worktreereclaim-openat2-probe-")
 	if err != nil {
 		return nil
@@ -31,7 +35,7 @@ var Missing = sync.OnceValue(func() error {
 		return fmt.Errorf("openat2: %w", err)
 	}
 	if err == nil {
-		unix.Close(fd)
+		_ = unix.Close(fd)
 	}
 	from := filepath.Join(dir, "from")
 	if err := os.WriteFile(from, nil, 0o600); err != nil {
