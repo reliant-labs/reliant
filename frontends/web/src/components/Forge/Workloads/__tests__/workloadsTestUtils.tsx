@@ -42,10 +42,20 @@ export function WorkloadsProviders({
 }) {
   const obsRef = useRef(obs);
   obsRef.current = obs;
+  const vulnsRef = useRef(vulns);
+  vulnsRef.current = vulns;
   const [scope] = useState(() =>
     createTransportScope({
       id: "workloads-fixtures",
-      transport: vulnerabilityTransport(vulns, observabilityFixtureTransport(() => obsRef.current, Date.now())),
+      transport: vulnerabilityTransport(
+        {
+          getVulnerabilitySummary: (req) => vulnsRef.current.getVulnerabilitySummary(req),
+          listVulnerabilities: (req) => vulnsRef.current.listVulnerabilities(req),
+          getVulnerability: (req) => vulnsRef.current.getVulnerability(req),
+          getReleaseVulnerabilities: (req) => vulnsRef.current.getReleaseVulnerabilities(req),
+        },
+        observabilityFixtureTransport(() => obsRef.current, Date.now())
+      ),
       queryClient: createTestQueryClient(),
     })
   );
