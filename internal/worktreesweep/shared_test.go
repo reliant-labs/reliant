@@ -38,6 +38,7 @@ func (e *env) liveProject(t *testing.T, dir string, rels ...string) *db.Worktree
 // kept every one of them forever.
 func TestSweep_ALiveRowAtAParentPathDoesNotShieldArchivedWorktrees(t *testing.T) {
 	testkit.Slow(t, "builds real git worktrees and runs git against them")
+	requireSafeRemoval(t)
 	t.Parallel()
 
 	e := newEnv(t)

@@ -14,6 +14,7 @@ import (
 // Real format + policy + transport + restore proof. The bare remote is injected
 // only in this test; it is not evidence of actual GitHub policy compatibility.
 func TestRecoveryRealCaptureSurvivesSourceLoss(t *testing.T) {
+	requireSafeRemoval(t)
 	t.Parallel()
 	f, c, tr := recoveryFixture(t)
 	require.NoError(t, os.WriteFile(filepath.Join(f.clone, "README.md"), []byte("staged version\n"), 0600))

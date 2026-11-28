@@ -10,6 +10,7 @@ import (
 )
 
 func TestRecoveryInterruptedRollbackInventory(t *testing.T) {
+	requireOpenat2(t)
 	heavyUnderShort(t, "rollback ownership proof uses local Git subprocesses")
 	ctx := context.Background()
 	source := recoveryTestRepo(t)

@@ -36,6 +36,7 @@ func (h *harness) worktreeWithNodeModules(name string) (checkout string) {
 // A dirty worktree idle for 3 days loses its node_modules and nothing else:
 // not its edit, not its other ignored files, not its branch.
 func TestWorktrees_StripsOnlyNodeModulesFromIdleKeptWorktrees(t *testing.T) {
+	requireSafeRemoval(t)
 	t.Parallel()
 	h := newHarness(t)
 	h.r.NodeModules = worktreereclaim.NodeModulesTargets

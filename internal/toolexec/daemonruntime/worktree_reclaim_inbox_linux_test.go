@@ -58,6 +58,7 @@ func (d daemonOnTheWire) SendDaemonCommandToDaemon(ctx context.Context, _, daemo
 // recording who approved it. Sending the approval again does nothing again.
 func TestInboxApprovalIsTheOnlyApprovalTheDaemonActsOn(t *testing.T) {
 	testkit.Slow(t, "creates real git checkouts and a database, and sweeps them")
+	requireSafeRemoval(t)
 	f := newEnsureFixture(t, "")
 	commitIn(t, f.root, "committed.txt")
 	if err := os.WriteFile(filepath.Join(f.root, "a.txt"), []byte("unstaged edit\n"), 0o644); err != nil {

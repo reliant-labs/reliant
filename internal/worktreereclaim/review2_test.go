@@ -204,6 +204,7 @@ func TestReview2_N3b_RestorePatchTail(t *testing.T) {
 // N5: unarchive arriving after phase two removed the directory. The daemon's
 // answer to the re-lock is "gone"; WorktreeService.relockActive discards it.
 func TestReview2_N5_RelockAfterRemovalSaysGone(t *testing.T) {
+	requireOpenat2(t)
 	t.Parallel()
 	heavyUnderShort(t, "~33 git processes")
 	f := newFixture(t)
@@ -331,6 +332,7 @@ func TestFence_IsSingleUseAndMonotonic(t *testing.T) {
 // R-S2: re-locking a directory that is already gone says so, so the server does
 // not flip the row to active over nothing.
 func TestRelockOfARemovedDirectoryReportsGone(t *testing.T) {
+	requireOpenat2(t)
 	t.Parallel()
 	heavyUnderShort(t, "~33 git processes")
 	f := newFixture(t)
@@ -387,6 +389,7 @@ func TestReconcile_OrphanHistoryIsReportedAndIsSavedByConfirmed(t *testing.T) {
 
 // R-B1: a commit that IS on a branch is not an orphan, however the worktree got there.
 func TestReconcile_ReflogOfAnOrdinaryBranchIsNotAnOrphan(t *testing.T) {
+	requireOpenat2(t)
 	t.Parallel()
 	heavyUnderShort(t, "~36 git processes")
 	f := newFixture(t)
@@ -405,6 +408,7 @@ func TestReconcile_ReflogOfAnOrdinaryBranchIsNotAnOrphan(t *testing.T) {
 // with ENOENT instead of writing into a directory that is about to be deleted,
 // and the change is noticed, so everything is put back.
 func TestQuarantine_PathWriterLosesAndTheWorktreeIsPutBack(t *testing.T) {
+	requireOpenat2(t)
 	t.Parallel()
 	heavyUnderShort(t, "~69 git processes")
 	for _, mode := range []string{"auto", "confirmed"} {
@@ -453,6 +457,7 @@ func TestQuarantine_PathWriterLosesAndTheWorktreeIsPutBack(t *testing.T) {
 
 // R-S3: removal is per checkout and each is quarantined at its own moment.
 func TestQuarantine_MultiCheckoutIsRemovedOneAtATimeAndRestoredOnChange(t *testing.T) {
+	requireOpenat2(t)
 	t.Parallel()
 	heavyUnderShort(t, "a multi-checkout quarantined, restored and removed (~61 git processes)")
 	f := newFixture(t)

@@ -39,6 +39,7 @@ func (f *fixture) active(w Worktree) Result {
 }
 
 func TestTombstone_MarkPlacesItWhereAnAgentLooksAndGitNeverSees(t *testing.T) {
+	requireOpenat2(t)
 	t.Parallel()
 	heavyUnderShort(t, "a linked worktree, marked, unmarked and probed (~30 git processes)")
 	f := newFixture(t)
@@ -134,6 +135,7 @@ func TestTombstone_MemoryLineKeepsWhatTheUserWrote(t *testing.T) {
 }
 
 func TestTombstone_ArchivedUnderAMarkIsRemovedOnlyWhileItStands(t *testing.T) {
+	requireOpenat2(t)
 	t.Parallel()
 	heavyUnderShort(t, "a marked worktree archived and settled (~40 git processes)")
 	f := newFixture(t)
@@ -272,6 +274,7 @@ func age(t *testing.T, w Worktree, at time.Time) {
 // now", and the removal held it as recently active and as used after its
 // archive, so a marked multi-repo workspace was never reclaimed.
 func TestTombstone_TheDaemonsOwnWritesAreNotUse(t *testing.T) {
+	requireOpenat2(t)
 	t.Parallel()
 	heavyUnderShort(t, "a marked worktree archived and removed on the real clock (~40 git processes)")
 	f := newFixture(t)

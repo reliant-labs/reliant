@@ -59,6 +59,7 @@ func TestReview3_Q1_CrashMidQuarantine(t *testing.T) {
 // the checkout sat in quarantine. Is the stranded copy still locked?
 func TestReview3_Q2_PutBackFailureLeavesItUnlocked(t *testing.T) {
 	testkit.Slow(t, "builds real git repositories and runs git against them")
+	requireOpenat2(t)
 	t.Parallel()
 	f := newFixture(t)
 	f.idle()
@@ -135,6 +136,7 @@ func TestReview3_Q3_RootCheckoutWithNestedCheckout(t *testing.T) {
 // none (cmd_worktree.go snapshotRefsFor -> nil), so a snapshot from an EARLIER
 // clean-up is applied again on a later restore.
 func TestReview3_R1_StaleSnapshotReappliedOverNewerCommits(t *testing.T) {
+	requireOpenat2(t)
 	t.Parallel()
 	heavyUnderShort(t, "a snapshot, newer commits, and a reapply (~79 git processes)")
 	f := newFixture(t)

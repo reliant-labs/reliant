@@ -10,6 +10,7 @@ import (
 )
 
 func TestWholeRetirementCleanWorktreeAndRuntimeExclusion(t *testing.T) {
+	requireOpenat2(t)
 	heavyUnderShort(t, "temporary real Git whole-worktree retirement")
 	f := newFixture(t)
 	f.idle()
@@ -80,6 +81,7 @@ func TestWholeRetirementPreservesProtectedAndFreshFiles(t *testing.T) {
 	}
 }
 func TestWholeRetirementConcurrentGitIndexChangeHoldsBeforeUnlink(t *testing.T) {
+	requireOpenat2(t)
 	heavyUnderShort(t, "temporary Git retirement with deterministic concurrent index write")
 	f := newFixture(t)
 	f.idle()

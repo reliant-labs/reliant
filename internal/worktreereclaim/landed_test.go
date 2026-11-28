@@ -80,6 +80,7 @@ func requireStillActive(t *testing.T, f *fixture, w Worktree) {
 }
 
 func TestLanded_MergeCommit(t *testing.T) {
+	requireOpenat2(t)
 	t.Parallel()
 	heavyUnderShort(t, "a merge commit on origin and a landed probe (~50 git processes)")
 	f := newFixture(t)
@@ -95,6 +96,7 @@ func TestLanded_MergeCommit(t *testing.T) {
 }
 
 func TestLanded_SquashMergeSeenAfterTheDaemonFetches(t *testing.T) {
+	requireOpenat2(t)
 	t.Parallel()
 	heavyUnderShort(t, "a squash merge and a landed probe that fetches (~50 git processes)")
 	f := newFixture(t)
@@ -111,6 +113,7 @@ func TestLanded_SquashMergeSeenAfterTheDaemonFetches(t *testing.T) {
 }
 
 func TestLanded_RebaseMerge(t *testing.T) {
+	requireOpenat2(t)
 	t.Parallel()
 	heavyUnderShort(t, "a rebase merge and a landed probe (~55 git processes)")
 	f := newFixture(t)
@@ -124,6 +127,7 @@ func TestLanded_RebaseMerge(t *testing.T) {
 }
 
 func TestLanded_MergedPullRequestHead(t *testing.T) {
+	requireOpenat2(t)
 	t.Parallel()
 	heavyUnderShort(t, "a PR merged with edits and a landed probe (~45 git processes)")
 	f := newFixture(t)
@@ -147,6 +151,7 @@ func TestLanded_MergedPullRequestHead(t *testing.T) {
 }
 
 func TestLanded_UnpushedWorkIsNotLanded(t *testing.T) {
+	requireOpenat2(t)
 	t.Parallel()
 	heavyUnderShort(t, "a squash merge then an unpushed commit (~50 git processes)")
 	f := newFixture(t)
@@ -161,6 +166,7 @@ func TestLanded_UnpushedWorkIsNotLanded(t *testing.T) {
 }
 
 func TestLanded_DirtyTreeIsNotLanded(t *testing.T) {
+	requireOpenat2(t)
 	t.Parallel()
 	heavyUnderShort(t, "a merged worktree probed dirty three ways (~45 git processes)")
 	f := newFixture(t)
@@ -183,6 +189,7 @@ func TestLanded_DirtyTreeIsNotLanded(t *testing.T) {
 }
 
 func TestLanded_NoCommitsBeyondBaseCounts(t *testing.T) {
+	requireOpenat2(t)
 	t.Parallel()
 	heavyUnderShort(t, "a fresh worktree and a landed probe (~25 git processes)")
 	f := newFixture(t)
@@ -194,6 +201,7 @@ func TestLanded_NoCommitsBeyondBaseCounts(t *testing.T) {
 }
 
 func TestLanded_ProbeNeverDeletesFromLiveWorktree(t *testing.T) {
+	requireOpenat2(t)
 	t.Parallel()
 	heavyUnderShort(t, "a landed worktree probed for shedding five ways (~70 git processes)")
 	f := newFixture(t)

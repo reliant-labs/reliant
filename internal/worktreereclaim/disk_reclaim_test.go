@@ -33,6 +33,7 @@ func archive(t *testing.T, path, id string, at time.Time) {
 // worktree.ensure restores it if the row is revived) and reclaimed, and one
 // with work only it holds is proposed, never deleted.
 func TestSweepReclaimsArchivedCheckoutsTheProtocolLeft(t *testing.T) {
+	requireOpenat2(t)
 	t.Parallel()
 	heavyUnderShort(t, "~120 git processes")
 	s := newSweepFixture(t)
@@ -69,6 +70,7 @@ func TestSweepReclaimsArchivedCheckoutsTheProtocolLeft(t *testing.T) {
 // moves were recorded, is retired, not held as used after its archive
 // forever. A change at the root after that put-back still counts.
 func TestRetirementForgivesALegacyRollbackOfItsOwn(t *testing.T) {
+	requireOpenat2(t)
 	t.Parallel()
 	heavyUnderShort(t, "a multi-repo workspace through a full retirement (~80 git processes)")
 	for _, touched := range []bool{false, true} {

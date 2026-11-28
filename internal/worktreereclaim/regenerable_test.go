@@ -12,6 +12,7 @@ import (
 // Regenerable tool output in a checkout does not hold it: forge's scratch and
 // generate cache, a project's pinned tools, and its scratch tmp/.
 func TestReconcile_ToolOutputIsRegenerable(t *testing.T) {
+	requireOpenat2(t)
 	t.Parallel()
 	if testing.Short() {
 		t.Skip("builds 7 git fixtures; TestRebuildablePath_Entries covers the rule under -short")

@@ -144,6 +144,7 @@ func exists(p string) bool { _, err := os.Stat(p); return err == nil }
 
 func TestSweep_RemovesCleanArchivedAndRecordsIt(t *testing.T) {
 	testkit.Slow(t, "builds real git worktrees and runs git against them")
+	requireSafeRemoval(t)
 	t.Parallel()
 
 	e := newEnv(t)
@@ -191,6 +192,7 @@ func TestSweep_LocksActiveWorktreesAndNeverRemovesThem(t *testing.T) {
 
 func TestSweep_AdoptsUnattributedRows(t *testing.T) {
 	testkit.Slow(t, "builds real git worktrees and runs git against them")
+	requireSafeRemoval(t)
 	t.Parallel()
 
 	e := newEnv(t)
@@ -224,6 +226,7 @@ func TestSweep_SkipsOfflineDaemon(t *testing.T) {
 
 func TestSettle_RemovesImmediately(t *testing.T) {
 	testkit.Slow(t, "builds real git worktrees and runs git against them")
+	requireSafeRemoval(t)
 	t.Parallel()
 
 	e := newEnv(t)
@@ -262,6 +265,7 @@ func TestStorageView_ShowsHeldAndLowDiskPerMachine(t *testing.T) {
 
 func TestStorageView_HealthyDiskWithNothingHeldHasNoItem(t *testing.T) {
 	testkit.Slow(t, "builds real git worktrees and runs git against them")
+	requireSafeRemoval(t)
 	t.Parallel()
 
 	e := newEnv(t)

@@ -14,6 +14,7 @@ import (
 )
 
 func TestFinalizeRecoveryQuarantineInventoryMismatchReturnsOriginal(t *testing.T) {
+	requireOpenat2(t)
 	heavyUnderShort(t, "real Git capture/quarantine removal proof")
 	ctx := context.Background()
 	parent := recoveryTestRepo(t)

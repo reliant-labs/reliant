@@ -51,6 +51,7 @@ func shedFixture(t *testing.T) (*fixture, Worktree, map[string]string) {
 // nothing in it has changed for the floor: the incident machine held 77 GiB
 // of node_modules in worktrees nothing ever reclaimed.
 func TestShed_LiveIdleWorktreeShedsRegenerableOutputOnly(t *testing.T) {
+	requireOpenat2(t)
 	t.Parallel()
 	heavyUnderShort(t, "real git worktree fixture")
 	f, w, p := shedFixture(t)
@@ -75,6 +76,7 @@ func TestShed_LiveIdleWorktreeShedsRegenerableOutputOnly(t *testing.T) {
 // are the package's content and shed with the rest; before this, one such
 // directory held every node_modules on the machine.
 func TestShed_InstalledPackageContentIsNotUserData(t *testing.T) {
+	requireOpenat2(t)
 	t.Parallel()
 	heavyUnderShort(t, "real git worktree fixture")
 	f, w, p := shedFixture(t)
@@ -154,6 +156,7 @@ func TestShed_HoldsWhatItCannotProveRegenerableAndIdle(t *testing.T) {
 
 // An archived worktree held for its work (dirty) sheds the same way.
 func TestShed_ArchivedDirtyWorktreeSheds(t *testing.T) {
+	requireOpenat2(t)
 	t.Parallel()
 	heavyUnderShort(t, "real git worktree fixture")
 	f, w, p := shedFixture(t)

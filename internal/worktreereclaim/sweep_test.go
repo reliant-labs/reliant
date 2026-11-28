@@ -210,6 +210,7 @@ func TestSweepCaptureOnlyCapturesAndNeverDeletes(t *testing.T) {
 // In mode on an auto-safe worktree is captured, then deleted; its branch
 // stays, a tombstone says how to restore it, and the restore works.
 func TestSweepOnReclaimsAutoSafeAfterCapture(t *testing.T) {
+	requireOpenat2(t)
 	t.Parallel()
 	heavyUnderShort(t, "~60 git processes")
 	s := newSweepFixture(t)
@@ -283,6 +284,7 @@ func TestHiddenIndexEntriesAreNeverCaptured(t *testing.T) {
 // is captured and reclaimed; changed after the approval, it is proposed
 // again.
 func TestSweepNeverAutoDeletesNeedsApproval(t *testing.T) {
+	requireOpenat2(t)
 	t.Parallel()
 	heavyUnderShort(t, "~90 git processes")
 	s := newSweepFixture(t)
@@ -353,6 +355,7 @@ func TestSweepNeverAutoDeletesNeedsApproval(t *testing.T) {
 // The capture is verified against the parked checkout immediately before
 // deletion; a change in between puts the checkout back and deletes nothing.
 func TestSweepVerifyMismatchAbortsDeletion(t *testing.T) {
+	requireOpenat2(t)
 	t.Parallel()
 	heavyUnderShort(t, "~50 git processes")
 	s := newSweepFixture(t)
@@ -535,6 +538,7 @@ func parkMidDeletion(t *testing.T, s *sweepFixture, orig string) (string, Captur
 // registration and the markers go, the capture stays and restores the whole
 // checkout. A dry-run pass only reports it.
 func TestSweepFinishesAnInterruptedDeletion(t *testing.T) {
+	requireOpenat2(t)
 	t.Parallel()
 	heavyUnderShort(t, "~50 git processes")
 	s := newSweepFixture(t)

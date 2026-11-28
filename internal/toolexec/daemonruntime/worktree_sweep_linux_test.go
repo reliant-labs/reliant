@@ -28,6 +28,7 @@ func (sweepTestLease) Release()                    {}
 // apart, and the notice says so.
 func TestSweepReclaimedWorkspaceIsRestoredWithItsCaptureByEnsure(t *testing.T) {
 	testkit.Slow(t, "creates real git checkouts, reclaims one and recreates it")
+	requireSafeRemoval(t)
 	f := newEnsureFixture(t, "")
 	commitIn(t, f.root, "committed.txt")
 	write := func(rel, content string) {

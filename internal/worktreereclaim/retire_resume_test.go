@@ -58,6 +58,7 @@ func interruptedRetirement(t *testing.T, f *fixture, w Worktree) string {
 }
 
 func TestWholeRetirementResumesAnInterruptedDisposal(t *testing.T) {
+	requireOpenat2(t)
 	heavyUnderShort(t, "temporary real Git whole-worktree retirement, interrupted and resumed")
 	f := newFixture(t)
 	manyFiles(t, f, 40)
@@ -90,6 +91,7 @@ func TestWholeRetirementResumesAnInterruptedDisposal(t *testing.T) {
 }
 
 func TestWholeRetirementResumeHoldsWorkWrittenAfterTheInterruption(t *testing.T) {
+	requireOpenat2(t)
 	heavyUnderShort(t, "temporary real Git whole-worktree retirement, interrupted and changed")
 	for _, kind := range []string{"untracked", "edited", "staged", "occupied", "foreign-fence"} {
 		t.Run(kind, func(t *testing.T) {
@@ -131,6 +133,7 @@ func TestWholeRetirementResumeHoldsWorkWrittenAfterTheInterruption(t *testing.T)
 }
 
 func TestWholeRetirementPacesItsProcessChecks(t *testing.T) {
+	requireOpenat2(t)
 	heavyUnderShort(t, "temporary real Git whole-worktree retirement of a 400-file checkout")
 	f := newFixture(t)
 	manyFiles(t, f, 400)

@@ -13,6 +13,8 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/reliant-labs/reliant/internal/worktreereclaim"
 )
 
 const day = 24 * time.Hour
@@ -34,6 +36,18 @@ type harness struct {
 	refuse bool
 	// scratchUse and chatUse are the recorded uses, by path.
 	scratchUse, chatUse map[string]time.Time
+}
+
+// requireSafeRemoval skips a test that expects a strip or a removal on a host
+// whose kernel or sandbox lacks openat2 or renameat2 (ENOSYS; some CI
+// runners). worktreereclaim fails closed there, so every pass holds and
+// removes nothing. The host is missing a resource, so the test skips rather
+// than fails. Tests that expect a hold still run.
+func requireSafeRemoval(t *testing.T) {
+	t.Helper()
+	if err := worktreereclaim.HostLacksSafeRemoval(); err != nil {
+		t.Skipf("host lacks openat2 (ENOSYS): %v; safe removal holds everything on this host, and this test expects a removal", err)
+	}
 }
 
 func newHarness(t *testing.T) *harness {

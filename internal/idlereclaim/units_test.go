@@ -18,6 +18,7 @@ import (
 // machine 107 of the 108 GiB in scratch sat in directories touched within
 // the last day, and no pass stripped anything.
 func TestScratch_IdleUnitsOfAnActiveDirectoryAreStripped(t *testing.T) {
+	requireSafeRemoval(t)
 	t.Parallel()
 	h := newHarness(t)
 	dir := h.chat("c1")
@@ -43,6 +44,7 @@ func TestScratch_IdleUnitsOfAnActiveDirectoryAreStripped(t *testing.T) {
 // in it, or a git HEAD moved; and the directory's own use still counts for a
 // target directly in it.
 func TestScratch_UnitUseHoldsItsOutput(t *testing.T) {
+	requireSafeRemoval(t)
 	t.Parallel()
 	h := newHarness(t)
 	dir := h.chat("c1")
@@ -69,6 +71,7 @@ func TestScratch_UnitUseHoldsItsOutput(t *testing.T) {
 // its ignored node_modules go once it is idle, and (with the machine-wide
 // worktree reclaim off) the clean, pushed worktree itself.
 func TestScratch_IdleWorktreeInAnActiveDirectory(t *testing.T) {
+	requireSafeRemoval(t)
 	t.Parallel()
 	h := newHarness(t)
 	main := pushedClone(t, t.TempDir(), filepath.Join(t.TempDir(), "main"))
@@ -97,6 +100,7 @@ func TestScratch_IdleWorktreeInAnActiveDirectory(t *testing.T) {
 // named by recent work, stays, and so does anything not named for an agent.
 // The chat's own tool calls are not its sub-agents' use.
 func TestScratch_IdleSubAgentDirectoryGoesWhole(t *testing.T) {
+	requireSafeRemoval(t)
 	t.Parallel()
 	h := newHarness(t)
 	dir := h.chat("c1")
@@ -134,6 +138,7 @@ func TestScratch_IdleSubAgentDirectoryGoesWhole(t *testing.T) {
 // A directory too large to measure whole, or with a process in it, is still
 // stripped unit by unit.
 func TestScratch_InUseDirectoryStillStripsIdleUnits(t *testing.T) {
+	requireSafeRemoval(t)
 	t.Parallel()
 	h := newHarness(t)
 	dir := h.chat("c1")
@@ -152,6 +157,7 @@ func TestScratch_InUseDirectoryStillStripsIdleUnits(t *testing.T) {
 // Under pressure the strip floor is a day, for scratch units and worktree
 // node_modules alike; the whole-directory floor stays.
 func TestPressurePassShortensStripFloors(t *testing.T) {
+	requireSafeRemoval(t)
 	t.Parallel()
 	h := newHarness(t)
 	h.r.NodeModules = worktreereclaim.NodeModulesTargets

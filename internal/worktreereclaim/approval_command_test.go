@@ -87,6 +87,7 @@ func (a *approvalFixture) approve(t *testing.T, cmd ApprovalCommand) (ApprovalRe
 // only by an entry written into approvals.json, is untouched. Who approved is
 // recorded in the journal and the command results.
 func TestApprovalCommandRemovesExactlyTheApprovedWorktree(t *testing.T) {
+	requireOpenat2(t)
 	t.Parallel()
 	heavyUnderShort(t, "~120 git processes")
 	a, e := newApprovalFixture(t, "approved", "forged")
@@ -181,6 +182,7 @@ func TestForgedApprovalsFileDeletesNothing(t *testing.T) {
 // and any failure refuses, keeps the worktree as it was, and puts the
 // proposal back in front of the person with the reason.
 func TestApprovalCommandRefuses(t *testing.T) {
+	requireOpenat2(t)
 	t.Parallel()
 	cases := []struct {
 		name   string
@@ -285,6 +287,7 @@ func TestPrepareApprovalCommandRefusesAtOnce(t *testing.T) {
 // Sending the same approval again does nothing again: while its removal
 // runs, and after it, the command answers what it answered before.
 func TestApprovalCommandReplayIsIdempotent(t *testing.T) {
+	requireOpenat2(t)
 	t.Parallel()
 	heavyUnderShort(t, "~90 git processes")
 	a, es := newApprovalFixture(t, "wip")
@@ -358,6 +361,7 @@ func TestApprovalCommandAuthorizesTheStateNotTheKey(t *testing.T) {
 // reclaimed, the refused one as the same proposal, undecided again with why;
 // the third is unchanged in the report and in what the Inbox lists.
 func TestApprovalCommandAmendsOnlyItsOwnProposals(t *testing.T) {
+	requireOpenat2(t)
 	t.Parallel()
 	heavyUnderShort(t, "~150 git processes")
 	a, e := newApprovalFixture(t, "removed", "refused", "untouched")
@@ -448,6 +452,7 @@ func TestApprovalCommandAmendsOnlyItsOwnProposals(t *testing.T) {
 // the cause has gone; the authority it carried is spent. A new Inbox decision,
 // a new command issued after it, is what removes the worktree.
 func TestApprovalCommandRefusalIsFinalForItsCommand(t *testing.T) {
+	requireOpenat2(t)
 	t.Parallel()
 	heavyUnderShort(t, "~110 git processes")
 	a, es := newApprovalFixture(t, "wip")
@@ -484,6 +489,7 @@ func TestApprovalCommandRefusalIsFinalForItsCommand(t *testing.T) {
 // An older decision delivered after a newer one never acts: not after the
 // newer one was refused, and not while it is being carried out.
 func TestApprovalCommandOlderThanTheNewestIsSuperseded(t *testing.T) {
+	requireOpenat2(t)
 	t.Parallel()
 	heavyUnderShort(t, "~110 git processes")
 	a, es := newApprovalFixture(t, "refused", "running")

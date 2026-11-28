@@ -155,6 +155,7 @@ func ignore(t *testing.T, f *fixture, patterns string) {
 }
 
 func TestReconcile_CleanMergedIsRemoved(t *testing.T) {
+	requireOpenat2(t)
 	t.Parallel()
 	heavyUnderShort(t, "~35 git processes")
 	f := newFixture(t)
@@ -175,6 +176,7 @@ func TestReconcile_CleanMergedIsRemoved(t *testing.T) {
 
 // B2: ignored files are potentially work. Rebuildable output goes; data holds.
 func TestReconcile_RebuildableIgnoredFilesDoNotBlock(t *testing.T) {
+	requireOpenat2(t)
 	t.Parallel()
 	heavyUnderShort(t, "~36 git processes")
 	f := newFixture(t)
@@ -266,6 +268,7 @@ func snapshotHas(t *testing.T, f *fixture, r Result, file, content string) bool 
 }
 
 func TestReconcile_UnpushedCommitIsHeld_ThenSafeOnceMergedOrPushed(t *testing.T) {
+	requireOpenat2(t)
 	t.Parallel()
 	heavyUnderShort(t, "~51 git processes")
 	f := newFixture(t)
@@ -548,6 +551,7 @@ func TestReconcile_MultiRepoRootFilesPastTheCapHoldTheWorkspace(t *testing.T) {
 }
 
 func TestReconcile_MultiRepoWorkspaceWithOnlyEmptyDirsBetweenIsRemoved(t *testing.T) {
+	requireOpenat2(t)
 	t.Parallel()
 	heavyUnderShort(t, "a multi-repo workspace, every checkout through a full reclaim (~80 git processes)")
 	f := newFixture(t)
