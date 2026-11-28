@@ -63,9 +63,7 @@ func (s *Service) ListInbox(
 
 	readCtx := withCallerJWT(ctx, auth.BearerToken(req.Header().Get("Authorization")))
 	var read *inboxReads
-	if categories := req.Msg.GetCategories(); len(categories) > 0 && slices.Contains(categories, reliantv1.InboxCategory_INBOX_CATEGORY_HOUSEKEEPING) && !slices.ContainsFunc(categories, func(c reliantv1.InboxCategory) bool {
-		return c != reliantv1.InboxCategory_INBOX_CATEGORY_HOUSEKEEPING
-	}) {
+	if categories := req.Msg.GetCategories(); len(categories) == 1 && categories[0] == reliantv1.InboxCategory_INBOX_CATEGORY_HOUSEKEEPING {
 		read, err = s.readHousekeeping(readCtx, userID)
 	} else {
 		read, err = s.sharedRead(readCtx, userID)
