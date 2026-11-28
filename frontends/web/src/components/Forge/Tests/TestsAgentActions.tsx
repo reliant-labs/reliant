@@ -30,7 +30,7 @@ import Tooltip from "@/components/forge-ui/tooltip";
 import { testsServiceQueries } from "@/hooks/controlplane/tests-service-hooks_gen";
 import { onControlPlane, refuseWithoutControlPlane } from "@/hooks/test-queries";
 import { useProject } from "@/hooks/project-queries";
-import { useOrgScope, whenOrgScopeReady } from "@/lib/orgScope";
+import { getOrgScope, useOrgScope, whenOrgScopeReady, withOrgFailure } from "@/lib/orgScope";
 import { toast } from "@/lib/toast-manager";
 import type { CoverageTarget, FileCoverage, TestFlake } from "@/services/controlPlane/tests/types";
 import { coverageRequest, coverageTreeOf, fileCoverageOf, fileCoverageRequest, summaryRequest, testDetailOf, testRequest } from "@/services/controlPlane/tests/wire";
@@ -102,12 +102,12 @@ export function useFixFlakyTest({ project, projectId, flake, defaultBranch }: { 
     // Refused without a control plane, as the pages' reads are (onControlPlane).
     refuseWithoutControlPlane(client);
     // The same generated reads (and so cache entries) as the pages' hooks; fetchQuery answers the message, mapped here.
-    const detail = testDetailOf(await client.fetchQuery(testsServiceQueries.getTest(testRequest({ orgId, project, testId }), { staleTime: LIVE_MS })));
+    const detail = testDetailOf(await client.fetchQuery(withOrgFailure(onControlPlane(testsServiceQueries.getTest(testRequest({ orgId, project, testId }), { staleTime: LIVE_MS })), getOrgScope())));
     // The default branch the flake gate measures from: the summary's (cached when Flaky tests read it). Without it, the prompt says "<default branch>".
     const branch =
       defaultBranch ??
       (await client
-        .fetchQuery(onControlPlane(testsServiceQueries.getTestSummary(summaryRequest({ orgId, project }), { staleTime: LIVE_MS })))
+        .fetchQuery(withOrgFailure(onControlPlane(testsServiceQueries.getTestSummary(summaryRequest({ orgId, project }), { staleTime: LIVE_MS })), getOrgScope()))
         .then((summary) => summary.branch || undefined)
         .catch(() => undefined));
     return flakyTestSubject(detail.flake ?? flake, detail, branch);
@@ -219,13 +219,13 @@ export function RaiseCoverageButton({
     const query = { target, path: pkg };
     // Refused without a control plane, as the pages' reads are (onControlPlane).
     refuseWithoutControlPlane(client);
-    const tree = coverageTreeOf(await client.fetchQuery(testsServiceQueries.getCoverage(coverageRequest({ orgId, project, ...query }), { staleTime: SETTLED_MS })));
+    const tree = coverageTreeOf(await client.fetchQuery(withOrgFailure(onControlPlane(testsServiceQueries.getCoverage(coverageRequest({ orgId, project, ...query }), { staleTime: SETTLED_MS })), getOrgScope())));
     const paths = filesToRead(tree).slice(0, MAX_UNCOVERED_FILES);
     // Read in parallel, each started here, after the org is known (not in a callback of its own).
     const reads: Promise<FileCoverage>[] = [];
     for (const path of paths) {
       reads.push(
-        client.fetchQuery(onControlPlane(testsServiceQueries.getFileCoverage(fileCoverageRequest({ orgId, project, target, path }), { staleTime: SETTLED_MS }))).then(fileCoverageOf)
+        client.fetchQuery(withOrgFailure(onControlPlane(testsServiceQueries.getFileCoverage(fileCoverageRequest({ orgId, project, target, path }), { staleTime: SETTLED_MS })), getOrgScope())).then(fileCoverageOf)
       );
     }
     const files = await Promise.all(reads);
