@@ -1549,11 +1549,14 @@ func logBatch(ctx context.Context, t target, results []worktreereclaim.Result, r
 			inRun++
 		}
 	}
-	var shedBytes int64
+	var shedBytes, keptBytes int64
 	for _, r := range results {
 		outcomes[string(r.Outcome)]++
 		if r.Outcome == worktreereclaim.OutcomeHeld {
 			held[string(r.Reason)]++
+			if r.Reason == worktreereclaim.ReasonKept {
+				keptBytes += r.SizeBytes
+			}
 		}
 		if r.Landed {
 			landed++
@@ -1573,6 +1576,14 @@ func logBatch(ctx context.Context, t target, results []worktreereclaim.Result, r
 		"outcomes", outcomes, "held", held, "landed", landed, "recoverable_idle", recoverable,
 		"in_run", inRun, "not_reclaimable", notReclaimable,
 		"shed_rows", shed, "shed_bytes", shedBytes)
+	if keptBytes > 0 {
+		// Safe to remove, and held only by the user's archive setting: on
+		// 2026-11-13 ~104 GiB of a 629 GB machine sat in such rows and
+		// nothing named the setting as the cause (reliant#2762).
+		logging.InfoContext(ctx, "[WorktreeSweep] archived worktrees kept by archive setting", "daemonID", t.daemonID,
+			"setting", "worktree.archive_cleanup_mode=always_keep", "rows", held[string(worktreereclaim.ReasonKept)], "bytes", keptBytes,
+			"fix", `set "When you archive a workspace" to "Clean up automatically" in Settings → Workspaces → Cleanup settings`)
+	}
 }
 
 // ptrString is *p, or "" for nil.

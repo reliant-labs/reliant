@@ -675,6 +675,30 @@ describe("InboxPage storage item", () => {
     expect(within(row).getByText(/build caches & docker: 38 GB of 40 GB used — Docker 21 GB · Build caches 15 GB/)).toBeInTheDocument();
     expect(within(row).queryByText(/124 GB/)).not.toBeInTheDocument();
     expect(within(row).getByText(/3 workspaces kept \(3\.3 GB\)/)).toBeInTheDocument();
+    // None is held by the archive setting, so the setting is not named.
+    expect(within(row).queryByText(/Keep everything/)).not.toBeInTheDocument();
+  });
+
+  it("names the Keep everything archive setting, what it holds and how to change it, when it is why workspaces are kept", async () => {
+    respond([
+      storageItem(
+        {},
+        {
+          held: [
+            { worktreeId: "wt-1", name: "fix", removable: true, reason: "dirty", sizeBytes: 1_000_000_000n },
+            { worktreeId: "wt-2", name: "old-a", removable: true, reason: "kept", sizeBytes: 60_000_000_000n },
+            { worktreeId: "wt-3", name: "old-b", removable: true, reason: "kept", sizeBytes: 44_000_000_000n },
+          ],
+        },
+      ),
+    ]);
+    renderInboxAt(<InboxPage />);
+    const row = await screen.findByTestId("inbox-item-storage:d-1:disk:1760000000000:critical");
+    expect(
+      within(row).getByText(
+        /3 workspaces kept \(105 GB\) · 2 only because your archive setting is "Keep everything" \(104 GB\): to free them, choose "Clean up automatically" in Settings → Workspaces → Cleanup settings/,
+      ),
+    ).toBeInTheDocument();
   });
 
   it("Free up space offers only the safe caches, explains what it leaves alone, and calls nothing until confirmed", async () => {

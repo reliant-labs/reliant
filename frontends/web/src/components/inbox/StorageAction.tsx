@@ -99,6 +99,23 @@ export function totalHeldBytes(held: HeldWorktree[]): number {
   return held.reduce((sum, w) => sum + Number(w.sizeBytes), 0);
 }
 
+/** Where the archive setting is changed, in the settings' own words. */
+export const KEEP_EVERYTHING_FIX = 'choose "Clean up automatically" in Settings → Workspaces → Cleanup settings';
+
+/**
+ * "2 only because your archive setting is "Keep everything" (104 GB): choose
+ * …", or "" when nothing is held for that reason. Such workspaces are safe to
+ * remove; nothing removes them automatically while the setting stands, and it
+ * is set once and forgotten. On 2026-11-13 it held ~104 GB of a 629 GB machine
+ * that filled every day, and nothing named it as the cause (reliant#2762).
+ */
+export function keepEverythingNote(held: HeldWorktree[]): string {
+  const kept = held.filter((w) => w.reason === "kept");
+  if (kept.length === 0) return "";
+  const size = totalHeldBytes(kept);
+  return `${kept.length} only because your archive setting is "Keep everything"${size > 0 ? ` (${formatBytes(size)})` : ""}: to free them, ${KEEP_EVERYTHING_FIX}`;
+}
+
 /**
  * The storage item's actions: "Free up space" when one of the machine's
  * volumes is under pressure (what is using it, and the rebuildable caches it
