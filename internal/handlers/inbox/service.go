@@ -42,6 +42,10 @@ type Deps struct {
 	Registrations Registrations
 	// Recoveries lists the caller's worktree recoveries.
 	Recoveries Recoveries
+	// Preferences reads the person's Inbox filters (inbox.show_*). nil reads
+	// none: every filter is at its default.
+	// forge:optional-dep
+	Preferences Preferences
 	// Marks lists the caller's worktrees marked for reclaim and records keep /
 	// reclaim now. store.WorktreeExtStore satisfies it.
 	Marks worktreesweep.MarkDecisionStore

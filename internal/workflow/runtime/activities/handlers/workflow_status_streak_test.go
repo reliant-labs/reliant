@@ -16,10 +16,12 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/store/triggertest"
+	"github.com/reliant-labs/reliant/internal/triggers"
 )
 
 // An automation that fails every hour must notify once per failure streak, not
-// once per failure (WORKFLOW_UI.md §6.4). A success ends the streak.
+// once per failure (WORKFLOW_UI.md §6.4). A success ends the streak; a streak
+// that begins within triggers.QuietWindow of the last failure is not news.
 
 type streakFixture struct {
 	t         *testing.T
@@ -171,9 +173,19 @@ func TestWorkflowStatus_AutomationFailureNotifiesOncePerStreak(t *testing.T) {
 			ok := f.launch(ev, db.Active())
 			f.finish(ok, "completed")
 
+			// A success ends the streak, but an automation that fails again
+			// within the quiet window of its last failure flaps: it is the
+			// same unhealthy period, and it was reported.
 			afterSuccess := f.launch(ev, db.Active())
-			unread, reason = f.finish(afterSuccess, "failed")
-			assert.True(t, unread, "a success ends the streak, so the next failure notifies again")
+			unread, _ = f.finish(afterSuccess, "failed")
+			assert.False(t, unread, "a new streak within a day of the last failure does not notify")
+
+			// A day without a failure: the next one is news again.
+			f.finish(f.launch(ev, db.Active()), "completed")
+			f.clock = f.clock.Add(triggers.QuietWindow)
+			afterQuiet := f.launch(ev, db.Active())
+			unread, reason = f.finish(afterQuiet, "failed")
+			assert.True(t, unread, "the first failure after a quiet day notifies again")
 			assert.Equal(t, "workflow_failed", reason)
 		})
 	}

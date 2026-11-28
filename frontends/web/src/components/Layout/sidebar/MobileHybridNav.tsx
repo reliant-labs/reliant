@@ -50,7 +50,7 @@ import {
 } from "@/lib/paths";
 import { orgFreePath } from "@/lib/paths/org";
 
-import { InboxNavItem } from "../../inbox/InboxNavItem";
+import { InboxNavItem, SandboxesHousekeepingDot } from "../../inbox/InboxNavItem";
 import { MobileNavChatList } from "../../Mobile/MobileNavChatList";
 import { hybridNav } from "./navConfig";
 import { releaseNavDrawerHold } from "./navDrawerHold";
@@ -143,6 +143,7 @@ export function MobileHybridNav({
       // The chats inline, as the shell's drawer lists them under Agents (the phone's own list: Mobile/MobileNavChatList).
       "chat-list": (layout) => <MobileNavChatList {...layout} onOpen={(href) => navigate(href)} />,
       inbox: () => <InboxNavItem href={inboxPath()} onOpen={() => navigate(inboxPath())} current={isAtOrBelow(pathname, inboxPath())} />,
+      "sandboxes-housekeeping": () => <SandboxesHousekeepingDot />,
     }),
     [navigate, pathname],
   );

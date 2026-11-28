@@ -4,6 +4,62 @@ import ToggleSwitch from "../forge-ui/toggle_switch";
 import { useNotificationStore, getNotificationSoundOptions } from "../../store/notificationStore";
 import { showTestNotification } from "../../lib/notifications";
 import { SettingsPageHeader } from "./SettingsPageHeader";
+import { useInboxPreferences, useUpdateInboxPreferences, type InboxPreferences } from "../../hooks/settings-queries";
+import { toast } from "../../lib/toast-manager";
+
+/**
+ * What the Inbox lists beyond what needs you (both off by default). Stored
+ * per person on the server (UpdatePreferences), so every device's Inbox
+ * follows them; ListInbox applies them.
+ */
+export function InboxFilterSettings() {
+  const { data } = useInboxPreferences();
+  const update = useUpdateInboxPreferences();
+  const set = (prefs: Partial<InboxPreferences>) => {
+    update.mutateAsync(prefs).catch((error: unknown) => void toast.error(error));
+  };
+  return (
+    <div className="space-y-4 rounded-lg border border-border bg-card p-4" data-testid="inbox-filter-settings">
+      <div>
+        <h3 className="text-sm font-semibold text-foreground">Inbox</h3>
+        <p className="mt-0.5 text-xs text-muted-foreground">
+          The Inbox lists what needs you. These add what usually does not.
+        </p>
+      </div>
+      <div className="flex items-start justify-between">
+        <div className="flex-1 pr-4">
+          <span className="text-sm">Show machine housekeeping in the Inbox</span>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            Storage, worktree clean-up and reclaim proposals. Off, they are on each sandbox&apos;s page in Agent sandboxes.
+          </p>
+        </div>
+        <ToggleSwitch
+          checked={data.showHousekeeping}
+          onChange={(checked) => set({ showHousekeeping: checked })}
+          ariaLabel="Show machine housekeeping in the Inbox"
+          size="lg"
+          className="forge-ui"
+        />
+      </div>
+      <div className="flex items-start justify-between">
+        <div className="flex-1 pr-4">
+          <span className="text-sm">Show every automation failure</span>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            Off, the Inbox shows an automation when it starts failing after being healthy; one that keeps failing stays on
+            the Automations page.
+          </p>
+        </div>
+        <ToggleSwitch
+          checked={data.showEveryAutomationFailure}
+          onChange={(checked) => set({ showEveryAutomationFailure: checked })}
+          ariaLabel="Show every automation failure"
+          size="lg"
+          className="forge-ui"
+        />
+      </div>
+    </div>
+  );
+}
 
 export function NotificationSettings() {
   const {
@@ -300,6 +356,9 @@ export function NotificationSettings() {
             Notifications use your system's default sound. You can change the sound in your OS notification settings.
           </p>
         </div>
+
+        <div className="border-t border-border/30 pt-5 mt-5"></div>
+        <InboxFilterSettings />
       </div>
     </div>
   );

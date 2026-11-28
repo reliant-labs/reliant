@@ -15,24 +15,24 @@
  * Every row can be dismissed, and so can a whole section. The rows leave at
  * once and a toast offers Undo, which restores them on the server.
  *
+ * The Inbox lists what needs the person. By default the server keeps out
+ * machine housekeeping (it is on each sandbox's page) and the failures of an
+ * automation that keeps failing (it is on the Automations page); a quiet
+ * line under the list says how many, and where they are. The two filters
+ * are in Settings → Notifications.
+ *
  * The same view is the phone's Inbox (`/m/inbox`, Mobile/MobileInboxScreen):
  * `titled={false}` drops the page title the mobile screen header already
  * shows, and the controls grow to touch size on a coarse pointer.
  */
 
 import { useMemo } from "react";
+import { Link } from "@tanstack/react-router";
 
-import { InboxItemKind, type InboxItem as InboxItemData } from "@/gen/reliant/v1/inbox_pb";
-import {
-  useDismissInboxItems,
-  useInbox,
-  useInboxProjectId,
-  useInboxScopeStore,
-  useRestoreInboxItems,
-  type InboxScope,
-} from "@/hooks/inbox-queries";
-import { toast } from "@/lib/toast-manager";
+import { InboxCategory, InboxItemKind, type InboxItem as InboxItemData } from "@/gen/reliant/v1/inbox_pb";
+import { useInbox, useInboxProjectId, useInboxScopeStore, type InboxScope } from "@/hooks/inbox-queries";
 import { cn } from "@/lib/utils";
+import { useSurface } from "@/lib/surfaceContext";
 import { useShellCurrentProject } from "../Layout/sidebar/useShellCurrentProject";
 import Card from "../forge-ui/card";
 import PageHeader from "../forge-ui/page_header";
@@ -40,7 +40,8 @@ import SkeletonLoader from "../forge-ui/skeleton_loader";
 import Button from "@/components/forge-ui/button";
 import { AreaShell } from "../Layout/AreaShell";
 import { InboxApprovalBatch, InboxItem, subjectName } from "./InboxItem";
-import { inboxPath } from "@/lib/paths";
+import { useDismissWithUndo } from "./useDismissWithUndo";
+import { automationsPath, inboxPath, mobileMachinesPath, sandboxesPath } from "@/lib/paths";
 import { ProjectEmptyCtaRow } from "@/components/EmptyState/ProjectEmptyCta";
 
 export function InboxPage() {
@@ -79,7 +80,7 @@ const SECTION_TITLE: Record<InboxItemKind, string> = {
   [InboxItemKind.AUTOMATIONS_ON_PERSONAL_ACCOUNTS]: "Automations on your own AI accounts",
 };
 
-/** Section the items by kind, in kind (priority) order, keeping each kind's server order. */
+/** Section the items by kind, preserving category priority and each kind's server order. */
 export function sectionInboxItems(items: InboxItemData[]): InboxSection[] {
   const byKind = new Map<InboxItemKind, InboxItemData[]>();
   for (const item of items) {
@@ -87,8 +88,9 @@ export function sectionInboxItems(items: InboxItemData[]): InboxSection[] {
     if (list) list.push(item);
     else byKind.set(item.kind, [item]);
   }
+  const priority = (section: InboxItemData[]) => section[0]?.category || InboxCategory.UNSPECIFIED;
   return [...byKind.entries()]
-    .sort(([a], [b]) => a - b)
+    .sort(([a, aItems], [b, bItems]) => priority(aItems) - priority(bItems) || a - b)
     .map(([kind, sectionItems]) => ({ kind, title: SECTION_TITLE[kind] ?? "Other", items: sectionItems }));
 }
 
@@ -140,25 +142,11 @@ export function InboxView({ titled = true }: { titled?: boolean } = {}) {
   const currentProject = useShellCurrentProject();
   const projectId = useInboxProjectId(currentProject?.id ?? null);
   const inbox = useInbox(projectId);
-  const dismiss = useDismissInboxItems();
-  const restore = useRestoreInboxItems();
+  const onDismiss = useDismissWithUndo();
 
   const items = useMemo(() => inbox.data?.items ?? [], [inbox.data]);
   const sections = useMemo(() => sectionInboxItems(items), [items]);
   const scoped = projectId !== undefined;
-
-  const onDismiss = (dismissed: InboxItemData[], what: string) => {
-    const ids = dismissed.map((item) => item.itemId);
-    dismiss.mutate({ itemIds: ids }, {
-      onSuccess: () =>
-        toast.notify(`Dismissed ${what}`, {
-          // Long enough to notice and reach for Undo; the default 4s is not.
-          duration: 8000,
-          action: { label: "Undo", onClick: () => restore.mutate({ itemIds: ids }) },
-        }),
-      onError: (error) => void toast.error(error),
-    });
-  };
 
   const subtitle = scoped ? `Waiting on you in ${currentProject?.name ?? "this project"}.` : "Waiting on you, across every project.";
   const header = titled ? (
@@ -254,6 +242,52 @@ export function InboxView({ titled = true }: { titled?: boolean } = {}) {
         {toolbar}
       </div>
       {body}
+      {inbox.data && (
+        <FilteredOutNotes habitualCount={inbox.data.habitualCount} housekeepingCount={inbox.data.housekeepingCount} />
+      )}
+    </div>
+  );
+}
+
+const noteLinkClass = cn(
+  "font-medium text-foreground underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm",
+  TOUCH_TARGET,
+);
+
+/**
+ * What the person's Inbox filters kept out (Settings → Notifications → Inbox),
+ * said once, quietly, with where it is instead: an automation that keeps
+ * failing is on the Automations page, a machine's housekeeping on its
+ * sandbox's page. Not a warning: nothing here is new.
+ */
+function FilteredOutNotes({ habitualCount, housekeepingCount }: { habitualCount: number; housekeepingCount: number }) {
+  const mobile = useSurface() === "mobile";
+  if (habitualCount <= 0 && housekeepingCount <= 0) return null;
+  return (
+    <div className="space-y-1 px-1 text-xs text-muted-foreground" data-testid="inbox-filtered-notes">
+      {habitualCount > 0 && (
+        <p data-testid="inbox-habitual-note">
+          {habitualCount} {habitualCount === 1 ? "automation keeps" : "automations keep"} failing —{" "}
+          {/* Automations are configured on desktop only. */}
+          {mobile ? (
+            "see Automations on desktop"
+          ) : (
+            <>
+              see{" "}
+              <Link to={automationsPath()} className={noteLinkClass}>
+                Automations
+              </Link>
+            </>
+          )}
+        </p>
+      )}
+      {housekeepingCount > 0 && (
+        <p data-testid="inbox-housekeeping-note">
+          <Link to={mobile ? mobileMachinesPath() : sandboxesPath()} className={noteLinkClass}>
+            {housekeepingCount} housekeeping {housekeepingCount === 1 ? "item" : "items"} on your sandboxes
+          </Link>
+        </p>
+      )}
     </div>
   );
 }

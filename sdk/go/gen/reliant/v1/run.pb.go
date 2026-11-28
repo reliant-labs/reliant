@@ -43,6 +43,14 @@ const (
 	// continue, a finally handler's node that failed. A run node's non-zero
 	// exit code is not one. Health counts it as a failure.
 	RunOutcome_RUN_OUTCOME_FAILURE_HANDLED RunOutcome = 3
+	// SKIPPED: the run completed into a node that declares outcome: skipped:
+	// it chose not to do its work this time, for a reason it expects to clear
+	// on its own (its environment is unhealthy, another run holds the work, a
+	// person must first fix something it already reported), and it will be
+	// asked again. Health counts it as neither a success nor a failure: it does
+	// not end or extend a failure streak, and a run of skips reads DEGRADED,
+	// never FAILING. It puts nothing in the Inbox.
+	RunOutcome_RUN_OUTCOME_SKIPPED RunOutcome = 4
 )
 
 // Enum value maps for RunOutcome.
@@ -52,12 +60,14 @@ var (
 		1: "RUN_OUTCOME_SUCCEEDED",
 		2: "RUN_OUTCOME_FAILED",
 		3: "RUN_OUTCOME_FAILURE_HANDLED",
+		4: "RUN_OUTCOME_SKIPPED",
 	}
 	RunOutcome_value = map[string]int32{
 		"RUN_OUTCOME_UNSPECIFIED":     0,
 		"RUN_OUTCOME_SUCCEEDED":       1,
 		"RUN_OUTCOME_FAILED":          2,
 		"RUN_OUTCOME_FAILURE_HANDLED": 3,
+		"RUN_OUTCOME_SKIPPED":         4,
 	}
 )
 
@@ -2243,13 +2253,14 @@ const file_reliant_v1_run_proto_rawDesc = "" +
 	"\x06thread\x18\x02 \x01(\tR\x06thread\"\x82\x01\n" +
 	"\x14InterruptRunResponse\x120\n" +
 	"\x14cancelled_tool_calls\x18\x01 \x01(\x05R\x12cancelledToolCalls\x128\n" +
-	"\x18undeliverable_tool_calls\x18\x02 \x03(\tR\x16undeliverableToolCalls*}\n" +
+	"\x18undeliverable_tool_calls\x18\x02 \x03(\tR\x16undeliverableToolCalls*\x96\x01\n" +
 	"\n" +
 	"RunOutcome\x12\x1b\n" +
 	"\x17RUN_OUTCOME_UNSPECIFIED\x10\x00\x12\x19\n" +
 	"\x15RUN_OUTCOME_SUCCEEDED\x10\x01\x12\x16\n" +
 	"\x12RUN_OUTCOME_FAILED\x10\x02\x12\x1f\n" +
-	"\x1bRUN_OUTCOME_FAILURE_HANDLED\x10\x03*\xbd\x02\n" +
+	"\x1bRUN_OUTCOME_FAILURE_HANDLED\x10\x03\x12\x17\n" +
+	"\x13RUN_OUTCOME_SKIPPED\x10\x04*\xbd\x02\n" +
 	"\x0fRunDisplayState\x12!\n" +
 	"\x1dRUN_DISPLAY_STATE_UNSPECIFIED\x10\x00\x12\x1c\n" +
 	"\x18RUN_DISPLAY_STATE_QUEUED\x10\x01\x12\x1d\n" +

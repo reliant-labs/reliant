@@ -1151,8 +1151,14 @@ func (r *Runner) RunContext(ctx context.Context, sc *scenario.Scenario) (result 
 		// a terminal node declaring `outcome: failure` returns no error, and
 		// production records it failed (it is not archived, on_failure runs,
 		// the CLI exits non-zero). Report it the same way.
-		if rec.verdict == model.OutcomeFailure {
+		switch rec.verdict {
+		case model.OutcomeFailure:
 			execution.Outcome = string(scenario.OutcomeFailed)
+			execution.OutcomeNode = rec.verdictNode
+		case model.OutcomeSkipped:
+			// A declared skip: the run completed and chose not to do its
+			// work. Production records it run_outcome skipped.
+			execution.Outcome = string(scenario.OutcomeSkipped)
 			execution.OutcomeNode = rec.verdictNode
 		}
 		var wfResult *runtime.WorkflowResult

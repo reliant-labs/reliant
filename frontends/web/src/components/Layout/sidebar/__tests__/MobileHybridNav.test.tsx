@@ -46,6 +46,7 @@ vi.mock("../../../inbox/InboxNavItem", () => ({
       Inbox
     </a>
   ),
+  SandboxesHousekeepingDot: () => null,
 }));
 
 vi.mock("../ProjectSwitcher", () => ({

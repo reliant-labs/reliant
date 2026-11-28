@@ -180,6 +180,7 @@ type (
 	InboxAutomationNoOrgAccount              = sdk.InboxAutomationNoOrgAccount
 	InboxAutomationRunPaused                 = sdk.InboxAutomationRunPaused
 	InboxAutomationsOnPersonalAccounts       = sdk.InboxAutomationsOnPersonalAccounts
+	InboxCategory                            = sdk.InboxCategory
 	InboxItem                                = sdk.InboxItem
 	InboxItemKind                            = sdk.InboxItemKind
 	InboxItem_Approval                       = sdk.InboxItem_Approval
@@ -579,6 +580,11 @@ const (
 	FileChangeType_FILE_CHANGE_TYPE_DELETED                                    = sdk.FileChangeType_FILE_CHANGE_TYPE_DELETED
 	FileChangeType_FILE_CHANGE_TYPE_UNSPECIFIED                                = sdk.FileChangeType_FILE_CHANGE_TYPE_UNSPECIFIED
 	FileChangeType_FILE_CHANGE_TYPE_UPDATED                                    = sdk.FileChangeType_FILE_CHANGE_TYPE_UPDATED
+	InboxCategory_INBOX_CATEGORY_ALERT                                         = sdk.InboxCategory_INBOX_CATEGORY_ALERT
+	InboxCategory_INBOX_CATEGORY_AUTOMATION                                    = sdk.InboxCategory_INBOX_CATEGORY_AUTOMATION
+	InboxCategory_INBOX_CATEGORY_HOUSEKEEPING                                  = sdk.InboxCategory_INBOX_CATEGORY_HOUSEKEEPING
+	InboxCategory_INBOX_CATEGORY_NEEDS_YOU                                     = sdk.InboxCategory_INBOX_CATEGORY_NEEDS_YOU
+	InboxCategory_INBOX_CATEGORY_UNSPECIFIED                                   = sdk.InboxCategory_INBOX_CATEGORY_UNSPECIFIED
 	InboxItemKind_INBOX_ITEM_KIND_APPROVAL                                     = sdk.InboxItemKind_INBOX_ITEM_KIND_APPROVAL
 	InboxItemKind_INBOX_ITEM_KIND_AUTOMATIONS_ON_PERSONAL_ACCOUNTS             = sdk.InboxItemKind_INBOX_ITEM_KIND_AUTOMATIONS_ON_PERSONAL_ACCOUNTS
 	InboxItemKind_INBOX_ITEM_KIND_AUTOMATION_DEFINITION_BROKEN                 = sdk.InboxItemKind_INBOX_ITEM_KIND_AUTOMATION_DEFINITION_BROKEN
@@ -644,6 +650,7 @@ const (
 	RunDisplayState_RUN_DISPLAY_STATE_WAITING_FOR_MACHINE                      = sdk.RunDisplayState_RUN_DISPLAY_STATE_WAITING_FOR_MACHINE
 	RunOutcome_RUN_OUTCOME_FAILED                                              = sdk.RunOutcome_RUN_OUTCOME_FAILED
 	RunOutcome_RUN_OUTCOME_FAILURE_HANDLED                                     = sdk.RunOutcome_RUN_OUTCOME_FAILURE_HANDLED
+	RunOutcome_RUN_OUTCOME_SKIPPED                                             = sdk.RunOutcome_RUN_OUTCOME_SKIPPED
 	RunOutcome_RUN_OUTCOME_SUCCEEDED                                           = sdk.RunOutcome_RUN_OUTCOME_SUCCEEDED
 	RunOutcome_RUN_OUTCOME_UNSPECIFIED                                         = sdk.RunOutcome_RUN_OUTCOME_UNSPECIFIED
 	StreamingState_STREAMING_STATE_COMPLETE                                    = sdk.StreamingState_STREAMING_STATE_COMPLETE
@@ -780,6 +787,8 @@ var (
 	File_reliant_v1_tools_daemon_proto   = sdk.File_reliant_v1_tools_daemon_proto
 	File_reliant_v1_trigger_proto        = sdk.File_reliant_v1_trigger_proto
 	File_reliant_v1_worktree_proto       = sdk.File_reliant_v1_worktree_proto
+	InboxCategory_name                   = sdk.InboxCategory_name
+	InboxCategory_value                  = sdk.InboxCategory_value
 	InboxItemKind_name                   = sdk.InboxItemKind_name
 	InboxItemKind_value                  = sdk.InboxItemKind_value
 	MachineHealthState_name              = sdk.MachineHealthState_name

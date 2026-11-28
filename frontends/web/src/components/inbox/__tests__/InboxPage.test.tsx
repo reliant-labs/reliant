@@ -21,6 +21,7 @@ import {
   CleanupStorageResponseSchema,
   type HeldWorktreeSchema,
   InboxApprovalSchema,
+  InboxCategory,
   InboxAutomationFailingSchema,
   InboxItemKind,
   InboxItemSchema,
@@ -31,6 +32,7 @@ import { TriggerHealthSchema, TriggerHealthStatus } from "@/gen/reliant/v1/trigg
 import { ApprovalType } from "@/gen/reliant/v1/approval_pb";
 import { useInboxScopeStore } from "@/hooks/inbox-queries";
 import { useProjectStore } from "@/store/projectStore";
+import { sectionInboxItems } from "../InboxPage";
 import {
   approvalItem,
   failingItem,
@@ -44,6 +46,21 @@ import {
   storageItem,
   waitingItem,
 } from "./inboxTestUtils";
+
+it("places questions and alerts before automation failures and housekeeping", () => {
+  const items = [
+    { ...storageItem(), category: InboxCategory.HOUSEKEEPING },
+    { ...failingItem(), category: InboxCategory.AUTOMATION },
+    { ...needsSetupItem(), category: InboxCategory.ALERT },
+    { ...questionItem(), category: InboxCategory.NEEDS_YOU },
+  ];
+  expect(sectionInboxItems(items).map(({ kind }) => kind)).toEqual([
+    InboxItemKind.QUESTION,
+    InboxItemKind.AUTOMATION_NEEDS_SETUP,
+    InboxItemKind.AUTOMATION_FAILING,
+    InboxItemKind.STORAGE,
+  ]);
+});
 
 const mocks = vi.hoisted(() => ({
   listInbox: vi.fn(),
@@ -88,7 +105,10 @@ vi.mock("@/lib/toast-manager", () => ({ toast: { notify: mocks.notify, error: vi
 
 import { InboxPage } from "../InboxPage";
 
-function respond(items: InboxItem[], extra: { truncated?: boolean; otherProjectsCount?: number } = {}) {
+function respond(
+  items: InboxItem[],
+  extra: { truncated?: boolean; otherProjectsCount?: number; housekeepingCount?: number; habitualCount?: number } = {},
+) {
   mocks.listInbox.mockResolvedValue(
     create(ListInboxResponseSchema, {
       items,
@@ -96,6 +116,8 @@ function respond(items: InboxItem[], extra: { truncated?: boolean; otherProjects
       hasInformational: items.some((i) => i.kind >= 4),
       truncated: extra.truncated ?? false,
       otherProjectsCount: extra.otherProjectsCount ?? 0,
+      housekeepingCount: extra.housekeepingCount ?? 0,
+      habitualCount: extra.habitualCount ?? 0,
     }),
   );
 }
@@ -852,5 +874,44 @@ describe("InboxPage workspaces with no machine", () => {
     expect(button).toHaveAttribute("title", expect.stringMatching(/connect a machine/i));
     expect(within(row).getByText(/no machine connected to check/)).toBeInTheDocument();
     expect(within(row).queryByText(/offline/)).not.toBeInTheDocument();
+  });
+});
+
+describe("InboxPage: what the filters kept out", () => {
+  it("says quietly how many automations keep failing and how much housekeeping waits, with where each is", async () => {
+    respond([approvalItem()], { habitualCount: 3, housekeepingCount: 2 });
+    renderInboxAt(<InboxPage />);
+    const habitual = await screen.findByTestId("inbox-habitual-note");
+    expect(habitual).toHaveTextContent("3 automations keep failing — see Automations");
+    expect(within(habitual).getByRole("link", { name: "Automations" })).toHaveAttribute("href", "/workflows/automations");
+    const housekeeping = screen.getByTestId("inbox-housekeeping-note");
+    expect(within(housekeeping).getByRole("link", { name: "2 housekeeping items on your sandboxes" })).toHaveAttribute(
+      "href",
+      "/settings/machines",
+    );
+    // Not an alert: nothing here is new.
+    expect(screen.getByTestId("inbox-filtered-notes").closest("[role=alert]")).toBeNull();
+  });
+
+  it("speaks in the singular, and shows the notes on an empty Inbox too", async () => {
+    respond([], { habitualCount: 1, housekeepingCount: 1 });
+    renderInboxAt(<InboxPage />);
+    expect(await screen.findByTestId("inbox-habitual-note")).toHaveTextContent("1 automation keeps failing");
+    expect(screen.getByTestId("inbox-housekeeping-note")).toHaveTextContent("1 housekeeping item on your sandboxes");
+    expect(screen.getByText(/Nothing needs you/)).toBeInTheDocument();
+  });
+
+  it("nothing kept out: no notes", async () => {
+    respond([approvalItem()]);
+    renderInboxAt(<InboxPage />);
+    await screen.findByTestId("inbox-item-approval:appr-1");
+    expect(screen.queryByTestId("inbox-filtered-notes")).toBeNull();
+  });
+
+  it("a housekeeping item the person chose to see renders as an Inbox row", async () => {
+    respond([storageItem({ category: InboxCategory.HOUSEKEEPING })]);
+    renderInboxAt(<InboxPage />);
+    const row = await screen.findByTestId("inbox-item-storage:d-1:disk:1760000000000:critical");
+    expect(within(row).getByRole("button", { name: /Clean up/ })).toBeInTheDocument();
   });
 });

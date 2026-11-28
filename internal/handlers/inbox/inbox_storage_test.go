@@ -34,7 +34,7 @@ func (n *neverSender) SendDaemonCommandToDaemon(context.Context, string, string,
 // while its home volume is fine (the cloud-machine incident's shape).
 func storageFixture(t *testing.T) (*inboxFixture, string, string) {
 	t.Helper()
-	f := newInboxFixture(t)
+	f := newHousekeepingFixture(t)
 	daemonID := "d-" + uuid.NewString()
 	require.NoError(t, f.repo.UpsertDaemon(f.ctx, &db.Daemon{ID: daemonID, UserID: f.userID, Hostname: ptr.Of("MacBook")}))
 	require.NoError(t, f.repo.UpsertDaemonAttachment(f.ctx, &db.DaemonAttachment{DaemonID: daemonID, UserID: f.userID, Source: db.DaemonAttachmentSourceInbound}))
@@ -135,7 +135,7 @@ func TestListInbox_StorageItemAppearsInEveryProjectScope(t *testing.T) {
 }
 
 func TestListInbox_NoStorageItemWhenDiskIsFineAndNothingHeld(t *testing.T) {
-	f := newInboxFixture(t)
+	f := newHousekeepingFixture(t)
 	daemonID := "d-" + uuid.NewString()
 	require.NoError(t, f.repo.UpsertDaemon(f.ctx, &db.Daemon{ID: daemonID, UserID: f.userID}))
 	putDiskReport(t, f, daemonID, &reliantv1.DiskReport{Volumes: []*reliantv1.DiskVolume{
@@ -146,7 +146,7 @@ func TestListInbox_NoStorageItemWhenDiskIsFineAndNothingHeld(t *testing.T) {
 
 func TestListInbox_StorageItemIsScopedToItsOwner(t *testing.T) {
 	_, _, _ = storageFixture(t)
-	other := newInboxFixture(t)
+	other := newHousekeepingFixture(t)
 	assert.Empty(t, inboxByKind(other.list(t, nil).Items, reliantv1.InboxItemKind_INBOX_ITEM_KIND_STORAGE))
 }
 
@@ -181,7 +181,7 @@ func TestStorageItem_DismissalHoldsWhileThePictureChurns(t *testing.T) {
 // Within one episode the item comes back once per climb toward failing
 // builds, and never on the way down.
 func TestStorageItem_ReturnsOnlyWhenTheDiskGetsWorse(t *testing.T) {
-	f := newInboxFixture(t)
+	f := newHousekeepingFixture(t)
 	daemonID := "d-" + uuid.NewString()
 	require.NoError(t, f.repo.UpsertDaemon(f.ctx, &db.Daemon{ID: daemonID, UserID: f.userID}))
 
@@ -241,7 +241,7 @@ func TestStorageItem_ANewPressureEpisodeIsANewItem(t *testing.T) {
 // Kept workspaces on a healthy disk are told once per machine. Keeping more is
 // not a storage problem; the disk coming under pressure is.
 func TestStorageItem_KeptWorkspacesAloneAreToldOnce(t *testing.T) {
-	f := newInboxFixture(t)
+	f := newHousekeepingFixture(t)
 	daemonID := "d-" + uuid.NewString()
 	require.NoError(t, f.repo.UpsertDaemon(f.ctx, &db.Daemon{ID: daemonID, UserID: f.userID}))
 	f.holdWorktree(t, daemonID, "one", "dirty")
@@ -264,7 +264,7 @@ func TestStorageItem_KeptWorkspacesAloneAreToldOnce(t *testing.T) {
 
 // One machine is one item, however many of its volumes are full.
 func TestStorageItem_OneItemPerMachineAcrossVolumes(t *testing.T) {
-	f := newInboxFixture(t)
+	f := newHousekeepingFixture(t)
 	daemonID := "d-" + uuid.NewString()
 	require.NoError(t, f.repo.UpsertDaemon(f.ctx, &db.Daemon{ID: daemonID, UserID: f.userID}))
 	putDiskReport(t, f, daemonID, &reliantv1.DiskReport{Volumes: []*reliantv1.DiskVolume{
@@ -447,7 +447,7 @@ func (s *Service) mustList(t *testing.T, f *inboxFixture) []*reliantv1.InboxItem
 // the caller's own chats, never another user's — and no storage item when the
 // disk is fine and nothing is kept.
 func TestListInbox_ProcessLimitItemNamesTheTreesByAgent(t *testing.T) {
-	f := newInboxFixture(t)
+	f := newHousekeepingFixture(t)
 	daemonID := "d-" + uuid.NewString()
 	require.NoError(t, f.repo.UpsertDaemon(f.ctx, &db.Daemon{ID: daemonID, UserID: f.userID, Hostname: ptr.Of("cloud")}))
 	now := time.Now().UTC()

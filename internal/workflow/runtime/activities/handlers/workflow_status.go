@@ -66,9 +66,10 @@ type WorkflowStatusInput struct {
 	// workflow declared no outcome, and the stored value is left untouched —
 	// absence is not failure.
 	Outcome string `json:"outcome,omitempty"`
-	// OutcomeNode is the top-level node that declared a failure Outcome. Its
-	// newest attempt is marked failed (MarkDeclaredFailureNode), so the run's
-	// diagnostics name where it ended instead of finding no failed node.
+	// OutcomeNode is the top-level node that declared a failure (or skipped)
+	// Outcome. A failure's newest attempt is marked failed
+	// (MarkDeclaredFailureNode), so the run's diagnostics name where it ended
+	// instead of finding no failed node; a skip's is left alone.
 	OutcomeNode string `json:"outcome_node,omitempty"`
 	// RunStartedAtMs is when the run began (unix ms), on a "completed"
 	// status: its outcome is judged from the node attempts since then
@@ -378,6 +379,8 @@ func (a *WorkflowStatusActivity) completionNotifies(ctx context.Context, input W
 // between), the Inbox item for that automation just counts one more, and a
 // second OS notification would be the "hourly job pages you 24 times a day"
 // problem. The first failure of a streak notifies; a success ends the streak.
+// A streak that begins within triggers.QuietWindow of the trigger's previous
+// failure does not notify either: the automation flaps, and it was reported.
 // Interactive chats, agent-started runs and every run a person's reply started
 // — in any chat — always notify: the streak is the trigger's, and a person's
 // turn is not part of it (recordLaunchRunStatus keeps it out of the firings).
@@ -399,7 +402,22 @@ func (a *WorkflowStatusActivity) failureNotifies(ctx context.Context, input Work
 		return true
 	}
 	prior, found := triggers.PriorFailureStreak(firings[triggerID], input.ChatID)
-	return !found || prior.Count == 0
+	if !found {
+		return true
+	}
+	if prior.Count > 0 {
+		return false
+	}
+	// The first failure of a streak notifies only when the automation was
+	// healthy before it: one that flaps begins a new streak every success,
+	// and has already been reported within the QuietWindow (triggers.Habitual).
+	start := triggers.FiringOf(firings[triggerID], input.ChatID).Event.OccurredAt
+	last, err := a.repo.PriorTriggerFailures(ctx, chat.UserID, []string{triggerID}, []time.Time{start}, triggers.QuietWindow)
+	if err != nil || len(last) != 1 {
+		logging.WarnContext(ctx, "[WorkflowStatus] Could not read the trigger's prior failures; notifying", "chat_id", input.ChatID, "error", err)
+		return true
+	}
+	return !triggers.Habitual(start, last[0])
 }
 
 // recordLaunchRunStatus writes how the chat's launch run ended onto its launch
@@ -420,6 +438,9 @@ func (a *WorkflowStatusActivity) recordLaunchRunStatus(ctx context.Context, inpu
 	// recording "completed" here called a run that never did its job a success.
 	case input.Status == "completed" && input.Outcome == model.OutcomeFailure:
 		status = core.TriggerRunFailed
+	// A declared skip (Node.outcome: skipped) completed too: the run chose not
+	// to do its work, which is not a failure. run_outcome "skipped", written
+	// below, is what tells trigger health it was not a success either.
 	case input.Status == "completed":
 		status = core.TriggerRunCompleted
 	case input.Status == "failed":

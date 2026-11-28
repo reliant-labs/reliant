@@ -5644,7 +5644,8 @@ type workflowStatusOpts struct {
 	// Empty means the workflow declared no outcome and the stored value is left
 	// alone — absence is not failure.
 	Outcome string
-	// OutcomeNode is the top-level node that declared a failure Outcome.
+	// OutcomeNode is the top-level node that declared a failure or skipped
+	// Outcome.
 	OutcomeNode string
 	// RunStartedAtMs is when the run began (ChildWorkflowTracker.runStartedAtMs),
 	// on a "completed" notification: the status activity judges the run's
@@ -6176,10 +6177,15 @@ func handleWorkflowCompletion(ctx workflow.Context, workflowID, chatID, workflow
 	// "Ran to the end of the graph" is NOT "the work passed": a run that routed
 	// to a failure-outcome terminal node arrives here with no error at all. Say
 	// which one happened rather than logging success over both.
-	if runOutcome == model.OutcomeFailure {
+	switch runOutcome {
+	case model.OutcomeFailure:
 		logger.Info("[Workflow Runtime] Ran to completion with outcome FAILURE",
 			"workflowID", workflowID)
-	} else {
+	case model.OutcomeSkipped:
+		// Not a failure: the run chose not to do its work this time.
+		logger.Info("[Workflow Runtime] Ran to completion with outcome SKIPPED",
+			"workflowID", workflowID, "node", runOutcomeNode)
+	default:
 		logger.Info("[Workflow Runtime] Completed successfully", "workflowID", workflowID, "outcome", runOutcome)
 	}
 	// Belt and braces (spec §6.7): a detached spawn can still be live here if
@@ -6199,8 +6205,10 @@ func handleWorkflowCompletion(ctx workflow.Context, workflowID, chatID, workflow
 	// A failure verdict names the node that declared it, so the status
 	// activity can mark that node failed: its own activity succeeded, and
 	// without the mark no diagnostic surface can say where the run ended.
+	// A skip names its node too, so a reader can say where the run stood
+	// down; nothing marks that node failed.
 	outcomeNode := ""
-	if runOutcome == model.OutcomeFailure {
+	if runOutcome == model.OutcomeFailure || runOutcome == model.OutcomeSkipped {
 		outcomeNode = runOutcomeNode
 	}
 	if err := notifyWorkflowStatus(cleanupCtx, chatID, workflowID, workflowName, "completed", parentWorkflowID, thread,

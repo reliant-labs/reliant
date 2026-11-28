@@ -275,9 +275,20 @@ func TestListInbox_LaunchFailedDismissalAndNewerFailureReappears(t *testing.T) {
 	// A launch ends the episode; the next failure is a new one and reappears.
 	f.launched(t, "evL3", "chat-l3", "trg-l", base.Add(2*time.Minute), db.Completed())
 	f.firing(t, "evL4", "trg-l", core.TriggerEventFailed, "gone again", base.Add(3*time.Minute))
+	// The successful run separates these episodes. The new launch failure
+	// reappears in the default Inbox even within the quiet window.
 	resp = f.list(t, nil)
+	assert.Zero(t, resp.HabitualCount)
 	launchFailed := inboxByKind(resp.Items, reliantv1.InboxItemKind_INBOX_ITEM_KIND_AUTOMATION_LAUNCH_FAILED)
-	require.Len(t, launchFailed, 1, "a new episode reappears")
+	require.Len(t, launchFailed, 1, "a new episode reappears in the default Inbox")
+	assert.Equal(t, "automation_launch_failed:evL4", launchFailed[0].ItemId)
+	assert.False(t, launchFailed[0].Habitual)
+	assert.EqualValues(t, 1, launchFailed[0].GetAutomationLaunchFailed().ConsecutiveFailures)
+
+	f.setFilter(t, showEveryAutomationFailureKey, true)
+	resp = f.list(t, nil)
+	launchFailed = inboxByKind(resp.Items, reliantv1.InboxItemKind_INBOX_ITEM_KIND_AUTOMATION_LAUNCH_FAILED)
+	require.Len(t, launchFailed, 1)
 	assert.Equal(t, "automation_launch_failed:evL4", launchFailed[0].ItemId)
 	assert.EqualValues(t, 1, launchFailed[0].GetAutomationLaunchFailed().ConsecutiveFailures)
 }

@@ -685,7 +685,7 @@ func RecentTriggerOutcomes(ctx context.Context, db orm.Context, userID string, t
 
 // firingsSinceLastSuccessSQL is every firing of each named trigger after its
 // newest SUCCESS (a launched firing whose run completed, and did not complete
-// only because its failure path ran), newest first, capped at ?2 rows. A trigger with no success returns its whole history up to the
+// only because its failure path ran, nor into a declared skip), newest first, capped at ?2 rows. A trigger with no success returns its whole history up to the
 // cap. This is the failure episode: Go reads its length and its oldest
 // failure from it, so the episode is not truncated at the 10-firing health
 // window.
@@ -696,8 +696,12 @@ func RecentTriggerOutcomes(ctx context.Context, db orm.Context, userID string, t
 // that completed with run_outcome failure_handled — a node failed and the run
 // went on past it (reliant#2753) — is not a success: resolveRecordedRun
 // counts it a failure, so it must not end the episode either, or the streak
-// would restart at every handled failure. A completed run with no outcome
-// (recorded before run_outcome existed) is still a success.
+// would restart at every handled failure. Nor is one that completed with
+// run_outcome skipped — it declared it did not do its work this time:
+// resolveRecordedRun counts it a skip, which neither ends nor extends the
+// streak, so ending the episode at it would split one outage in two at every
+// skip. A completed run with no outcome (recorded before run_outcome existed)
+// is still a success.
 //
 // The outcome is read on the at most ?2 firings the success search already
 // holds, so it filters those rows and changes nothing about the index walks
@@ -759,7 +763,7 @@ LEFT JOIN LATERAL (
 		LIMIT ?2::integer
 	) w
 	WHERE w.outcome = 'launched'
-		AND ((w.run_status = 'completed' AND (w.run_outcome IS NULL OR w.run_outcome <> 'failure_handled'))
+		AND ((w.run_status = 'completed' AND (w.run_outcome IS NULL OR w.run_outcome NOT IN ('failure_handled', 'skipped')))
 			OR (w.run_status IS NULL AND (
 				SELECT sc.display_state FROM chats_with_activity sc
 				WHERE sc.id = w.chat_id AND sc.user_id = w.user_id) = 5))
@@ -1094,6 +1098,88 @@ func triggerEventToCore(row *TriggerEvent) (*core.TriggerEvent, error) {
 		ev.RunOutcome = *row.RunOutcome
 	}
 	return ev, nil
+}
+
+// priorTriggerFailuresSQL is, for each (trigger, since, before) triple, the
+// time of the trigger's newest FAILED firing in [since, before) after its
+// latest success before before: ?1 the trigger ids, ?2 and ?3 the bounds,
+// in the same order, ?0 the user. A
+// failed firing is one that could not launch, or one whose run failed or
+// completed only because its failure path ran (resolveRecordedRun's rule); a
+// skipped run, or one still going, is not. ord is the triple's 1-based
+// position, so the same trigger may be asked about at several bounds.
+//
+// Each lateral walks idx_trigger_events_trigger_occurred_id newest first
+// within the window. A success before since cannot separate any candidate
+// failure from before, so the success search need not read older history.
+const priorTriggerFailuresSQL = `SELECT t.ord::integer AS ord, f.occurred_at
+FROM unnest(?1::text[], ?2::timestamptz[], ?3::timestamptz[]) WITH ORDINALITY AS t(id, since, before, ord)
+LEFT JOIN LATERAL (
+	SELECT s.occurred_at, s.id FROM trigger_events s
+	WHERE s.trigger_id = t.id AND s.user_id = ?0::text
+		AND s.occurred_at >= t.since AND s.occurred_at < t.before
+		AND s.outcome = 'launched'
+		AND ((s.run_status = 'completed' AND (s.run_outcome IS NULL OR s.run_outcome NOT IN ('failure_handled', 'skipped')))
+			OR (s.run_status IS NULL AND (
+				SELECT sc.display_state FROM chats_with_activity sc
+				WHERE sc.id = s.chat_id AND sc.user_id = s.user_id) = 5))
+	ORDER BY s.occurred_at DESC, s.id DESC
+	LIMIT 1
+) ls ON true
+CROSS JOIN LATERAL (
+	SELECT x.occurred_at FROM trigger_events x
+	WHERE x.trigger_id = t.id AND x.user_id = ?0::text
+		AND x.occurred_at >= t.since AND x.occurred_at < t.before
+		AND (x.occurred_at, x.id) > (COALESCE(ls.occurred_at, '-infinity'::timestamptz), COALESCE(ls.id, ''))
+		AND (x.outcome = 'failed'
+			OR (x.outcome = 'launched' AND (x.run_status = 'failed' OR x.run_outcome = 'failure_handled')))
+	ORDER BY x.occurred_at DESC, x.id DESC
+	LIMIT 1
+) f`
+
+// PriorTriggerFailuresSQL returns PriorTriggerFailures' statement, with bun's
+// ?0..?3 placeholders, so a plan test runs the exact statement the Inbox does.
+func PriorTriggerFailuresSQL() string { return priorTriggerFailuresSQL }
+
+// PriorTriggerFailures returns, for each triggerIDs[i], when its newest failed
+// firing in the window before before[i] occurred: in [before[i]-window,
+// before[i]) and after its latest success, nil when it had none. The result
+// is aligned with triggerIDs; a trigger may be named more than once, at
+// different bounds. It is what tells a new streak after recovery or a quiet
+// spell from one more failure of an
+// automation that keeps failing (triggers.Habitual).
+func PriorTriggerFailures(ctx context.Context, db orm.Context, userID string, triggerIDs []string, before []time.Time, window time.Duration) ([]*time.Time, error) {
+	if userID == "" {
+		return nil, errors.New("user ID cannot be empty")
+	}
+	if len(triggerIDs) != len(before) {
+		return nil, fmt.Errorf("prior trigger failures: %d trigger ids, %d bounds", len(triggerIDs), len(before))
+	}
+	out := make([]*time.Time, len(triggerIDs))
+	if len(triggerIDs) == 0 {
+		return out, nil
+	}
+	since := make([]time.Time, len(before))
+	for i, b := range before {
+		since[i] = b.Add(-window)
+	}
+	var rows []struct {
+		Ord        int       `bun:"ord"`
+		OccurredAt time.Time `bun:"occurred_at"`
+	}
+	// Every value binds (orm.Arg), as in triggerFiringsByTrigger: one
+	// prepared statement whatever the user, triggers or bounds.
+	if err := db.Bun().NewRaw(priorTriggerFailuresSQL, userID, orm.Arg(triggerIDs), orm.Arg(since), orm.Arg(before)).Scan(ctx, &rows); err != nil {
+		return nil, fmt.Errorf("failed to list prior trigger failures: %w", err)
+	}
+	for _, r := range rows {
+		if r.Ord < 1 || r.Ord > len(out) {
+			continue
+		}
+		at := r.OccurredAt
+		out[r.Ord-1] = &at
+	}
+	return out, nil
 }
 
 // TriggerEventExtra carries fields on TriggerEvent that are NOT columns — computed

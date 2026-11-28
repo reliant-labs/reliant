@@ -493,6 +493,8 @@ export const sandboxes: NavRow = {
   icon: icon(Server),
   href: () => sandboxesPath(),
   match: (ctx) => isAtOrBelow(ctx.pathname, sandboxesPath()),
+  // Machine housekeeping lives on the sandboxes' pages, not in the Inbox.
+  trail: "sandboxes-housekeeping",
 };
 
 

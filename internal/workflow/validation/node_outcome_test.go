@@ -34,6 +34,12 @@ nodes:
     args:
       role: assistant
       content: "shipped"
+  - id: stood_down
+    type: save_message
+    outcome: skipped
+    args:
+      role: assistant
+      content: "unhealthy; asks again next tick"
 edges:
   - from: work
     default: failed
@@ -46,6 +52,7 @@ edges:
 	}
 	assert.Equal(t, "failure", byID["failed"], "outcome must survive the YAML parse")
 	assert.Equal(t, "success", byID["done"])
+	assert.Equal(t, "skipped", byID["stood_down"])
 	assert.Equal(t, "", byID["work"], "a node that declares nothing must stay undeclared")
 
 	result := &Result{}

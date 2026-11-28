@@ -395,3 +395,18 @@ describe("the nav's tour anchors", () => {
     }
   });
 });
+
+describe("the Agent sandboxes rows' housekeeping dot", () => {
+  const slots = { "sandboxes-housekeeping": () => <span data-testid="housekeeping-slot" /> };
+
+  it("Agents › Sandboxes carries it", () => {
+    render(<NavRenderer config={hybridNav} ctx={ctxAt(sandboxesPath())} slots={slots} onNavigate={vi.fn()} />);
+    expect(screen.getByTestId("nav-sandboxes")).toContainElement(screen.getByTestId("housekeeping-slot"));
+  });
+
+  it("Settings › Agent sandboxes carries it, and no other Settings row does", () => {
+    render(<NavRenderer config={hybridNav} ctx={ctxAt(settingsPath("notifications"))} slots={slots} onNavigate={vi.fn()} />);
+    expect(screen.getAllByTestId("housekeeping-slot")).toHaveLength(1);
+    expect(screen.getByTestId("nav-settings-machines")).toContainElement(screen.getByTestId("housekeeping-slot"));
+  });
+});

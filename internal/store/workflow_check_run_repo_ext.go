@@ -199,7 +199,7 @@ RETURNING c.id`, until, pgdialect.Array(ids), pgdialect.Array(gens), holder).Sca
 // of the chat it launched (the root workflow's id is the chat's).
 const observeWorkflowCheckRunSQL = `
 SELECT e.outcome, e.outcome_detail, COALESCE(e.chat_id, '') AS chat_id, COALESCE(e.run_status, '') AS run_status,
-       w.state, w.stop_reason, COALESCE(w.outcome, '') AS verdict, COALESCE(w.failure_detail, '') AS failure_detail
+       COALESCE(e.run_outcome, '') AS run_outcome, w.state, w.stop_reason, COALESCE(w.outcome, '') AS verdict, COALESCE(w.failure_detail, '') AS failure_detail
 FROM trigger_events e
 LEFT JOIN workflows w ON w.id = e.chat_id
 WHERE e.id = ?0::text`
@@ -215,6 +215,7 @@ func ObserveWorkflowCheckRun(ctx context.Context, db orm.Context, triggerEventID
 		OutcomeDetail string                   `bun:"outcome_detail"`
 		ChatID        string                   `bun:"chat_id"`
 		RunStatus     string                   `bun:"run_status"`
+		RunOutcome    string                   `bun:"run_outcome"`
 		State         *core.WorkflowState      `bun:"state"`
 		StopReason    *core.WorkflowStopReason `bun:"stop_reason"`
 		Verdict       string                   `bun:"verdict"`
@@ -229,7 +230,7 @@ func ObserveWorkflowCheckRun(ctx context.Context, db orm.Context, triggerEventID
 	}
 	obs := &core.WorkflowCheckObservation{
 		EventOutcome: core.TriggerEventOutcome(row.Outcome), EventDetail: row.OutcomeDetail,
-		ChatID: row.ChatID, RunStatus: row.RunStatus,
+		ChatID: row.ChatID, RunStatus: row.RunStatus, RunOutcome: row.RunOutcome,
 		RootVerdict: row.Verdict, RootFailureDetail: row.FailureDetail,
 	}
 	if row.State != nil {

@@ -19,6 +19,13 @@ import (
 	"github.com/reliant-labs/reliant/internal/logging"
 )
 
+// The Inbox filters' setting keys (user-global, "true"/"false", default
+// false). The inbox handler reads the same keys (inbox.readFilters).
+const (
+	inboxShowHousekeepingKey           = "inbox.show_housekeeping"
+	inboxShowEveryAutomationFailureKey = "inbox.show_every_automation_failure"
+)
+
 // UpdatePreferences updates user preferences
 func (s *Service) UpdatePreferences(ctx context.Context, req *connect.Request[reliantv1.UpdatePreferencesRequest]) (*connect.Response[reliantv1.UpdatePreferencesResponse], error) {
 	userID := auth.MustGetUserID(ctx)
@@ -151,6 +158,30 @@ func (s *Service) UpdatePreferences(ctx context.Context, req *connect.Request[re
 		markChanged("ui.hide_builtin_presets")
 	}
 
+	// The Inbox filters decide what ListInbox lists, and so the nav badge:
+	// the person's clients re-read the Inbox below.
+	inboxChanged := false
+	for _, pref := range []struct {
+		key   string
+		value *bool
+	}{
+		{inboxShowHousekeepingKey, req.Msg.InboxShowHousekeeping},
+		{inboxShowEveryAutomationFailureKey, req.Msg.InboxShowEveryAutomationFailure},
+	} {
+		if pref.value == nil {
+			continue
+		}
+		value := "false"
+		if *pref.value {
+			value = "true"
+		}
+		if err := s.upsertSetting(ctx, userID, nil, pref.key, value); err != nil {
+			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to update preferences"))
+		}
+		markChanged(pref.key)
+		inboxChanged = true
+	}
+
 	if len(changedKeys) > 0 {
 		sort.Strings(changedKeys)
 		analyticsClient.TrackPreferencesUpdated(analytics.PreferencesUpdatedMetrics{
@@ -161,6 +192,11 @@ func (s *Service) UpdatePreferences(ctx context.Context, req *connect.Request[re
 
 	if err := s.deps.Refetch.EmitUserRefetch(ctx, userID, core.RefetchConfigHealth, core.RefetchOpts{}); err != nil {
 		logging.WarnContext(ctx, "Failed to emit config_health refetch after UpdatePreferences", "error", err)
+	}
+	if inboxChanged {
+		if err := s.deps.Refetch.EmitUserRefetch(ctx, userID, core.RefetchInbox, core.RefetchOpts{}); err != nil {
+			logging.WarnContext(ctx, "Failed to emit inbox refetch after UpdatePreferences", "error", err)
+		}
 	}
 
 	return connect.NewResponse(&reliantv1.UpdatePreferencesResponse{

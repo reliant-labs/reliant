@@ -360,10 +360,21 @@ message Node {
   CelDaemonSelector daemon = 7 [(reliant) = {description: "Which machine runs this node's tools, overriding the workflow's daemon setting"}];
 
   // Outcome is the VERDICT this node stamps on the run when it executes:
-  // "success" or "failure". It is how a workflow says whether reaching this
-  // node means the work passed, which is a different question from whether the
-  // graph reached an end state — a run that routes to a `failed` terminal node
-  // ran to completion and did not succeed, and both facts have to survive.
+  // "success", "failure" or "skipped". It is how a workflow says whether
+  // reaching this node means the work passed, which is a different question
+  // from whether the graph reached an end state — a run that routes to a
+  // `failed` terminal node ran to completion and did not succeed, and both
+  // facts have to survive.
+  //
+  // "skipped" says the run chose not to do its work this time, for an
+  // expected reason that clears on its own (its environment is unhealthy,
+  // another run holds the work, a person must first fix something it has
+  // already reported), and that it will be asked again. It is not a
+  // failure: no on_failure handler, no failure notification, no Inbox item,
+  // and it neither ends nor extends its automation's failure streak (a run
+  // of skips reads DEGRADED on the automations page). A server older than
+  // it refuses a workflow that declares it, so a workflow adopts it only
+  // once the servers and daemons it runs on know it.
   //
   // Declared, never inferred: a terminal node named "failed" carries no meaning
   // the runtime can read, and absence of a declaration must not be read as
@@ -371,8 +382,8 @@ message Node {
   // node carrying a declaration wins, and it is recorded on the workflow
   // execution as its outcome, alongside — not instead of — its lifecycle status.
   string outcome = 8 [(reliant) = {
-    description: "The verdict reaching this node stamps on the run: success or failure. The last node that runs with one decides the run's outcome"
-    enum_values: "success|failure"
+    description: "The verdict reaching this node stamps on the run: success, failure, or skipped (it chose not to do its work this time, for an expected reason that clears on its own; not a failure). The last node that runs with one decides the run's outcome"
+    enum_values: "success|failure|skipped"
   }];
 
   // TolerateFailure marks the node optional: when it fails, the run goes on

@@ -112,6 +112,9 @@ import { formatMachineSpec } from "@/components/Billing/machineSpecs";
 import { MachineCost } from "@/components/Billing/MachineCost";
 import { CardInset } from "@/components/forge-ui/card";
 import { MachineDiskCard } from "./MachineDiskCard";
+import { MachineHousekeepingCard } from "./MachineHousekeepingCard";
+import { HousekeepingDot } from "@/components/inbox/InboxNavItem";
+import { useMachineHousekeepingItems } from "@/hooks/inbox-queries";
 import { MachineResourcesCard } from "./MachineResourcesCard";
 import { RenameMachineButton, RenameMachineField } from "./RenameMachine";
 import { machineBuildLabel } from "@/lib/machineBuild";
@@ -470,6 +473,8 @@ export function MachinesSection() {
             )}
             <EnvironmentsList cloud={cloud} onOpenDetail={openMachine} />
           </div>
+          {/* Archived workspaces whose machine was removed: no machine's page lists them. */}
+          <MachineHousekeepingCard daemonId="" title="Workspaces with no machine" />
           <SelfHostedSetupCard />
         </div>
       )}
@@ -862,6 +867,7 @@ function MachineName({ daemon, appCount }: { daemon: Daemon; appCount: number })
   const build = machineBuildLabel(daemon);
   const machineOrgs = useMachineOrgs();
   const org = machineOrgs.multiOrg ? machineOrgs.orgOf(daemon.daemonId) : undefined;
+  const housekeeping = useMachineHousekeepingItems(daemon.daemonId).length > 0;
   return (
     // DataTable rows have a minimum height, not vertical padding. Reserve room
     // around both lines so a badge plus build cannot press against the border.
@@ -871,6 +877,12 @@ function MachineName({ daemon, appCount }: { daemon: Daemon; appCount: number })
         {daemon.isDefault && <Badge label="Default" variant="neutral" size="sm" className="ml-2" />}
         {org && <Badge label={org.name} variant="neutral" size="sm" className="ml-2" />}
         <AppAccessIndicator count={appCount} />
+        {/* Its housekeeping waits on its page, not in the Inbox. */}
+        {housekeeping && (
+          <span className="ml-2 inline-flex">
+            <HousekeepingDot label="Housekeeping waiting" testId="machine-housekeeping-dot" />
+          </span>
+        )}
       </span>
       {build && <span className="mt-0.5 block text-xs text-muted-foreground">{build}</span>}
     </span>
@@ -1853,6 +1865,10 @@ function EnvironmentDetail({
             onGrowDisk={canGrowDisk ? openGrow : undefined}
             growDisabled={busy}
           />
+
+          {/* Held worktrees, reclaim proposals, marked worktrees: the Inbox
+              keeps them out by default, so they are decided here. */}
+          <MachineHousekeepingCard daemonId={daemonId} className="mt-6" />
 
           {/* Which outside AI apps can reach this machine. Above port access:
               it is the broader grant — tools on the machine, not one port. */}

@@ -11430,7 +11430,7 @@ func (m *MockTriggerPauser) SystemPauseTriggerCalls() []MockTriggerPauserSystemP
 var _ TriggerPauser = (*MockTriggerPauser)(nil)
 
 // forge:section MockWorkflowStatusStore
-// forge:hash=5c5c6decf91dba13f0226bd759700435da00b023b0e004b3c02b45524c4dcf0a
+// forge:hash=2638d302f8b76a6d4d8e313c741a274da8250415564d1df78c06fc206b8346fe
 
 // MockWorkflowStatusStore is a test mock for the WorkflowStatusStore interface.
 //
@@ -11455,6 +11455,7 @@ type MockWorkflowStatusStore struct {
 	UpdateChatUnreadFunc                                     func(context.Context, string, bool, string) error
 	SetChatPausedForMachineFunc                              func(context.Context, string, bool) (bool, error)
 	CreateChatUpdateFunc                                     func(context.Context, string, reliantv1.ChatUpdateType, string, string) error
+	PriorTriggerFailuresFunc                                 func(context.Context, string, []string, []time.Time, time.Duration) ([]*time.Time, error)
 	CreateThreadFunc                                         func(context.Context, *db.Thread) (*db.Thread, error)
 	ResolveThreadAmbientMemoryExclusionFunc                  func(context.Context, string, string, bool) (bool, error)
 	GetThreadWithParentFunc                                  func(context.Context, string) (*db.Thread, *string, error)
@@ -11626,6 +11627,15 @@ func (m *MockWorkflowStatusStore) CreateChatUpdate(ctx context.Context, chatID s
 		return m.CreateChatUpdateFunc(ctx, chatID, updateType, entityID, data)
 	}
 	return contractkit.MockNotSet("MockWorkflowStatusStore", "CreateChatUpdate")
+}
+
+// PriorTriggerFailures records the call and delegates to PriorTriggerFailuresFunc when set.
+func (m *MockWorkflowStatusStore) PriorTriggerFailures(ctx context.Context, userID string, triggerIDs []string, before []time.Time, window time.Duration) ([]*time.Time, error) {
+	m.Recorder.Record("PriorTriggerFailures", ctx, userID, triggerIDs, before, window)
+	if m.PriorTriggerFailuresFunc != nil {
+		return m.PriorTriggerFailuresFunc(ctx, userID, triggerIDs, before, window)
+	}
+	return nil, contractkit.MockNotSet("MockWorkflowStatusStore", "PriorTriggerFailures")
 }
 
 // CreateThread records the call and delegates to CreateThreadFunc when set.
@@ -12346,6 +12356,32 @@ func (m *MockWorkflowStatusStore) CreateChatUpdateCalls() []MockWorkflowStatusSt
 		r.UpdateType, _ = c.Args[2].(reliantv1.ChatUpdateType)
 		r.EntityID, _ = c.Args[3].(string)
 		r.Data, _ = c.Args[4].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockWorkflowStatusStorePriorTriggerFailuresCall is one recorded call of MockWorkflowStatusStore.PriorTriggerFailures, one
+// field per parameter.
+type MockWorkflowStatusStorePriorTriggerFailuresCall struct {
+	Ctx        context.Context
+	UserID     string
+	TriggerIDs []string
+	Before     []time.Time
+	Window     time.Duration
+}
+
+// PriorTriggerFailuresCalls returns every recorded PriorTriggerFailures call, oldest first, with
+// its arguments typed. It reads the same log as Calls("PriorTriggerFailures").
+func (m *MockWorkflowStatusStore) PriorTriggerFailuresCalls() []MockWorkflowStatusStorePriorTriggerFailuresCall {
+	var out []MockWorkflowStatusStorePriorTriggerFailuresCall
+	for _, c := range m.Recorder.Calls("PriorTriggerFailures") {
+		var r MockWorkflowStatusStorePriorTriggerFailuresCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.TriggerIDs, _ = c.Args[2].([]string)
+		r.Before, _ = c.Args[3].([]time.Time)
+		r.Window, _ = c.Args[4].(time.Duration)
 		out = append(out, r)
 	}
 	return out

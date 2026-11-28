@@ -189,6 +189,8 @@ func TestAttentionTransitionsDoNotRewriteOutcome(t *testing.T) {
 		{"started", "", "recovering", ""},
 		{"completed", model.OutcomeSuccess, "resolved", ""},
 		{"completed", model.OutcomeFailure, "action_required", "unsuccessful"},
+		// A skip is not a failure: it takes the success path.
+		{"completed", model.OutcomeSkipped, "resolved", ""},
 		{"failed", "", "action_required", "execution_error"},
 		{"cancelled", "", "action_required", "execution_error"},
 	} {

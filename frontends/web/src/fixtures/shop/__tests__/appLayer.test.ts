@@ -30,7 +30,7 @@ import { ChatService, ListMessagesResponseSchema } from "@/gen/reliant/v1/chat_p
 import { ConnectorService } from "@/gen/reliant/v1/connector_pb";
 import { DaemonRegistryService } from "@/gen/reliant/v1/daemon_registry_pb";
 import { ForgeService } from "@/gen/reliant/v1/forge_pb";
-import { InboxItemKind, InboxService } from "@/gen/reliant/v1/inbox_pb";
+import { InboxCategory, InboxItemKind, InboxService } from "@/gen/reliant/v1/inbox_pb";
 import { MCPService } from "@/gen/reliant/v1/mcp_pb";
 import { PresetService } from "@/gen/reliant/v1/preset_pb";
 import { ListProjectsWithAppsResponseSchema, ProjectService } from "@/gen/reliant/v1/project_pb";
@@ -206,6 +206,8 @@ describe("the app layer", () => {
     const counts = await createClient(InboxService, transport).listInbox({ limit: 0 });
     expect([counts.items.length, counts.blockingCount]).toEqual([0, 2]);
     expect(await createClient(InboxService, transport).listInbox({ projectId: PROJECT_IDS.docs })).toMatchObject({ items: [], blockingCount: 0, otherProjectsCount: 4 });
+    // A machine's page asks for housekeeping and alerts: shop's machines have none.
+    expect((await createClient(InboxService, transport).listInbox({ categories: [InboxCategory.HOUSEKEEPING, InboxCategory.ALERT] })).items).toEqual([]);
 
     const [approval, asyncQuestion, blockingQuestion, automation] = inbox.items;
     const { approvals } = await createClient(ApprovalService, transport).listApprovalsByChat({ chatId: CHAT_IDS.cartTotals });

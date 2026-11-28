@@ -60,6 +60,7 @@ import {
   useSetHiddenItem as useSetHiddenItemRpc,
   useUpdatePreferences as useUpdatePreferencesRpc,
 } from "./settings-service-hooks_gen";
+import { inboxServiceKeys } from "./inbox-service-hooks_gen";
 
 /**
  * Whether an outbound RPC can carry a credential.
@@ -434,6 +435,8 @@ function applyUpdate(prev: GetPreferencesResponse, req: UpdatePreferencesInit): 
     defaultWorkflow: req.defaultWorkflow ?? prev.defaultWorkflow,
     hideBuiltinWorkflows: req.hideBuiltinWorkflows ?? prev.hideBuiltinWorkflows,
     hideBuiltinPresets: req.hideBuiltinPresets ?? prev.hideBuiltinPresets,
+    inboxShowHousekeeping: req.inboxShowHousekeeping ?? prev.inboxShowHousekeeping,
+    inboxShowEveryAutomationFailure: req.inboxShowEveryAutomationFailure ?? prev.inboxShowEveryAutomationFailure,
     additional: { ...prev.additional, ...req.additional },
   };
 }
@@ -563,6 +566,65 @@ export function useUpdateScopePreferences() {
         defaultWorkflow: prefs.defaultWorkflow,
         hideBuiltinWorkflows: prefs.hideBuiltinWorkflows,
         hideBuiltinPresets: prefs.hideBuiltinPresets,
+      }).then(() => undefined),
+    [mutateAsync],
+  );
+  return { isPending: rpc.isPending, mutateAsync: update };
+}
+
+// --- Inbox filters ---
+
+/**
+ * What the person's Inbox lists beyond what needs them (both off by default):
+ * machine housekeeping (storage, worktree clean-up and reclaim proposals,
+ * which each sandbox's page lists anyway), and every failure of an
+ * automation that keeps failing (by default the Inbox shows an automation
+ * when it starts failing after being healthy). The server applies them to
+ * ListInbox; ListInboxResponse.housekeeping_count / habitual_count say what
+ * they kept out.
+ */
+export interface InboxPreferences {
+  showHousekeeping: boolean;
+  showEveryAutomationFailure: boolean;
+}
+
+const DEFAULT_INBOX_PREFERENCES: InboxPreferences = { showHousekeeping: false, showEveryAutomationFailure: false };
+
+function inboxPreferencesOf(response: GetPreferencesResponse): InboxPreferences {
+  return {
+    showHousekeeping: response.inboxShowHousekeeping,
+    showEveryAutomationFailure: response.inboxShowEveryAutomationFailure,
+  };
+}
+
+/** The Inbox filters; the defaults (both off) until the answer arrives, and signed out. */
+export function useInboxPreferences(): { data: InboxPreferences; isPending: boolean } {
+  const hasSession = useHasSession();
+  const q = useGetPreferences({}, { staleTime: 60_000, enabled: hasSession, select: inboxPreferencesOf });
+  return { data: q.data ?? DEFAULT_INBOX_PREFERENCES, isPending: q.isPending };
+}
+
+/**
+ * Change an Inbox filter: `mutateAsync({ showHousekeeping: true })`. The
+ * switch moves at once and comes back if the server refuses (the promise
+ * rejects then, for the caller's toast). On success every Inbox read is
+ * marked stale too: the filter changes what ListInbox returns.
+ */
+export function useUpdateInboxPreferences() {
+  const qc = useQueryClient();
+  const rpc = useUpdatePreferencesRpc({
+    onMutate: (req) => patchPreferences(qc, (prev) => applyUpdate(prev, req)),
+    onError: (_err, _req, context) => restorePreferences(qc, context),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: inboxServiceKeys.all });
+    },
+  });
+  const { mutateAsync } = rpc;
+  const update = useMemo(
+    () => (prefs: Partial<InboxPreferences>) =>
+      mutateAsync({
+        inboxShowHousekeeping: prefs.showHousekeeping,
+        inboxShowEveryAutomationFailure: prefs.showEveryAutomationFailure,
       }).then(() => undefined),
     [mutateAsync],
   );

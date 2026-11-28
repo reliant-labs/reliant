@@ -45,7 +45,7 @@ import { useAdoptRun, useUnadoptRun, type LiveRunsScope } from "../../hooks/run-
 import { isAdoptedAutomation, withOpenChatPinned } from "../../lib/sidebarChatList";
 import { useSidebarPinStore } from "../../store/sidebarPinStore";
 import { AutomationActivityPill } from "./AutomationActivityPill";
-import { InboxNavItem } from "../inbox/InboxNavItem";
+import { InboxNavItem, SandboxesHousekeepingDot } from "../inbox/InboxNavItem";
 import { SharedWithOrgSection } from "../Sharing/SharedWithOrgSection";
 import { ShareChatDialog } from "../Sharing/ShareChatDialog";
 import { ShareWorkflowDialog } from "../Sharing/ShareWorkflowDialog";
@@ -1943,6 +1943,7 @@ function SidebarComponent({
       chatsNeedYou > 0 ? (
         <span role="img" aria-label="A chat needs you" title="A chat needs you" className="size-2 rounded-full bg-warning" />
       ) : null,
+    "sandboxes-housekeeping": () => <SandboxesHousekeepingDot />,
     inbox: () => (
       <InboxNavItem
         href={inboxHref}

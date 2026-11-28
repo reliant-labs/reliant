@@ -2824,6 +2824,25 @@ func (r *Repo) ClaimRunEvents(ctx context.Context, now, leaseUntil time.Time, ma
 	return store.ClaimRunEvents(ctx, r.ORM(), now, leaseUntil, max)
 }
 
+// FiringsSinceLastSuccess returns each trigger's firings since its newest
+// success, newest first, capped at perTrigger: the current failure episode.
+// The events carry no body (payload, sender, origin): an episode is counted.
+//
+// Deprecated: use store.TriggerEventExtStore.FiringsSinceLastSuccess.
+func (r *Repo) FiringsSinceLastSuccess(ctx context.Context, userID string, triggerIDs []string, perTrigger int) (map[string][]*core.TriggerEventWithRun, error) {
+	if userID == "" {
+		return nil, fmt.Errorf("user ID cannot be empty")
+	}
+	return store.FiringsSinceLastSuccess(ctx, r.ORM(), userID, triggerIDs, perTrigger)
+}
+
+// PriorTriggerFailures returns, for each triggerIDs[i], when its newest failed
+// firing in [before[i]-window, before[i]) occurred, nil when none
+// (store.PriorTriggerFailures).
+func (r *Repo) PriorTriggerFailures(ctx context.Context, userID string, triggerIDs []string, before []time.Time, window time.Duration) ([]*time.Time, error) {
+	return store.PriorTriggerFailures(ctx, r.ORM(), userID, triggerIDs, before, window)
+}
+
 // ClaimPendingTriggerEvent is store.ClaimPendingTriggerEvent.
 //
 // Deprecated: use store.TriggerEventExtStore.ClaimPendingTriggerEvent; a launch reads the

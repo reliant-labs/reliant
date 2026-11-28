@@ -311,6 +311,28 @@ func TestTriggerFiringQueries(t *testing.T) {
 	foreign.UserID = "someone-else"
 	write(foreign)
 
+	// Fail/success/fail within the quiet window starts a new episode: the
+	// failure before f1-ok must not make f1-fail-a habitual. Once that new
+	// failure has occurred, it is a prior failure for the next firing.
+	prior, err := store.PriorTriggerFailures(ctx, env.ORM, storetest.SeedUserID,
+		[]string{"trg-f1", "trg-f1", "trg-f1"},
+		[]time.Time{base.Add(30 * time.Second), tied, base.Add(3 * time.Minute)}, 24*time.Hour)
+	if err != nil {
+		t.Fatalf("PriorTriggerFailures: %v", err)
+	}
+	if len(prior) != 3 {
+		t.Fatalf("PriorTriggerFailures returned %d bounds, want 3", len(prior))
+	}
+	if prior[0] == nil || !prior[0].Equal(base) {
+		t.Fatalf("before success: prior failure = %v, want %v", prior[0], base)
+	}
+	if prior[1] != nil {
+		t.Fatalf("fail/success/fail: prior failure = %v, want none after success", prior[1])
+	}
+	if prior[2] == nil || !prior[2].Equal(tied) {
+		t.Fatalf("after new failure: prior failure = %v, want %v", prior[2], tied)
+	}
+
 	pageIDs := func(items []*core.TriggerEventWithRun) []string {
 		out := make([]string, len(items))
 		for i, it := range items {

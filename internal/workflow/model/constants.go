@@ -31,18 +31,23 @@ const (
 //
 // A node with no declaration leaves the outcome alone. Absence therefore means
 // "the workflow never said", never "failure" — most workflows declare nothing.
+//
+// OutcomeSkipped says the run chose not to do its work this time, for an
+// expected reason that clears on its own, and will be asked again. It is not
+// a failure anywhere: no on_failure, no failure notification, no Inbox item.
 const (
 	OutcomeSuccess = "success"
 	OutcomeFailure = "failure"
+	OutcomeSkipped = "skipped"
 )
 
 // ValidOutcomes lists every value Node.outcome accepts, for validation and
 // error messages.
-var ValidOutcomes = []string{OutcomeSuccess, OutcomeFailure}
+var ValidOutcomes = []string{OutcomeSuccess, OutcomeFailure, OutcomeSkipped}
 
 // IsValidOutcome reports whether s is a declarable node outcome.
 func IsValidOutcome(s string) bool {
-	return s == OutcomeSuccess || s == OutcomeFailure
+	return s == OutcomeSuccess || s == OutcomeFailure || s == OutcomeSkipped
 }
 
 // Thread mode constants.

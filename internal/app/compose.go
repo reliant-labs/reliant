@@ -1406,6 +1406,8 @@ func (g *Graph) newInbox() (*inbox.Service, error) {
 		// Which of the caller's orgs are teams, for the notice of their
 		// automations still on their own accounts; nil without orgs.
 		Members: inboxMembers(g.OrgResolver()),
+		// The person's Inbox filters (inbox.show_*).
+		Preferences: store.NewSettingExtStore(g.Database().ORM()),
 	})
 }
 

@@ -28,6 +28,12 @@ const PauseGrace = 15 * time.Minute
 // (model.OutcomeFailure).
 const verdictFailure = "failure"
 
+// verdictSkipped is the Node.outcome a run declares when it chose not to do
+// its work this time (model.OutcomeSkipped). Such a run verified nothing, so
+// its check concludes cancelled: never a passing conclusion, and not a
+// failure either.
+const verdictSkipped = "skipped"
+
 // state is what a check should say on GitHub now, derived from its firing and
 // run alone. It is recomputed on every sync, so a sync that is lost, retried
 // or run twice converges on the same answer.
@@ -88,7 +94,13 @@ func observed(row *core.WorkflowCheckRun, obs *core.WorkflowCheckObservation, no
 	// Launched.
 	switch obs.RunStatus {
 	case core.TriggerRunCompleted, core.TriggerRunFailed, core.TriggerRunCancelled:
-		return ended(obs.RunStatus, "", ""), nil
+		// The trigger records a declared failure as run_status failed, but a
+		// declared skip as completed with run_outcome skipped.
+		verdict := ""
+		if obs.RunOutcome == core.RunOutcomeSkipped {
+			verdict = verdictSkipped
+		}
+		return ended(obs.RunStatus, verdict, ""), nil
 	}
 	if obs.ChatID == "" {
 		return couldNotRun("its run was deleted"), nil
@@ -133,6 +145,9 @@ func observed(row *core.WorkflowCheckRun, obs *core.WorkflowCheckObservation, no
 func ended(status, verdict, detail string) state {
 	s := state{Status: core.CheckStatusCompleted, RunOutput: true}
 	switch {
+	case status == core.TriggerRunCompleted && verdict == verdictSkipped:
+		s.Conclusion, s.Title, s.Summary = ConclusionCancelled, "Skipped: the run skipped its work",
+			"The run completed into a node that declares outcome: skipped: it chose not to do its work this time, so it verified nothing. Re-run the check to try again."
 	case status == core.TriggerRunCompleted && verdict != verdictFailure:
 		s.Conclusion, s.Title, s.Summary = ConclusionSuccess, "Passed", "The run completed."
 	case status == core.TriggerRunCompleted:

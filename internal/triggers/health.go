@@ -19,7 +19,8 @@ const HealthWindow = 10
 const EpisodeFirings = 500
 
 // skipStreakDegraded is the run of consecutive skipped firings that marks a
-// trigger DEGRADED: it is firing but never launching.
+// trigger DEGRADED: it is firing but never launching, or its runs keep
+// declaring they skipped their work (core.RunOutcomeSkipped).
 const skipStreakDegraded = 3
 
 type firingResult int
@@ -265,6 +266,11 @@ func resolveFiring(f *core.TriggerEventWithRun) (firingResult, string) {
 // here, not a success: the automation's work did not all happen, and counting
 // it as a recovery is how a trigger whose every run failed delivery read as
 // "degraded, 2 later run(s) succeeded" (reliant#2753).
+//
+// A run that completed into a declared outcome: skipped
+// (core.RunOutcomeSkipped) chose not to do its work this time. It is a skip,
+// for every kind of trigger: neither a success that ends a failure streak nor
+// a failure that extends one, and a run of them reads DEGRADED.
 func resolveRecordedRun(f *core.TriggerEventWithRun) (firingResult, string) {
 	switch f.Event.RunStatus {
 	case core.TriggerRunCompleted:
@@ -273,6 +279,9 @@ func resolveRecordedRun(f *core.TriggerEventWithRun) (firingResult, string) {
 				return resultFailure, f.Event.OutcomeDetail
 			}
 			return resultFailure, "the run completed, but a node in it failed and its failure path ran"
+		}
+		if f.Event.RunOutcome == core.RunOutcomeSkipped {
+			return resultSkipped, ""
 		}
 		return resultSuccess, ""
 	case core.TriggerRunFailed:

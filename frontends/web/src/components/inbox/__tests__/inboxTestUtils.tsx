@@ -32,6 +32,8 @@ export function renderInboxAt(ui: ReactNode, path = "/inbox") {
     createRoute({ getParentRoute: () => rootRoute, path: "/" }),
     createRoute({ getParentRoute: () => rootRoute, path: "/workflows/runs/$runId" }),
     createRoute({ getParentRoute: () => rootRoute, path: "/workflows/automations/$triggerId" }),
+    createRoute({ getParentRoute: () => rootRoute, path: "/workflows/automations" }),
+    createRoute({ getParentRoute: () => rootRoute, path: "/settings/machines" }),
   ];
   const router = createRouter({
     routeTree: rootRoute.addChildren(routes),

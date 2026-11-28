@@ -1908,7 +1908,7 @@ events:
         text: "Hello!"
       response_text: "Hello!"
 expect:
-  outcome: completed         # or "error" / "failed"
+  outcome: completed         # or "error" / "failed" / "skipped"
   reached: ["node1", "node2"]
   not_reached: ["node3"]
 ```
@@ -1927,7 +1927,7 @@ expect:
 ```
 
 **Assertions — all optional:**
-- outcome: completed | error | failed
+- outcome: completed | error | failed | skipped
 - reached / not_reached: whether a node was SCHEDULED. reached includes nodes
   that were skipped or errored, so it does NOT prove a node ran.
 - completed: nodes that must have EXECUTED successfully. This is the assertion
@@ -2520,7 +2520,7 @@ Show one Forge Change in full: its declared variants (from the environment's cur
 
 Check on one top-level run: its state, title, workflow, when it was created and last active, an excerpt of the last thing its agent said, and a nodes section with per-attempt status, timing and errors. Command nodes include exit codes and redacted stdout/stderr tails (up to 50 lines each). The newest 200 attempts are shown; older attempts are explicitly marked omitted.
 
-The state is the run's root workflow: pending, running, paused, completed, failed or cancelled. "completed" means the workflow reached its end, not that the work was right — read the excerpt. An ended run also has an outcome: succeeded, failed, or failure_handled when it completed only because a node failed and its failure path ran. A live run blocked outside itself also says what it is waiting for (usage limit with when it retries, machine, or input) and how many of its threads are working.
+The state is the run's root workflow: pending, running, paused, completed, failed or cancelled. "completed" means the workflow reached its end, not that the work was right — read the excerpt. An ended run also has an outcome: succeeded, failed, failure_handled when it completed only because a node failed and its failure path ran, or skipped when it completed into a node that declares outcome: skipped (it chose not to do its work this time; not a failure). A live run blocked outside itself also says what it is waiting for (usage limit with when it retries, machine, or input) and how many of its threads are working.
 
 Only runs the user owns can be inspected. To check on a sub-agent you spawned, use spawn_status.
 

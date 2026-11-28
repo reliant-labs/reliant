@@ -26,7 +26,7 @@ These fields are available on **all** node types. They provide shared functional
 | `timeout` | string | No | Overrides the node's default timeout, as a duration such as 30s, 5m or 1h30m |
 | `save_message` | SaveMessageConfig | No | A message to save to the thread when the node completes, as a template over output.* |
 | `daemon` | CelDaemonSelector | No | Which machine runs this node's tools, overriding the workflow's daemon setting |
-| `outcome` | string | No | The verdict reaching this node stamps on the run: success or failure. The last node that runs with one decides the run's outcome (enum: success\|failure) |
+| `outcome` | string | No | The verdict reaching this node stamps on the run: success, failure, or skipped (it chose not to do its work this time, for an expected reason that clears on its own; not a failure). The last node that runs with one decides the run's outcome (enum: success\|failure\|skipped) |
 | `tolerate_failure` | boolean | No | Make the node optional: when it fails the run continues, and nodes.`<id>`.failed is true with the reason in nodes.`<id>`.error |
 | `observe` | NodeObserve | No | What the node records when it finishes: span attributes, events (a decision is an event named decision) and metrics, as templates over output.*. Never fails the node |
 | `role` | string | No | The engine role this node acts in. Only reviewer, and only on a review node, which requires it (enum: reviewer) |

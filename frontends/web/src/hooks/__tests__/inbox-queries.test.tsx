@@ -82,7 +82,7 @@ describe("useInboxCounts", () => {
     const queryClient = newClient();
     const wrapper = wrapperFor(queryClient);
     const { result } = renderHook(() => ({ counts: useInboxCounts(), list: useInbox() }), { wrapper });
-    await waitFor(() => expect(result.current.counts.data).toEqual({ blockingCount: 3, hasInformational: true }));
+    await waitFor(() => expect(result.current.counts.data).toEqual({ blockingCount: 3, hasInformational: true, hasHousekeeping: false }));
     expect(result.current.list.data?.items).toHaveLength(1);
     expect(listInbox).toHaveBeenCalledTimes(1);
     expect(listInbox.mock.calls[0]![0].limit).toBeUndefined();

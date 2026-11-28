@@ -16,7 +16,7 @@
  */
 import { create } from "@bufbuild/protobuf";
 
-import { InboxItemKind, InboxItemSchema, InboxService, type InboxItem } from "@/gen/reliant/v1/inbox_pb";
+import { InboxCategory, InboxItemKind, InboxItemSchema, InboxService, type InboxItem } from "@/gen/reliant/v1/inbox_pb";
 
 import { HOUR } from "../../shopStory";
 import { CHAT_IDS, CHAT_TITLES, PROJECT_IDS, isoAgo } from "../../workspace";
@@ -36,22 +36,22 @@ function inboxItems(): InboxItem[] {
   const rateQuestion = rateLimitQuestion();
   return [
     create(InboxItemSchema, {
-      kind: InboxItemKind.APPROVAL, itemId: `approval:${approval.id}`, chatId: approval.chatId, runId: approval.chatId, ...SHOP,
+      kind: InboxItemKind.APPROVAL, category: InboxCategory.NEEDS_YOU, itemId: `approval:${approval.id}`, chatId: approval.chatId, runId: approval.chatId, ...SHOP,
       workflowName: "builtin://get-it-right", chatTitle: CHAT_TITLES.cartTotals, waitingSince: approval.createdAt,
       payload: { case: "approval", value: { approvalId: approval.id, approvalType: approval.approvalType, title: approval.title, batchId: "" } },
     }),
     create(InboxItemSchema, {
-      kind: InboxItemKind.QUESTION, itemId: `question:${cartQuestion.questionId}`, chatId: cartQuestion.chatId, runId: cartQuestion.chatId, ...SHOP,
+      kind: InboxItemKind.QUESTION, category: InboxCategory.NEEDS_YOU, itemId: `question:${cartQuestion.questionId}`, chatId: cartQuestion.chatId, runId: cartQuestion.chatId, ...SHOP,
       workflowName: "builtin://get-it-right", chatTitle: CHAT_TITLES.cartTotals, waitingSince: cartQuestion.createdAt,
       payload: { case: "question", value: { questionId: cartQuestion.questionId, threadId: cartQuestion.threadId, prompt: promptOf(cartQuestion.metadata), metadata: cartQuestion.metadata, async: true } },
     }),
     create(InboxItemSchema, {
-      kind: InboxItemKind.QUESTION, itemId: `question:${rateQuestion.questionId}`, chatId: rateQuestion.chatId, runId: rateQuestion.chatId, ...SHOP,
+      kind: InboxItemKind.QUESTION, category: InboxCategory.NEEDS_YOU, itemId: `question:${rateQuestion.questionId}`, chatId: rateQuestion.chatId, runId: rateQuestion.chatId, ...SHOP,
       workflowName: "builtin://agent", chatTitle: CHAT_TITLES.rateLimit, waitingSince: rateQuestion.createdAt,
       payload: { case: "question", value: { questionId: rateQuestion.questionId, threadId: rateQuestion.threadId, prompt: promptOf(rateQuestion.metadata), metadata: rateQuestion.metadata, async: false } },
     }),
     create(InboxItemSchema, {
-      kind: InboxItemKind.AUTOMATION_FAILING, itemId: `automation_failing:${TRIGGER_IDS.nightly}:shop-trgev-nightly-1`, ...SHOP,
+      kind: InboxItemKind.AUTOMATION_FAILING, category: InboxCategory.AUTOMATION, itemId: `automation_failing:${TRIGGER_IDS.nightly}:shop-trgev-nightly-1`, ...SHOP,
       triggerId: TRIGGER_IDS.nightly, triggerName: "Nightly CI triage", workflowName: "nightly-ci-triage", waitingSince: isoAgo(9 * HOUR),
       payload: {
         case: "automationFailing",
@@ -68,8 +68,9 @@ const blocks = (item: InboxItem) =>
 export function inboxHandlers() {
   return serve(InboxService, {
     // Scoped to one project when asked (docs has nothing waiting); `limit: 0` is the badge's counts-only read.
+    // `categories` (a machine's page asks for housekeeping and alerts) lists exactly those: shop has none.
     listInbox: (req) => {
-      const all = inboxItems();
+      const all = req.categories.length ? inboxItems().filter((item) => req.categories.includes(item.category)) : inboxItems();
       const items = req.projectId ? all.filter((item) => item.projectId === req.projectId) : all;
       const limit = req.limit ?? 100;
       return {

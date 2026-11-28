@@ -76,6 +76,16 @@ type Firings interface {
 	// GetLatestTriggerEvent is a trigger's newest event with outcome, nil
 	// when it has none.
 	GetLatestTriggerEvent(ctx context.Context, triggerID string, outcome *core.TriggerEventOutcome) (*core.TriggerEvent, error)
+	// PriorTriggerFailures is, for each triggerIDs[i], its newest failed
+	// firing in the window before before[i] (nil for none): what makes a
+	// failing automation's item habitual (triggers.Habitual).
+	PriorTriggerFailures(ctx context.Context, userID string, triggerIDs []string, before []time.Time, window time.Duration) ([]*time.Time, error)
+}
+
+// Preferences reads the person's settings whose key is LIKE keyPattern, every
+// scope: the Inbox's filters (inbox.show_*). store.SettingExtStore satisfies it.
+type Preferences interface {
+	ListSettingsByKey(ctx context.Context, userID, keyPattern string) ([]*core.Setting, error)
 }
 
 // Registrations reads the integration registrations of the caller's triggers,

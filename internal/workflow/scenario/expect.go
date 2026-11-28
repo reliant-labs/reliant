@@ -150,16 +150,24 @@ func toolResultOutput(event SimulatedEvent) map[string]interface{} {
 	return result
 }
 
-func completedMatchesFailed(expected ExpectedOutcome, got string) bool {
-	return expected == OutcomeCompleted && got == string(OutcomeFailed)
+// completedMatchesDeclared reports whether the legacy `outcome: completed`
+// matches got: a run that ran its graph to the end, into a node that declared
+// it failed or skipped, did complete its graph.
+func completedMatchesDeclared(expected ExpectedOutcome, got string) bool {
+	return expected == OutcomeCompleted && (got == string(OutcomeFailed) || got == string(OutcomeSkipped))
 }
 
 // CompletedOverFailedWarning is the warning for a scenario that expects
-// `outcome: completed` of a run whose graph declared it failed. Empty when the
-// expectation does not have that shape.
+// `outcome: completed` of a run whose graph declared it failed or skipped.
+// Empty when the expectation does not have that shape.
 func CompletedOverFailedWarning(expect *Expectation, execution *ExecutionDetails) string {
-	if expect == nil || !completedMatchesFailed(expect.Outcome, execution.Outcome) {
+	if expect == nil || !completedMatchesDeclared(expect.Outcome, execution.Outcome) {
 		return ""
+	}
+	if execution.Outcome == string(OutcomeSkipped) {
+		return fmt.Sprintf("expect.outcome is \"completed\" but the run ended at node %q, which declares "+
+			"outcome: skipped, so the run SKIPPED its work; it still matches for compatibility — assert "+
+			"`outcome: skipped` to pin the verdict", execution.OutcomeNode)
 	}
 	return fmt.Sprintf("expect.outcome is \"completed\" but the run ended at node %q, which declares "+
 		"outcome: failure, so the run FAILED; it still matches for compatibility — assert "+
@@ -182,7 +190,9 @@ func CheckExpectations(expect *Expectation, execution *ExecutionDetails) []strin
 		// "completed", and scenarios written then assert `completed` on such
 		// paths; they keep matching (the run did complete its graph), and
 		// CompletedOverFailedWarning tells their author to assert `failed`.
-		if execution.Outcome != expectedOutcome && !completedMatchesFailed(expect.Outcome, execution.Outcome) {
+		// A run that ends at a node declaring `outcome: skipped` reports
+		// "skipped", and matches `completed` the same way.
+		if execution.Outcome != expectedOutcome && !completedMatchesDeclared(expect.Outcome, execution.Outcome) {
 			msg := fmt.Sprintf("expected outcome %q but got %q", expectedOutcome, execution.Outcome)
 			// Say why, here: the mismatch line is all a text report prints,
 			// and the cause otherwise appeared only in --json.
@@ -191,6 +201,8 @@ func CheckExpectations(expect *Expectation, execution *ExecutionDetails) []strin
 				msg += fmt.Sprintf(" (node %q: %s)", execution.Error.Node, execution.Error.Message)
 			case execution.Error != nil && execution.Error.Message != "":
 				msg += fmt.Sprintf(" (%s)", execution.Error.Message)
+			case execution.OutcomeNode != "" && execution.Outcome == string(OutcomeSkipped):
+				msg += fmt.Sprintf(" (node %q declares outcome: skipped)", execution.OutcomeNode)
 			case execution.OutcomeNode != "":
 				msg += fmt.Sprintf(" (node %q declares outcome: failure)", execution.OutcomeNode)
 			}

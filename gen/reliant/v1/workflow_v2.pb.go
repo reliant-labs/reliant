@@ -1848,10 +1848,21 @@ type Node struct {
 	// Supports: string shorthand ("local"), structured object ({type: "cloud"}), or CEL expression.
 	Daemon *CelDaemonSelector `protobuf:"bytes,7,opt,name=daemon,proto3" json:"daemon,omitempty"`
 	// Outcome is the VERDICT this node stamps on the run when it executes:
-	// "success" or "failure". It is how a workflow says whether reaching this
-	// node means the work passed, which is a different question from whether the
-	// graph reached an end state — a run that routes to a `failed` terminal node
-	// ran to completion and did not succeed, and both facts have to survive.
+	// "success", "failure" or "skipped". It is how a workflow says whether
+	// reaching this node means the work passed, which is a different question
+	// from whether the graph reached an end state — a run that routes to a
+	// `failed` terminal node ran to completion and did not succeed, and both
+	// facts have to survive.
+	//
+	// "skipped" says the run chose not to do its work this time, for an
+	// expected reason that clears on its own (its environment is unhealthy,
+	// another run holds the work, a person must first fix something it has
+	// already reported), and that it will be asked again. It is not a
+	// failure: no on_failure handler, no failure notification, no Inbox item,
+	// and it neither ends nor extends its automation's failure streak (a run
+	// of skips reads DEGRADED on the automations page). A server older than
+	// it refuses a workflow that declares it, so a workflow adopts it only
+	// once the servers and daemons it runs on know it.
 	//
 	// Declared, never inferred: a terminal node named "failed" carries no meaning
 	// the runtime can read, and absence of a declaration must not be read as
@@ -10049,7 +10060,7 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"\x03tag\x18\x01 \x01(\tB\x1d\x82\xb5\x18\x19\n" +
 	"\x17Tag for preset matchingR\x03tag\x123\n" +
 	"\adefault\x18\x02 \x01(\tB\x19\x82\xb5\x18\x15\n" +
-	"\x13Default preset slugR\adefault\"\xd0\x16\n" +
+	"\x13Default preset slugR\adefault\"\xc8\x17\n" +
 	"\x04Node\x12f\n" +
 	"\x02id\x18\x01 \x01(\tBV\x82\xb5\x18R\n" +
 	"PUnique within the workflow; other nodes read this node's outputs as nodes.<id>.*R\x02id\x12r\n" +
@@ -10062,9 +10073,9 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"\fsave_message\x18\x06 \x01(\v2\x1d.reliant.v1.SaveMessageConfigBZ\x82\xb5\x18V\n" +
 	"TA message to save to the thread when the node completes, as a template over output.*R\vsaveMessage\x12\x8b\x01\n" +
 	"\x06daemon\x18\a \x01(\v2\x1d.reliant.v1.CelDaemonSelectorBT\x82\xb5\x18P\n" +
-	"NWhich machine runs this node's tools, overriding the workflow's daemon settingR\x06daemon\x12\xb4\x01\n" +
-	"\aoutcome\x18\b \x01(\tB\x99\x01\x82\xb5\x18\x94\x01\n" +
-	"\x80\x01The verdict reaching this node stamps on the run: success or failure. The last node that runs with one decides the run's outcome\x12\x0fsuccess|failureR\aoutcome\x12\xac\x01\n" +
+	"NWhich machine runs this node's tools, overriding the workflow's daemon settingR\x06daemon\x12\xac\x02\n" +
+	"\aoutcome\x18\b \x01(\tB\x91\x02\x82\xb5\x18\x8c\x02\n" +
+	"\xf0\x01The verdict reaching this node stamps on the run: success, failure, or skipped (it chose not to do its work this time, for an expected reason that clears on its own; not a failure). The last node that runs with one decides the run's outcome\x12\x17success|failure|skippedR\aoutcome\x12\xac\x01\n" +
 	"\x10tolerate_failure\x18\t \x01(\bB\x80\x01\x82\xb5\x18|\n" +
 	"zMake the node optional: when it fails the run continues, and nodes.<id>.failed is true with the reason in nodes.<id>.errorR\x0ftolerateFailure\x12\xe1\x01\n" +
 	"\aobserve\x18\x1e \x01(\v2\x17.reliant.v1.NodeObserveB\xad\x01\x82\xb5\x18\xa8\x01\n" +

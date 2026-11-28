@@ -19,7 +19,7 @@ import (
 // reclaimMachine is a user with one connected machine whose disk is fine.
 func reclaimMachine(t *testing.T) (*inboxFixture, string) {
 	t.Helper()
-	f := newInboxFixture(t)
+	f := newHousekeepingFixture(t)
 	daemonID := "d-" + uuid.NewString()
 	require.NoError(t, f.repo.UpsertDaemon(f.ctx, &db.Daemon{ID: daemonID, UserID: f.userID, Hostname: ptr.Of("default")}))
 	require.NoError(t, f.repo.UpsertDaemonAttachment(f.ctx, &db.DaemonAttachment{DaemonID: daemonID, UserID: f.userID, Source: db.DaemonAttachmentSourceInbound}))

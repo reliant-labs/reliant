@@ -402,7 +402,7 @@ events:
         text: "Hello!"
       response_text: "Hello!"
 expect:
-  outcome: completed         # or "error" / "failed"
+  outcome: completed         # or "error" / "failed" / "skipped"
   reached: ["node1", "node2"]
   not_reached: ["node3"]
 
@@ -418,7 +418,7 @@ expect:
     is_error: false          # marks the tool result as failed
 
 **Assertions — all optional:**
-- outcome: completed | error | failed
+- outcome: completed | error | failed | skipped
 - reached / not_reached: whether a node was SCHEDULED. reached includes nodes
   that were skipped or errored, so it does NOT prove a node ran.
 - completed: nodes that must have EXECUTED successfully. This is the assertion

@@ -1577,8 +1577,17 @@ type GetPreferencesResponse struct {
 	HiddenWorkflowSlugs []string `protobuf:"bytes,15,rep,name=hidden_workflow_slugs,json=hiddenWorkflowSlugs,proto3" json:"hidden_workflow_slugs,omitempty"`
 	// List of hidden preset slugs (from hidden_items table)
 	HiddenPresetSlugs []string `protobuf:"bytes,16,rep,name=hidden_preset_slugs,json=hiddenPresetSlugs,proto3" json:"hidden_preset_slugs,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	// Inbox filter: list machine housekeeping (a disk under pressure, held
+	// or marked worktrees, worktree-reclaim proposals, a
+	// machine near its process limit) in the Inbox too. Defaults to false:
+	// they are on each machine's settings page (InboxCategory HOUSEKEEPING).
+	InboxShowHousekeeping bool `protobuf:"varint,17,opt,name=inbox_show_housekeeping,json=inboxShowHousekeeping,proto3" json:"inbox_show_housekeeping,omitempty"`
+	// Inbox filter: list every automation failure, including an automation
+	// that fails habitually (InboxItem.habitual). Defaults to false: the Inbox
+	// lists an automation when it starts failing after being healthy.
+	InboxShowEveryAutomationFailure bool `protobuf:"varint,18,opt,name=inbox_show_every_automation_failure,json=inboxShowEveryAutomationFailure,proto3" json:"inbox_show_every_automation_failure,omitempty"`
+	unknownFields                   protoimpl.UnknownFields
+	sizeCache                       protoimpl.SizeCache
 }
 
 func (x *GetPreferencesResponse) Reset() {
@@ -1709,6 +1718,20 @@ func (x *GetPreferencesResponse) GetHiddenPresetSlugs() []string {
 	return nil
 }
 
+func (x *GetPreferencesResponse) GetInboxShowHousekeeping() bool {
+	if x != nil {
+		return x.InboxShowHousekeeping
+	}
+	return false
+}
+
+func (x *GetPreferencesResponse) GetInboxShowEveryAutomationFailure() bool {
+	if x != nil {
+		return x.InboxShowEveryAutomationFailure
+	}
+	return false
+}
+
 type UpdatePreferencesRequest struct {
 	state                       protoimpl.MessageState `protogen:"open.v1"`
 	StreamingEnabled            *bool                  `protobuf:"varint,1,opt,name=streaming_enabled,json=streamingEnabled,proto3,oneof" json:"streaming_enabled,omitempty"`
@@ -1732,8 +1755,12 @@ type UpdatePreferencesRequest struct {
 	HideBuiltinWorkflows *bool `protobuf:"varint,13,opt,name=hide_builtin_workflows,json=hideBuiltinWorkflows,proto3,oneof" json:"hide_builtin_workflows,omitempty"`
 	// Hide builtin presets from preset pickers
 	HideBuiltinPresets *bool `protobuf:"varint,14,opt,name=hide_builtin_presets,json=hideBuiltinPresets,proto3,oneof" json:"hide_builtin_presets,omitempty"`
-	unknownFields      protoimpl.UnknownFields
-	sizeCache          protoimpl.SizeCache
+	// Inbox filters (GetPreferencesResponse.inbox_show_housekeeping,
+	// inbox_show_every_automation_failure). Unset leaves each as it is.
+	InboxShowHousekeeping           *bool `protobuf:"varint,15,opt,name=inbox_show_housekeeping,json=inboxShowHousekeeping,proto3,oneof" json:"inbox_show_housekeeping,omitempty"`
+	InboxShowEveryAutomationFailure *bool `protobuf:"varint,16,opt,name=inbox_show_every_automation_failure,json=inboxShowEveryAutomationFailure,proto3,oneof" json:"inbox_show_every_automation_failure,omitempty"`
+	unknownFields                   protoimpl.UnknownFields
+	sizeCache                       protoimpl.SizeCache
 }
 
 func (x *UpdatePreferencesRequest) Reset() {
@@ -1846,6 +1873,20 @@ func (x *UpdatePreferencesRequest) GetHideBuiltinWorkflows() bool {
 func (x *UpdatePreferencesRequest) GetHideBuiltinPresets() bool {
 	if x != nil && x.HideBuiltinPresets != nil {
 		return *x.HideBuiltinPresets
+	}
+	return false
+}
+
+func (x *UpdatePreferencesRequest) GetInboxShowHousekeeping() bool {
+	if x != nil && x.InboxShowHousekeeping != nil {
+		return *x.InboxShowHousekeeping
+	}
+	return false
+}
+
+func (x *UpdatePreferencesRequest) GetInboxShowEveryAutomationFailure() bool {
+	if x != nil && x.InboxShowEveryAutomationFailure != nil {
+		return *x.InboxShowEveryAutomationFailure
 	}
 	return false
 }
@@ -5187,7 +5228,7 @@ const file_reliant_v1_settings_proto_rawDesc = "" +
 	"\x17UpdateShortcutsResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x18\n" +
 	"\amessage\x18\x02 \x01(\tR\amessage\"\x17\n" +
-	"\x15GetPreferencesRequest\"\x94\a\n" +
+	"\x15GetPreferencesRequest\"\x9a\b\n" +
 	"\x16GetPreferencesResponse\x12+\n" +
 	"\x11streaming_enabled\x18\x01 \x01(\bR\x10streamingEnabled\x122\n" +
 	"\x15worktree_archive_mode\x18\x03 \x01(\tR\x13worktreeArchiveMode\x12C\n" +
@@ -5205,10 +5246,13 @@ const file_reliant_v1_settings_proto_rawDesc = "" +
 	"\x16hide_builtin_workflows\x18\r \x01(\bR\x14hideBuiltinWorkflows\x120\n" +
 	"\x14hide_builtin_presets\x18\x0e \x01(\bR\x12hideBuiltinPresets\x122\n" +
 	"\x15hidden_workflow_slugs\x18\x0f \x03(\tR\x13hiddenWorkflowSlugs\x12.\n" +
-	"\x13hidden_preset_slugs\x18\x10 \x03(\tR\x11hiddenPresetSlugs\x1a=\n" +
+	"\x13hidden_preset_slugs\x18\x10 \x03(\tR\x11hiddenPresetSlugs\x126\n" +
+	"\x17inbox_show_housekeeping\x18\x11 \x01(\bR\x15inboxShowHousekeeping\x12L\n" +
+	"#inbox_show_every_automation_failure\x18\x12 \x01(\bR\x1finboxShowEveryAutomationFailure\x1a=\n" +
 	"\x0fAdditionalEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x95\t\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xe9\n" +
+	"\n" +
 	"\x18UpdatePreferencesRequest\x120\n" +
 	"\x11streaming_enabled\x18\x01 \x01(\bH\x00R\x10streamingEnabled\x88\x01\x01\x127\n" +
 	"\x15worktree_archive_mode\x18\x03 \x01(\tH\x01R\x13worktreeArchiveMode\x88\x01\x01\x12H\n" +
@@ -5225,7 +5269,9 @@ const file_reliant_v1_settings_proto_rawDesc = "" +
 	"\x10default_workflow\x18\f \x01(\tH\bR\x0fdefaultWorkflow\x88\x01\x01\x129\n" +
 	"\x16hide_builtin_workflows\x18\r \x01(\bH\tR\x14hideBuiltinWorkflows\x88\x01\x01\x125\n" +
 	"\x14hide_builtin_presets\x18\x0e \x01(\bH\n" +
-	"R\x12hideBuiltinPresets\x88\x01\x01\x1a=\n" +
+	"R\x12hideBuiltinPresets\x88\x01\x01\x12;\n" +
+	"\x17inbox_show_housekeeping\x18\x0f \x01(\bH\vR\x15inboxShowHousekeeping\x88\x01\x01\x12Q\n" +
+	"#inbox_show_every_automation_failure\x18\x10 \x01(\bH\fR\x1finboxShowEveryAutomationFailure\x88\x01\x01\x1a=\n" +
 	"\x0fAdditionalEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01B\x14\n" +
@@ -5239,7 +5285,9 @@ const file_reliant_v1_settings_proto_rawDesc = "" +
 	"\x17_default_workflow_scopeB\x13\n" +
 	"\x11_default_workflowB\x19\n" +
 	"\x17_hide_builtin_workflowsB\x17\n" +
-	"\x15_hide_builtin_presets\"O\n" +
+	"\x15_hide_builtin_presetsB\x1a\n" +
+	"\x18_inbox_show_housekeepingB&\n" +
+	"$_inbox_show_every_automation_failure\"O\n" +
 	"\x19UpdatePreferencesResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x18\n" +
 	"\amessage\x18\x02 \x01(\tR\amessage\"{\n" +
