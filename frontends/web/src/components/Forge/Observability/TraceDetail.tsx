@@ -14,6 +14,7 @@
  * timeline and, when recorded, its masked replay — at the trace's start.
  */
 
+import { useState } from "react";
 import { ArrowLeft, Flame, FileText, LineChart, MonitorPlay } from "lucide-react";
 
 import Card, { CardHeader } from "@/components/forge-ui/card";
@@ -43,6 +44,8 @@ import { hasClient } from "@/services/controlPlane/observability/client";
 import { ClientSummary } from "./Client";
 import { traceBuildsOf, type TraceBuilds } from "./traceBuilds";
 import { Foldable } from "./detailDensity";
+import { GenAISteps } from "./genai/GenAISteps";
+import { hasGenAI } from "./genai/genaiSteps";
 
 export function TraceDetail({
   scope,
@@ -76,6 +79,11 @@ export function TraceDetail({
   const signals = useSignalsIndex(scope, "7d");
   const profilesOf = (service: string | undefined): SignalState => signalState(signals, service, "profiles");
   const rootProfiles = profilesOf(root?.service);
+  // A trace with GenAI spans opens on its AI steps; the waterfall is one
+  // click away. The choice is this view's, not the URL's.
+  const genai = hasGenAI(spans);
+  const [lens, setLens] = useState<"steps" | "waterfall">("steps");
+  const showSteps = genai && lens === "steps";
 
   const back = (
     <Button
@@ -216,16 +224,38 @@ export function TraceDetail({
 
       <div className="grid grid-cols-[minmax(0,1fr)] gap-4 xl:grid-cols-[minmax(0,3fr)_minmax(20rem,1fr)]">
         <Card padding="md">
-          <TraceWaterfall
-            spans={spans}
-            truncated={trace.data?.truncated ?? false}
-            selectedSpanId={selected?.spanId}
-            onSelect={(next) => navigate({ span: next }, { replace: true })}
-          />
+          {genai && (
+            <div role="tablist" aria-label="Trace view" className="mb-3 flex gap-1" data-testid="trace-lens">
+              {(["steps", "waterfall"] as const).map((l) => (
+                <Button
+                  key={l}
+                  role="tab"
+                  aria-selected={lens === l}
+                  variant={lens === l ? "secondary" : "ghost"}
+                  size="xs"
+                  onClick={() => setLens(l)}
+                  data-testid={`trace-lens-${l}`}
+                >
+                  {l === "steps" ? "AI steps" : "Waterfall"}
+                </Button>
+              ))}
+            </div>
+          )}
+          {showSteps ? (
+            <GenAISteps spans={spans} selectedSpanId={selected?.spanId} onSelect={(next) => navigate({ span: next }, { replace: true })} />
+          ) : (
+            <TraceWaterfall
+              spans={spans}
+              truncated={trace.data?.truncated ?? false}
+              selectedSpanId={selected?.spanId}
+              onSelect={(next) => navigate({ span: next }, { replace: true })}
+            />
+          )}
         </Card>
         {selected ? (
           <SpanDetails
             span={selected}
+            metadataOnly={showSteps}
             originMs={extent?.startMs ?? selected.startMs}
             onLogs={() => navigate({ view: "logs", trace: traceId, span: selected.spanId, q: undefined, service: undefined })}
             profiles={profilesOf(selected.service)}
@@ -248,6 +278,7 @@ const SESSION_LEAD_MS = 2_000;
 
 function SpanDetails({
   span,
+  metadataOnly,
   originMs,
   onLogs,
   profiles,
@@ -256,6 +287,8 @@ function SpanDetails({
   onLinkedSpan,
 }: {
   span: Span;
+  /** Raw attributes, events and status text can contain captured AI content. */
+  metadataOnly: boolean;
   originMs: number;
   onLogs: () => void;
   /** Whether the span's service has profiles to open (serviceSignals.ts). */
@@ -285,7 +318,7 @@ function SpanDetails({
         />
         <Fact label="Span" value={shortId(span.spanId)} mono />
       </dl>
-      {span.status === "error" && span.statusMessage && (
+      {!metadataOnly && span.status === "error" && span.statusMessage && (
         <p className="mb-3 break-words rounded-md border border-danger-border bg-surface-sunken px-3 py-2 font-mono text-xs text-danger-ink">
           {span.statusMessage}
         </p>
@@ -324,8 +357,12 @@ function SpanDetails({
             </ul>
           </section>
         )}
-        <AttributeTable title="Attributes" attributes={span.attributes} />
-        {span.events.length > 0 && (
+        {metadataOnly ? (
+          <p className="text-xs text-ink-muted">
+            Raw attributes, events and status messages are hidden in AI steps because they may contain captured content.
+          </p>
+        ) : <AttributeTable title="Attributes" attributes={span.attributes} />}
+        {!metadataOnly && span.events.length > 0 && (
           <section aria-label="Events">
             <h4 className="mb-1 text-xs font-semibold text-ink-muted">Events</h4>
             <ul className="space-y-2">
@@ -350,7 +387,7 @@ function SpanDetails({
             </ul>
           </section>
         )}
-        <AttributeTable title="Resource" attributes={span.resource} />
+        {!metadataOnly && <AttributeTable title="Resource" attributes={span.resource} />}
       </div>
     </Card>
   );
