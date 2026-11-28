@@ -16,6 +16,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { GetSiteAuditRequestSchema, GetSiteAuditResponseSchema, SiteAuditSchema, SiteAuditStatus, SiteAuditTrigger } from "@/gen/controlplane/services/siteaudit/v1/siteaudit_pb";
 import { SHOP_WEB_OG_THUMBNAIL, shopSiteAudit } from "@/fixtures/shop/handlers/siteAudit";
 import { resetDemoNowForTests } from "@/fixtures/shop/shopStory";
+import { useRouteOrgScope } from "@/lib/routeOrg";
 import { renderWithQuery } from "@/test/renderWithQuery";
 
 import { SeoInsightsBody } from "../SeoInsightsView";
@@ -24,8 +25,16 @@ import { AuditEmpty, AuditTargetNotice, RERUN_READ_ONLY_WORDS, rerunErrorWords }
 import { siteAuditOf } from "../siteAuditModel";
 
 const NOW = Date.UTC(2026, 10, 26, 12, 0);
-beforeEach(() => resetDemoNowForTests(NOW));
-afterEach(() => resetDemoNowForTests());
+// Re-run sends the org it runs in (RerunButton), so the live console is on an org page.
+const routeOrg = useRouteOrgScope.getState();
+beforeEach(() => {
+  resetDemoNowForTests(NOW);
+  useRouteOrgScope.setState({ scope: { kind: "member", org: { id: "org-shop", slug: "shop" } } });
+});
+afterEach(() => {
+  resetDemoNowForTests();
+  useRouteOrgScope.setState(routeOrg);
+});
 
 const TARGET = { kind: "site" as const, frontend: "shop-web", envId: "env-prod", envName: "prod", preview: false };
 const storyAudit = () => siteAuditOf(shopSiteAudit(create(GetSiteAuditRequestSchema, { selector: { case: "latest", value: { environmentId: "env-prod", frontend: "shop-web" } } })));

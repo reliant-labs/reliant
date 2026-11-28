@@ -19,7 +19,11 @@ vi.mock("@/hooks/forge-queries", () => ({
   useCloudEnvStatuses: () => mocks.statuses,
 }));
 vi.mock("@/hooks/observability-queries", () => ({ useObservabilityOrg: () => ({ orgId: mocks.orgId }) }));
-vi.mock("@tanstack/react-query", () => ({ useQueryClient: () => ({ invalidateQueries: vi.fn() }) }));
+// Partial: modules on the import path build a real QueryClient at load (lib/query-client).
+vi.mock("@tanstack/react-query", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@tanstack/react-query")>()),
+  useQueryClient: () => ({ invalidateQueries: vi.fn() }),
+}));
 vi.mock("@/hooks/controlplane/site-audit-service-hooks_gen", () => ({
   siteAuditServiceKeys: { getSiteAudit: { all: [] } },
   useGetSiteAudit: vi.fn(),
