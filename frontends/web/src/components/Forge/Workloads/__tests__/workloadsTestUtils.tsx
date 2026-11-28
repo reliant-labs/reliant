@@ -8,21 +8,21 @@
  * needs it).
  */
 
-import { useState, type ComponentProps, type ReactElement } from "react";
+import { useRef, useState, type ComponentProps, type ReactElement } from "react";
 import { render, type RenderResult } from "@testing-library/react";
-import { QueryClientProvider } from "@tanstack/react-query";
 import { vi } from "vitest";
 
 import type { DomainsState } from "@/hooks/forge-domain-queries";
 import { createTestQueryClient } from "@/test/renderWithQuery";
-import { type ObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
-import { ObservabilityFixtures } from "@/test/observabilityFixtures";
+import { ObservabilityApiProvider, type ObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
+import { observabilityFixtureTransport } from "@/test/observabilityFixtures";
 import { ReleasesApiProvider } from "@/services/forge/ReleasesApiContext";
 import { RepoMetaProvider, type RepoMetaApi } from "@/services/forge/RepoMetaContext";
-import { VulnerabilityApiProvider, type VulnerabilityApi } from "@/services/controlPlane/vulnerabilities/VulnerabilityApiContext";
+import { createTransportScope, TransportScopeProvider } from "@/lib/transportScope";
 
 import { createReleasesFixtureApi } from "../../Releases/__fixtures__/releaseFixtures";
 import { fixtureVulnerabilityApi } from "../../Security/fixtures";
+import { vulnerabilityTransport, type VulnerabilityReads } from "../../Security/vulnService";
 import { OverviewHome, type HostedByEnv, type OverviewRollback, type OverviewSearch } from "../OverviewHome";
 import { WorkloadDetail, type HostedObservation, type WorkloadActions, type WorkloadDetailSearch } from "../WorkloadDetail";
 import type { StripEnv } from "../workloadModel";
@@ -36,24 +36,41 @@ export function WorkloadsProviders({
 }: {
   obs: ObservabilityApi;
   repoMeta?: RepoMetaApi;
-  /** The Overview's Vulnerabilities card's reads. */
-  vulns?: VulnerabilityApi;
+  /** The Overview's Vulnerabilities card's reads, served under a TransportScope; every other service stays on the app's transport. */
+  vulns?: VulnerabilityReads;
   children: ReactElement;
 }) {
+  const obsRef = useRef(obs);
+  obsRef.current = obs;
+  const vulnsRef = useRef(vulns);
+  vulnsRef.current = vulns;
+  const [scope] = useState(() =>
+    createTransportScope({
+      id: "workloads-fixtures",
+      transport: vulnerabilityTransport(
+        {
+          getVulnerabilitySummary: (req) => vulnsRef.current.getVulnerabilitySummary(req),
+          listVulnerabilities: (req) => vulnsRef.current.listVulnerabilities(req),
+          getVulnerability: (req) => vulnsRef.current.getVulnerability(req),
+          getReleaseVulnerabilities: (req) => vulnsRef.current.getReleaseVulnerabilities(req),
+        },
+        observabilityFixtureTransport(() => obsRef.current, Date.now())
+      ),
+      queryClient: createTestQueryClient(),
+    })
+  );
   return (
-    <QueryClientProvider client={createTestQueryClient()}>
-      <ObservabilityFixtures api={obs}>
+    <TransportScopeProvider scope={scope}>
+      <ObservabilityApiProvider api={obs}>
         <ReleasesApiProvider api={createReleasesFixtureApi()}>
-          <VulnerabilityApiProvider api={vulns}>
-            <RepoMetaProvider api={repoMeta}>{children}</RepoMetaProvider>
-          </VulnerabilityApiProvider>
+          <RepoMetaProvider api={repoMeta}>{children}</RepoMetaProvider>
         </ReleasesApiProvider>
-      </ObservabilityFixtures>
-    </QueryClientProvider>
+      </ObservabilityApiProvider>
+    </TransportScopeProvider>
   );
 }
 
-function wrap(obs: ObservabilityApi, ui: ReactElement, repoMeta?: RepoMetaApi, vulns?: VulnerabilityApi): RenderResult {
+function wrap(obs: ObservabilityApi, ui: ReactElement, repoMeta?: RepoMetaApi, vulns?: VulnerabilityReads): RenderResult {
   return render(
     <WorkloadsProviders obs={obs} repoMeta={repoMeta} vulns={vulns}>
       {ui}
@@ -86,7 +103,7 @@ export function renderOverview({
   domains?: DomainsState;
   rollback?: OverviewRollback;
   envsUnread?: ComponentProps<typeof OverviewHome>["envsUnread"];
-  vulns?: VulnerabilityApi;
+  vulns?: VulnerabilityReads;
 } = {}): Harness<OverviewSearch> & { navigateTo: ReturnType<typeof vi.fn> } {
   let latest = search;
   const navigateTo = vi.fn();

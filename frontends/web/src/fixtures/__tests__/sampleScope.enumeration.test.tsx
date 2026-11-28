@@ -210,12 +210,24 @@ function Shell() {
   );
 }
 
-function renderAt(path: string): QueryClient {
+async function renderAt(path: string): Promise<QueryClient> {
   const app = createAppQueryClient();
   const root = createRootRoute({ component: Shell });
   const authenticated = createRoute({ getParentRoute: () => root, id: "_authenticated", component: () => <Outlet /> });
   const tree = root.addChildren([authenticated.addChildren([createForgeConsoleRoutes(() => authenticated, forgeConsolePages)])]);
   const router = createRouter({ routeTree: tree, history: createMemoryHistory({ initialEntries: [path] }) });
+  // Warm Releases before the initial load, not after it: the layout's env
+  // search update can otherwise race this route's first lazy import.
+  if (new URL(path, "https://sample.test").pathname === `${SAMPLE}/releases`) {
+    await forgeConsolePages.releases.preload?.();
+  }
+  // Resolve the matched lazy chunks before mounting. Otherwise settling also
+  // races the first import and the router's pending/Suspense timers.
+  await router.load();
+  // A child can be hidden behind the console's loading state on the first
+  // render. Explicitly preload its component too, before an env search update
+  // from the layout can race the child's first Suspense boundary.
+  await Promise.all(router.state.matches.map((match) => router.routesById[match.routeId].options.component?.preload?.()));
   const AppQueries = ({ children }: { children: ReactNode }) => <QueryClientProvider client={app}>{children}</QueryClientProvider>;
   render(<RouterProvider router={router} />, { wrapper: AppQueries });
   return app;
@@ -227,7 +239,8 @@ function renderAt(path: string): QueryClient {
  * in-flight reads: a view that polls is never idle, and what this test judges
  * is WHICH reads the page makes.
  */
-async function settle(): Promise<void> {
+async function settle(path: string): Promise<void> {
+  const isReleases = new URL(path, "https://sample.test").pathname === `${SAMPLE}/releases`;
   let quiet = 0;
   let seen = -1;
   for (let i = 0; i < 300 && quiet < 10; i++) {
@@ -236,7 +249,12 @@ async function settle(): Promise<void> {
       await new Promise((resolve) => setTimeout(resolve, 30));
     });
     const rpcs = new Set([...liveCalls.map((call) => call.rpc), ...scopeCalls.map((call) => `${call.rpc} ${call.code}`)]).size;
-    const rendered = !!document.querySelector("[data-testid='forge-console-page']") && !document.querySelector("[data-testid='forge-console-loading']");
+    const releases = document.querySelector("[data-testid='console-releases']");
+    // The console frame can commit before Releases' dependent reads mount.
+    // Wait for its own data-backed page as well, rather than declaring the
+    // layout's first answered read sufficient for this route.
+    const releasesReady = !isReleases || !!releases?.querySelector("[data-testid='releases'][data-state='ready']");
+    const rendered = !!document.querySelector("[data-testid='forge-console-page']") && !document.querySelector("[data-testid='forge-console-loading']") && releasesReady;
     const answered = scopeCalls.some((call) => call.code === null);
     quiet = rpcs === seen && answered && rendered ? quiet + 1 : 0;
     seen = rpcs;
@@ -275,11 +293,10 @@ describe("every page the forge tour walks reads the sample's scope, never the li
     expect(TOUR_ROUTES.some((path) => path.includes(`issue=${SAMPLE_ID_PREFIX}`)), "the issue fg-ask opens, by the sample's id").toBe(true);
   });
 
-  // The Overview case intermittently never settles on its first lazy mount.
-  // Removed per the flake rule; the tour-target checks below still render it.
+  // The Overview case was removed per the flake rule; the other route and tour-target checks remain.
   it.each(TOUR_ROUTES.filter((path) => path !== SAMPLE))("%s", async (path) => {
-    const app = renderAt(path);
-    await settle();
+    const app = await renderAt(path);
+    await settle(path);
 
     const unexpected = [...new Set(liveCalls.map((call) => call.rpc).filter((rpc) => !(rpc in GLOBAL_READS) && !(rpc in PENDING_P4_1)))];
     expect(unexpected, "live calls on a sample route, outside GLOBAL_READS and PENDING_P4_1").toEqual([]);
@@ -329,8 +346,9 @@ describe("each step of the forge tour finds its target on the sample's pages", (
   it.each(STEPS.map((step) => [step.id, step] as const))("%s", async (_id, step) => {
     const open = step.route!.open as RouteTarget;
     const search = Object.fromEntries(Object.entries(open.search ?? {}).filter(([, value]) => value !== undefined)) as Record<string, string>;
-    renderAt(withSearch(open.to, search));
-    await settle();
+    const path = withSearch(open.to, search);
+    await renderAt(path);
+    await settle(path);
     const target = NOT_IN_JSDOM[step.id]?.instead ?? presentStep(step).target!;
     // The spotlight's selector, on the sample's own data: the nav's anchors, a trace row, a span, an issue.
     await act(async () => {

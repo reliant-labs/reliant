@@ -38,8 +38,8 @@ function noFindings(scenario: VulnScenario) {
   const api = fixtureVulnerabilityApi(scenario);
   const real = api.getVulnerabilitySummary;
   const zero = { critical: 0, high: 0, medium: 0, low: 0, negligible: 0, unknown: 0 };
-  api.getVulnerabilitySummary = async (req, opts) => {
-    const summary = await real(req, opts);
+  api.getVulnerabilitySummary = async (req) => {
+    const summary = await real(req);
     return { ...summary, environments: summary.environments.map((env) => ({ ...env, counts: zero, kev: 0, fixable: 0, blocking: 0 })) };
   };
   return api;
@@ -126,7 +126,7 @@ describe("Overview vulnerabilities card", () => {
     let fail = true;
     // retry-after 0: the hook's own retries of a transport blip (vulnRetry) run at once.
     const blip = () => new ConnectError("upstream reset", Code.Unavailable, new Headers({ "retry-after": "0" }));
-    api.getVulnerabilitySummary = (req, opts) => (fail ? Promise.reject(blip()) : real(req, opts));
+    api.getVulnerabilitySummary = (req) => (fail ? Promise.reject(blip()) : real(req));
     renderCard(api);
     expect(await screen.findByTestId("overview-vulns-error-unavailable")).toBeInTheDocument();
     fail = false;

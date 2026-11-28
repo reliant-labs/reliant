@@ -4,7 +4,7 @@
  * The seam between the Tests pages (components/Forge/Tests) and the
  * TestsService reads they make.
  *
- * The same shape as VulnerabilityApiContext: component tests and the preview
+ * Component tests and the preview
  * hand it the in-memory fixture (components/Forge/Tests/fixtures.ts), and
  * production never provides anything but the real client (testApi.ts), which
  * calls the control plane directly with the user's session. The default is

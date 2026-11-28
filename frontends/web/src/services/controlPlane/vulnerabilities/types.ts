@@ -264,7 +264,3 @@ export interface ReleaseRequest extends VulnRequestBase {
   pageSize?: number;
   pageToken?: string;
 }
-
-export interface CallOptions {
-  signal?: AbortSignal;
-}

@@ -7,12 +7,14 @@
  * page tests, the dev preview and the console nav's Security section, so they
  * all speak one shape.
  *
- * `fixtureVulnerabilityApi(scenario)` is an in-memory VulnerabilityApi that
+ * `fixtureVulnerabilityApi(scenario)` is an in-memory VulnerabilityService that
  * answers the way the server does: filters as ListVulnerabilities applies
  * them (exempt rows left out unless asked, an UNKNOWN severity passing every
  * minimum), keyset-style paging, NotFound for an advisory found nowhere, and
  * the scan states C5 derives (no SBOM, pending, failed with failing-since,
- * stale, scanned). Hand it to VulnerabilityApiProvider.
+ * stale, scanned). Serve it with vulnService.ts's `vulnerabilityTransport`
+ * under a TransportScope (__tests__/securityTestUtils.tsx's renderWith), so
+ * the pages' generated reads ask it over the wire.
  *
  * The project is "shop": prod runs v1.4.0, staging runs v1.5.0, and dev was
  * never promoted. Each release has three artifacts: `api` (an image), `worker`
@@ -21,7 +23,6 @@
 
 import { Code, ConnectError } from "@connectrpc/connect";
 
-import type { VulnerabilityApi } from "@/services/controlPlane/vulnerabilities/VulnerabilityApiContext";
 import type {
   ArtifactSbom,
   EnvVulnSummary,
@@ -33,6 +34,7 @@ import type {
 } from "@/services/controlPlane/vulnerabilities/types";
 
 import { byServerOrder, countsOf, passes } from "./vulnDataset";
+import type { VulnerabilityReads } from "./vulnService";
 
 /**
  * A fixed "now", so relative times do not move: the visual harness's and the
@@ -346,8 +348,13 @@ function releaseFor(version: string): { key: "prod" | "staging"; releaseId: stri
   return null;
 }
 
+/** A fixture's reads, each answering asynchronously as the server does, and every call it was asked. */
+export type FixtureVulnerabilityApi = {
+  [K in keyof VulnerabilityReads]: (req: Parameters<VulnerabilityReads[K]>[0]) => Promise<Awaited<ReturnType<VulnerabilityReads[K]>>>;
+} & { calls: { method: string; req: unknown }[] };
+
 /** An in-memory VulnerabilityService for `scenario`. Calls are recorded in `calls`, for tests. */
-export function fixtureVulnerabilityApi(scenario: VulnScenario = "findings"): VulnerabilityApi & { calls: { method: string; req: unknown }[] } {
+export function fixtureVulnerabilityApi(scenario: VulnScenario = "findings"): FixtureVulnerabilityApi {
   const data = scenarioData(scenario);
   const calls: { method: string; req: unknown }[] = [];
   const fail = () => (data.error ? Promise.reject(data.error) : null);

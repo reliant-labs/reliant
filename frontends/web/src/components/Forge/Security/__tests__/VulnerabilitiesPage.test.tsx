@@ -106,7 +106,7 @@ describe("Vulnerabilities: findings", () => {
   it("pages with the server's token, keeping the request the same", async () => {
     const api = fixtureVulnerabilityApi("findings");
     const pageOne = api.listVulnerabilities;
-    api.listVulnerabilities = (req, opts) => pageOne({ ...req, pageSize: 2 }, opts);
+    api.listVulnerabilities = (req) => pageOne({ ...req, pageSize: 2 });
     renderVulnerabilities(api);
     await screen.findByTestId("vuln-list");
     expect(within(screen.getByTestId("vuln-list")).getAllByRole("row")).toHaveLength(3);
@@ -182,8 +182,8 @@ describe("Vulnerabilities: unknown is never clean", () => {
     const api = fixtureVulnerabilityApi("partial");
     const real = api.getVulnerabilitySummary;
     const zero = { critical: 0, high: 0, medium: 0, low: 0, negligible: 0, unknown: 0 };
-    api.getVulnerabilitySummary = async (req, opts) => {
-      const summary = await real(req, opts);
+    api.getVulnerabilitySummary = async (req) => {
+      const summary = await real(req);
       return { ...summary, environments: summary.environments.map((env) => ({ ...env, counts: zero, kev: 0, fixable: 0, blocking: 0 })) };
     };
     api.listVulnerabilities = async () => ({ findings: [], nextPageToken: "", database: null });
@@ -213,12 +213,12 @@ describe("Vulnerabilities: a release named in the URL", () => {
     const list = api.listVulnerabilities;
     let finishReleaseList!: (page: FindingPage) => void;
     const releaseList = vi.fn(() => new Promise<FindingPage>((resolve) => (finishReleaseList = resolve)));
-    api.listVulnerabilities = (req, opts) => (req.filters.releaseVersion ? releaseList() : list(req, opts));
+    api.listVulnerabilities = (req) => (req.filters.releaseVersion ? releaseList() : list(req));
     // The URL release's own read (no environment) answers; only its findings are held.
     const releaseReads: Promise<unknown>[] = [];
     const releaseRead = api.getReleaseVulnerabilities;
-    api.getReleaseVulnerabilities = (req, opts) => {
-      const read = releaseRead(req, opts);
+    api.getReleaseVulnerabilities = (req) => {
+      const read = releaseRead(req);
       if (!req.environmentId) releaseReads.push(read);
       return read;
     };
@@ -256,7 +256,7 @@ describe("Vulnerabilities: a release named in the URL", () => {
   it("is unknown when the release answers with no artifacts", async () => {
     const api = emptyList(fixtureVulnerabilityApi("clean"));
     const real = api.getReleaseVulnerabilities;
-    api.getReleaseVulnerabilities = async (req, opts) => ({ ...(await real(req, opts)), artifacts: [], coverage: { artifacts: 0, withSbom: 0, scanned: 0 } });
+    api.getReleaseVulnerabilities = async (req) => ({ ...(await real(req)), artifacts: [], coverage: { artifacts: 0, withSbom: 0, scanned: 0 } });
     renderVulnerabilities(api, { search: release });
     expect(await screen.findByTestId("vuln-none-in-scanned")).toHaveTextContent("Not every artifact of release v1.4.0");
     expect(screen.queryByTestId("vuln-none-known")).not.toBeInTheDocument();
@@ -292,9 +292,9 @@ describe("Vulnerabilities: refusals", () => {
     expect(state).toHaveTextContent("Nothing here means this project is clean");
   });
 
-  it("is what the real client says with no control plane configured", async () => {
-    const { controlPlaneVulnerabilityApi } = await import("@/services/controlPlane/vulnerabilities/VulnerabilityApiContext");
-    renderVulnerabilities(controlPlaneVulnerabilityApi);
+  it("is what the real reads say with no control plane configured", async () => {
+    // No scope: the generated reads on the app's transport, with no control plane to route to.
+    renderVulnerabilities(null);
     expect(await screen.findByTestId("vuln-error-not-configured")).toBeInTheDocument();
   });
 
@@ -303,9 +303,9 @@ describe("Vulnerabilities: refusals", () => {
     let release: () => void = () => undefined;
     const gate = new Promise<void>((resolve) => (release = resolve));
     const real = api.getVulnerabilitySummary;
-    api.getVulnerabilitySummary = async (req, opts) => {
+    api.getVulnerabilitySummary = async (req) => {
       await gate;
-      return real(req, opts);
+      return real(req);
     };
     renderVulnerabilities(api);
     expect(screen.getByTestId("vuln-loading")).toBeInTheDocument();
