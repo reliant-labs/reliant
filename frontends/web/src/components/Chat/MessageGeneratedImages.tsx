@@ -16,7 +16,7 @@
  * the presentation.
  */
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { ImageOff } from "lucide-react";
 import type { Attachment } from "../../types/chat";
 import { cn } from "../../lib/utils";
@@ -42,15 +42,16 @@ export function MessageGeneratedImages({
   caption,
   className,
 }: MessageGeneratedImagesProps) {
-  const [preview, setPreview] = useState<{
-    url: string;
-    filename: string;
-  } | null>(null);
+  const [previewId, setPreviewId] = useState<string | null>(null);
+  const previewTrigger = useRef<HTMLButtonElement>(null);
 
   const images = attachments.filter((attachment) =>
     isImageMimeType(attachment.mimeType),
   );
-  const { blobUrls, failedIds } = useAttachmentBlobUrls(images);
+  const { blobUrls, blobs, failedIds } = useAttachmentBlobUrls(images);
+  const availableImages = images.filter(({ id }) => blobUrls.has(id) && !failedIds.has(id));
+  const previewIndex = availableImages.findIndex(({ id }) => id === previewId);
+  const preview = availableImages[previewIndex];
 
   if (images.length === 0) return null;
 
@@ -103,9 +104,10 @@ export function MessageGeneratedImages({
           <button
             key={attachment.id}
             type="button"
-            onClick={() =>
-              setPreview({ url: blobUrl, filename: attachment.filename })
-            }
+            onClick={(event) => {
+              previewTrigger.current = event.currentTarget;
+              setPreviewId(attachment.id);
+            }}
             // A button, not a div+onClick: click-to-expand has to be reachable
             // by keyboard, and this is the only affordance for seeing the
             // image at full size.
@@ -143,14 +145,19 @@ export function MessageGeneratedImages({
         grid
       )}
 
-      {preview && (
-        <ImagePreviewModal
-          isOpen
-          onClose={() => setPreview(null)}
-          imageUrl={preview.url}
-          filename={preview.filename}
-        />
-      )}
+      <ImagePreviewModal
+        isOpen={Boolean(preview)}
+        onClose={() => setPreviewId(null)}
+        restoreFocus={() => previewTrigger.current?.focus({ preventScroll: true })}
+        imageUrl={preview ? blobUrls.get(preview.id) ?? "" : ""}
+        filename={preview?.filename ?? ""}
+        imageBlob={preview ? blobs.get(preview.id) : undefined}
+        navigation={availableImages.length > 1 ? {
+          index: previewIndex,
+          total: availableImages.length,
+          onSelect: (index) => setPreviewId(availableImages[index]?.id ?? null),
+        } : undefined}
+      />
     </>
   );
 }

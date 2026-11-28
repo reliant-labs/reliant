@@ -4,6 +4,20 @@ import { ChatMessage } from "../ChatMessage";
 import { ContentBlockType, MessageRole, StreamingState } from "../../../types/chat";
 import type { Message } from "../../../types/chat";
 import { SurfaceProvider } from "../../../lib/surfaceContext";
+import { BranchNavigationProvider } from "../MessageChrome";
+
+vi.mock("../tool-renderers/RequestMachineToolRenderer", () => ({ RequestMachineCard: () => null, requestMachineReason: () => "" }));
+vi.mock("../tool-renderers/DraftAutomationToolRenderer", () => ({ DraftAutomationCard: () => null, isDraftAutomationTool: () => false }));
+vi.mock("../AskUserCard", () => ({ AskUserCard: () => null }));
+vi.mock("../FailedSendStatus", () => ({ FailedSendStatus: () => null }));
+vi.mock("../MessageAttachments", () => ({ MessageAttachments: () => null }));
+vi.mock("../MessageGeneratedImages", () => ({ MessageGeneratedImages: () => null }));
+vi.mock("../MessageGeneratedVideos", () => ({ MessageGeneratedVideos: () => null, isVideoMimeType: () => false }));
+vi.mock("../../../hooks/tool-result-queries", () => ({ fetchFullToolBodies: vi.fn() }));
+vi.mock("../../../hooks/chat-actions", () => ({}));
+vi.mock("../ToolExecution", () => ({ ToolExecution: () => null }));
+vi.mock("../ToolExecutionGroup", () => ({ ToolExecutionGroup: () => null }));
+vi.mock("../ToolExecutionCollapsibleGroup", () => ({ ToolExecutionCollapsibleGroup: () => null }));
 
 vi.mock("../MarkdownRenderer", () => ({
   MarkdownRenderer: ({ content }: { content: string }) => <div>{content}</div>,
@@ -24,6 +38,7 @@ vi.mock("../../../store/projectStore", () => ({
 }));
 
 const branchChat = vi.fn();
+const navigateToBranch = vi.fn();
 vi.mock("../../../store/chatStore", () => ({
   useChatStore: { getState: () => ({ branchChat }) },
 }));
@@ -45,7 +60,9 @@ vi.mock("../../../lib/tabSwitchProfiler", () => ({
 vi.mock("../BranchOptionsMenu", () => ({ BranchOptionsMenu: () => null }));
 vi.mock("../BranchToWorktreeModal", () => ({ BranchToWorktreeModal: () => null }));
 vi.mock("../BranchToExistingWorktreeModal", () => ({
-  BranchToExistingWorktreeModal: () => null,
+  BranchToExistingWorktreeModal: ({ onBranched }: { onBranched?: (id: string) => void }) => (
+    <button onClick={() => onBranched?.("workspace-branch")}>Complete workspace branch</button>
+  ),
 }));
 vi.mock("../CodeContextPill", () => ({ CodeContextPill: () => null }));
 
@@ -73,7 +90,9 @@ function touch(x: number, y: number) {
 function renderMobile(role: MessageRole) {
   return render(
     <SurfaceProvider surface="mobile">
-      <ChatMessage message={buildMessage(role)} chatId="chat-1" />
+      <BranchNavigationProvider onNavigate={navigateToBranch}>
+        <ChatMessage message={buildMessage(role)} chatId="chat-1" />
+      </BranchNavigationProvider>
     </SurfaceProvider>,
   );
 }
@@ -99,8 +118,8 @@ describe("ChatMessage long-press actions (mobile)", () => {
 
     expect(screen.getByRole("dialog")).toBeInTheDocument();
     expect(screen.getByText("Copy message")).toBeInTheDocument();
-    expect(screen.queryByText("Branch in place")).not.toBeInTheDocument();
-    expect(screen.queryByText("Branch to existing workspace")).not.toBeInTheDocument();
+    expect(screen.getByText("Branch in place")).toBeInTheDocument();
+    expect(screen.getByText("Branch to existing workspace")).toBeInTheDocument();
   });
 
   it("does not open the sheet on a short tap", () => {
@@ -137,12 +156,25 @@ describe("ChatMessage long-press actions (mobile)", () => {
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
-  it("does not expose branching before mobile routing supports it", () => {
-    branchChat.mockClear();
+  it.each([MessageRole.USER, MessageRole.ASSISTANT])("branches and opens the new chat on mobile", async (role) => {
+    branchChat.mockReset().mockResolvedValue({ id: "branch-1" });
+    navigateToBranch.mockReset();
+    renderMobile(role);
+    fireEvent.click(screen.getByRole("button", { name: "Message actions" }));
+    await act(async () => {
+      fireEvent.click(screen.getByText("Branch in place"));
+    });
+    expect(branchChat).toHaveBeenCalledWith("chat-1", "msg-1");
+    expect(navigateToBranch).toHaveBeenCalledWith("branch-1");
+  });
+
+  it("routes to the branch created in an existing workspace", () => {
+    navigateToBranch.mockReset();
     renderMobile(MessageRole.USER);
     fireEvent.click(screen.getByRole("button", { name: "Message actions" }));
-    expect(screen.queryByText("Branch in place")).not.toBeInTheDocument();
-    expect(branchChat).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByText("Branch to existing workspace"));
+    fireEvent.click(screen.getByText("Complete workspace branch"));
+    expect(navigateToBranch).toHaveBeenCalledWith("workspace-branch");
   });
 
   it.each([

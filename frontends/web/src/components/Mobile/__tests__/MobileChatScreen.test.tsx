@@ -17,6 +17,7 @@ vi.mock("@tanstack/react-router", () => ({
     <a {...props}>{children}</a>
   ),
   useParams: () => ({ chatId: "chat-1" }),
+  useNavigate: () => vi.fn(),
 }));
 
 let chatMock: { title?: string; worktreeId?: string; projectId?: string; noMachine?: boolean } | undefined = {

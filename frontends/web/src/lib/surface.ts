@@ -202,7 +202,8 @@ const MOBILE: SurfaceCapabilities = {
   // Where a new chat runs: one of the user's machines, or No machine —
   // preselected when none is awake (research/NO_MACHINE_CHATS.md §2.5).
   chatDaemonSelection: true,
-  chatBranching: false,
+  // Message actions provide touch-accessible branching and route to the new chat.
+  chatBranching: true,
   // Dense multi-pane UI; no phone layout worth shipping.
   chatExecutionSidebar: false,
   // A flat, ordered step list (MobileWorkflowStepList/MobileWorkflowScreen)
