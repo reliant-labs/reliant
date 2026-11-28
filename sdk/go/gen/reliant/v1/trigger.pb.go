@@ -2065,7 +2065,12 @@ type TriggerDefinitionSource struct {
 	// Things about this source the owner should act on, one sentence each:
 	// a same-named account workflow that an automation does not run, a
 	// machine that has never synced the project.
-	Warnings      []string `protobuf:"bytes,6,rep,name=warnings,proto3" json:"warnings,omitempty"`
+	Warnings []string `protobuf:"bytes,6,rep,name=warnings,proto3" json:"warnings,omitempty"`
+	// Hex SHA-256 of the raw bytes of the configured workflow currently
+	// resolved for this activation, comparable to sha256sum. This is not the
+	// hash of the last firing, nor a Git blob ID. Empty if the version cannot
+	// be described (including on older servers).
+	ContentHash   string `protobuf:"bytes,7,opt,name=content_hash,json=contentHash,proto3" json:"content_hash,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2140,6 +2145,13 @@ func (x *TriggerDefinitionSource) GetWarnings() []string {
 		return x.Warnings
 	}
 	return nil
+}
+
+func (x *TriggerDefinitionSource) GetContentHash() string {
+	if x != nil {
+		return x.ContentHash
+	}
+	return ""
 }
 
 // TriggerChange is a configuration audit entry, not a firing.
@@ -5666,7 +5678,7 @@ const file_reliant_v1_trigger_proto_rawDesc = "" +
 	"\x0e_connection_idB\x0e\n" +
 	"\f_webhook_urlB\x13\n" +
 	"\x11_workflow_triggerB\t\n" +
-	"\a_org_id\"\xb5\x01\n" +
+	"\a_org_id\"\xd8\x01\n" +
 	"\x17TriggerDefinitionSource\x12\x12\n" +
 	"\x04kind\x18\x01 \x01(\tR\x04kind\x12\x12\n" +
 	"\x04path\x18\x02 \x01(\tR\x04path\x12\x1b\n" +
@@ -5674,7 +5686,8 @@ const file_reliant_v1_trigger_proto_rawDesc = "" +
 	"\vdaemon_name\x18\x04 \x01(\tR\n" +
 	"daemonName\x12\x18\n" +
 	"\asummary\x18\x05 \x01(\tR\asummary\x12\x1a\n" +
-	"\bwarnings\x18\x06 \x03(\tR\bwarnings\"\x89\x03\n" +
+	"\bwarnings\x18\x06 \x03(\tR\bwarnings\x12!\n" +
+	"\fcontent_hash\x18\a \x01(\tR\vcontentHash\"\x89\x03\n" +
 	"\rTriggerChange\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x17\n" +
 	"\auser_id\x18\x02 \x01(\tR\x06userId\x12\x17\n" +

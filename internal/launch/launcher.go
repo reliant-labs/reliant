@@ -387,6 +387,17 @@ func (l *Launcher) launchNew(ctx context.Context, ev Event, spec Spec, seed seed
 		}
 	}
 
+	// Explicit attended runs (CLI and Run now) use the same immutable
+	// snapshot for admission, their recorded provenance, and execution.
+	// An ordinary chat's selection and continuation semantics are unchanged.
+	if ev.Kind == core.TriggerEventKindCLIRun || ev.Kind == core.TriggerEventKindManualRun {
+		pin, definition, err := l.pinAttendedDefinition(ctx, chat, workflowName)
+		if err != nil {
+			return nil, err
+		}
+		spec.CatalogPin, ev.Definition = pin, definition
+	}
+
 	// Validate workflow tree BEFORE creating chat to avoid runtime graph failures and orphaned chats.
 	// Uses runtime-equivalent loader semantics: builtin:// and usable workflow drafts only,
 	// read from the catalog of the machine the chat is pinned to, which is what the run's
@@ -660,7 +671,7 @@ func (l *Launcher) launchNew(ctx context.Context, ev Event, spec Spec, seed seed
 		initialData:   initialData,
 		userContent:   seed.userContent,
 		eventID:       eventRow.ID,
-		trigger:       TriggerInfoFromEvent(eventRow),
+		trigger:       pinnedLaunchTriggerInfo(eventRow, spec.CatalogPin),
 		generateTitle: spec.GenerateTitle,
 		attemptAt:     attemptAt,
 	})
@@ -1038,7 +1049,7 @@ func (l *Launcher) startRecorded(ctx context.Context, recorded *core.TriggerEven
 		initialData:   initialData,
 		userContent:   seed.userContent,
 		eventID:       recorded.ID,
-		trigger:       TriggerInfoFromEvent(recorded),
+		trigger:       pinnedLaunchTriggerInfo(recorded, spec.CatalogPin),
 		generateTitle: spec.GenerateTitle && chat.Title == "",
 		attemptAt:     attemptAt,
 	})
@@ -1624,6 +1635,20 @@ func TriggerInfoFromEvent(row *core.TriggerEvent) *v2.TriggerInfo {
 	}
 	if row.TriggerID != nil {
 		info.TriggerID = *row.TriggerID
+	}
+	return info
+}
+
+// pinnedLaunchTriggerInfo attaches the recorded provenance only at a start
+// that will load that same snapshot. Chat restarts deliberately use just
+// TriggerInfoFromEvent: they are not a new launch against the old pin.
+func pinnedLaunchTriggerInfo(row *core.TriggerEvent, pin string) *v2.TriggerInfo {
+	info := TriggerInfoFromEvent(row)
+	d := row.Definition
+	if d != nil && d.Error == "" && pin != "" && d.CatalogPin == pin && d.Source == "project" && d.Path != "" {
+		if hash, err := hex.DecodeString(d.ContentHash); err == nil && len(hash) == sha256.Size {
+			info.LaunchDefinition = &v2.TriggerLaunchDefinition{Source: d.Source, Path: d.Path, ContentHash: d.ContentHash}
+		}
 	}
 	return info
 }

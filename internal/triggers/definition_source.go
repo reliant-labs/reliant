@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/workflow/workflowref"
 	"github.com/reliant-labs/reliant/internal/workflow/workflowsource"
@@ -29,6 +30,9 @@ func DefinitionSource(desc *workflowsource.Description, t *core.Trigger) *relian
 		machine = t.DaemonID
 	}
 	out := &reliantv1.TriggerDefinitionSource{Kind: string(desc.Source)}
+	if len(desc.YAML) != 0 {
+		out.ContentHash = config.DefinitionHash(desc.YAML)
+	}
 	switch desc.Source {
 	case workflowref.SourceBuiltin:
 		out.Summary = fmt.Sprintf("builtin workflow %s", desc.Ref.Raw)

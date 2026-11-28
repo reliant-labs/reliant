@@ -2659,6 +2659,10 @@
               "name": "warnings",
               "kind": "string",
               "repeated": true
+            },
+            {
+              "name": "content_hash",
+              "kind": "string"
             }
           ],
           "reliant.v1.TriggerEvent": [
@@ -48498,6 +48502,10 @@
               "name": "warnings",
               "kind": "string",
               "repeated": true
+            },
+            {
+              "name": "content_hash",
+              "kind": "string"
             }
           ],
           "reliant.v1.TriggerEvent": [

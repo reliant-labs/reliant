@@ -1017,7 +1017,9 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 	// the workflow loads so load-time templates see it too; it is a
 	// RuntimeInjectedInput so schema validation and defaults leave it alone.
 	if input.Trigger != nil {
-		input.Inputs[wfcel.TriggerInputKey] = input.Trigger.CELValue()
+		trigger := *input.Trigger
+		trigger.LaunchDefinition = nil
+		input.Inputs[wfcel.TriggerInputKey] = trigger.CELValue()
 	}
 
 	// Get execution context (required)
@@ -1203,6 +1205,7 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 	defer caught.capture()
 
 	// STEP 5: Load workflow definition (YAML and JSON)
+	rootPin := rootCatalogPin(input)
 	loadedWf, err := loadWorkflowDefinition(ctx, input)
 	if err != nil {
 		// Notify user of the workflow parsing/loading error
@@ -1219,6 +1222,13 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 		ctx = withCatalogPin(ctx, loadedWf.CatalogPin)
 	}
 	nameRunOrg(ctx, loadedWf.OrgID)
+	// Publish recorded provenance only after the actual root load confirms
+	// the same pin, origin and raw bytes. Neither an old activity result
+	// nor a later unpinned chat turn can supply launch evidence.
+	if input.Trigger != nil && input.Trigger.LaunchDefinition != nil {
+		input.Trigger = confirmLaunchDefinition(input.Trigger, rootPin, loadedWf)
+		input.Inputs[wfcel.TriggerInputKey] = input.Trigger.CELValue()
+	}
 
 	// Parse the placeholder-resolved workflow to get input schemas
 	wfWithPlaceholders, err := LoadWorkflow(loadedWf.WorkflowJSON)
@@ -3625,6 +3635,8 @@ type LoadedWorkflow struct {
 	// CatalogPin is the project catalog the load resolved against
 	// (catalog_pin.go); empty from a worker that predates pins.
 	CatalogPin string `json:"catalog_pin,omitempty"`
+	// ProjectDefinition is the origin and raw-byte hash returned by the loader.
+	ProjectDefinition *types.ProjectDefinition `json:"project_definition,omitempty"`
 	// OrgID is the org of the run's chat, for the run's own span
 	// (nameRunOrg); empty from a worker that predates it.
 	OrgID string `json:"org_id,omitempty"`

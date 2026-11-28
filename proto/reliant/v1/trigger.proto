@@ -875,6 +875,12 @@ message TriggerDefinitionSource {
   // a same-named account workflow that an automation does not run, a
   // machine that has never synced the project.
   repeated string warnings = 6;
+
+  // Hex SHA-256 of the raw bytes of the configured workflow currently
+  // resolved for this activation, comparable to sha256sum. This is not the
+  // hash of the last firing, nor a Git blob ID. Empty if the version cannot
+  // be described (including on older servers).
+  string content_hash = 7;
 }
 
 // TriggerChange is a configuration audit entry, not a firing.

@@ -44,6 +44,9 @@ type LoadWorkflowOutput struct {
 	// input's, or the one it pinned. The runtime carries it to every later
 	// load of the run.
 	CatalogPin string `json:"catalog_pin,omitempty"`
+	// ProjectDefinition attests to the original bytes from which this load
+	// parsed the workflow, not the re-marshaled YAML used by the evaluator.
+	ProjectDefinition *types.ProjectDefinition `json:"project_definition,omitempty"`
 	// OrgID is the org of the run's chat, as the worker stamps it on every
 	// span of the run (the run-scope interceptor's chat-owner lookup): the
 	// workflow names its own span with it (runtime.nameRunOrg), which it
@@ -85,8 +88,9 @@ func (a *LoadWorkflowActivity) Category() schema.ActivityCategory {
 
 // loadedWorkflow holds parsed workflow data with template metadata.
 type loadedWorkflow struct {
-	Workflow     *reliantv1.Workflow
-	HasTemplates bool
+	Workflow          *reliantv1.Workflow
+	HasTemplates      bool
+	ProjectDefinition *types.ProjectDefinition
 }
 
 // Execute loads a workflow definition from DB (or embedded builtins) and returns both raw YAML and validated JSON.
@@ -140,11 +144,12 @@ func (a *LoadWorkflowActivity) Execute(ctx context.Context, input LoadWorkflowIn
 	}
 
 	return &LoadWorkflowOutput{
-		YAML:         yamlData,
-		WorkflowJSON: jsonData,
-		HasTemplates: loaded.HasTemplates,
-		CatalogPin:   wfCtx.catalogPin,
-		OrgID:        telemetry.RunScopeFromContext(ctx).OrgID,
+		YAML:              yamlData,
+		WorkflowJSON:      jsonData,
+		HasTemplates:      loaded.HasTemplates,
+		CatalogPin:        wfCtx.catalogPin,
+		ProjectDefinition: loaded.ProjectDefinition,
+		OrgID:             telemetry.RunScopeFromContext(ctx).OrgID,
 	}, nil
 }
 
@@ -317,7 +322,13 @@ func (a *LoadWorkflowActivity) loadWorkflowByNameWithRaw(ctx context.Context, wo
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to marshal workflow to YAML: %w", err)
 	}
-	return yamlData, &loadedWorkflow{Workflow: resolved.Workflow, HasTemplates: hasTemplates}, nil
+	loaded := &loadedWorkflow{Workflow: resolved.Workflow, HasTemplates: hasTemplates}
+	if resolved.Source == workflowref.SourceProject {
+		loaded.ProjectDefinition = &types.ProjectDefinition{
+			Path: workflowref.ProjectRelative(resolved.Path), ContentHash: cfg.DefinitionHash(resolved.YAML),
+		}
+	}
+	return yamlData, loaded, nil
 }
 
 // loadBuiltinWorkflowWithRaw loads a builtin workflow and returns raw YAML + parsed proto.

@@ -1,6 +1,8 @@
 package runtime
 
 import (
+	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -8,6 +10,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/db/core"
 	wfcel "github.com/reliant-labs/reliant/internal/workflow/cel"
+	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 )
 
 func triggerTestInputs() map[string]interface{} {
@@ -35,6 +38,51 @@ func TestTriggerNamespaceResolvesInNodeTemplates(t *testing.T) {
 		require.NoError(t, err, template)
 		assert.Equal(t, want, got, template)
 	}
+}
+
+func TestTriggerLaunchDefinitionOnlyFromSerializedLaunch(t *testing.T) {
+	const oldHistory = `{"kind":"schedule","trigger_id":"trg-1","payload":{"launch_definition":{"content_hash":"forged"}}}`
+	var info TriggerInfo
+	require.NoError(t, json.Unmarshal([]byte(oldHistory), &info))
+	for _, phase := range []string{"old history", "new launch"} {
+		t.Run(phase, func(t *testing.T) {
+			want := ""
+			if phase == "new launch" {
+				want = strings.Repeat("a", 64)
+				info.LaunchDefinition = &TriggerLaunchDefinition{Source: "project", Path: "control-plane/.reliant/workflows/rc-train.yaml", ContentHash: want}
+			}
+			data, err := json.Marshal(&info)
+			require.NoError(t, err)
+			var roundTripped TriggerInfo
+			require.NoError(t, json.Unmarshal(data, &roundTripped))
+			value := roundTripped.CELValue()
+			scope := &wfcel.NodeResolutionContext{Inputs: map[string]interface{}{wfcel.TriggerInputKey: value}, Nodes: map[string]interface{}{}}
+			got, err := wfcel.EvaluateTemplate("{{ trigger.?launch_definition.?content_hash.orValue('') }}", scope)
+			require.NoError(t, err)
+			assert.Equal(t, want, got)
+			_, present := value["launch_definition"]
+			assert.Equal(t, want != "", present)
+		})
+	}
+}
+
+func TestLoadedDefinitionMustMatchTheRecordedLaunch(t *testing.T) {
+	d := &TriggerLaunchDefinition{Source: "project", Path: "control-plane/.reliant/workflows/rc-train.yaml", ContentHash: strings.Repeat("a", 64)}
+	info := &TriggerInfo{Kind: "cli.run", LaunchDefinition: d}
+	loaded := &LoadedWorkflow{CatalogPin: "recorded", ProjectDefinition: &types.ProjectDefinition{Path: d.Path, ContentHash: d.ContentHash}}
+	assert.Same(t, info, confirmLaunchDefinition(info, "recorded", loaded))
+	assert.Nil(t, confirmLaunchDefinition(info, "", loaded).LaunchDefinition)
+	assert.Nil(t, confirmLaunchDefinition(info, "wrong pin", loaded).LaunchDefinition)
+	assert.Nil(t, confirmLaunchDefinition(info, "recorded", &LoadedWorkflow{CatalogPin: "recorded"}).LaunchDefinition, "old loader result does not attest the bytes")
+	loaded.ProjectDefinition.ContentHash = strings.Repeat("b", 64)
+	assert.Nil(t, confirmLaunchDefinition(info, "recorded", loaded).LaunchDefinition)
+	loaded.ProjectDefinition = &types.ProjectDefinition{Path: "other-path", ContentHash: d.ContentHash}
+	assert.Nil(t, confirmLaunchDefinition(info, "recorded", loaded).LaunchDefinition)
+
+	fresh := lateWakeSuccessorInput(WorkflowInput{Trigger: info, Inputs: map[string]interface{}{wfcel.TriggerInputKey: info.CELValue()}, ExecContext: &ExecutionContext{CatalogPin: "recorded"}})
+	assert.Nil(t, fresh.Trigger.LaunchDefinition)
+	assert.Empty(t, fresh.ExecContext.CatalogPin)
+	assert.NotNil(t, info.LaunchDefinition, "do not erase the original launch's copy")
 }
 
 func TestTriggerSenderResolvesInNodeTemplates(t *testing.T) {

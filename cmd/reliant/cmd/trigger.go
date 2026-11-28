@@ -13,6 +13,7 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/spf13/cobra"
+	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/structpb"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -344,7 +345,7 @@ your own accounts is done in the app.`,
 
 func newTriggerListCmd() *cobra.Command {
 	var projectID string
-	var allProjects bool
+	var allProjects, asJSON bool
 	cmd := &cobra.Command{
 		Use:   "list",
 		Short: "List your triggers",
@@ -374,12 +375,21 @@ func newTriggerListCmd() *cobra.Command {
 			if err != nil {
 				return conn.annotate(fmt.Errorf("listing triggers: %w", sdkCause(err)))
 			}
+			if asJSON {
+				data, err := (protojson.MarshalOptions{UseProtoNames: true, EmitDefaultValues: true}).Marshal(&reliantv1.ListTriggersResponse{Triggers: list})
+				if err != nil {
+					return fmt.Errorf("encoding triggers: %w", err)
+				}
+				_, err = fmt.Fprintln(cmd.OutOrStdout(), string(data))
+				return err
+			}
 			printTriggerTable(cmd.OutOrStdout(), list)
 			return nil
 		},
 	}
 	cmd.Flags().StringVar(&projectID, "project-id", "", "List one project's triggers")
 	cmd.Flags().BoolVar(&allProjects, "all", false, "List triggers across every project")
+	cmd.Flags().BoolVar(&asJSON, "json", false, "Write the trigger list as protobuf JSON (snake_case fields)")
 	return cmd
 }
 

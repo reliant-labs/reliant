@@ -20,6 +20,10 @@ type TriggerInfo struct {
 	// Origin says whether Reliant caused the event and which run did; nil reads
 	// as "not caused by Reliant" (OriginCELValue).
 	Origin *core.TriggerOrigin `json:"origin,omitempty"`
+	// LaunchDefinition is present only when this run loads a recorded launch
+	// snapshot. It is not populated for later runs of the same chat, which
+	// may read a different definition, or on historical replay inputs.
+	LaunchDefinition *TriggerLaunchDefinition `json:"launch_definition,omitempty"`
 	// TraceParent is the W3C traceparent of the span that fired an
 	// unattended launch. Such a run is a trace of its own, not a child of
 	// that span (one event fans out to several orgs' triggers), and links to
@@ -28,10 +32,17 @@ type TriggerInfo struct {
 	TraceParent string `json:"trace_parent,omitempty"`
 }
 
-// CELValue is the `trigger` namespace: the envelope fields plus `name` and
-// `scheduled_for` lifted from the payload, and `sender`. Every key is always
-// present (empty string when not applicable, `sender.verified` false) so a
-// template or filter never fails with "no such key".
+// TriggerLaunchDefinition is the root workflow source from the catalog snapshot
+// the firing recorded and the run uses. ContentHash is hex SHA-256 of the raw
+// workflow bytes, not the Git object ID or a hash of a parsed workflow.
+type TriggerLaunchDefinition struct {
+	Source      string `json:"source"`
+	Path        string `json:"path"`
+	ContentHash string `json:"content_hash"`
+}
+
+// CELValue is the `trigger` namespace. Only `launch_definition` is optional:
+// it must stay absent for old Temporal inputs and before a run has launched.
 func (t *TriggerInfo) CELValue() map[string]interface{} {
 	payload := make(map[string]interface{}, len(t.Payload))
 	for key, value := range t.Payload {
@@ -42,7 +53,7 @@ func (t *TriggerInfo) CELValue() map[string]interface{} {
 		scheduledFor = value
 	}
 	name, _ := payload["trigger_name"].(string)
-	return map[string]interface{}{
+	out := map[string]interface{}{
 		"kind":          t.Kind,
 		"trigger_id":    t.TriggerID,
 		"event_id":      t.EventID,
@@ -54,6 +65,25 @@ func (t *TriggerInfo) CELValue() map[string]interface{} {
 		"origin":        OriginCELValue(t.Origin),
 		"record":        RecordCELValue(t.Kind, t.Payload),
 	}
+	if d := t.LaunchDefinition; d != nil {
+		out["launch_definition"] = map[string]any{
+			"source": d.Source, "path": d.Path, "content_hash": d.ContentHash,
+		}
+	}
+	return out
+}
+
+// confirmLaunchDefinition compares serialized evidence with what the root
+// loader actually used. Missing fields on either side fail closed without
+// changing the replay behavior of histories that never carried them.
+func confirmLaunchDefinition(t *TriggerInfo, rootPin string, loaded *LoadedWorkflow) *TriggerInfo {
+	d := loaded.ProjectDefinition
+	if d != nil && rootPin != "" && rootPin == loaded.CatalogPin && d.Path == t.LaunchDefinition.Path && d.ContentHash == t.LaunchDefinition.ContentHash {
+		return t
+	}
+	copy := *t
+	copy.LaunchDefinition = nil
+	return &copy
 }
 
 // RecordKindDue is the trigger kind of a record_due firing
