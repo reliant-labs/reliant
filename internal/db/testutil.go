@@ -174,6 +174,11 @@ func NewTestDatabase(tb testing.TB) (raw *sql.DB, dsn string) {
 // first test to ask for a database is timed with them (seconds on a loaded
 // machine, against the merge gate's per-test budget). The returned release
 // holds the server for the process; call it after m.Run.
+//
+// It also starts the process's warm supply of test databases (testDBSupply):
+// copies made ahead of the tests that will ask for them, and dropped after
+// those tests end without holding them up. release stops the supply and waits
+// for every drop it started.
 func PrepareTestDatabases() (release func(), err error) {
 	key, err := migratedTemplateKey()
 	if err != nil {
@@ -185,10 +190,160 @@ func PrepareTestDatabases() (release func(), err error) {
 	if err != nil {
 		return nil, fmt.Errorf("test database (template %s): %w", key, err)
 	}
+	s := startTestDBSupply(key)
 	return func() {
+		s.stop()
 		_ = raw.Close()
 		cleanup()
 	}, nil
+}
+
+// testDBSupply takes the copy and the drop of a test's database off the test's
+// own time, for a process whose TestMain called PrepareTestDatabases.
+//
+// A copy takes ~0.1s on an idle machine and ~0.4s on a loaded one, and a drop
+// about half that. A test that runs without t.Parallel() pays both in series
+// with every other such test: in internal/workflow/runtime/activities/handlers
+// that was ~18s of 26s idle, and ~90s of 107s on a loaded host, before any
+// parallel test started. So workers keep a few copies ready while those tests
+// run, and a test's cleanup hands its drop to a goroutine. The drops stay
+// bounded (dropSlots): past that, a cleanup drops its database itself, so a
+// burst of finishing tests cannot leave an unbounded backlog of databases on
+// the server. A copy is still the test's own, from the same template, so
+// nothing a test can observe changes.
+type testDBSupply struct {
+	ready     chan preparedTestDB
+	done      chan struct{}
+	workers   sync.WaitGroup
+	dropSlots chan struct{}
+	stopOnce  sync.Once
+
+	mu      sync.Mutex
+	stopped bool
+	drops   sync.WaitGroup
+}
+
+type preparedTestDB struct {
+	raw     *sql.DB
+	dsn     string
+	cleanup func()
+}
+
+const (
+	testDBSupplyWorkers = 2
+	testDBSupplyReady   = 2
+	testDBSupplyDrops   = 4
+)
+
+var (
+	activeSupplyMu sync.Mutex
+	activeSupply   *testDBSupply
+)
+
+func startTestDBSupply(key string) *testDBSupply {
+	s := &testDBSupply{
+		ready:     make(chan preparedTestDB, testDBSupplyReady),
+		done:      make(chan struct{}),
+		dropSlots: make(chan struct{}, testDBSupplyDrops),
+	}
+	for range testDBSupplyWorkers {
+		s.workers.Add(1)
+		go s.fill(key)
+	}
+	activeSupplyMu.Lock()
+	activeSupply = s
+	activeSupplyMu.Unlock()
+	return s
+}
+
+func currentTestDBSupply() *testDBSupply {
+	activeSupplyMu.Lock()
+	defer activeSupplyMu.Unlock()
+	return activeSupply
+}
+
+// fill makes copies until stop. A copy that fails ends the worker: the test
+// that next asks makes its own and reports the error under its name.
+func (s *testDBSupply) fill(key string) {
+	defer s.workers.Done()
+	for {
+		select {
+		case <-s.done:
+			return
+		default:
+		}
+		raw, dsn, cleanup, err := pgtest.NewFromTemplate(key, func(b *sql.DB, dsn string) error {
+			return buildMigratedTemplate(dsn, b)
+		})
+		if err != nil {
+			return
+		}
+		select {
+		case s.ready <- preparedTestDB{raw: raw, dsn: dsn, cleanup: cleanup}:
+		case <-s.done:
+			cleanup()
+			return
+		}
+	}
+}
+
+// take returns a ready copy, or false when none is ready yet.
+func (s *testDBSupply) take() (preparedTestDB, bool) {
+	select {
+	case d := <-s.ready:
+		return d, true
+	default:
+		return preparedTestDB{}, false
+	}
+}
+
+// dropLater wraps cleanup to drop the database in the background while a drop
+// slot is free, and in the caller otherwise or once the supply has stopped.
+func (s *testDBSupply) dropLater(cleanup func()) func() {
+	return func() {
+		s.mu.Lock()
+		if s.stopped {
+			s.mu.Unlock()
+			cleanup()
+			return
+		}
+		select {
+		case s.dropSlots <- struct{}{}:
+		default:
+			s.mu.Unlock()
+			cleanup()
+			return
+		}
+		s.drops.Add(1)
+		s.mu.Unlock()
+		go func() {
+			defer s.drops.Done()
+			defer func() { <-s.dropSlots }()
+			cleanup()
+		}()
+	}
+}
+
+// stop ends the workers, drops the copies nobody took, and waits for every
+// background drop. Calls after the first do nothing.
+func (s *testDBSupply) stop() { s.stopOnce.Do(s.stopNow) }
+
+func (s *testDBSupply) stopNow() {
+	activeSupplyMu.Lock()
+	if activeSupply == s {
+		activeSupply = nil
+	}
+	activeSupplyMu.Unlock()
+	close(s.done)
+	s.workers.Wait()
+	close(s.ready)
+	for d := range s.ready {
+		d.cleanup()
+	}
+	s.mu.Lock()
+	s.stopped = true
+	s.mu.Unlock()
+	s.drops.Wait()
 }
 
 // NewTestVault returns a credential vault over repo's database with a throwaway key,
@@ -251,7 +406,15 @@ func newTestDatabase(tb testing.TB) (*sql.DB, string, func()) {
 	if err != nil {
 		tb.Fatalf("test template key: %v", err)
 	}
-	return cloneTestTemplate(tb, key, buildMigratedTemplate)
+	s := currentTestDBSupply()
+	if s == nil {
+		return cloneTestTemplate(tb, key, buildMigratedTemplate)
+	}
+	if d, ok := s.take(); ok {
+		return d.raw, d.dsn, s.dropLater(d.cleanup)
+	}
+	raw, dsn, cleanup := cloneTestTemplate(tb, key, buildMigratedTemplate)
+	return raw, dsn, s.dropLater(cleanup)
 }
 
 // buildMigratedTemplate migrates and seeds the empty template database at dsn.
