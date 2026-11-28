@@ -13,6 +13,8 @@ import (
 
 func recoveryTestRepo(t *testing.T) string {
 	t.Helper()
+	// Recovery capture and restore read the tree through openat2.
+	requireOpenat2(t)
 	dir := t.TempDir()
 	recoveryTestGit(t, dir, "init", "-q", "-b", "main", ".")
 	recoveryTestWrite(t, dir, "file.txt", []byte("HEAD C\n"), 0644)
