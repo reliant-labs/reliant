@@ -42,31 +42,37 @@ import (
 // ("no opinion") for an error it does not recognise.
 type Rule func(err error) svcerr.Class
 
-var (
-	rulesMu sync.Mutex
-	rules   atomic.Pointer[[]Rule]
-)
+type registry struct {
+	mu    sync.Mutex
+	rules atomic.Pointer[[]Rule]
+}
+
+var libraryRules registry
 
 // Register adds a library rule to Library, and so to Classify. It is meant for
 // a package's init: rules are consulted in registration order, the first
 // verdict other than ClassNone wins, and the built-in retryable-refusal rule
 // runs after all of them. A rule must not call back into this package.
-func Register(r Rule) {
-	rulesMu.Lock()
-	defer rulesMu.Unlock()
+func Register(r Rule) { libraryRules.register(r) }
+
+func (r *registry) register(rule Rule) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	var next []Rule
-	if cur := rules.Load(); cur != nil {
+	if cur := r.rules.Load(); cur != nil {
 		next = append(next, *cur...)
 	}
-	next = append(next, r)
-	rules.Store(&next)
+	next = append(next, rule)
+	r.rules.Store(&next)
 }
 
 // Classify reports who has to act on err: a library's verdict when a
 // registered rule has one (Temporal's, for an ApplicationError), otherwise
 // svcerr.Classify.
-func Classify(err error) svcerr.Class {
-	if class := Library(err); class != svcerr.ClassNone {
+func Classify(err error) svcerr.Class { return libraryRules.classify(err) }
+
+func (r *registry) classify(err error) svcerr.Class {
+	if class := r.library(err); class != svcerr.ClassNone {
 		return class
 	}
 	return svcerr.Classify(err)
@@ -80,11 +86,13 @@ func IsServerError(err error) bool { return Classify(err) == svcerr.ClassServer 
 // library verdicts, such as Temporal's — and ClassNone ("no opinion") for
 // everything else. It is the classifier the process logger is given
 // (observe.WithErrorClassifier), which falls back to svcerr.Classify itself.
-func Library(err error) svcerr.Class {
+func Library(err error) svcerr.Class { return libraryRules.library(err) }
+
+func (r *registry) library(err error) svcerr.Class {
 	if err == nil {
 		return svcerr.ClassNone
 	}
-	if cur := rules.Load(); cur != nil {
+	if cur := r.rules.Load(); cur != nil {
 		for _, rule := range *cur {
 			if class := rule(err); class != svcerr.ClassNone {
 				return class

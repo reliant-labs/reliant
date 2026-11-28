@@ -108,10 +108,7 @@ func packageFileImports(t *testing.T, repo, importPath string, withTests bool) m
 	dir := packageDir(repo, importPath)
 	entries, err := os.ReadDir(dir)
 	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return nil
-		}
-		t.Fatalf("read %s: %v", dir, err)
+		t.Fatalf("read in-module package %s at %s: %v", importPath, dir, err)
 	}
 	out := map[string][]string{}
 	fset := token.NewFileSet()

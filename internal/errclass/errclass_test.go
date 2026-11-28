@@ -37,25 +37,26 @@ type marker struct{ error }
 // TestRegisteredRulesAreConsulted pins the seam: a registered rule's verdict
 // wins over svcerr, ClassNone defers, and registration order breaks ties.
 func TestRegisteredRulesAreConsulted(t *testing.T) {
-	// Keep this test non-parallel so registration cannot overlap parallel tests.
-	// Leave existing rules intact; these rules only recognise this test's marker.
+	t.Parallel()
+	var rules registry
 	plain := errors.New("plain")
-	assert.Equal(t, svcerr.ClassServer, Classify(plain))
+	assert.Equal(t, svcerr.ClassServer, rules.classify(plain))
 
-	Register(func(err error) svcerr.Class {
+	rules.register(func(err error) svcerr.Class {
 		if errors.As(err, new(marker)) {
 			return svcerr.ClassUser
 		}
 		return svcerr.ClassNone
 	})
-	Register(func(err error) svcerr.Class {
+	rules.register(func(err error) svcerr.Class {
 		if errors.As(err, new(marker)) {
 			return svcerr.ClassCanceled
 		}
 		return svcerr.ClassNone
 	})
-	assert.Equal(t, svcerr.ClassUser, Classify(marker{plain}), "first verdict wins")
-	assert.Equal(t, svcerr.ClassUser, Library(marker{plain}))
-	assert.Equal(t, svcerr.ClassNone, Library(plain), "no rule has an opinion")
-	assert.Equal(t, svcerr.ClassServer, Classify(plain))
+	assert.Equal(t, svcerr.ClassUser, rules.classify(marker{plain}), "first verdict wins")
+	assert.Equal(t, svcerr.ClassUser, rules.library(marker{plain}))
+	assert.Equal(t, svcerr.ClassNone, rules.library(plain), "no rule has an opinion")
+	assert.Equal(t, svcerr.ClassServer, rules.classify(plain))
+	assert.Equal(t, svcerr.ClassServer, Classify(marker{plain}), "isolated rules do not affect the global registry")
 }
