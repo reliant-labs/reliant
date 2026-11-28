@@ -74,7 +74,9 @@ type API struct {
 	// ChatUpdateHeadsBackfill brings chats' materialized snapshot heads up to
 	// their logs.
 	ChatUpdateHeadsBackfill *ChatUpdateHeadsBackfill
-	Router                  *APIDaemonRouter
+	// GtmAssetSweep deletes GTM assets left PENDING; nil with assets off.
+	GtmAssetSweep *GtmAssetSweep
+	Router        *APIDaemonRouter
 	// Feed publishes the repository's user and chat updates; it has no
 	// lifecycle, and orders the hubs after the router.
 	Feed      *RepoUpdateFeed

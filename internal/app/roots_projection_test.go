@@ -91,15 +91,18 @@ func TestKCLRootsDeployedCredentials(t *testing.T) {
 	require.ElementsMatch(t, []string{"api", "gateway", "worker"}, keys(roots))
 
 	base := []string{"DATABASE_URL", "DATABASE_DIRECT_URL", "INTERNAL_SERVICE_SECRET", "NATS_URL", "NATS_PASSWORD"}
+	// GTM's secrets are on ServerProcessConfig (GtmConfig, GtmAssetsConfig),
+	// read only by the api and the worker graphs: the gateway gets none.
+	gtm := []string{"GTM_ANALYTICS_TOKEN", "GTM_ASSETS_ACCESS_KEY_ID", "GTM_ASSETS_SECRET_ACCESS_KEY"}
 	integrations := []string{"RELIANT_VAULT_KEY", "RELIANT_SLACK_SIGNING_SECRET", "RELIANT_GITHUB_WEBHOOK_SECRET", "RELIANT_TEST_INTEGRATION_SECRET"}
 	want := map[string][]string{
 		// IDP_BROKER_TOKEN and IDP_LOGIN_POLICY: the login broker's sensitive
 		// managed-identity credentials (ApiServerConfig, served on /auth/*).
-		"api":     append(append([]string{"JWT_JWKS_SNAPSHOT", "AUTH_API_KEY", "AUTH_DEV_JWT_SECRET", "IDP_BROKER_TOKEN", "IDP_LOGIN_POLICY"}, base...), integrations...),
+		"api":     append(append([]string{"JWT_JWKS_SNAPSHOT", "AUTH_API_KEY", "AUTH_DEV_JWT_SECRET", "IDP_BROKER_TOKEN", "IDP_LOGIN_POLICY"}, base...), append(integrations, gtm...)...),
 		"gateway": base,
 		// GITHUB_QUEUE_APP_CALLER_SECRET: the merge queue's proof to
 		// control-plane that it is the worker (Queue App tokens).
-		"worker": append(append([]string{"GITHUB_QUEUE_APP_CALLER_SECRET"}, base...), integrations...),
+		"worker": append(append([]string{"GITHUB_QUEUE_APP_CALLER_SECRET"}, base...), append(integrations, gtm...)...),
 	}
 	for name, r := range roots {
 		t.Run(name, func(t *testing.T) {

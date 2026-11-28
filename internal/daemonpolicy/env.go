@@ -261,8 +261,9 @@ var daemonIdentityEnvVars = map[string]bool{
 	// The merge queue's gate configuration for this machine: a daemon an
 	// agent starts (a gate's own suite, say) is not a gate machine, and must
 	// not run gates with the host's image and database.
-	"RELIANT_DAEMON_GATE_IMAGE":       true,
-	"RELIANT_DAEMON_GATE_VULN_DB_DIR": true,
+	"RELIANT_DAEMON_GATE_IMAGE":            true,
+	"RELIANT_DAEMON_GATE_VULN_DB_DIR":      true,
+	"RELIANT_DAEMON_GATE_TRUSTED_GO_CACHE": true,
 }
 
 // withoutDaemonConnectionEnv drops the daemon's own connection settings

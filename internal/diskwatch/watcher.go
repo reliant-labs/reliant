@@ -66,6 +66,9 @@ type Watcher struct {
 	trim cacheTrimState
 	// wtSizes remembers each worktree's size across scans (worktreesizes.go).
 	wtSizes worktreeSizes
+	// ownCaches are the caches the daemon alone creates (owncaches.go),
+	// guarded by mu.
+	ownCaches []*ownCacheEntry
 	// systemEnv: the watcher reads the daemon's own environment, so its
 	// caches are this machine's real ones (never trimmed from a test).
 	systemEnv bool
@@ -104,8 +107,12 @@ func New(opts Options) *Watcher {
 	if opts.worktreeReap == nil {
 		opts.worktreeReap = execWorktreeReap
 	}
+	var scanGoCaches func() []string
+	if systemEnv {
+		scanGoCaches = scanGoCacheRoots
+	}
 	return &Watcher{
-		reaper:       reaperState{sem: make(chan struct{}, 1), run: opts.reaper, goCache: execGoCacheReaper},
+		reaper:       reaperState{sem: make(chan struct{}, 1), run: opts.reaper, goCache: execGoCacheReaper, scanGoCaches: scanGoCaches},
 		worktreeReap: worktreeReapState{run: opts.worktreeReap},
 		trim:         cacheTrimState{cfg: DefaultCacheTrimConfig()},
 		systemEnv:    systemEnv,

@@ -61,10 +61,40 @@ func (g *fakeGitHub) PullRequest(_ context.Context, _ practions.Caller, _ string
 	return pr, nil
 }
 
-func (g *fakeGitHub) ChangedFiles(_ context.Context, _ practions.Caller, _ string, number int) (practions.ChangedFiles, error) {
-	g.mu.Lock()
-	defer g.mu.Unlock()
-	return g.files[number], nil
+// baseTip is the fake's tip of every base branch.
+const baseTip = "base-tip"
+
+func (g *fakeGitHub) BranchTip(_ context.Context, _ practions.Caller, _ string, branch string) (string, error) {
+	if branch == "" {
+		return "", errors.New("no branch")
+	}
+	return baseTip + "-" + branch, nil
+}
+
+// fakeFiles is the gate pool's changed-file list: each PR's files, found by
+// its head, or unavailable, as a pool with no member answers.
+type fakeFiles struct {
+	gh          *fakeGitHub
+	unavailable atomic.Bool
+	bases       []string
+	mu          sync.Mutex
+}
+
+func (f *fakeFiles) ChangedFiles(_ context.Context, _ *core.PipelineRepo, base, head string) (practions.ChangedFiles, error) {
+	f.mu.Lock()
+	f.bases = append(f.bases, base)
+	f.mu.Unlock()
+	if f.unavailable.Load() {
+		return practions.ChangedFiles{}, fmt.Errorf("%w: no member", practions.ErrFilesUnavailable)
+	}
+	f.gh.mu.Lock()
+	defer f.gh.mu.Unlock()
+	for n, pr := range f.gh.prs {
+		if pr.HeadSHA == head {
+			return f.gh.files[n], nil
+		}
+	}
+	return practions.ChangedFiles{}, fmt.Errorf("no PR at %s", head)
 }
 
 func (g *fakeGitHub) Comment(_ context.Context, _ practions.Caller, _ string, _ int, body string) error {
@@ -109,6 +139,7 @@ type harness struct {
 	ctx    context.Context
 	env    *storetest.Env
 	gh     *fakeGitHub
+	files  *fakeFiles
 	inbox  *fakeInbox
 	svc    *practions.Service
 	repo   *core.PipelineRepo
@@ -122,9 +153,10 @@ func newHarness(t *testing.T, mode core.PipelineRepoMode) *harness {
 	t.Helper()
 	h := &harness{t: t, ctx: context.Background(), env: storetest.New(t), gh: newFakeGitHub(), inbox: &fakeInbox{},
 		number: 7, now: time.Now().UTC().Truncate(time.Second)}
+	h.files = &fakeFiles{gh: h.gh}
 	h.repo = h.enrol(mode)
 	h.record = h.addPR(h.number, "head-1")
-	svc, err := practions.New(practions.Deps{Store: h.env.Repo, GitHub: h.gh, Inbox: h.inbox, Now: func() time.Time { return h.now }})
+	svc, err := practions.New(practions.Deps{Store: h.env.Repo, GitHub: h.gh, Files: h.files, Inbox: h.inbox, Now: func() time.Time { return h.now }})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -518,7 +550,7 @@ func (r *racingStore) GetPRPipeline(ctx context.Context, id string) (*core.PRPip
 func TestALostCompareAndSetIsRefused(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t, core.PipelineRepoModeShadow)
-	svc, err := practions.New(practions.Deps{Store: &racingStore{Repo: h.env.Repo}, GitHub: h.gh, Now: func() time.Time { return h.now }})
+	svc, err := practions.New(practions.Deps{Store: &racingStore{Repo: h.env.Repo}, GitHub: h.gh, Files: h.files, Now: func() time.Time { return h.now }})
 	if err != nil {
 		t.Fatal(err)
 	}

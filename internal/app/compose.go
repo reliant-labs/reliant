@@ -47,6 +47,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/daemonstate"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/egresslimit"
+	"github.com/reliant-labs/reliant/internal/featuregate"
 	grpcserver "github.com/reliant-labs/reliant/internal/grpc"
 	"github.com/reliant-labs/reliant/internal/handlers/account"
 	"github.com/reliant-labs/reliant/internal/handlers/approval"
@@ -373,7 +374,7 @@ func (g *Graph) newCatalog() (*catalog.Service, error) {
 		InputOptions:       g.InputOptions(),
 		IntegrationMethods: catalog.IntegrationMethodsFrom(g.APIConnections().Service),
 		Orgs:               g.OrgResolver(),
-		Gate:               nil, // optional — no provider
+		Gate:               g.FeatureGate(),
 	})
 }
 
@@ -594,7 +595,7 @@ func (g *Graph) newWorkerTrigger() (*WorkerTrigger, error) {
 		ControlPlane:    g.ServerProcessConfig.GetControlPlane(),
 		AutomationKeys:  g.CredentialsAutomationtokens(),
 		Owners:          g.Triggerowner(),
-		Gate:            nil, // optional — no provider
+		Gate:            g.FeatureGate(),
 	})
 }
 
@@ -618,6 +619,7 @@ func (g *Graph) newWorkerToolsFactory() (*WorkerToolsFactory, error) {
 		ChangeController:  g.ChangeController(),
 		MachineController: g.MachineController(),
 		WorkflowDrafts:    g.Workflowdrafts(),
+		GTM:               g.WorkerGtmDomain(),
 	})
 }
 
@@ -698,6 +700,8 @@ func (g *Graph) newTemporalWorker() (*workersetup.Worker, error) {
 		Membership: g.OrgResolver(),
 		// ... and the org policy resolver beside it (orgpolicy).
 		Policies: g.OrgPolicyResolver(),
+		// ... and the feature gate call_llm decides gated tools with.
+		Gate:     g.FeatureGate(),
 		OrgMoves: g.OrgMoves(),
 	})
 }
@@ -734,7 +738,14 @@ func (g *Graph) newMergeQueue() (*MergeQueue, error) {
 		// names them (pkg/config Roots).
 		Pipeline:     g.ServerProcessConfig.GetPipeline(),
 		ControlPlane: g.ServerProcessConfig.GetControlPlane(),
-		DataDir:      g.ServerProcessConfig.GetDataDir(),
+	})
+}
+
+func (g *Graph) newPipelineConfigRefresh() (*PipelineConfigRefresh, error) {
+	return NewPipelineConfigRefresh(PipelineConfigRefreshDeps{
+		DB:       g.Database(),
+		Router:   g.WorkerDaemonRouter(),
+		Pipeline: g.ServerProcessConfig.GetPipeline(),
 	})
 }
 
@@ -1145,6 +1156,10 @@ func (g *Graph) newAccount() (*account.Service, error) {
 
 // newApproval constructs the approval handler (internal/handlers/approval).
 func (g *Graph) newApproval() (*approval.Service, error) {
+	capabilityGrants, err := pipelineGrants(g.Database())
+	if err != nil {
+		return nil, err
+	}
 	return approval.New(approval.Deps{
 		Logger:      g.Log,
 		Config:      g.Cfg,
@@ -1152,6 +1167,7 @@ func (g *Graph) newApproval() (*approval.Service, error) {
 		Chats:       store.NewChatExtStore(g.Database().ORM()),
 		Signals:     g.PauseService(),
 		Connections: g.APIConnections().Service,
+		Grants:      capabilityGrants,
 	})
 }
 
@@ -1315,7 +1331,7 @@ func (g *Graph) newTrigger() (*trigger.Service, error) {
 		OrgGitHubApps: apps,
 		// Binding is off until every replica and the rollback target honour it.
 		OrgRollout: TriggerOrgRollout(g.ApiServerConfig),
-		Gate:       nil, // optional — no provider
+		Gate:       g.FeatureGate(),
 	})
 }
 
@@ -1975,7 +1991,10 @@ func (g *Graph) newWorkflowCheckSyncer() (*workflowcheck.Syncer, error) {
 // (internal/handlers/coverage_source): a covered file's source, read from
 // GitHub with the viewer's own token once control-plane confirms a retained
 // coverage report names it. Without a control plane, or without a way to
-// read GitHub as the viewer, every read is NOT_YET_AVAILABLE.
+// read GitHub as the viewer, every read is NOT_YET_AVAILABLE. A read, never
+// a checkout or a build: the owner allowed it on the API server
+// (2026-11-27), bounded in memory (ghblobs.MaxBytes per blob, a bounded
+// number in flight, the handler's capped cache).
 func (g *Graph) newCoverageSource() (*coverage_source.Service, error) {
 	blobs, err := CoverageSourceBlobs(g.Database(), g.CredentialsConnectionvault(), g.Vault(), g.ServerProcessConfig.GetControlPlane(), g.IntegrationSettings())
 	if err != nil {
@@ -2141,9 +2160,69 @@ func (g *Graph) newInternalControlPlane() (*InternalControlPlane, error) {
 	})
 }
 
+// newFeatureGate constructs the FeatureGate provider (NewFeatureGate,
+// internal/app/providers_gtm.go): one Gate for every GTM surface of the
+// process, over the org resolver authz decides with.
+func (g *Graph) newFeatureGate() (featuregate.Gate, error) {
+	return NewFeatureGate(FeatureGateDeps{
+		Gtm:        g.ServerProcessConfig.GetGtm(),
+		Membership: g.OrgResolver(),
+		Logger:     g.Log,
+	})
+}
+
+// newGtmDomain constructs the GtmDomain provider (NewGtmDomain,
+// internal/app/providers_gtm.go).
+func (g *Graph) newGtmDomain() (*GtmDomain, error) {
+	return NewGtmDomain(GtmDomainDeps{
+		DB:              g.Database(),
+		Gate:            g.FeatureGate(),
+		ConnectionVault: g.CredentialsConnectionvault(),
+		Assets:          g.GtmAssets(),
+	})
+}
+
+// newGtmAssets constructs the GtmAssets provider (NewGtmAssets,
+// internal/app/providers_gtm.go): the GTM assets bucket, or none.
+func (g *Graph) newGtmAssets() (*GtmAssets, error) {
+	return NewGtmAssets(GtmAssetsDeps{
+		Assets: g.ServerProcessConfig.GetGtmAssets(),
+		Logger: g.Log,
+	})
+}
+
+// newGtmAssetSweep constructs the GtmAssetSweep provider (NewGtmAssetSweep,
+// internal/app/providers_gtm.go).
+func (g *Graph) newGtmAssetSweep() (*GtmAssetSweep, error) {
+	return NewGtmAssetSweep(GtmAssetSweepDeps{
+		DB:     g.Database(),
+		Assets: g.GtmAssets(),
+	})
+}
+
+// newWorkerGtmDomain constructs the WorkerGtmDomain provider
+// (NewWorkerGtmDomain, internal/app/providers_gtm.go).
+func (g *Graph) newWorkerGtmDomain() (*WorkerGtmDomain, error) {
+	return NewWorkerGtmDomain(WorkerGtmDomainDeps{
+		DB:              g.Database(),
+		Gate:            g.FeatureGate(),
+		ConnectionVault: g.CredentialsConnectionvault(),
+		Credentials:     g.WorkerIntegrationCredentials(),
+		WriteLedger:     g.IntegrationsWriteledger(),
+		ControlPlane:    g.ServerProcessConfig.GetControlPlane(),
+		Gtm:             g.ServerProcessConfig.GetGtm(),
+		Logger:          g.Log,
+		Assets:          g.GtmAssets(),
+	})
+}
+
 // newPipeline constructs the pipeline handler (internal/handlers/pipeline).
 // pipeline.enabled reaches the API server here (G4): off, every rpc refuses.
 func (g *Graph) newPipeline() (*pipeline.Service, error) {
+	capabilityGrants, err := pipelineGrants(g.Database())
+	if err != nil {
+		return nil, err
+	}
 	return pipeline.New(pipeline.Deps{
 		Logger: g.Log,
 		Config: g.Cfg,
@@ -2154,6 +2233,7 @@ func (g *Graph) newPipeline() (*pipeline.Service, error) {
 		Pipeline: &configv1.PipelineConfig{Enabled: g.ServerProcessConfig.GetPipeline().GetEnabled()},
 		Store:    g.Database(),
 		Now:      nil, // optional — no provider
+		Grants:   capabilityGrants,
 	})
 }
 
@@ -2162,6 +2242,6 @@ func (g *Graph) newSvcGtm() (*svcGtm.Service, error) {
 	return svcGtm.New(svcGtm.Deps{
 		Logger:  g.Log,
 		Config:  g.Cfg,
-		Service: nil, // optional — no provider
+		Service: g.GtmDomain().Service,
 	})
 }

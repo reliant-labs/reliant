@@ -231,7 +231,7 @@ func RegisterAll(registry *v2.ActivityRegistry, deps *Activities) {
 	if deps.Repo != nil {
 		chatProjects = deps.Repo
 	}
-	v2.RegisterActivity(registry, handlers.NewCallLLMActivity(handlers.CallLLMDeps{Store: tools.WithChats(deps.Repo), Triggers: attendanceTriggers, Spawns: spawnTree, Threads: deps.Threads, ToolResults: toolCalls, Mailbox: mailboxStore.queue, Hub: deps.StreamingHub, ToolsFactory: deps.ToolsFactory, ConfigProvider: deps.ConfigProvider, DriverResolver: deps.DriverResolver, MCPBinder: deps.MCPBinder}).WithModelEndpoints(modelEndpoints).WithDaemonRouter(deps.DaemonRouter).WithPrivateEgress(deps.AllowPrivateEgress).WithAccountRouting(deps.AccountRouting).WithUsageRecorder(deps.LLMUsage).WithProviderBackoff(deps.ProviderBackoff).WithChatProjects(chatProjects))
+	v2.RegisterActivity(registry, handlers.NewCallLLMActivity(handlers.CallLLMDeps{Store: tools.WithChats(deps.Repo), Triggers: attendanceTriggers, Spawns: spawnTree, Threads: deps.Threads, ToolResults: toolCalls, Mailbox: mailboxStore.queue, Hub: deps.StreamingHub, ToolsFactory: deps.ToolsFactory, ConfigProvider: deps.ConfigProvider, DriverResolver: deps.DriverResolver, MCPBinder: deps.MCPBinder}).WithModelEndpoints(modelEndpoints).WithDaemonRouter(deps.DaemonRouter).WithPrivateEgress(deps.AllowPrivateEgress).WithAccountRouting(deps.AccountRouting).WithUsageRecorder(deps.LLMUsage).WithProviderBackoff(deps.ProviderBackoff).WithChatProjects(chatProjects).WithFeatureGate(deps.FeatureGate))
 
 	// ========================================================================
 	// TOOL EXECUTION ACTIVITIES

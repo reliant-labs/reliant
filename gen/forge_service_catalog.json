@@ -45,10 +45,14 @@
         "DaemonStatePublisher",
         "Daemonmirror",
         "Database",
+        "FeatureGate",
         "FileSystem",
         "Forge",
         "GitHubAccess",
         "GitHubAccessLoop",
+        "GtmAssetSweep",
+        "GtmAssets",
+        "GtmDomain",
         "HTTPRoutes",
         "Inbox",
         "InputOptions",
@@ -544,6 +548,8 @@
         "Daemonmirror",
         "Database",
         "DebugServer",
+        "FeatureGate",
+        "GtmAssets",
         "IntegrationSettings",
         "IntegrationsWriteledger",
         "LedgerRetention",
@@ -556,6 +562,7 @@
         "OrgResolver",
         "PauseService",
         "PayloadStore",
+        "PipelineConfigRefresh",
         "Privacy",
         "ProcessRuntime",
         "ProcessSettings",
@@ -583,6 +590,7 @@
         "WorkerCatalogSearch",
         "WorkerChat",
         "WorkerDaemonRouter",
+        "WorkerGtmDomain",
         "WorkerIntegrationCredentials",
         "WorkerRun",
         "WorkerToolsFactory",
@@ -16447,6 +16455,16 @@
             {
               "name": "has_children",
               "kind": "bool"
+            },
+            {
+              "name": "symlink_target",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "symlink_status",
+              "kind": "enum",
+              "type_name": "reliant.v1.FileNodeSymlinkStatus"
             }
           ],
           "reliant.v1.FilePreviewInfo": [
@@ -16923,6 +16941,13 @@
           "reliant.v1.SearchResult": "reliant/v1/filesystem.proto"
         },
         "Enums": {
+          "reliant.v1.FileNodeSymlinkStatus": [
+            "FILE_NODE_SYMLINK_STATUS_UNSPECIFIED",
+            "FILE_NODE_SYMLINK_STATUS_RESOLVED",
+            "FILE_NODE_SYMLINK_STATUS_BROKEN",
+            "FILE_NODE_SYMLINK_STATUS_LOOP",
+            "FILE_NODE_SYMLINK_STATUS_DENIED"
+          ],
           "reliant.v1.FileNodeType": [
             "FILE_NODE_TYPE_UNSPECIFIED",
             "FILE_NODE_TYPE_FILE",
@@ -16939,6 +16964,13 @@
           ]
         },
         "EnumNumbers": {
+          "reliant.v1.FileNodeSymlinkStatus": [
+            0,
+            1,
+            2,
+            3,
+            4
+          ],
           "reliant.v1.FileNodeType": [
             0,
             1,
@@ -16955,6 +16987,10 @@
           ]
         },
         "EnumGoRefs": {
+          "reliant.v1.FileNodeSymlinkStatus": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "FileNodeSymlinkStatus"
+          },
           "reliant.v1.FileNodeType": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
             "GoName": "FileNodeType"
@@ -30333,6 +30369,16 @@
           "auth_required": true
         },
         {
+          "id": "reliant.v1.PipelineService/ListCapabilityGrants",
+          "name": "ListCapabilityGrants",
+          "input": "reliant.v1.ListCapabilityGrantsRequest",
+          "output": "reliant.v1.ListCapabilityGrantsResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "NO_SIDE_EFFECTS",
+          "auth_required": true
+        },
+        {
           "id": "reliant.v1.PipelineService/ListQueue",
           "name": "ListQueue",
           "input": "reliant.v1.ListQueueRequest",
@@ -30340,6 +30386,16 @@
           "client_streaming": false,
           "server_streaming": false,
           "idempotency": "NO_SIDE_EFFECTS",
+          "auth_required": true
+        },
+        {
+          "id": "reliant.v1.PipelineService/RevokeCapabilityGrant",
+          "name": "RevokeCapabilityGrant",
+          "input": "reliant.v1.RevokeCapabilityGrantRequest",
+          "output": "reliant.v1.RevokeCapabilityGrantResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "IDEMPOTENT",
           "auth_required": true
         },
         {
@@ -30436,6 +30492,45 @@
             "Activity": {
               "Mutating": false
             }
+          },
+          {
+            "Name": "ListCapabilityGrants",
+            "InputType": "ListCapabilityGrantsRequest",
+            "OutputType": "ListCapabilityGrantsResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
+            "InputTypeFQ": "reliant.v1.ListCapabilityGrantsRequest",
+            "OutputTypeFQ": "reliant.v1.ListCapabilityGrantsResponse",
+            "InputProtoFile": "reliant/v1/pipeline.proto",
+            "OutputProtoFile": "reliant/v1/pipeline.proto",
+            "Activity": {
+              "Mutating": false
+            }
+          },
+          {
+            "Name": "RevokeCapabilityGrant",
+            "InputType": "RevokeCapabilityGrantRequest",
+            "OutputType": "RevokeCapabilityGrantResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "Idempotency": "IDEMPOTENT",
+            "InputTypeFQ": "reliant.v1.RevokeCapabilityGrantRequest",
+            "OutputTypeFQ": "reliant.v1.RevokeCapabilityGrantResponse",
+            "InputProtoFile": "reliant/v1/pipeline.proto",
+            "OutputProtoFile": "reliant/v1/pipeline.proto",
+            "Activity": {
+              "Mutating": true,
+              "Declared": true,
+              "Verb": "revoke",
+              "TargetKind": "pipeline_capability_grant",
+              "Writer": "INTERCEPTOR"
+            }
           }
         ],
         "ProtoFile": "reliant/v1/pipeline.proto",
@@ -30504,6 +30599,26 @@
               "MessageType": "reliant.v1.PipelineMainHealth"
             }
           ],
+          "ListCapabilityGrantsRequest": [
+            {
+              "Name": "trigger_id",
+              "ProtoType": "string",
+              "IsOptional": true
+            },
+            {
+              "Name": "include_revoked",
+              "ProtoType": "bool",
+              "IsOptional": true
+            }
+          ],
+          "ListCapabilityGrantsResponse": [
+            {
+              "Name": "grants",
+              "ProtoType": "[]message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.PipelineCapabilityGrant"
+            }
+          ],
           "ListQueueRequest": [
             {
               "Name": "repo_id",
@@ -30523,6 +30638,21 @@
               "ProtoType": "message",
               "IsOptional": false,
               "MessageType": "reliant.v1.PipelineQueueBatch"
+            }
+          ],
+          "RevokeCapabilityGrantRequest": [
+            {
+              "Name": "grant_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            }
+          ],
+          "RevokeCapabilityGrantResponse": [
+            {
+              "Name": "grant",
+              "ProtoType": "message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.PipelineCapabilityGrant"
             }
           ],
           "SetPipelineModeRequest": [
@@ -30614,6 +30744,26 @@
               "type_name": "reliant.v1.PipelineMainHealth"
             }
           ],
+          "reliant.v1.ListCapabilityGrantsRequest": [
+            {
+              "name": "trigger_id",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "include_revoked",
+              "kind": "bool",
+              "optional": true
+            }
+          ],
+          "reliant.v1.ListCapabilityGrantsResponse": [
+            {
+              "name": "grants",
+              "kind": "message",
+              "type_name": "reliant.v1.PipelineCapabilityGrant",
+              "repeated": true
+            }
+          ],
           "reliant.v1.ListQueueRequest": [
             {
               "name": "repo_id",
@@ -30634,6 +30784,50 @@
               "name": "current_batch",
               "kind": "message",
               "type_name": "reliant.v1.PipelineQueueBatch"
+            }
+          ],
+          "reliant.v1.PipelineCapabilityGrant": [
+            {
+              "name": "id",
+              "kind": "string"
+            },
+            {
+              "name": "trigger_id",
+              "kind": "string"
+            },
+            {
+              "name": "machine_pool_id",
+              "kind": "string"
+            },
+            {
+              "name": "repo_id",
+              "kind": "string"
+            },
+            {
+              "name": "capability",
+              "kind": "string"
+            },
+            {
+              "name": "granted_by_user_id",
+              "kind": "string"
+            },
+            {
+              "name": "approval_id",
+              "kind": "string"
+            },
+            {
+              "name": "granted_at",
+              "kind": "message",
+              "type_name": "google.protobuf.Timestamp"
+            },
+            {
+              "name": "revoked_at",
+              "kind": "message",
+              "type_name": "google.protobuf.Timestamp"
+            },
+            {
+              "name": "revoked_by_user_id",
+              "kind": "string"
             }
           ],
           "reliant.v1.PipelineMainHealth": [
@@ -30820,6 +31014,22 @@
               "kind": "int32"
             }
           ],
+          "reliant.v1.RevokeCapabilityGrantRequest": [
+            {
+              "name": "grant_id",
+              "kind": "string",
+              "validate": {
+                "required": true
+              }
+            }
+          ],
+          "reliant.v1.RevokeCapabilityGrantResponse": [
+            {
+              "name": "grant",
+              "kind": "message",
+              "type_name": "reliant.v1.PipelineCapabilityGrant"
+            }
+          ],
           "reliant.v1.SetPipelineModeRequest": [
             {
               "name": "repo_id",
@@ -30850,13 +31060,18 @@
           "reliant.v1.EnrolRepositoryResponse": "reliant/v1/pipeline.proto",
           "reliant.v1.GetPipelineStateRequest": "reliant/v1/pipeline.proto",
           "reliant.v1.GetPipelineStateResponse": "reliant/v1/pipeline.proto",
+          "reliant.v1.ListCapabilityGrantsRequest": "reliant/v1/pipeline.proto",
+          "reliant.v1.ListCapabilityGrantsResponse": "reliant/v1/pipeline.proto",
           "reliant.v1.ListQueueRequest": "reliant/v1/pipeline.proto",
           "reliant.v1.ListQueueResponse": "reliant/v1/pipeline.proto",
+          "reliant.v1.PipelineCapabilityGrant": "reliant/v1/pipeline.proto",
           "reliant.v1.PipelineMainHealth": "reliant/v1/pipeline.proto",
           "reliant.v1.PipelineQueueBatch": "reliant/v1/pipeline.proto",
           "reliant.v1.PipelineQueueEntry": "reliant/v1/pipeline.proto",
           "reliant.v1.PipelineRepository": "reliant/v1/pipeline.proto",
           "reliant.v1.PipelineStateCount": "reliant/v1/pipeline.proto",
+          "reliant.v1.RevokeCapabilityGrantRequest": "reliant/v1/pipeline.proto",
+          "reliant.v1.RevokeCapabilityGrantResponse": "reliant/v1/pipeline.proto",
           "reliant.v1.SetPipelineModeRequest": "reliant/v1/pipeline.proto",
           "reliant.v1.SetPipelineModeResponse": "reliant/v1/pipeline.proto"
         }
@@ -63143,6 +63358,18 @@
       "implementation_candidates": []
     },
     {
+      "id": "FeatureGate",
+      "name": "FeatureGate",
+      "kind": "provider",
+      "type": "github.com/reliant-labs/reliant/internal/featuregate.Gate",
+      "source": {
+        "path": "internal/app/providers_gtm.go",
+        "symbol": "NewFeatureGate"
+      },
+      "methods": [],
+      "implementation_candidates": []
+    },
+    {
       "id": "FileSystem",
       "name": "FileSystem",
       "kind": "component",
@@ -63198,6 +63425,42 @@
       "source": {
         "path": "internal/app/providers_api.go",
         "symbol": "NewGitHubAccessLoop"
+      },
+      "methods": [],
+      "implementation_candidates": []
+    },
+    {
+      "id": "GtmAssetSweep",
+      "name": "GtmAssetSweep",
+      "kind": "provider",
+      "type": "*github.com/reliant-labs/reliant/internal/app.GtmAssetSweep",
+      "source": {
+        "path": "internal/app/providers_gtm.go",
+        "symbol": "NewGtmAssetSweep"
+      },
+      "methods": [],
+      "implementation_candidates": []
+    },
+    {
+      "id": "GtmAssets",
+      "name": "GtmAssets",
+      "kind": "provider",
+      "type": "*github.com/reliant-labs/reliant/internal/app.GtmAssets",
+      "source": {
+        "path": "internal/app/providers_gtm.go",
+        "symbol": "NewGtmAssets"
+      },
+      "methods": [],
+      "implementation_candidates": []
+    },
+    {
+      "id": "GtmDomain",
+      "name": "GtmDomain",
+      "kind": "provider",
+      "type": "*github.com/reliant-labs/reliant/internal/app.GtmDomain",
+      "source": {
+        "path": "internal/app/providers_gtm.go",
+        "symbol": "NewGtmDomain"
       },
       "methods": [],
       "implementation_candidates": []
@@ -63632,6 +63895,18 @@
       "source": {
         "path": "internal/handlers/pipeline/service.go",
         "symbol": "New"
+      },
+      "methods": [],
+      "implementation_candidates": []
+    },
+    {
+      "id": "PipelineConfigRefresh",
+      "name": "PipelineConfigRefresh",
+      "kind": "provider",
+      "type": "*github.com/reliant-labs/reliant/internal/app.PipelineConfigRefresh",
+      "source": {
+        "path": "internal/app/providers_mergequeue.go",
+        "symbol": "NewPipelineConfigRefresh"
       },
       "methods": [],
       "implementation_candidates": []
@@ -64619,6 +64894,18 @@
       "implementation_candidates": []
     },
     {
+      "id": "WorkerGtmDomain",
+      "name": "WorkerGtmDomain",
+      "kind": "provider",
+      "type": "*github.com/reliant-labs/reliant/internal/app.WorkerGtmDomain",
+      "source": {
+        "path": "internal/app/providers_gtm.go",
+        "symbol": "NewWorkerGtmDomain"
+      },
+      "methods": [],
+      "implementation_candidates": []
+    },
+    {
       "id": "WorkerIntegrationCredentials",
       "name": "WorkerIntegrationCredentials",
       "kind": "provider",
@@ -64952,6 +65239,15 @@
     },
     {
       "consumer": "Approval",
+      "field": "Grants",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/approval.CapabilityGrants",
+      "methods": [],
+      "candidates": [],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "Approval",
       "field": "Repo",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/approval.Repository",
       "methods": [],
@@ -65070,9 +65366,13 @@
       "field": "Gate",
       "interface": "github.com/reliant-labs/reliant/internal/featuregate.Gate",
       "methods": [],
-      "candidates": [],
-      "providers": [],
-      "resolution": "unresolved"
+      "candidates": [
+        "FeatureGate"
+      ],
+      "providers": [
+        "FeatureGate"
+      ],
+      "resolution": "composition_expression"
     },
     {
       "consumer": "Catalog",
@@ -65963,6 +66263,32 @@
       "resolution": "composition_expression"
     },
     {
+      "consumer": "GtmDomain",
+      "field": "ConnectionVault",
+      "interface": "github.com/reliant-labs/reliant/internal/credentials/connectionvault.Service",
+      "methods": [],
+      "candidates": [
+        "CredentialsConnectionvault"
+      ],
+      "providers": [
+        "CredentialsConnectionvault"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "GtmDomain",
+      "field": "Gate",
+      "interface": "github.com/reliant-labs/reliant/internal/featuregate.Gate",
+      "methods": [],
+      "candidates": [
+        "FeatureGate"
+      ],
+      "providers": [
+        "FeatureGate"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
       "consumer": "HTTPRoutes",
       "field": "Grants",
       "interface": "github.com/reliant-labs/reliant/internal/connectorgrant.Store",
@@ -66744,6 +67070,15 @@
       "consumer": "PauseService",
       "field": "Updates",
       "interface": "github.com/reliant-labs/reliant/internal/chatupdates.Service",
+      "methods": [],
+      "candidates": [],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "Pipeline",
+      "field": "Grants",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/pipeline.Grants",
       "methods": [],
       "candidates": [],
       "providers": [],
@@ -68043,9 +68378,14 @@
       "field": "Service",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/gtm.ServiceService",
       "methods": [],
-      "candidates": [],
-      "providers": [],
-      "resolution": "unresolved"
+      "candidates": [
+        "GtmDomain",
+        "WorkerGtmDomain"
+      ],
+      "providers": [
+        "GtmDomain"
+      ],
+      "resolution": "composition_expression"
     },
     {
       "consumer": "System",
@@ -68154,6 +68494,19 @@
       ],
       "providers": [
         "CredentialsConnectionvault"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "TemporalWorker",
+      "field": "Gate",
+      "interface": "github.com/reliant-labs/reliant/internal/featuregate.Gate",
+      "methods": [],
+      "candidates": [
+        "FeatureGate"
+      ],
+      "providers": [
+        "FeatureGate"
       ],
       "resolution": "composition_expression"
     },
@@ -68573,9 +68926,13 @@
       "field": "Gate",
       "interface": "github.com/reliant-labs/reliant/internal/featuregate.Gate",
       "methods": [],
-      "candidates": [],
-      "providers": [],
-      "resolution": "unresolved"
+      "candidates": [
+        "FeatureGate"
+      ],
+      "providers": [
+        "FeatureGate"
+      ],
+      "resolution": "composition_expression"
     },
     {
       "consumer": "Trigger",
@@ -68950,6 +69307,45 @@
       "resolution": "composition_expression"
     },
     {
+      "consumer": "WorkerGtmDomain",
+      "field": "ConnectionVault",
+      "interface": "github.com/reliant-labs/reliant/internal/credentials/connectionvault.Service",
+      "methods": [],
+      "candidates": [
+        "CredentialsConnectionvault"
+      ],
+      "providers": [
+        "CredentialsConnectionvault"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "WorkerGtmDomain",
+      "field": "Gate",
+      "interface": "github.com/reliant-labs/reliant/internal/featuregate.Gate",
+      "methods": [],
+      "candidates": [
+        "FeatureGate"
+      ],
+      "providers": [
+        "FeatureGate"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "WorkerGtmDomain",
+      "field": "WriteLedger",
+      "interface": "github.com/reliant-labs/reliant/internal/integrations/writeledger.Service",
+      "methods": [],
+      "candidates": [
+        "IntegrationsWriteledger"
+      ],
+      "providers": [
+        "IntegrationsWriteledger"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
       "consumer": "WorkerIntegrationCredentials",
       "field": "ConnectionVault",
       "interface": "github.com/reliant-labs/reliant/internal/credentials/connectionvault.Service",
@@ -69094,9 +69490,13 @@
       "field": "Gate",
       "interface": "github.com/reliant-labs/reliant/internal/featuregate.Gate",
       "methods": [],
-      "candidates": [],
-      "providers": [],
-      "resolution": "unresolved"
+      "candidates": [
+        "FeatureGate"
+      ],
+      "providers": [
+        "FeatureGate"
+      ],
+      "resolution": "composition_expression"
     },
     {
       "consumer": "WorkerTrigger",
@@ -69539,9 +69939,9 @@
     },
     {
       "code": "binding_unresolved",
-      "component": "Catalog.Gate",
+      "component": "Approval.Grants",
       "source": {
-        "path": "internal/handlers/catalog/service.go",
+        "path": "internal/handlers/approval/service.go",
         "symbol": "New"
       }
     },
@@ -69647,6 +70047,14 @@
       "source": {
         "path": "internal/app/providers.go",
         "symbol": "NewPauseService"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "Pipeline.Grants",
+      "source": {
+        "path": "internal/handlers/pipeline/service.go",
+        "symbol": "New"
       }
     },
     {
@@ -69843,14 +70251,6 @@
     },
     {
       "code": "binding_unresolved",
-      "component": "SvcGtm.Service",
-      "source": {
-        "path": "internal/handlers/gtm/service.go",
-        "symbol": "New"
-      }
-    },
-    {
-      "code": "binding_unresolved",
       "component": "Task.Chats",
       "source": {
         "path": "internal/handlers/task/service.go",
@@ -69932,14 +70332,6 @@
     {
       "code": "binding_unresolved",
       "component": "Trigger.Fires",
-      "source": {
-        "path": "internal/handlers/trigger/service.go",
-        "symbol": "New"
-      }
-    },
-    {
-      "code": "binding_unresolved",
-      "component": "Trigger.Gate",
       "source": {
         "path": "internal/handlers/trigger/service.go",
         "symbol": "New"
@@ -70055,14 +70447,6 @@
       "source": {
         "path": "internal/app/providers_worker.go",
         "symbol": "NewWorkerToolsFactory"
-      }
-    },
-    {
-      "code": "binding_unresolved",
-      "component": "WorkerTrigger.Gate",
-      "source": {
-        "path": "internal/app/providers_worker.go",
-        "symbol": "NewWorkerTrigger"
       }
     },
     {

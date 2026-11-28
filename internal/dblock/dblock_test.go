@@ -118,6 +118,8 @@ func TestKeys_AreTheOnesProductionAlreadyHolds(t *testing.T) {
 	assert.EqualValues(t, int64(0x7265_6c69_616e_7403), dblock.ChatUpdateHeads)
 	assert.NotEqual(t, dblock.WorktreeSweep, dblock.AlertReceivers)
 	assert.NotEqual(t, dblock.AlertReceivers, dblock.ChatUpdateHeads)
+	assert.EqualValues(t, int64(0x7265_6c69_616e_7404), dblock.GtmAssetSweep)
+	assert.NotEqual(t, dblock.ChatUpdateHeads, dblock.GtmAssetSweep)
 }
 
 type failingSessions struct{ err error }

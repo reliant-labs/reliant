@@ -43,6 +43,9 @@ const (
 	// ChatUpdateHeads elects the replica that backfills chats' materialized
 	// snapshot heads.
 	ChatUpdateHeads Key = 0x7265_6c69_616e_7403 // "reliant\x03"
+	// GtmAssetSweep elects the replica that deletes GTM assets left PENDING
+	// (internal/gtm/assetstore's Sweeper).
+	GtmAssetSweep Key = 0x7265_6c69_616e_7404 // "reliant\x04"
 )
 
 // Deps is what the lock service is built from.

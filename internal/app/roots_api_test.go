@@ -43,6 +43,7 @@ func TestAPIStopsTakingCallsFirst(t *testing.T) {
 		"llm_usage_retention",
 		"org_credential_sweep",
 		"chat_update_heads_backfill",
+		"gtm_asset_sweep",
 		"api_daemon_router",
 		"chat_update_hub",
 		"user_update_hub",
@@ -59,7 +60,7 @@ func TestAPIStopsTakingCallsFirst(t *testing.T) {
 	loops := []string{
 		"trigger_redriver", "trigger_reconciler", "trigger_schedule_sync", "worktree_sweeper", "queued_delivery",
 		"daemon_events_consumer", "github_access_loop", "workflow_reconciler", "reliant_key_sweep", "payload_gc", "sign_in_sessions", "llm_usage_retention",
-		"chat_update_heads_backfill",
+		"chat_update_heads_backfill", "gtm_asset_sweep",
 	}
 	for _, n := range plan {
 		switch {
@@ -128,7 +129,7 @@ func TestAPIVariantsStayInTheAPI(t *testing.T) {
 		"reset_guard", "queued_deliverer", "github_access", "trigger_inbound", "trigger_senders",
 		"trigger_redriver", "trigger_reconciler", "trigger_schedule_sync", "worktree_sweeper", "queued_delivery",
 		"daemon_events_consumer", "github_access_loop", "workflow_reconciler", "reliant_key_sweep", "payload_gc", "sign_in_sessions", "llm_usage_retention",
-		"chat_update_heads_backfill",
+		"chat_update_heads_backfill", "gtm_asset_sweep",
 	} {
 		require.Contains(t, api, name)
 		require.False(t, slices.Contains(others, name), "another root builds the api's %s", name)

@@ -17,7 +17,13 @@ describe("learnLinks", () => {
     expect(learnSectionOf({ kind: "services" })).toBe("services");
     expect(learnSectionOf({ kind: "obs-view", view: "logs" })).toBe("observability");
     expect(learnSectionOf({ kind: "obs-view", view: "dashboards" })).toBe("dashboards");
-    expect(learnSectionOf({ kind: "speed-insights" })).toBe("speed-insights");
+    expect(learnSectionOf({ kind: "site-insights" })).toBe("site-insights");
+    expect(learnSectionOf({ kind: "site-insights", view: "accessibility" })).toBe("site-insights");
+  });
+
+  it("keeps the old Speed insights section, on the guide it moved to", () => {
+    expect(learnUrl("speed-insights")).toBe(learnUrl("site-insights"));
+    expect(learnUrl("site-insights")).toBe("https://docs.reliantlabs.io/forge/observability/site-insights");
     expect(learnSectionOf({ kind: "users" })).toBe("auth");
   });
 });

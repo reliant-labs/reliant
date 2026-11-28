@@ -695,7 +695,7 @@ schema DaemonConfigInstance:
     workspace: str = ""
 
 # forge:section schema DaemonConfig
-# forge:hash=0256ad4e58d4bb3b4ad505b9e9e077f6bd978921e62fa282e647ef2e95865256
+# forge:hash=2e50cde65c0939d97cbccb44dba865abf40f8af50714bf213414de6e07ebcf69
 schema DaemonConfig:
     # Daemon gateway URL to dial (default: the credential's gateway, else localhost on --port)
     gateway_url: str = ""
@@ -763,6 +763,8 @@ schema DaemonConfig:
     heavy_cpu_weight: int = 0
     # memory.high of a heavy-slot command while it runs: off, or a size such as 16G (unset: 1.5x one slot's part of the memory, at least 12GiB)
     heavy_memory_high: str = ""
+    # Trusted Go build cache mounted read-only into merge-queue gates: off, or a directory (unset: /var/cache/workspace/go-build-trusted when it exists)
+    gate_trusted_go_cache: str = ""
     # instance config block (DaemonInstanceConfig). Set its fields as `instance.<field> = ...`.
     instance: DaemonConfigInstance = DaemonConfigInstance {}
 
@@ -822,7 +824,7 @@ daemonConfigEnvMap = lambda c: DaemonConfig, config_secrets: [str] -> {str: str 
         "RELIANT_INSTANCE_WORKSPACE" = c.instance.workspace
 
         # forge:section daemonConfigEnvMap values (root)
-        # forge:hash=0d651a4a196590b8dfda460060431826d5e4d774c0704bd0f2fc7feff6146616
+        # forge:hash=f8901b5835fbf5e433625d5fec3d14bea80382df9bc5b9c6a80c81e97d73a1d1
         "DAEMON_GRPC_URL" = c.gateway_url
         "TOOLS_DAEMON_PORT" = str(c.gateway_port)
         "DAEMON_TLS_MODE" = c.tls_mode
@@ -856,6 +858,7 @@ daemonConfigEnvMap = lambda c: DaemonConfig, config_secrets: [str] -> {str: str 
         "RELIANT_DAEMON_GATE_VULN_DB_DIR" = c.gate_vuln_db_dir
         "RELIANT_HEAVY_CPU_WEIGHT" = str(c.heavy_cpu_weight)
         "RELIANT_HEAVY_MEMORY_HIGH" = c.heavy_memory_high
+        "RELIANT_DAEMON_GATE_TRUSTED_GO_CACHE" = c.gate_trusted_go_cache
 
         # forge:section daemonConfigEnvMap values (end)
         # forge:hash=06d93ea6019c14e6397469374bab99b5c2725f7353c6e9a894aa0b0ce1f5d421
@@ -2487,6 +2490,19 @@ ROOTS: {str: Root} = {
             # forge:hash=61e1f0cf7fe0f4ecadd5042d5200121cc2fd39886496cc144a3210dea72032f5
             "RELIANT_RECONCILER_STALL_WATCHDOG",
 
+            # forge:section root api env gtm
+            # forge:hash=e73e25f525253ee9106ecc1d45b85a87c36f950631e1c93c1e7f9550dea129ca
+            "GTM_ALLOWED_ORG_IDS",
+            "GTM_ATTACH_FROM_CHAT_ENABLED",
+
+            # forge:section root api env gtm_assets
+            # forge:hash=6b1496425e12ca8e6f61500f352f08cccd51b0c9e9576febbec6b2d4ca0c293d
+            "GTM_ASSETS_ENDPOINT",
+            "GTM_ASSETS_PUBLIC_ENDPOINT",
+            "GTM_ASSETS_REGION",
+            "GTM_ASSETS_BUCKET",
+            "GTM_ASSETS_PATH_STYLE",
+
             # forge:section root api env (end)
             # forge:hash=7cce70f80c7f09e7d6d0f6dadef2f51be26ee5e885d6331fc33ef3bad4a54a1a
         ]
@@ -2516,6 +2532,15 @@ ROOTS: {str: Root} = {
             "RELIANT_SLACK_SIGNING_SECRET",
             "RELIANT_GITHUB_WEBHOOK_SECRET",
             "RELIANT_TEST_INTEGRATION_SECRET",
+
+            # forge:section root api secrets gtm
+            # forge:hash=28385b00489d9b52f48b32775bcee9609c20935ad7c2434fbdfa12bd77b4c48d
+            "GTM_ANALYTICS_TOKEN",
+
+            # forge:section root api secrets gtm_assets
+            # forge:hash=22fe72bbecf20bae01492c2ccdfb3a75139bb8a34bf0ca1d2bcc8781a87cbeed
+            "GTM_ASSETS_ACCESS_KEY_ID",
+            "GTM_ASSETS_SECRET_ACCESS_KEY",
 
             # forge:section root api secrets (end)
             # forge:hash=51508a9c3d2d78952b193ba57b93e4722f3b40806cc9fe70a9e5e1a9d74571e5
@@ -2811,6 +2836,19 @@ ROOTS: {str: Root} = {
             # forge:hash=27b08e9cee28d1479b57db4d6024cdfbb3be3797490236cbe08a4927cea191bb
             "RELIANT_PIPELINE_ENABLED",
 
+            # forge:section root worker env gtm
+            # forge:hash=76a9836847f07f4d43f10039c7fa6e61c996bdb3bcd6fc0c113314320971aba2
+            "GTM_ALLOWED_ORG_IDS",
+            "GTM_ATTACH_FROM_CHAT_ENABLED",
+
+            # forge:section root worker env gtm_assets
+            # forge:hash=d3c6fca485848e343e54c716d63812e5bb9df072cf921db1395585df3f36a559
+            "GTM_ASSETS_ENDPOINT",
+            "GTM_ASSETS_PUBLIC_ENDPOINT",
+            "GTM_ASSETS_REGION",
+            "GTM_ASSETS_BUCKET",
+            "GTM_ASSETS_PATH_STYLE",
+
             # forge:section root worker env (root) #3
             # forge:hash=70d220a87f5a1a77143da462766d214493a2c6a59bee71c9f8c96ba9896ae6b8
             "RELIANT_WORKER_HOSTED_ACTIONS_URL",
@@ -2862,6 +2900,15 @@ ROOTS: {str: Root} = {
             # forge:section root worker secrets pipeline
             # forge:hash=a077fb7d21011d7bf8648cfea9e6441e8f0bcb0e42a7d2a101cdd2ffc8d6aaa9
             "GITHUB_QUEUE_APP_CALLER_SECRET",
+
+            # forge:section root worker secrets gtm
+            # forge:hash=11dee0e938f40347af90fff57aae1c5bb93d7b3d27338a4df54839c5297f57e8
+            "GTM_ANALYTICS_TOKEN",
+
+            # forge:section root worker secrets gtm_assets
+            # forge:hash=694b2822ff06e31ec381dadd8d104c1de5dd3b3ff961cefe7e213fb78525bcb9
+            "GTM_ASSETS_ACCESS_KEY_ID",
+            "GTM_ASSETS_SECRET_ACCESS_KEY",
 
             # forge:section root worker secrets (end)
             # forge:hash=edcab42e181091b2db15b9c6ce9c0fc7d7517adfa83aff3ab74182a177bb91cf

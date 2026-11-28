@@ -18,6 +18,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/featuregate"
 	"github.com/reliant-labs/reliant/internal/instanceid"
 	"github.com/reliant-labs/reliant/internal/integrations/httpaction"
 	"github.com/reliant-labs/reliant/internal/integrations/writeledger"
@@ -166,6 +167,10 @@ type Config struct {
 	// WriteLedger records the action node's mutating integration calls, so an
 	// event they cause can be attributed. nil records nothing.
 	WriteLedger writeledger.Service
+	// FeatureGate decides which feature-gated tools (featuregate) a run's
+	// owner is offered in the run's org. nil entitles nothing: every gated
+	// tool is absent.
+	FeatureGate featuregate.Gate
 
 	// AccountLimits records the rate-limit state of the accounts that serve
 	// requests and benches one the provider refused. Optional: nil records
@@ -321,6 +326,7 @@ func NewWorker(cfg *Config) (*Worker, *v2.ActivityRegistry, error) {
 	activityDeps.ServerActions = dispatcher
 	activityDeps.AllowPrivateEgress = cfg.AllowPrivateEgress
 	activityDeps.WriteLedger = cfg.WriteLedger
+	activityDeps.FeatureGate = cfg.FeatureGate
 	if cfg.Database != nil {
 		usage, err := llmusage.NewInstrumented(llmusage.Deps{Ledger: store.NewLlmCallUsageExtStore(cfg.Database.ORM()), Tools: store.NewToolCallUsageExtStore(cfg.Database.ORM()), Tx: cfg.Database})
 		if err != nil {

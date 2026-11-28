@@ -46,6 +46,9 @@ var rootDepsOnlySomeRoots = map[string]string{
 	"workflowcheck.RunURL":         "pre-existing difference between roots, to review",
 	"run.Orgs":                     "pre-existing difference between roots, to review",
 	"chat.Orgs":                    "pre-existing difference between roots, to review",
+	"gtmsvc.Analytics":             "worker-only: product analytics is read by the agent's read_product_analytics tool; no GtmService rpc reads it (providers_gtm.go)",
+	"gtmsvc.Attachments":           "worker-only: only attach_gtm_asset copies a chat attachment, behind GTM_ATTACH_FROM_CHAT_ENABLED; no GtmService rpc reads one (providers_gtm.go)",
+	"gtmsvc.Email":                 "worker-only: only send_gtm_email sends, through the worker's integration credentials; no GtmService rpc sends (providers_gtm.go)",
 	"controlplane.Sign":            "only the clients that call the control plane as this process sign; the per-caller (bearer) clients do not",
 }
 
