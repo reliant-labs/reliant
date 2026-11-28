@@ -14,13 +14,11 @@ import (
 	"unicode"
 
 	"github.com/reliant-labs/reliant/internal/gtm"
+	"github.com/reliant-labs/reliant/internal/llm/tools/names"
 )
 
 // ToolName is the agent tool that sends a GTM email through this package.
-//
-// TODO(PR-7): names.ToolSendGtmEmail replaces this once the tool is
-// registered; until then the runtime wiring spells the same literal.
-const ToolName = "send_gtm_email"
+const ToolName = names.ToolSendGtmEmail
 
 // senderHashVersion opens the sender part of every CardHash; a change to its
 // format is a new version.

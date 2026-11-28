@@ -70,7 +70,7 @@ var unattendedWithheld = []struct {
 		// Reliant, and every send needs the owner's approval card, which an
 		// unattended run cannot show; the tool refuses an unattended call
 		// even when a step names it (internal/gtm/email).
-		withholds: toolNamed(toolSendGtmEmail),
+		withholds: toolNamed(ToolSendGtmEmail),
 		reason:    "unattended runs can't send GTM emails",
 	},
 	{
@@ -88,12 +88,6 @@ var unattendedWithheld = []struct {
 		reason:    "unattended runs can't take integration actions that change something outside Reliant",
 	},
 }
-
-// toolSendGtmEmail is the GTM email tool (internal/gtm/email).
-//
-// TODO(PR-7): ToolSendGtmEmail (names.go) replaces this literal once the tool
-// is registered.
-const toolSendGtmEmail = "send_gtm_email"
 
 // unattendedNote follows the reason in every refusal of a withheld tool: the
 // model may repeat it, and a person reading the FAILED row learns the opt-in.

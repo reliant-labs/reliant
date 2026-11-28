@@ -37,8 +37,10 @@
 //     its unattended flag, and returns ActivationPreview{Title: title, Hash:
 //     hash} with needsApproval TRUE. It never returns needsApproval false (a
 //     NoApproval preview): every send needs a card. Every error is returned
-//     as tools.RefuseActivation(err.Error(), err); the errors' text names ids
-//     and revisions only, never the email.
+//     as a tools.RefuseActivation whose reason is sanitized: this package's
+//     own errors name ids and revisions only, never the email, but an error
+//     from a store or a driver can carry anything, so never pass raw error
+//     text as the reason.
 //   - The hash is opaque: CardHash, the item's gtm.ApprovalHash, ".", and a
 //     hash of the sender the card shows. The tool passes it through as the
 //     preview hash unchanged and never parses or rebuilds it; the runtime

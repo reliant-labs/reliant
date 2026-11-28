@@ -20,13 +20,16 @@ func TestListTools_Generated(t *testing.T) {
 
 	tdd.RunRPCCases(t, []tdd.RPCCase[pb.ListToolsRequest, pb.ListToolsResponse]{
 		{
-			Name: "every registered tool is listed once, with a category",
+			Name: "every registered tool but the feature-gated ones is listed once, with a category",
 			Req:  connect.NewRequest(&pb.ListToolsRequest{}),
 			Ctx:  catalog.AuthedContext(t),
 			Check: func(t *testing.T, resp *connect.Response[pb.ListToolsResponse]) {
-				registry := tools.GetToolRegistry()
-				if got := resp.Msg.GetTools(); len(got) != len(registry) || int(resp.Msg.GetTotal()) != len(registry) {
-					t.Fatalf("listed %d tools (total %d), want the %d registered", len(got), resp.Msg.GetTotal(), len(registry))
+				// The test catalog has no gate, so it entitles no caller to a
+				// gated tool.
+				registry, gated := tools.GetToolRegistry(), tools.FeatureGatedTools()
+				want := len(registry) - len(gated)
+				if got := resp.Msg.GetTools(); len(got) != want || int(resp.Msg.GetTotal()) != want {
+					t.Fatalf("listed %d tools (total %d), want the %d registered and not gated", len(got), resp.Msg.GetTotal(), want)
 				}
 				seen := map[string]bool{}
 				for _, tool := range resp.Msg.GetTools() {
@@ -39,7 +42,7 @@ func TestListTools_Generated(t *testing.T) {
 					}
 				}
 				for _, def := range registry {
-					if !seen[def.Name] {
+					if _, isGated := gated[def.Name]; !isGated && !seen[def.Name] {
 						t.Fatalf("registered tool %q is not listed", def.Name)
 					}
 				}

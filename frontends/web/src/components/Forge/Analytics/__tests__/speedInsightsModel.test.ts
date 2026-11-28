@@ -11,6 +11,9 @@ import {
   rateScore,
   realExperienceScore,
   routesByScore,
+  siteRows,
+  siteServiceNames,
+  sitesPanel,
   speedPanel,
   vitalScore,
   vitalsRows,
@@ -100,5 +103,30 @@ describe("speedInsightsModel", () => {
     expect(sql).toContain("IN ('mobile', 'tablet')");
     expect(sql).toContain("GROUP BY page");
     expect(speedPanel("series", "desktop", "p75", "24h").sql).toContain("INTERVAL 3600 SECOND");
+  });
+
+  it("keeps every panel to the query's sites: service.name in {services}, every site when it names none", () => {
+    const filter = "(empty({services:Array(String)}) OR has({services:Array(String)}, ResourceAttributes['service.name']))";
+    for (const kind of ["summary", "routes", "series"] as const) expect(speedPanel(kind, "desktop", "p75", "7d").sql).toContain(`AND ${filter}`);
+    expect(sitesPanel().sql).toContain(`AND ${filter}`);
+    // The panel ids are the fixture's contract, unchanged by the filter.
+    expect(speedPanel("summary", "desktop", "p75", "7d").id).toBe("speed-insights-summary");
+  });
+
+  it("lists the sites that sent vitals, every device but bots, busiest first", () => {
+    const sql = sitesPanel().sql ?? "";
+    expect(sitesPanel().id).toBe("speed-insights-sites");
+    expect(sql).toContain("ResourceAttributes['service.name'] AS service");
+    expect(sql).toContain("!= 'bot'");
+    expect(sql).not.toContain("IN ('mobile', 'tablet')");
+    expect(sql).toContain("GROUP BY service");
+    expect(sql).toContain("ORDER BY views DESC");
+    const result = { columns: ["views"], rows: [{ group: { service: "shop-web" }, values: [42] }, { group: { service: "" }, values: [3] }] } as unknown as PanelResult;
+    expect(siteRows(result)).toEqual([{ service: "shop-web", views: 42 }]);
+  });
+
+  it("names a frontend's telemetry services as forge does, and by its bare name", () => {
+    expect(siteServiceNames("shop", "web")).toEqual(["shop-web", "web"]);
+    expect(siteServiceNames("", "web")).toEqual(["web"]);
   });
 });

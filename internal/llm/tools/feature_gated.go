@@ -23,7 +23,25 @@ import (
 // The registry row of a gated tool is an ordinary one; only this map gates it.
 // toolcatalog carries a generated copy of its keys for the workflow layer,
 // which cannot import this package.
-var featureGatedTools = map[string]featuregate.Feature{}
+var featureGatedTools = map[string]featuregate.Feature{
+	// GTM (gtm_tools.go): every GTM tool, reads and send alike.
+	ToolListGtmIdeas:           featuregate.GTM,
+	ToolSaveGtmIdea:            featuregate.GTM,
+	ToolListGtmStrategies:      featuregate.GTM,
+	ToolSaveGtmStrategy:        featuregate.GTM,
+	ToolListGtmStrategyLibrary: featuregate.GTM,
+	ToolListGtmCampaigns:       featuregate.GTM,
+	ToolSaveGtmCampaign:        featuregate.GTM,
+	ToolListGtmCalendar:        featuregate.GTM,
+	ToolSaveGtmItem:            featuregate.GTM,
+	ToolListGtmChannels:        featuregate.GTM,
+	ToolSaveGtmChannel:         featuregate.GTM,
+	ToolGetGtmPositioning:      featuregate.GTM,
+	ToolCheckGtmClaims:         featuregate.GTM,
+	ToolReadProductAnalytics:   featuregate.GTM,
+	ToolAttachGtmAsset:         featuregate.GTM,
+	ToolSendGtmEmail:           featuregate.GTM,
+}
 
 // featureGatedOverride replaces featureGatedTools for the length of a test
 // (GateToolForTest); nil uses the map.
@@ -74,7 +92,8 @@ func ReachedGatedFeatures(access ToolAccess) []featuregate.Feature {
 }
 
 // GateToolForTest gates the registry tool name behind f for the length of a
-// test, here and in toolcatalog, since no real tool is gated yet. It swaps
+// test, here and in toolcatalog, so the gating machinery can be tested on a
+// tool whose tags and placement the test picks. It swaps
 // process-wide state, so the test that calls it must not run in parallel.
 func GateToolForTest(tb testing.TB, name string, f featuregate.Feature) {
 	tb.Helper()

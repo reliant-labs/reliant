@@ -39,7 +39,7 @@ const BY_KIND: Partial<Record<string, LearnSection>> = {
   usage: "usage",
   events: "analytics",
   analytics: "analytics",
-  "speed-insights": "speed-insights",
+  "site-insights": "site-insights",
 };
 
 /** The Learn section of a console page, or undefined when it has none. */

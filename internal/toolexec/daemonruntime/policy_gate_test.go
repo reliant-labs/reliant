@@ -312,6 +312,18 @@ func TestPolicyGate_ConfinesGetTree(t *testing.T) {
 		}
 	}
 
+	t.Run("an exemption root outside the grant is refused", func(t *testing.T) {
+		d := newPolicyGateClient(t)
+		resp := runCommand(t, d, &reliantv1.DaemonCommandRequest{
+			RequestId:   "tree-viewer-root",
+			CommandType: "fs.get_tree",
+			Payload:     mustPayload(t, map[string]any{"path": root, "viewer_root": outside}),
+			Policy:      policy(),
+		})
+		require.False(t, resp.GetSuccess())
+		require.Contains(t, resp.GetErrorMessage(), "outside")
+	})
+
 	t.Run("an absolute path outside the root is refused", func(t *testing.T) {
 		d := newPolicyGateClient(t)
 		resp := runCommand(t, d, &reliantv1.DaemonCommandRequest{

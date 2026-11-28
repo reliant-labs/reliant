@@ -139,6 +139,15 @@ type ToolsOptions struct {
 	// manage_change. Optional: nil means they report they are unavailable
 	// here (self-hosted, or the daemon runtime).
 	ChangeController ChangeController
+	// GTM is the GTM domain (gtm.Service) behind the GTM tools, which act
+	// on it as an agent for the calling chat's user and org. Optional: nil
+	// means they report GTM is unavailable here. The tools are feature-gated
+	// whether or not it is set (feature_gated.go).
+	GTM GTMService
+	// GTMEmail sends an approved GTM email for send_gtm_email, behind the
+	// owner's card (internal/gtm/email's Approver). Optional: nil refuses
+	// every send.
+	GTMEmail GTMEmailSender
 	// ConnectionProposer checks a propose_connection call (the chat's org,
 	// the person's org role, an identical proposal already waiting) and reads
 	// back the connection the person made. Optional: nil means the tool
