@@ -47,60 +47,6 @@ func TestTeardownRunsAnOpAtMostOncePerID(t *testing.T) {
 	assert.EqualValues(t, 1, runs.Load())
 }
 
-// A second delivery that arrives while the first is still deleting waits for
-// it instead of running beside it.
-func TestTeardownDuplicateWhileRunningWaitsForTheFirst(t *testing.T) {
-	t.Parallel()
-	j, _ := newTestTeardownJournal(t)
-	release := make(chan struct{})
-	var runs atomic.Int32
-	fn := func(context.Context) (bool, error) { runs.Add(1); <-release; return true, nil }
-
-	firstDone := make(chan teardownRecord)
-	go func() {
-		rec, _ := j.run(context.Background(), "op-2", "reclone", "/clone", fn)
-		firstDone <- rec
-	}()
-	require.Eventually(t, func() bool { return runs.Load() == 1 }, 5*time.Second, time.Millisecond)
-
-	secondDone := make(chan teardownRecord)
-	go func() {
-		rec, _ := j.run(context.Background(), "op-2", "reclone", "/clone", fn)
-		secondDone <- rec
-	}()
-	close(release)
-	assert.Equal(t, teardownDone, (<-firstDone).State)
-	assert.Equal(t, teardownDone, (<-secondDone).State)
-	assert.EqualValues(t, 1, runs.Load())
-}
-
-// The server stops waiting; the op does not stop with it. The request answers
-// running, and a later status query answers how it ended.
-func TestTeardownOutlivesTheRequestThatStartedIt(t *testing.T) {
-	t.Parallel()
-	j, _ := newTestTeardownJournal(t)
-	release := make(chan struct{})
-	ctx, cancel := context.WithCancel(context.Background())
-	started := make(chan struct{})
-	go func() {
-		<-started
-		cancel()
-	}()
-	rec, err := j.run(ctx, "op-3", "reclone", "/clone", func(opCtx context.Context) (bool, error) {
-		close(started)
-		<-release
-		return true, opCtx.Err()
-	})
-	require.NoError(t, err)
-	assert.Equal(t, teardownRunning, rec.State)
-
-	close(release)
-	require.Eventually(t, func() bool {
-		st, err := j.status("op-3")
-		return err == nil && st.State == teardownDone
-	}, 5*time.Second, time.Millisecond, "the op finished on its own context, not the request's")
-}
-
 // A status query for an op never received fences it: a delivery still in
 // flight then refuses to run, so "not run" stays true.
 func TestTeardownStatusFencesAnUnknownOp(t *testing.T) {

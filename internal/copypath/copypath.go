@@ -74,6 +74,16 @@ type Result struct {
 	Copied  []string // entries copied, in request order
 	Missing []string // entries absent from the source — skipped, not an error
 	Failed  []Failure
+	// Stale are copied node_modules entries whose install may not match the
+	// lockfile beside them in the destination, each with the sentence that
+	// says why and what to run (StaleInstall).
+	Stale []Stale
+}
+
+// Stale is a copied node_modules that StaleInstall could not trust.
+type Stale struct {
+	Path   string
+	Reason string
 }
 
 // Failure is an entry that exists in the source but could not be copied.
@@ -94,6 +104,11 @@ type Failure struct {
 //
 // An entry that already exists in the destination — a file the checkout
 // itself created — is replaced. The caller asked for the source's version.
+//
+// A node_modules is copied as an install only: its checkout's build output
+// (node_modules/.tmp, .cache, *.tsbuildinfo) is dropped, and one whose
+// install may not match the destination's lockfile is listed in Stale. See
+// node_modules.go.
 func Copy(srcRoot, dstRoot string, entries []string) Result {
 	var res Result
 	for _, entry := range entries {
@@ -108,11 +123,20 @@ func Copy(srcRoot, dstRoot string, entries []string) Result {
 		if err == nil {
 			err = copyEntry(src, dst, info)
 		}
+		nodeModules := err == nil && info.IsDir() && isNodeModules(entry)
+		if nodeModules {
+			err = dropBuildState(dst)
+		}
 		if err != nil {
 			res.Failed = append(res.Failed, Failure{Path: entry, Err: err})
 			continue
 		}
 		res.Copied = append(res.Copied, entry)
+		if nodeModules {
+			if why := StaleInstall(srcRoot, dstRoot, entry); why != "" {
+				res.Stale = append(res.Stale, Stale{Path: entry, Reason: why})
+			}
+		}
 	}
 	return res
 }

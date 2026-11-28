@@ -38,6 +38,8 @@ type fakeMachine struct {
 	// of an answer: the command never got one.
 	sendErr error
 	copyErr error
+	// copyStale is the daemon's `stale` answer to worktree.copy_paths.
+	copyStale map[string]string
 }
 
 func (f *fakeMachine) Send(_ context.Context, cmd string, payload, resp any, _ int32) error {
@@ -72,7 +74,11 @@ func (f *fakeMachine) Send(_ context.Context, cmd string, payload, resp any, _ i
 		out.WorktreePath = filepath.Join(f.root, sub)
 		out.BaseBranch = "main"
 	case "worktree.copy_paths":
-		return f.copyErr
+		if f.copyErr != nil {
+			return f.copyErr
+		}
+		b, _ := json.Marshal(map[string]any{"copied": p["paths"], "stale": f.copyStale})
+		return json.Unmarshal(b, resp)
 	}
 	return nil
 }
@@ -251,6 +257,28 @@ func TestFinishCopyFailureIsNonFatal(t *testing.T) {
 	require.NoError(t, Finish(context.Background(), st, m, req, wt))
 	assert.Equal(t, int32(reliantv1.WorktreeStatus_WORKTREE_STATUS_ACTIVE), st.rows[wt.ID].Status)
 	assert.Equal(t, "/src/ws", m.cmds("worktree.copy_paths")[0].payload["source_root"])
+}
+
+// A copied node_modules the daemon could not trust is reported back, in the
+// order the paths were asked for, so the caller can tell the agent which
+// install to run before its tests fail on stale packages.
+func TestFinishWithReportPassesOnTheDaemonsStaleInstallNotes(t *testing.T) {
+	st := &fakeStore{}
+	m := &fakeMachine{root: "/w/r", copyStale: map[string]string{
+		"b/web/node_modules": "b/web/node_modules may not match: run its install",
+		"a/node_modules":     "a/node_modules may not match: run its install",
+	}}
+	req := twoRepoReq()
+	req.CopyPaths = []string{".env", "a/node_modules", "b/web/node_modules"}
+	wt, _ := Insert(context.Background(), st, nil, req)
+
+	report, err := FinishWithReport(context.Background(), st, m, req, wt)
+	require.NoError(t, err)
+	assert.Equal(t, []string{
+		"a/node_modules may not match: run its install",
+		"b/web/node_modules may not match: run its install",
+	}, report.CopyNotes)
+	assert.Equal(t, int32(reliantv1.WorktreeStatus_WORKTREE_STATUS_ACTIVE), st.rows[wt.ID].Status, "a note never fails the workspace")
 }
 
 func TestFinishPerRepoBaseOverride(t *testing.T) {
