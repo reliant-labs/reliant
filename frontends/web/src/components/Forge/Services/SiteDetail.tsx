@@ -8,8 +8,9 @@
  *                  else the first), the verdict, the live URL, the release,
  *                  and what is wrong: drift, a suspension, the last error.
  *   site insights  the Real Experience Score (the Speed view's, narrowed to
- *                  this site), SEO and accessibility (placeholders until the
- *                  audits ship), and the way into Site insights.
+ *                  this site), SEO and accessibility (the newest audit's
+ *                  scores, SiteAuditScoreSummary), and the way into Site
+ *                  insights.
  *   deploys        the environment's promotions that moved this site
  *                  (RecentDeploys, filtered to its `sites/<name>/` artifact).
  *   domains        its custom domains: state, where their DNS points, and
@@ -33,6 +34,7 @@ import { cn } from "@/lib/utils";
 import { workloadLastError, type ForgeHostedWorkload } from "@/services/forge/topology";
 
 import { DomainStateBadge } from "../Domains/DomainStateBadge";
+import { SiteAuditScoreSummary } from "../Analytics/siteAuditParts";
 import { SCORE_LABEL, siteRows, siteServiceNames, sitesPanel, type Rating } from "../Analytics/speedInsightsModel";
 import { SITE_SPEED_DEFAULT_RANGE, useSiteInsightsScope, useSiteSpeedSummary } from "../Analytics/useSiteSpeedSummary";
 import { useForgeConsole } from "../Console/consoleContext";
@@ -161,9 +163,6 @@ function Note({ icon, testId, children }: { icon: ReactNode; testId: string; chi
 
 const RATING_INK: Record<Rating, string> = { good: "text-success-ink", ni: "text-warning-ink", poor: "text-danger-ink" };
 
-/** What SEO and accessibility say until the audits (Site insights R4, R5) report. */
-export const FIRST_AUDIT_PENDING = "Your first audit runs after the next release";
-
 function SiteInsightsCard({ name, site }: { name: string; site: SiteEnv }) {
   const { forgeProject, href } = useForgeConsole();
   const services = useMemo(() => siteServiceNames(forgeProject, name), [forgeProject, name]);
@@ -202,12 +201,10 @@ function SiteInsightsCard({ name, site }: { name: string; site: SiteEnv }) {
           )}
         </Score>
         <Score title="SEO" testId="site-insights-seo">
-          <Figure className="text-ink-muted">—</Figure>
-          <Caption>{FIRST_AUDIT_PENDING}</Caption>
+          <SiteAuditScoreSummary envId={site.envId} frontend={name} category="seo" />
         </Score>
         <Score title="Accessibility" testId="site-insights-accessibility">
-          <Figure className="text-ink-muted">—</Figure>
-          <Caption>{FIRST_AUDIT_PENDING}</Caption>
+          <SiteAuditScoreSummary envId={site.envId} frontend={name} category="accessibility" />
         </Score>
       </Card>
     </Section>

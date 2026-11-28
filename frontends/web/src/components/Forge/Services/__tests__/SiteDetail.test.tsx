@@ -42,13 +42,37 @@ vi.mock("../../Analytics/useSiteSpeedSummary", () => ({
   },
 }));
 
+// The audits' read (GetSiteAudit), answered by the shop pack's story (v1.8.2 audited: SEO 81, accessibility 88,
+// down from 94 and 97 on v1.8.1), by a site with no finished audit yet, or still loading.
+const audit = { mode: "story" as "story" | "none" | "loading" };
+const auditReads: unknown[] = [];
+vi.mock("@/hooks/controlplane/site-audit-service-hooks_gen", async (importOriginal) => {
+  const { create } = await import("@bufbuild/protobuf");
+  const { GetSiteAuditRequestSchema, GetSiteAuditResponseSchema } = await import("@/gen/controlplane/services/siteaudit/v1/siteaudit_pb");
+  const { shopSiteAudit } = await import("@/fixtures/shop/handlers/siteAudit");
+  type Req = Parameters<typeof shopSiteAudit>[0];
+  type Res = ReturnType<typeof shopSiteAudit>;
+  return {
+    ...(await importOriginal<typeof import("@/hooks/controlplane/site-audit-service-hooks_gen")>()),
+    useGetSiteAudit: (req: unknown, options: { enabled?: boolean; select: (res: Res) => unknown }) => {
+      if (!options.enabled) return { data: undefined, isLoading: false, error: null };
+      auditReads.push(req);
+      if (audit.mode === "loading") return { data: undefined, isLoading: true, error: null };
+      const res = audit.mode === "story" ? shopSiteAudit(create(GetSiteAuditRequestSchema, req as Req)) : create(GetSiteAuditResponseSchema, {});
+      return { data: options.select(res), isLoading: false, error: null };
+    },
+  };
+});
+
 vi.mock("@/hooks/observability-queries", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/hooks/observability-queries")>()),
+  useObservabilityOrg: () => ({ orgId: "org-shop", isLoading: false, error: null, refetch: () => undefined }),
   // The sites panel: the storefront reports as "shop-web".
   usePanelQuery: () => ({ data: { columns: ["views"], rows: [{ group: { service: "shop-web" }, values: [1234] }] }, isLoading: false }),
 }));
 
-const { SiteDetail, FIRST_AUDIT_PENDING } = await import("../SiteDetail");
+const { SiteDetail } = await import("../SiteDetail");
+const { FIRST_AUDIT_PENDING } = await import("../../Analytics/siteAuditParts");
 const { ForgeConsoleContext } = await import("@/components/Forge/Console/consoleContextValue");
 const { consolePath, withSearch } = await import("@/components/Forge/Console/paths");
 type ForgeConsole = NonNullable<React.ContextType<typeof ForgeConsoleContext>>;
@@ -110,6 +134,8 @@ beforeEach(() => {
   orgDomains.domains = [];
   speed.score = 87;
   speedCalls.length = 0;
+  audit.mode = "story";
+  auditReads.length = 0;
   setEnv.mockReset();
 });
 
@@ -146,16 +172,44 @@ describe("SiteDetail", () => {
     expect(screen.getByTestId("site-last-error")).toHaveTextContent("upload to the bucket failed");
   });
 
-  it("Site insights: this site's Real Experience Score, the audits' placeholders, and the way in", () => {
+  it("Site insights: this site's Real Experience Score, its audit scores, and the way in", () => {
     renderSite([{ envName: "prod", deployment: PROD }], "prod");
     expect(speedCalls[0]).toMatchObject({ project: "shop", envId: "env-prod", services: ["shop-shop-web", "shop-web"] });
     const card = screen.getByTestId("site-insights-card");
     expect(within(card).getByTestId("site-insights-speed")).toHaveTextContent("87");
     expect(within(card).getByTestId("site-insights-speed")).toHaveTextContent("Real Experience Score · Needs improvement · 1.2k page loads");
-    expect(within(card).getByTestId("site-insights-seo")).toHaveTextContent(FIRST_AUDIT_PENDING);
-    expect(within(card).getByTestId("site-insights-accessibility")).toHaveTextContent(FIRST_AUDIT_PENDING);
+    expect(within(card).getByTestId("site-insights-seo")).toHaveTextContent("SEO81−13 since v1.8.1");
+    expect(within(card).getByTestId("site-insights-accessibility")).toHaveTextContent("Accessibility88−9 since v1.8.1");
     // The picker's service.name: the one that sent vitals.
     expect(within(card).getByTestId("site-insights-link")).toHaveAttribute("href", "/forge/p/shop/site-insights?env=prod&site=shop-web");
+  });
+
+  it("Site insights: the audit read names this site in the shown environment, and a score below 90 is rated", () => {
+    renderSite([{ envName: "prod", deployment: PROD }], "prod");
+    expect(auditReads).toContainEqual({ selector: { case: "latest", value: { environmentId: "env-prod", frontend: "shop-web" } }, orgId: "org-shop" });
+    expect(within(screen.getByTestId("site-audit-summary-seo")).getByText("81")).toHaveClass("text-warning-ink");
+    expect(within(screen.getByTestId("site-audit-summary-accessibility")).getByText("88")).toHaveClass("text-warning-ink");
+  });
+
+  it("Site insights: before the first audit, SEO and accessibility say when it runs", () => {
+    audit.mode = "none";
+    renderSite([{ envName: "prod", deployment: PROD }], "prod");
+    expect(screen.getByTestId("site-insights-seo")).toHaveTextContent(`SEO—${FIRST_AUDIT_PENDING}`);
+    expect(screen.getByTestId("site-insights-accessibility")).toHaveTextContent(`Accessibility—${FIRST_AUDIT_PENDING}`);
+  });
+
+  it("Site insights: a site in an environment the console does not list reads no audit", () => {
+    renderSite([{ envName: "preview", deployment: PROD }], "preview");
+    expect(auditReads).toEqual([]);
+    expect(screen.getByTestId("site-insights-seo")).toHaveTextContent(FIRST_AUDIT_PENDING);
+    expect(screen.getByTestId("site-insights-accessibility")).toHaveTextContent(FIRST_AUDIT_PENDING);
+  });
+
+  it("Site insights: the audit scores load in place", () => {
+    audit.mode = "loading";
+    renderSite([{ envName: "prod", deployment: PROD }], "prod");
+    expect(within(screen.getByTestId("site-insights-seo")).getByLabelText("Loading the audit score")).toBeInTheDocument();
+    expect(within(screen.getByTestId("site-insights-accessibility")).getByLabelText("Loading the audit score")).toBeInTheDocument();
   });
 
   it("Site insights: no score before a measured visit", () => {
