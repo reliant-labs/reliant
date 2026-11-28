@@ -14,6 +14,10 @@
  * (ForgePanePreview, ReleasesPreview, WorkloadsPreview) map their query
  * strings to a console path, and their pickers (case, scheme, dark) to
  * PreviewControls.
+ *
+ * The static site's page (Services/SiteDetail.tsx) is the `service` route at
+ * the pack's site: /forge/p/shop/services/shop-web (prod: two live custom
+ * domains and one issuing its certificate; staging: one verifying).
  */
 
 import { useEffect, useMemo, type ReactNode } from "react";

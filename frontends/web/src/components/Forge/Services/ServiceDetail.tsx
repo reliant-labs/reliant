@@ -17,7 +17,7 @@
  *               one charted (the picked one, else the first).
  *   deploys     the environment's recent promotions.
  *
- * A static site has a page of its own shape (below). A database's page is
+ * A static site has a page of its own shape (SiteDetail.tsx). A database's page is
  * Data, the database's home (U6e, owner: "the DB page from Services and
  * Data should be the same place"): /services/<database> redirects there,
  * keeping the environment.
@@ -25,14 +25,13 @@
 
 import { useEffect, useMemo, type ReactNode } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { ArrowRight, ExternalLink, ScrollText, Waypoints } from "lucide-react";
+import { ArrowRight, ScrollText, Waypoints } from "lucide-react";
 
 import Card from "@/components/forge-ui/card";
 import Link from "@/components/forge-ui/link";
 import Status from "@/components/forge-ui/status";
 import Tag from "@/components/forge-ui/tag";
 import { useMetricCatalog, usePanelQuery, useWorkload } from "@/hooks/observability-queries";
-import { useEnvPromotions } from "@/hooks/release-queries";
 import { cn } from "@/lib/utils";
 import type { MetricCatalogEntry } from "@/services/controlPlane/observability/metricsTypes";
 import type { ObsScope, Workload, WorkloadPod } from "@/services/controlPlane/observability/types";
@@ -46,14 +45,16 @@ import { unionTimestamps, alignTo } from "../Observability/Dashboards/seriesMode
 import { formatBytes, formatCores, formatCount, formatDuration, formatPercent, type ValueUnit } from "../Observability/format";
 import { ratioSeries, redPanel, seriesValues } from "../Observability/Home/homeModel";
 import { useExploreHref } from "../Observability/Metrics/pivots";
-import { Ago } from "../Releases/releaseParts";
 import { shortVersion } from "../Releases/releaseModel";
 import { formatAge, KIND_LABEL, OVERVIEW_RANGE } from "../Workloads/workloadModel";
 import { HealthStatus } from "../Workloads/workloadParts";
 import type { StripEnv } from "../Workloads/workloadModel";
 import { useWorkloadUsage } from "../LiveState/useAppLiveState";
 import { useServicesData, type ServicesSearch } from "./useServicesData";
-import { containerFigures, customMetrics, databasesOf, metricPanel, sitesOf, verdictStatus } from "./servicesModel";
+import { RecentDeploys } from "./RecentDeploys";
+import { Section } from "./serviceParts";
+import { containerFigures, customMetrics, databasesOf, metricPanel, sitesOf } from "./servicesModel";
+import { SiteDetail } from "./SiteDetail";
 
 export function ServiceDetail({ name, search }: { name: string; search: ServicesSearch }) {
   const range = search.range ?? OVERVIEW_RANGE;
@@ -65,7 +66,7 @@ export function ServiceDetail({ name, search }: { name: string; search: Services
   if (databases.length > 0 && !isWorkload) return <DatabaseRedirect entries={databases} />;
   // Not a workload: wait for GetStatus, which says whether it is the database or a site.
   if (!isWorkload && data.hostedLoading) return <div className="h-64 animate-pulse rounded-xl border border-border bg-surface motion-reduce:animate-none" aria-label="Loading" />;
-  if (sites.length > 0) return <SiteDetail name={name} entries={sites} />;
+  if (sites.length > 0) return <SiteDetail name={name} entries={sites} envs={envs} />;
   // The environment: the scope's; on All, the first (prod leads) that runs it.
   const runsIn = (candidate: StripEnv) => (listed.data?.workloads ?? []).some((w) => w.workload === name && w.envName === candidate.name);
   const target = env === ENV_ALL ? (envs.find((candidate) => !candidate.preview && runsIn(candidate)) ?? envs.find(runsIn) ?? null) : (envs.find((candidate) => candidate.name === env) ?? null);
@@ -194,21 +195,6 @@ function IconLink({ href, icon, children }: { href: string; icon: ReactNode; chi
       {icon}
       {children}
     </Link>
-  );
-}
-
-function Section({ title, meta, actions, testId, children }: { title: ReactNode; meta?: ReactNode; actions?: ReactNode; testId?: string; children: ReactNode }) {
-  return (
-    <section className="min-w-0 space-y-3 pt-4" data-testid={testId}>
-      <div className="flex min-h-7 items-center justify-between gap-3">
-        <h2 className="min-w-0 text-section text-ink">
-          {title}
-          {meta && <span className="ml-2 text-meta font-normal text-ink-muted">{meta}</span>}
-        </h2>
-        {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
-      </div>
-      {children}
-    </section>
   );
 }
 
@@ -500,40 +486,7 @@ function CustomMetrics({ scope, range, name, picked, env }: { scope: ObsScope | 
   );
 }
 
-// ── Recent deploys ──────────────────────────────────────────────────────────
-
-function RecentDeploys({ env, name }: { env: StripEnv; name: string }) {
-  const { href } = useForgeConsole();
-  const ledgers = useEnvPromotions([env.id]);
-  const entry = ledgers.get(env.id);
-  const moved = (entry?.data ?? []).filter((p) => p.targets.length === 0 || p.targets.includes(name)).slice(0, 5);
-  return (
-    <Section title="Recent deploys" meta={`in ${env.name}`} actions={<Link href={href({ kind: "releases" })} className="no-color text-meta text-ink-muted hover:text-ink">All releases →</Link>} testId="service-deploys">
-      {entry?.isLoading ? (
-        <div className="h-16 animate-pulse rounded-xl bg-ink/5 motion-reduce:animate-none" />
-      ) : moved.length === 0 ? (
-        <p className="text-ui text-ink-muted">No deploy has moved {name} in {env.name} yet.</p>
-      ) : (
-        <ol className="divide-y divide-border-subtle rounded-xl border border-border bg-surface">
-          {moved.map((p) => (
-            <li key={p.id} className="flex items-center gap-3 px-3 py-2.5 text-ui">
-              <Link href={href({ kind: "release", version: p.releaseVersion })} className="no-color font-medium tabular-nums text-ink hover:underline" title={p.releaseVersion}>
-                {shortVersion(p.releaseVersion)}
-              </Link>
-              {p.fromEnvironmentName && <span className="text-meta text-ink-muted">from {p.fromEnvironmentName}</span>}
-              <span className="ml-auto text-meta text-ink-muted">
-                {p.promotedByActor && <span className="text-ink">{p.promotedByActor} · </span>}
-                {p.createdAt && <Ago at={p.createdAt} />}
-              </span>
-            </li>
-          ))}
-        </ol>
-      )}
-    </Section>
-  );
-}
-
-// ── The database and the site ──────────────────────────────────────────────
+// ── The database ────────────────────────────────────────────────────────────
 
 /**
  * /services/<database> → Data (U6e): the database's home is Data, with its
@@ -549,42 +502,4 @@ function DatabaseRedirect({ entries }: { entries: { envName: string }[] }) {
     void navigate({ href: to, replace: true });
   }, [navigate, to]);
   return <div className="h-64 animate-pulse rounded-xl border border-border bg-surface motion-reduce:animate-none" aria-label="Opening Data" data-testid="console-service-database-redirect" />;
-}
-
-function SiteDetail({ name, entries }: { name: string; entries: { envName: string; deployment: { url?: string; hostname?: string; verdict?: string } }[] }) {
-  const { href } = useForgeConsole();
-  return (
-    <Page testId="console-service-site">
-      <Header title={name} meta={<span>Static site</span>} />
-      <ul className="divide-y divide-border-subtle rounded-xl border border-border bg-surface">
-        {entries.map(({ envName, deployment }) => {
-          const url = deployment.url || (deployment.hostname ? `https://${deployment.hostname}` : "");
-          const verdict = verdictStatus(deployment);
-          return (
-            <li key={envName} className="flex items-center gap-3 px-3 py-2.5 text-ui">
-              <Tag>{envName}</Tag>
-              <Status tone={verdict.tone} label={verdict.label} />
-              {url && (
-                <a href={url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-primary-ink hover:underline">
-                  {url.replace(/^https?:\/\//, "")}
-                  <ExternalLink className="size-3" aria-hidden="true" />
-                </a>
-              )}
-            </li>
-          );
-        })}
-      </ul>
-      <p className="text-ui text-ink-muted">
-        Visitors, page views and browser errors are on{" "}
-        <Link href={href({ kind: "obs-view", view: "sessions" })} className="no-color text-primary-ink hover:underline">
-          Sessions
-        </Link>{" "}
-        and{" "}
-        <Link href={href({ kind: "obs-view", view: "errors" })} className="no-color text-primary-ink hover:underline">
-          Errors
-        </Link>
-        .
-      </p>
-    </Page>
-  );
 }

@@ -885,6 +885,14 @@ const SURFACES: Surface[] = [
     ready: (page) => page.getByTestId('service-instances').first(),
   },
   {
+    // A static site's page (Site insights R2): its header, Site insights card, deploys and
+    // domains, on prod (the environment with a live custom domain).
+    name: 'shell-site-detail',
+    path: '/forge/p/shop/services/shop-web',
+    on: ['desktop'],
+    ready: (page) => page.getByTestId('site-domain-sale.shop.example.com').first(),
+  },
+  {
     name: 'shell-services-charts',
     path: '/forge/p/shop/services?view=charts',
     on: ['desktop'],

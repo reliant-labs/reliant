@@ -24,6 +24,7 @@ import { Code, ConnectError, createClient } from "@connectrpc/connect";
 
 vi.mock("@/services/controlPlane/config", () => ({ CONTROL_PLANE_API_URL: "https://cp.test", hasControlPlane: true }));
 
+import { DeployCustomDomainState } from "@/gen/controlplane/controlplane/v1/deploy_pb";
 import { DeployService } from "@/gen/controlplane/services/deploy/v1/deploy_pb";
 import { ObservabilityBillingService } from "@/gen/controlplane/services/observability_billing/v1/observability_billing_pb";
 import { SecretStoreService } from "@/gen/controlplane/services/secret_store/v1/secret_store_pb";
@@ -223,6 +224,19 @@ describe("the console's sample data, on the demo's transport", () => {
     expect(domains.map((d) => d.hostname)).toEqual(DEMO_DOMAINS.map((d) => d.hostname));
     expect(domains.find((d) => d.hostname === "shop.example.com")?.state).toBe("live");
     expect(domains.find((d) => d.hostname === "staging.shop.example.com")?.state).toBe("verifying");
+    expect(domains.find((d) => d.hostname === "sale.shop.example.com")?.state).toBe("issuing");
+  });
+
+  it("GetStatus: the storefront's custom domains on its static deployment, none on a backend", async () => {
+    const deploy = createClient(DeployService, transport);
+    const prod = (await deploy.getStatus({ environmentId: "env-prod" })).deployments;
+    const site = prod.find((d) => d.deployment?.name === "shop-web")?.deployment?.observed?.domains ?? [];
+    expect(site.map((d) => [d.domain, d.state])).toEqual([
+      ["shop.example.com", DeployCustomDomainState.LIVE],
+      ["shop.example.co.uk", DeployCustomDomainState.LIVE],
+      ["sale.shop.example.com", DeployCustomDomainState.ISSUING],
+    ]);
+    expect(prod.find((d) => d.deployment?.name === "api")?.deployment?.observed?.domains).toEqual([]);
   });
 
   it("Activity: promotions, a release cut, a triage and a rotation, newest first", async () => {
