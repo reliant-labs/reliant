@@ -360,6 +360,10 @@ var reissuableDaemonCommands = map[string]bool{
 	// once.
 	"pipeline.gate.start":  true,
 	"pipeline.gate.status": true,
+	// The merge queue's code operations (internal/mergequeue/buildjob), the
+	// same way: a start is keyed by its job id, a status only reads.
+	"pipeline.job.start":  true,
+	"pipeline.job.status": true,
 }
 
 // interruption is ErrDaemonConnectionInterrupted in the gateway's own words,

@@ -75,6 +75,75 @@ service PipelineService {
   rpc ListQueue(ListQueueRequest) returns (ListQueueResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
+
+  // ListCapabilityGrants lists the pipeline capability grants the caller
+  // made to their activations (internal/pipeline/grants), newest first: the
+  // live ones, or every one with include_revoked. A grant is made only by
+  // approving the card an activation's run raises
+  // (reliant/pipeline.request_grant@1), never by an rpc.
+  rpc ListCapabilityGrants(ListCapabilityGrantsRequest) returns (ListCapabilityGrantsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+
+  // RevokeCapabilityGrant revokes one of the caller's grants at once: the
+  // next run of the activation no longer holds it. It needs no approval,
+  // since it only takes power away. Revoking a revoked grant returns it
+  // unchanged; another user's grant is NotFound.
+  rpc RevokeCapabilityGrant(RevokeCapabilityGrantRequest) returns (RevokeCapabilityGrantResponse) {
+    option idempotency_level = IDEMPOTENT;
+    option (forge.v1.method) = {
+      activity: {
+        verb: "revoke"
+        target: {
+          kind: "pipeline_capability_grant"
+          id: "grant_id"
+          label: "response.grant.capability"
+        }
+      }
+    };
+  }
+}
+
+message ListCapabilityGrantsRequest {
+  // trigger_id narrows the list to one activation's grants.
+  optional string trigger_id = 1;
+  // include_revoked lists revoked grants too.
+  optional bool include_revoked = 2;
+}
+
+message ListCapabilityGrantsResponse {
+  repeated PipelineCapabilityGrant grants = 1;
+}
+
+message RevokeCapabilityGrantRequest {
+  string grant_id = 1 [(buf.validate.field).required = true];
+}
+
+message RevokeCapabilityGrantResponse {
+  PipelineCapabilityGrant grant = 1;
+}
+
+// PipelineCapabilityGrant is the owner's grant of one pipeline capability
+// to one activation, on one machine pool.
+message PipelineCapabilityGrant {
+  string id = 1;
+  // trigger_id is the activation (the trigger) the grant is made to.
+  string trigger_id = 2;
+  // machine_pool_id is the pool the activation's runs must run on.
+  string machine_pool_id = 3;
+  // repo_id is the enrolled repository the grant is limited to; empty for
+  // every one.
+  string repo_id = 4;
+  // capability is approve or land.
+  string capability = 5;
+  // granted_by_user_id is the owner who approved the card that made it.
+  string granted_by_user_id = 6;
+  // approval_id is that card.
+  string approval_id = 7;
+  google.protobuf.Timestamp granted_at = 8;
+  // revoked_at is unset while the grant is live.
+  google.protobuf.Timestamp revoked_at = 9;
+  string revoked_by_user_id = 10;
 }
 
 message EnrolRepositoryRequest {

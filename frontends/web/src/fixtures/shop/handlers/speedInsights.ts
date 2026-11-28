@@ -1,15 +1,19 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * The shop pack's Speed insights: web vitals for six routes of shop's
- * storefront (shop-web), as the page's three SQL QueryPanels read them from
- * the browser runtime's `webvitals` spans (Forge/Analytics/speedInsightsModel.ts):
+ * The shop pack's Site insights › Speed: web vitals for six routes of shop's
+ * storefront (shop-web), as the page's SQL QueryPanels read them from the
+ * browser runtime's `webvitals` spans (Forge/Analytics/speedInsightsModel.ts):
  *
  *   speed-insights-summary   the app, one row: each vital at the percentile,
  *                            its good / needs-improvement / poor counts, and
  *                            page loads
  *   speed-insights-routes    the same per route
  *   speed-insights-series    the same per time bucket over the window
+ *   speed-insights-sites     the sites that sent any: the storefront alone
+ *
+ * The site filter (the request's scope.services, the page's `?site=`) is
+ * honoured: a site other than the storefront measured nothing.
  *
  * The device (`reliant.device.type`), the percentile (`quantileIf(0.9)`) and
  * the bucket (`INTERVAL n SECOND`) are read back out of the request's SQL, so
@@ -20,8 +24,8 @@
  * Every time is relative to the pack clock.
  *
  * Ported from the visual harness's own fixture (e2e/visual), so the demo and
- * the screenshots show one Speed insights page. `withSpeedInsights` answers
- * these three panels and hands every other QueryPanel to the pack's handler.
+ * the screenshots show one Site insights page. `withSpeedInsights` answers
+ * these panels and hands every other QueryPanel to the pack's handler.
  */
 
 import { create } from "@bufbuild/protobuf";
@@ -29,7 +33,7 @@ import type { MockHandlers } from "@reliantlabs/forge-web-runtime/mock-transport
 
 import { ObservabilityService, QueryPanelResponseSchema, type QueryPanelRequest } from "@/gen/controlplane/services/observability/v1/observability_pb";
 
-import { DAY, demoNow } from "../shopStory";
+import { DAY, DEMO_FRONTEND, demoNow } from "../shopStory";
 import { msOf, windowOf } from "./wire";
 
 type Vital = "lcp" | "inp" | "cls" | "fcp" | "ttfb";
@@ -125,7 +129,10 @@ function combine(parts: Part[]): Part {
   return { stats, views: parts.reduce((acc, p) => acc + p.views, 0) };
 }
 
-/** Speed insights' answer to one QueryPanel, or undefined when the panel is not one of its three. */
+/** The storefront's telemetry service.name: the one site the pack measures. */
+export const SPEED_SITE = DEMO_FRONTEND;
+
+/** Site insights' answer to one of its QueryPanels, or undefined when the panel is not one of them. */
 export function speedInsightsPanel(req: QueryPanelRequest, now: number = demoNow()) {
   const id = req.panel?.id ?? "";
   if (!id.startsWith("speed-insights-")) return undefined;
@@ -134,13 +141,23 @@ export function speedInsightsPanel(req: QueryPanelRequest, now: number = demoNow
   const window = windowOf(range, now);
   const end = window?.endMs ?? (range?.end ? msOf(range.end) : now);
   const start = window?.startMs ?? (range?.start ? msOf(range.start) : end - 7 * DAY);
-  const share = Math.min(4, (end - start) / (7 * DAY));
+  // Another site than the storefront measured nothing (the model's {services} filter).
+  const services = req.scope?.services ?? [];
+  const measured = services.length === 0 || services.includes(SPEED_SITE);
+  const share = measured ? Math.min(4, (end - start) / (7 * DAY)) : 0;
   const answer = (rows: { group: Record<string, string>; values: number[] }[], columns = COLUMNS) =>
     create(QueryPanelResponseSchema, { kind: "sql", columns, rows: rows.map((row) => ({ ...row, missingValueIndexes: [] })) });
+  if (id === "speed-insights-sites") {
+    const all = combine(ROUTES.map((route) => routeStats(route, { ...ask, device: "desktop" }, share)));
+    const mobile = combine(ROUTES.map((route) => routeStats(route, { ...ask, device: "mobile" }, share)));
+    return answer(measured ? [{ group: { service: SPEED_SITE }, values: [all.views + mobile.views] }] : [], ["views"]);
+  }
   if (id === "speed-insights-summary") {
+    // An aggregate over no row is still one row, of zeros: no sample.
     const all = combine(ROUTES.map((route) => routeStats(route, ask, share)));
     return answer([{ group: { scope: "all" }, values: values(all.stats, all.views) }]);
   }
+  if (!measured) return answer([], id === "speed-insights-series" ? ["t", ...COLUMNS] : COLUMNS);
   if (id === "speed-insights-routes") {
     return answer(
       ROUTES.map((route) => {
@@ -166,7 +183,7 @@ export function speedInsightsPanel(req: QueryPanelRequest, now: number = demoNow
 
 const QUERY_PANEL = `${ObservabilityService.typeName}/QueryPanel`;
 
-/** `handlers` with Speed insights' three panels answered first, every other QueryPanel by the handler it had. */
+/** `handlers` with Site insights' Speed panels answered first, every other QueryPanel by the handler it had. */
 export function withSpeedInsights(handlers: MockHandlers): MockHandlers {
   const rest = handlers[QUERY_PANEL];
   return {

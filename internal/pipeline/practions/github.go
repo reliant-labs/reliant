@@ -10,11 +10,10 @@ import (
 	"github.com/reliant-labs/reliant/internal/integrations/catalog"
 	"github.com/reliant-labs/reliant/internal/integrations/httpaction"
 	"github.com/reliant-labs/reliant/internal/integrations/writeledger"
-	"github.com/reliant-labs/reliant/internal/pipeline/prpolicy"
 )
 
 // CatalogGitHub is GitHub through the integration catalog's own actions
-// (github/pr.get, pr.list_files, issue.comment, issue.update), run the way
+// (github/pr.get, branch.get, issue.comment, issue.update), run the way
 // an action node runs them: credentials resolved for the run on the worker,
 // every write recorded in the write ledger, so the comment it posts is
 // attributed to the run and an event it causes is known as its echo.
@@ -86,47 +85,22 @@ func (g *CatalogGitHub) PullRequest(ctx context.Context, as Caller, repo string,
 	return pr, nil
 }
 
-// ChangedFiles reads the PR's files (github/pr.list_files, without
-// patches). A list GitHub cut short is marked so (Diff.ChangedFiles), which
-// prpolicy judges high risk.
-func (g *CatalogGitHub) ChangedFiles(ctx context.Context, as Caller, repo string, number int) (ChangedFiles, error) {
+// BranchTip reads the commit a branch points at (github/branch.get): a ref,
+// never contents. A branch that does not exist is an error.
+func (g *CatalogGitHub) BranchTip(ctx context.Context, as Caller, repo, branch string) (string, error) {
 	owner, name, err := ownerRepo(repo)
 	if err != nil {
-		return ChangedFiles{}, err
+		return "", err
 	}
-	res, err := g.run(ctx, as, "github/pr.list_files@1",
-		map[string]any{"owner": owner, "repo": name, "pull_number": number, "include_patch": false}, false)
+	res, err := g.run(ctx, as, "github/branch.get@1", map[string]any{"owner": owner, "repo": name, "branch": branch}, false)
 	if err != nil {
-		return ChangedFiles{}, err
+		return "", err
 	}
-	items, _ := res.Data["items"].([]any)
-	files := make([]prpolicy.ChangedFile, 0, len(items))
-	blobs := make(map[string]string, len(items))
-	for _, raw := range items {
-		f, ok := raw.(map[string]any)
-		if !ok {
-			continue
-		}
-		cf := prpolicy.ChangedFile{}
-		cf.Path, _ = f["filename"].(string)
-		cf.PreviousPath, _ = f["previous_filename"].(string)
-		status, _ := f["status"].(string)
-		cf.Status = prpolicy.FileStatus(status)
-		if n, ok := f["additions"].(float64); ok {
-			cf.Additions = int(n)
-		}
-		if n, ok := f["deletions"].(float64); ok {
-			cf.Deletions = int(n)
-		}
-		files = append(files, cf)
-		sha, _ := f["sha"].(string)
-		blobs[cf.Path] = sha
+	sha, _ := res.Data["sha"].(string)
+	if exists, _ := res.Data["exists"].(bool); !exists || sha == "" {
+		return "", fmt.Errorf("%s has no branch %q", repo, branch)
 	}
-	diff := prpolicy.NewDiff(files...)
-	if res.Truncated {
-		diff.ChangedFiles = len(files) + 1 // more than were listed
-	}
-	return ChangedFiles{Diff: diff, Blobs: blobs}, nil
+	return sha, nil
 }
 
 // Comment posts on the PR's conversation (github/issue.comment) as the bot.

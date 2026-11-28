@@ -25,7 +25,7 @@ minimumReleaseAgeExclude:
   # (vitest 5 no longer reads the global jest.Matchers that 6.x/7.x augment).
   # Published 2026-11-19; drop this line once it is past the release-age window.
   - '@testing-library/jest-dom@8.0.0'
-  - '@reliantlabs/forge-web-runtime@0.13.19 || 0.13.22 || 0.13.23 || 0.14.1'
+  - '@reliantlabs/forge-web-runtime@0.13.19 || 0.13.22 || 0.13.23 || 0.14.0 || 0.14.1'
 # Dependency versions forced past what a package pins.
 #   monaco-editor pins dompurify exactly (3.4.15 in 0.57.0); keep its copy on
 #   the same patched release as ours.
