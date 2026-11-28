@@ -243,6 +243,13 @@ export const DEMO_TIPS: Record<DemoTipKey, DemoTip> = {
     command: "forge site audit dist",
     target: tid("site-insights-seo-routes"),
   },
+  "site-insights-accessibility": {
+    title: "Accessibility",
+    body: "After every release, each page of your site is checked for what keeps people using a screen reader, a keyboard or a magnifier out. Each issue names the element, the route and how to fix it, most serious first.",
+    help: "Your agent can fix an issue from its element and rule, and check the page again before the next release.",
+    command: "forge site audit dist --browser",
+    target: tid("site-insights-a11y-routes"),
+  },
   sessions: {
     title: "Sessions",
     body: "Understand what a visitor experienced before something went wrong. Open a session to follow its pages, actions and errors alongside the requests behind them.",

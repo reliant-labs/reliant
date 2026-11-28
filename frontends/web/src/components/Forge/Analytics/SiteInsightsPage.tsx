@@ -18,7 +18,7 @@
  *
  * An audit view says "coming soon" until its page ships:
  * SITE_AUDIT_VIEWS_READY is the flag each card flips (SEO: R4,
- * SeoInsightsView.tsx).
+ * SeoInsightsView.tsx; Accessibility: R5, AccessibilityInsightsView.tsx).
  */
 
 import type { ComponentType, ReactNode } from "react";
@@ -29,6 +29,7 @@ import Card from "@/components/forge-ui/card";
 import { useForgeConsole } from "../Console/consoleContext";
 import { Page } from "../Console/consolePageFrame";
 import type { ConsolePage, SiteInsightsView } from "../Console/paths";
+import { AccessibilityInsightsView } from "./AccessibilityInsightsView";
 import { SeoInsightsView } from "./SeoInsightsView";
 import { SiteInsightsHeader } from "./siteInsightsParts";
 import { SpeedInsightsView } from "./SpeedInsightsPage";
@@ -41,10 +42,10 @@ export type SiteAuditView = Exclude<SiteInsightsView, "speed">;
  * what is coming. The SEO (R4) and Accessibility (R5) cards flip theirs when
  * the page they render ships.
  */
-export const SITE_AUDIT_VIEWS_READY: Readonly<Record<SiteAuditView, boolean>> = { seo: true, accessibility: false };
+export const SITE_AUDIT_VIEWS_READY: Readonly<Record<SiteAuditView, boolean>> = { seo: true, accessibility: true };
 
 /** Each audit view's page, once its flag is set. */
-const AUDIT_VIEWS: Partial<Record<SiteAuditView, ComponentType>> = { seo: SeoInsightsView };
+const AUDIT_VIEWS: Partial<Record<SiteAuditView, ComponentType>> = { seo: SeoInsightsView, accessibility: AccessibilityInsightsView };
 
 /** The view a Site insights page shows: its path's, or Speed. */
 export function siteInsightsViewOf(page: ConsolePage): SiteInsightsView {
