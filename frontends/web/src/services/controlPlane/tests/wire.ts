@@ -9,11 +9,12 @@
  * messages (gen/controlplane/services/tests/v1/tests_pb.ts, vendored from
  * control-plane at the commit proto-vendor/controlplane/SOURCE names): field
  * names as protobuf-es writes them, enums as their numbers, int64 as bigint,
- * timestamps as google.protobuf.Timestamp. testApi.ts hands each generated
- * response straight to its mapper here, so the compiler checks that every
- * field below exists on the real message with a compatible type. They stay
- * plain interfaces, not the generated types, because the fixtures
- * (components/Forge/Tests/*Fixtures.ts) build them as object literals.
+ * timestamps as google.protobuf.Timestamp. hooks/test-queries.ts hands each
+ * generated response straight to its mapper here (in `select`), so the
+ * compiler checks that every field below exists on the real message with a
+ * compatible type. They stay plain interfaces, not the generated types,
+ * because the fixtures (components/Forge/Tests/*Fixtures.ts) build them as
+ * object literals.
  * Fields added to the proto after the first sync are optional here, so the
  * fixtures need not set them.
  */
@@ -661,18 +662,19 @@ export function testDetailOf(res: WireTestResponse): TestDetail {
 
 // ── Requests ────────────────────────────────────────────────────────────────
 
-const RUN_SOURCE_WIRE: Record<NonNullable<RunsRequest["filters"]["source"]>, number> = {
+/** The request filters' enums as their wire numbers (exported for the fixtures, which read requests back). */
+export const RUN_SOURCE_WIRE: Record<NonNullable<RunsRequest["filters"]["source"]>, number> = {
   ci: WireRunSource.CI,
   local: WireRunSource.LOCAL,
   env: WireRunSource.ENV,
   confirm: WireRunSource.CONFIRM,
 };
-const RUN_OUTCOME_WIRE: Record<TestRunOutcome, number> = {
+export const RUN_OUTCOME_WIRE: Record<TestRunOutcome, number> = {
   passed: WireRunOutcome.PASSED,
   failed: WireRunOutcome.FAILED,
   undetermined: WireRunOutcome.UNDETERMINED,
 };
-const FLAKE_STATE_WIRE: Record<NonNullable<FlakyRequest["filters"]["state"]>, number> = {
+export const FLAKE_STATE_WIRE: Record<NonNullable<FlakyRequest["filters"]["state"]>, number> = {
   healthy: WireFlakeState.HEALTHY,
   suspected: WireFlakeState.SUSPECTED,
   flaky: WireFlakeState.FLAKY,

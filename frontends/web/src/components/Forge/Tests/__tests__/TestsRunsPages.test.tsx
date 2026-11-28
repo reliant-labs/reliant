@@ -16,11 +16,11 @@ import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 
 import { forgeConsoleTestsRunsSearchSchema } from "@/routeSchemas";
 
-import { FIXTURE_NOW, FIXTURE_PROJECT, fixtureTestApi, type FixtureTestApi, type TestsScenario } from "../fixtures";
+import { FIXTURE_NOW, FIXTURE_PROJECT, fixtureTests, type FixtureTests, type TestsScenario } from "../fixtures";
 import { FIXTURE_PR_BRANCH, FIXTURE_PREVIEW_ENV_ID, FIXTURE_RUN_IDS } from "../runFlakeFixtures";
 import { TestsRunPage, TestsRunView } from "../TestsRunPage";
 import { TestsRunsPage } from "../TestsRunsPage";
-import { renderRoutedPage, renderWithApi } from "./testsTestUtils";
+import { renderRoutedPage, renderWithTests } from "./testsTestUtils";
 
 vi.mock("@/components/forge-ui/link", () => ({
   default: ({ href, children, ...rest }: { href: string; children: ReactNode }) => (
@@ -59,8 +59,8 @@ beforeEach(() => {
 
 const RUNS_PATH = "/forge/p/$project/tests/runs";
 
-function renderRuns(scenario: TestsScenario | FixtureTestApi, query = "") {
-  const api = typeof scenario === "string" ? fixtureTestApi(scenario) : scenario;
+function renderRuns(scenario: TestsScenario | FixtureTests, query = "") {
+  const api = typeof scenario === "string" ? fixtureTests(scenario) : scenario;
   const utils = renderRoutedPage(api, {
     path: RUNS_PATH,
     url: `/forge/p/shopfront/tests/runs${query}`,
@@ -70,7 +70,7 @@ function renderRuns(scenario: TestsScenario | FixtureTestApi, query = "") {
   return { ...utils, api };
 }
 
-const lastRunsRequest = (api: FixtureTestApi) => [...api.calls].reverse().find((call) => call.method === "listTestRuns")!.req as { filters: Record<string, unknown> };
+const lastRunsRequest = (api: FixtureTests) => [...api.calls].reverse().find((call) => call.method === "listTestRuns")!.req as { filters: Record<string, unknown> };
 
 async function pick(menuTestId: string, option: string) {
   fireEvent.click(screen.getByTestId(menuTestId));
@@ -251,7 +251,7 @@ const RUN_HREFS = {
 };
 
 function renderRun(scenario: TestsScenario, runId: string) {
-  return renderWithApi(fixtureTestApi(scenario), <TestsRunView project={FIXTURE_PROJECT} runId={runId} hrefs={RUN_HREFS} now={FIXTURE_NOW} />);
+  return renderWithTests(fixtureTests(scenario), <TestsRunView project={FIXTURE_PROJECT} runId={runId} hrefs={RUN_HREFS} now={FIXTURE_NOW} />);
 }
 
 describe("a run's page", () => {
@@ -320,7 +320,7 @@ describe("a run's page", () => {
   });
 
   it("reads the run named in the route", async () => {
-    const api = fixtureTestApi("report");
+    const api = fixtureTests("report");
     renderRoutedPage(api, { path: "/forge/p/$project/tests/runs/$run", url: `/forge/p/shopfront/tests/runs/${FIXTURE_RUN_IDS.e2e}`, validateSearch: (s) => s, component: TestsRunPage });
     expect(await screen.findByTestId("tests-run-facts")).toHaveTextContent("e2e");
     expect(api.calls.find((call) => call.method === "getTestRun")!.req).toEqual({ orgId: null, project: "shopfront", runId: FIXTURE_RUN_IDS.e2e });

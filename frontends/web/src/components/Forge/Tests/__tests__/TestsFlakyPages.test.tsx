@@ -29,11 +29,11 @@ import type { AskFlakyTestSubject } from "../../Observability/AskReliant/askReli
 import { encodeTestIdSegment, flakyTestPath } from "../../Console/paths";
 import { AGENT_REASON } from "../testsAgent";
 
-import { FIXTURE_NOW, FIXTURE_PROJECT, fixtureTestApi, type FixtureTestApi, type TestsScenario } from "../fixtures";
+import { FIXTURE_NOW, FIXTURE_PROJECT, fixtureTests, type FixtureTests, type TestsScenario } from "../fixtures";
 import { FIXTURE_RUN_IDS } from "../runFlakeFixtures";
 import { TestsFlakyPage } from "../TestsFlakyPage";
 import { TestsFlakyTestPage, TestsFlakyTestView } from "../TestsFlakyTestPage";
-import { renderRoutedPage, renderWithApi } from "./testsTestUtils";
+import { renderRoutedPage, renderWithTests } from "./testsTestUtils";
 
 vi.mock("@/components/forge-ui/link", () => ({
   default: ({ href, children, ...rest }: { href: string; children: ReactNode }) => (
@@ -65,7 +65,7 @@ const MODULE = "github.com/acme/shopfront";
 const idOf = (dir: string, name: string) => `go:${MODULE}/${dir}:${name}`;
 
 function renderFlaky(scenario: TestsScenario, query = "") {
-  const api = fixtureTestApi(scenario);
+  const api = fixtureTests(scenario);
   const utils = renderRoutedPage(api, {
     path: "/forge/p/$project/tests/flaky",
     url: `/forge/p/shopfront/tests/flaky${query}`,
@@ -75,7 +75,7 @@ function renderFlaky(scenario: TestsScenario, query = "") {
   return { ...utils, api };
 }
 
-const flakyRequests = (api: FixtureTestApi) => api.calls.filter((call) => call.method === "listFlakyTests").map((call) => (call.req as { filters: unknown }).filters);
+const flakyRequests = (api: FixtureTests) => api.calls.filter((call) => call.method === "listFlakyTests").map((call) => (call.req as { filters: unknown }).filters);
 const rowNames = () => screen.getAllByTestId(/^tests-flake-row-/).map((row) => row.getAttribute("data-testid")!.replace("tests-flake-row-", ""));
 
 /** Opens a row's ⋯ menu and returns its items' names. */
@@ -278,7 +278,7 @@ describe("Tests › Flaky tests: nothing to show", () => {
 const runHref = (runId: string) => `/forge/p/shopfront/tests/runs/${runId}`;
 
 function renderTest(scenario: TestsScenario, testId: string, { projectId = "proj-shopfront" }: { projectId?: string | null } = {}) {
-  return renderWithApi(fixtureTestApi(scenario), <TestsFlakyTestView project={FIXTURE_PROJECT} projectId={projectId} testId={testId} runHref={runHref} now={FIXTURE_NOW} />);
+  return renderWithTests(fixtureTests(scenario), <TestsFlakyTestView project={FIXTURE_PROJECT} projectId={projectId} testId={testId} runHref={runHref} now={FIXTURE_NOW} />);
 }
 
 describe("a test's page", () => {
@@ -403,7 +403,7 @@ describe("a test's page", () => {
   });
 
   it("reads the test named in the route, from its base64url segment", async () => {
-    const api = fixtureTestApi("report");
+    const api = fixtureTests("report");
     const id = idOf("internal/webhooks", "TestWebhookSign/rotated key");
     const url = flakyTestPath("shopfront", id);
     expect(url).not.toMatch(/%2F/i);
@@ -415,7 +415,7 @@ describe("a test's page", () => {
   });
 
   it("still reads a link in the old percent-encoded form", async () => {
-    const api = fixtureTestApi("report");
+    const api = fixtureTests("report");
     const id = idOf("internal/webhooks", "TestWebhookSign/rotated key");
     renderRoutedPage(api, { path: "/forge/p/$project/tests/flaky/$test", url: `/forge/p/shopfront/tests/flaky/${encodeURIComponent(id)}`, validateSearch: (s) => s, component: TestsFlakyTestPage });
     expect(await screen.findByTestId("tests-test-state")).toHaveTextContent("Suspected");

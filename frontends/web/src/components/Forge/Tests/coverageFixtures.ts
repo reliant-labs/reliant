@@ -327,7 +327,7 @@ export function fixtureFileCoverageResponse(req: FileCoverageRequest): WireFileC
   return engine.fileCoverageResponse(req);
 }
 
-/** The fixture report through wire.ts, as the TestApi answers it: a path or commit it lacks is NotFound. */
+/** The fixture report through wire.ts, as the pages map it: a path or commit it lacks is NotFound. */
 export function fixtureCoverage(req: CoverageRequest): Promise<CoverageTree> {
   try {
     return Promise.resolve(coverageTreeOf(fixtureCoverageResponse(req)));

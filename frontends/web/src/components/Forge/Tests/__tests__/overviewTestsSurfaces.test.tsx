@@ -17,12 +17,12 @@ import { Code, ConnectError } from "@connectrpc/connect";
 import { useTestSummary } from "@/hooks/test-queries";
 import { flakeOf, summaryOf } from "@/services/controlPlane/tests/wire";
 
-import { FIXTURE_NOW, FIXTURE_PROJECT, fixtureSummaryWire, fixtureTestApi, type TestsScenario } from "../fixtures";
+import { FIXTURE_NOW, FIXTURE_PROJECT, fixtureSummaryWire, fixtureTests, type TestsScenario } from "../fixtures";
 import { fixtureFlakes } from "../runFlakeFixtures";
 import { OverviewTestsCard, TestsAttentionRows, testsAttentionHrefs } from "../surfaces/OverviewTests";
 import { useTestsNavCount } from "../surfaces/useTestsNavCount";
 import { COVERAGE_DROP_ATTENTION_POINTS, testsAttentionCount, testsAttentionItems } from "../surfaces/surfacesModel";
-import { renderWithApi } from "./testsTestUtils";
+import { renderWithTests } from "./testsTestUtils";
 
 // The Tests card draws its coverage line with UPlotChart; uPlot needs a canvas jsdom lacks.
 vi.mock("uplot", async () => (await import("../../Observability/__tests__/obsMocks")).obsMocks.uplot());
@@ -42,8 +42,8 @@ function Settled() {
   const summary = useTestSummary(FIXTURE_PROJECT);
   return summary.isError || summary.isSuccess ? <i data-testid="settled" /> : null;
 }
-const card = (scenario: TestsScenario) => renderWithApi(fixtureTestApi(scenario), <OverviewTestsCard project={FIXTURE_PROJECT} frame={frame} />);
-const rows = (scenario: TestsScenario) => renderWithApi(fixtureTestApi(scenario), <TestsAttentionRows project={FIXTURE_PROJECT} now={FIXTURE_NOW} />);
+const card = (scenario: TestsScenario) => renderWithTests(fixtureTests(scenario), <OverviewTestsCard project={FIXTURE_PROJECT} frame={frame} />);
+const rows = (scenario: TestsScenario) => renderWithTests(fixtureTests(scenario), <TestsAttentionRows project={FIXTURE_PROJECT} now={FIXTURE_NOW} />);
 
 describe("the Overview's Tests card", () => {
   it("shows the default branch's coverage, pass rate and flaky count, linking into Tests", async () => {
@@ -65,8 +65,8 @@ describe("the Overview's Tests card", () => {
   });
 
   it.each(["not-configured", "denied"] as const)("renders nothing, frame included, when the control plane answers %s", async (scenario) => {
-    renderWithApi(
-      fixtureTestApi(scenario),
+    renderWithTests(
+      fixtureTests(scenario),
       <>
         <OverviewTestsCard project={FIXTURE_PROJECT} frame={frame} />
         <Settled />
@@ -78,8 +78,11 @@ describe("the Overview's Tests card", () => {
 
   it("names a failed read rather than hiding it", async () => {
     // A refused page token: not retried (a transport blip would be), and not a state that hides the card.
-    const api = { ...fixtureTestApi("report"), getTestSummary: () => Promise.reject(new ConnectError("bad token", Code.InvalidArgument)) };
-    renderWithApi(api, <OverviewTestsCard project={FIXTURE_PROJECT} frame={frame} />);
+    const api = fixtureTests("report");
+    api.handlers.getTestSummary = () => {
+      throw new ConnectError("bad token", Code.InvalidArgument);
+    };
+    renderWithTests(api, <OverviewTestsCard project={FIXTURE_PROJECT} frame={frame} />);
     expect(await screen.findByTestId("overview-tests-error")).toBeInTheDocument();
   });
 });
@@ -123,8 +126,8 @@ describe("Needs attention's Tests rows", () => {
   });
 
   it.each(["not-configured", "denied", "no-runs"] as const)("adds nothing when the control plane answers %s", async (scenario) => {
-    renderWithApi(
-      fixtureTestApi(scenario),
+    renderWithTests(
+      fixtureTests(scenario),
       <>
         <TestsAttentionRows project={FIXTURE_PROJECT} now={FIXTURE_NOW} />
         <Settled />
@@ -173,7 +176,7 @@ describe("the nav badge's count", () => {
       const count = useTestsNavCount(FIXTURE_PROJECT);
       return summary.isSuccess || summary.isError ? <i data-testid="count" data-count={count} /> : null;
     }
-    renderWithApi(fixtureTestApi(scenario), <Probe />);
+    renderWithTests(fixtureTests(scenario), <Probe />);
     expect(await screen.findByTestId("count")).toHaveAttribute("data-count", expected);
   });
 
