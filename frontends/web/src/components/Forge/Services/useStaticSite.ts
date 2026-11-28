@@ -51,7 +51,6 @@ export function useStaticSiteTraffic(target: StaticSiteTarget | null, range: Tra
     enabled: !!target?.envId && org.ready,
     select: trafficView,
     staleTime: 60_000,
-    placeholderData: (previous) => previous,
     retry,
   });
 }
