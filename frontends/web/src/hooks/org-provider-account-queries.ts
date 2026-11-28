@@ -9,7 +9,7 @@
  */
 
 import { hasControlPlane } from "../services/controlPlane/config";
-import { useAuthIdentity } from "@/lib/auth/use-auth";
+import { useSignedIn } from "@/lib/session";
 import type { ListOrgProviderAccountsResponse, ListOrgProviderWorkspacesResponse } from "../gen/reliant/v1/org_provider_account_pb";
 import {
   orgAccountsFromProto,
@@ -22,7 +22,7 @@ const workspacesOf = (res: ListOrgProviderWorkspacesResponse) => orgWorkspacesFr
 
 /** The org's accounts: whole to an owner or admin, narrowed to provider, label and status for a member. */
 export function useOrgProviderAccounts(orgId: string | undefined) {
-  const signedIn = useAuthIdentity() !== null;
+  const signedIn = useSignedIn();
   return useListOrgProviderAccounts(
     { orgId: orgId ?? "" },
     { enabled: hasControlPlane && signedIn && !!orgId, staleTime: 30_000, select: accountsOf, retry: 1 },

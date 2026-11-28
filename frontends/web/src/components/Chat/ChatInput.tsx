@@ -22,7 +22,7 @@ import { detectPlatform } from "../../lib/keyboard/platform";
 import { useComposerUploads } from "./useComposerUploads";
 import { legacyPasteDraftKeys, migrateLegacyPasteDrafts, pastedTextFilename, useLongPaste } from "./useLongPaste";
 import { isDraftAttachmentPersisted, useAttachmentStore } from "../../store/attachmentStore";
-import { useAuthUserId } from "@/lib/auth/use-auth";
+import { useSession } from "@/lib/session";
 import { useChatParamsStore } from "../../store/chatParamsStore";
 import { useActiveChatId } from "../../store/chatStoreHooks";
 import { useModels } from "../../store/globalDataStore";
@@ -1182,7 +1182,7 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
     });
 
     // Long pastes a v1.10 composer stored for this draft become its attachments.
-    const pasteUserId = useAuthUserId() ?? undefined;
+    const pasteUserId = useSession().user?.id;
     const pasteProjectId = currentProjectFromStore?.id;
     useEffect(() => {
       if (!canAttach) return;

@@ -17,8 +17,8 @@ import {
   ResolvePersonalFundingChoiceRequest_Choice,
   type PersonalFundingQuestion as ProtoQuestion,
 } from "../gen/reliant/v1/provider_account_pb";
+import { useSignedIn } from "../lib/session";
 import { hasControlPlane } from "../services/controlPlane/config";
-import { useAuthStore } from "../store/authStore";
 import { rememberOrgFundingLocally } from "./org-funding-queries";
 import {
   providerAccountServiceKeys,
@@ -73,7 +73,7 @@ const select = (res: { question?: ProtoQuestion }) => (res.question ? fundingQue
  * every 15 s while `waiting` (the run is held: the question may arrive).
  */
 export function usePersonalFundingQuestion(chatId: string | undefined, waiting: boolean) {
-  const hasSession = useAuthStore((s) => !!s.session);
+  const hasSession = useSignedIn();
   return useGetPersonalFundingQuestion(
     { chatId: chatId ?? "" },
     {

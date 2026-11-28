@@ -15,10 +15,16 @@
  *   handlers/github.ts  Alex's GitHub connection and the org's GitHub App
  *                       installations
  *
- * A separate entry on purpose: the demo bundle imports ./index.ts and never
- * this file, so reliant's generated services stay out of it (the demo bundle
- * guard fails otherwise; __tests__/appLayer.test.ts pins the boundary).
+ * A separate entry on purpose: ./index.ts (the console's pack, which the
+ * forge tour's sample serves in the signed-in app) never imports this file,
+ * so reliant's generated services stay out of it. The public demo serves
+ * this layer (createShopAppTransport, Forge/Demo/demoTransport.ts) for its
+ * Agents pages; what it must never reach is fixture mode's install, the fake
+ * Supabase and the session it issues (../install.ts, ../outside.ts):
+ * __tests__/appLayer.test.ts pins both boundaries.
  */
+import type { DescMethod } from "@bufbuild/protobuf";
+import type { Transport } from "@connectrpc/connect";
 import type { MockHandlers } from "@reliantlabs/forge-web-runtime/mock-transport";
 
 import { BillingService } from "@/gen/controlplane/services/billing/v1/billing_pb";
@@ -31,13 +37,13 @@ import { SettingsService } from "@/gen/reliant/v1/settings_pb";
 import { StreamingService } from "@/gen/reliant/v1/streaming_pb";
 import { WorktreeService } from "@/gen/reliant/v1/worktree_pb";
 
-import { defineFixturePack, type FixturePack } from "../transport";
+import { createFixtureTransport, defineFixturePack, type FixturePack } from "../transport";
 import { accountScenarioHandlers } from "./handlers/account";
 import { billingScenarioHandlers } from "./handlers/billing";
 import { githubScenarioHandlers } from "./handlers/github";
 import { reliantScenarioHandlers } from "./handlers/reliant";
 import { streamingImpl } from "./handlers/reliant/streaming";
-import { shopPack, type ShopPackOptions } from "./index";
+import { createShopTransport, SHOP_SERVE, shopPack, type ShopPackOptions, type ShopTransportOptions } from "./index";
 
 /**
  * RPCs the app layer answers although the transport's read-only guard
@@ -91,8 +97,9 @@ import { shopPack, type ShopPackOptions } from "./index";
  *
  * They are the app pack's `answers`, so a read-only fixture transport lets
  * exactly these through, with no name heuristic.
- * Only a pure fixture transport honours them (fixture mode is one; the
- * demo's gateway passthrough is not, and never serves this pack).
+ * Only a pure fixture transport honours them: fixture mode, and the public
+ * demo's app-pack transport (createShopAppTransport). The demo's gateway
+ * passthrough is not one, and never sees an rpc this layer answers.
  */
 export const APP_LAYER_ANSWERS = [
   "reliant.v1.ProjectService/GetProject",
@@ -137,4 +144,34 @@ export function shopAppPack(options: ShopPackOptions = {}): FixturePack {
     answers: APP_LAYER_ANSWERS,
     services: ANSWERED_SERVICES,
   });
+}
+
+/** Every rpc the app layer itself answers, "pkg.Service/Method": its scenario handlers' and its stream routes'. */
+export function appLayerMethods(): ReadonlySet<string> {
+  return new Set([...Object.keys(appLayerScenarioHandlers()), ...StreamingService.methods.map((m) => `${StreamingService.typeName}/${m.name}`)]);
+}
+
+/**
+ * A transport serving the app pack, read-only (SHOP_SERVE): only an rpc whose
+ * proto declares NO_SIDE_EFFECTS answers, plus the packs' named `answers`
+ * (APP_LAYER_ANSWERS, DEMO_PACK_ANSWERS). The public demo's (demoTransport.ts).
+ *
+ * With `passthrough` (the demo's DEMO_DATA_SOURCE=remote gateway) the calls
+ * split by method, and the gateway's rule is unchanged: an rpc the app layer
+ * itself answers (appLayerMethods) goes to the pure app-pack transport and
+ * never reaches the gateway; every other rpc goes to createShopTransport's
+ * passthrough exactly as before, which asks the gateway only for
+ * NO_SIDE_EFFECTS reads and serves no `answers` at all. So the gateway never
+ * sees a reliant app read, nor any read the proto does not declare side-effect free.
+ */
+export function createShopAppTransport({ passthrough, ...options }: ShopTransportOptions = {}): Transport {
+  const app = createFixtureTransport({ ...SHOP_SERVE, pack: shopAppPack(options) });
+  if (!passthrough) return app;
+  const consoleReads = createShopTransport({ ...options, passthrough });
+  const own = appLayerMethods();
+  const pick = (method: DescMethod): Transport => (own.has(`${method.parent.typeName}/${method.name}`) ? app : consoleReads);
+  return {
+    unary: (method, signal, timeoutMs, header, input, contextValues) => pick(method).unary(method, signal, timeoutMs, header, input, contextValues),
+    stream: (method, signal, timeoutMs, header, input, contextValues) => pick(method).stream(method, signal, timeoutMs, header, input, contextValues),
+  };
 }

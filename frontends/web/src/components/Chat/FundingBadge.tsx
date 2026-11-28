@@ -18,9 +18,9 @@ import { Building2 } from "lucide-react";
 
 import { useGetChatProviderAccount } from "@/hooks/provider-account-service-hooks_gen";
 import { useMyOrgs } from "@/hooks/useOrgs";
+import { useSignedIn } from "@/lib/session";
 import { cn } from "@/lib/utils";
 import { hasControlPlane } from "@/services/controlPlane/config";
-import { useAuthStore } from "@/store/authStore";
 import { accountFromProto, isProviderAccountsUnavailable, type ProviderAccount } from "@/types/providerAccount";
 
 import { COMPOSER_CONTROL } from "./composerControl";
@@ -40,7 +40,7 @@ export function fundingBadgeText(account: ProviderAccount | undefined, orgName: 
 }
 
 export function FundingBadge({ chatId }: { chatId?: string }) {
-  const hasSession = useAuthStore((s) => !!s.session);
+  const hasSession = useSignedIn();
   const orgs = useMyOrgs();
   const q = useGetChatProviderAccount(
     { chatId: chatId ?? "" },

@@ -24,18 +24,25 @@ Forge run, is `/forge/demo?section=built`. `/forge/p/shop` opens the running sam
 console directly; individual-page deep links remain direct. Every page, the Home
 included, renders inside the signed-in app's own shell (`AppShellFrame`, since #3519)
 with the demo's nav (`Forge/Demo/demoNavConfig.ts`): the app's own rows in the app's order,
-less the app's Inbox, Agents, Settings and billing, plus Home and "How it was built".
-There is one shell and one nav (after #3574, which deletes the console's second
-frame, `ConsoleShell`, and its grouped nav). The smoke script checks the Home, then enters
-the console through "Open the console" and clicks every row of the shell's nav,
-Observability's drill-in included.
+less the account-only items it names (Usage & billing, Help, Settings), plus Home and
+"How it was built". Inbox and Agents are in it: the demo mounts the app's own chat pages,
+Inbox, Workflows, Connectors and Sandboxes (`demoAgentsRoutes.tsx`) over the shop's sample
+chats, runs and machines, as a fixed signed-in visitor (Alex Demo, in "Acme · Starter")
+with no token. Nothing writes: the demo transport refuses every write with a read-only
+toast. The bundle still holds no sign-in or account code (`dev-docs/demo-inventory.md`,
+"The bundle guard"); that, not "no app code", is what separates it from the hosted
+preview (`preview-env.md`). There is one shell and one nav (after #3574, which deletes
+the console's second frame, `ConsoleShell`, and its grouped nav). The smoke script checks
+the Home, then enters the console through "Open the console" and clicks every row of the
+shell's nav, Observability's drill-in included, then walks the Inbox and the Agents pages
+and opens a chat transcript.
 The cutover steps below describe the original hosting migration.
 
 ## What changes
 
 | | Before | After |
 |---|---|---|
-| Serves demo.reliantlabs.io | control-plane project, env `prod`, frontend `reliant-web` (the whole Reliant app; the host picked the shell) | reliant project, env `demo`, frontend `forge-demo` (the forge-only bundle `frontends/web/demo.html`) |
+| Serves demo.reliantlabs.io | control-plane project, env `prod`, frontend `reliant-web` (the whole Reliant app; the host picked the shell) | reliant project, env `demo`, frontend `forge-demo` (the demo bundle `frontends/web/demo.html`: no sign-in or account code) |
 | Built from | control-plane's reliant pin, shipped by the release train | reliant `main`, whenever you deploy it |
 | Runtime config | prod's (API URLs, Supabase, auth mode) | `DEMO_DATA_SOURCE=fixtures`, `DEMO_DATA_URL=""`, `DEMO_TELEMETRY=replay`, `OTEL_ENDPOINT=/_otel`, `OTEL_REPLAY=true` |
 | Backend calls | the old prod build calls the API → CORS errors | none: every RPC is answered in the browser |
@@ -99,7 +106,7 @@ curl -s  https://demo.reliantlabs.io/config.js                            # only
 node frontends/web/scripts/demo/smoke-demo-site.mjs https://demo.reliantlabs.io
 ```
 
-The smoke script loads `/`, the build story and 19 console pages in headless Chrome,
+The smoke script loads `/`, the build story, 19 console pages, the Inbox and the Agents pages in headless Chrome,
 then walks the shell's nav at desktop and phone widths (on a phone, the shell's drawer,
 opened by the page header's toggle; Observability is a drill-in, left by its "‹ Back").
 It exits 1 on any of these:
@@ -111,6 +118,8 @@ It exits 1 on any of these:
 - the nav missing a group (the signed-in app's Observability, Analytics, Deployments,
   Tests, Security, Configure) or row, a dead nav item, or an item leading to a page
   the demo does not serve (Usage, Speed insights);
+- the Inbox or the Agents pages (a project's chats, a chat transcript) not rendering the
+  shop's sample data, or any of them reaching a request off the page's origin;
 - a page without `data-shell="demo"`, or outside the app's shell (no `[data-testid=shell-nav]`);
 - Data or Storage on prod (the demo's audited environment) not asking for a
   reason, reading before it is given, or not reading after it.

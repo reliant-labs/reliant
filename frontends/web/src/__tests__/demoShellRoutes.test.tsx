@@ -6,6 +6,8 @@
  * console (`/forge/p/shop`), query kept, whose pages are all mounted, each in
  * the app's own shell (the frame and its nav column, with the demo's nav); and
  * a compact card offers the optional forge tour, which never starts by itself.
+ * The app's Agents pages (demoAgentsRoutes.tsx) open at their own paths, and
+ * the visitor is the shop's Alex Demo, signed in with no credential.
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -46,6 +48,23 @@ vi.mock("@/forgeConsolePages", async () => {
   const names = ["overview", "workload", "releases", "release", "observabilityView", "dashboards", "dashboard", "environments", "environment", "secrets", "domains", "activity", "data", "storage", "siteInsights", "orgObservability", "landing", "legacyEnv", "legacyDomains", "legacyCommand"];
   return { forgeConsolePages: { layout: Outlet, console: Outlet, orgLayout: Outlet, ...Object.fromEntries(names.map((n) => [n, page(n)])) }, preloadForgeConsole: () => {} };
 });
+// The Agents pages (demoAgentsRoutes.tsx), one test id each: the chat app reads the route itself.
+vi.mock("@/App", async () => {
+  const { useRouterState } = await import("@tanstack/react-router");
+  return { default: () => <main data-testid="agents-app" data-pathname={useRouterState({ select: (s) => s.location.pathname })} /> };
+});
+vi.mock("@/components/inbox/InboxPage", () => ({ InboxPage: () => <main data-testid="agents-inbox" /> }));
+vi.mock("@/components/Connectors/ConnectorsPage", () => ({ ConnectorsPage: () => <main data-testid="agents-connectors" /> }));
+vi.mock("@/components/Settings/cloud/machines", async () => {
+  const { useParams } = await import("@tanstack/react-router");
+  return { MachinesSection: () => <main data-testid="agents-sandboxes" data-machine={(useParams({ strict: false }) as { machineId?: string }).machineId ?? ""} /> };
+});
+vi.mock("@/components/workflows/WorkflowsShell", async () => ({ WorkflowsLayout: (await import("@tanstack/react-router")).Outlet }));
+vi.mock("@/components/workflows/list/WorkflowsListPage", () => ({ WorkflowsListPage: () => <main data-testid="agents-workflows" /> }));
+vi.mock("@/components/workflows/detail/WorkflowDetailPage", () => ({ WorkflowDetailPage: () => <main data-testid="agents-workflow" /> }));
+vi.mock("@/components/runs/RunsPage", () => ({ RunsPage: () => <main data-testid="agents-runs" /> }));
+vi.mock("@/components/runs/RunDetailPage", () => ({ RunDetailPage: () => <main data-testid="agents-run" /> }));
+vi.mock("@/components/workflows/AutomationRedirectPage", () => ({ AutomationRedirectPage: () => <main data-testid="agents-automation" /> }));
 vi.mock("@/demoBundle/DemoConsoleProviders", () => ({ DemoConsoleProviders: ({ children }: { children: React.ReactNode }) => children }));
 // The boot installs the demo transport through a lazy import() whose fixture
 // chain (sample metrics, traces, scenarios) is still loading when the file's
@@ -58,7 +77,8 @@ vi.mock("@/components/Forge/Demo/demoTransport", () => ({ createDemoTransport: (
 import { getTourShell, getTourStorage } from "@/components/Onboarding/tourShell";
 import { resetDemoSessionForTests } from "@/components/Forge/Demo/demoSession";
 import { resetShellForTests } from "@/lib/shell";
-import { buildDemoShellTree } from "@/demoShellRoutes";
+import { buildDemoShellTree, DEMO_SESSION } from "@/demoShellRoutes";
+import { APP_USER } from "@/fixtures/shop/user";
 
 // This file asserts module-evaluation boot calls, before the first test.
 // Vitest 5 clears mock history before each test by default.
@@ -109,7 +129,7 @@ describe("the demo shell's routes", () => {
     expect(searchOf(router).tour).toBeUndefined();
     expect(screen.queryByTestId("tour-callout")).toBeNull();
   });
-  it.each(["/auth", "/oauth/cli?port=1", "/claim", "/apps", "/forge/p/shop/env/prod", "/workflows"])(
+  it.each(["/auth", "/oauth/cli?port=1", "/claim", "/apps", "/forge/p/shop/env/prod", "/settings", "/settings/billing"])(
     "sends %s to the sample app's console overview",
     async (path) => {
       const router = renderDemoShell(path);
@@ -152,7 +172,7 @@ describe("the demo shell's routes", () => {
     ["/forge/p/shop", "console-overview"],
     ["/forge/p/shop/observability/traces", "console-observabilityView"],
     ["/forge/demo?section=home", "demo-console"],
-  ])("draws %s in the public-preview shell without authenticating the visitor", async (path, testId) => {
+  ])("draws %s in the public-preview shell, for the shop's visitor with no credential", async (path, testId) => {
     renderDemoShell(path);
     const page = await screen.findByTestId(testId);
     // Public-preview presentation only: the page in its one main region, the nav beside it.
@@ -160,8 +180,8 @@ describe("the demo shell's routes", () => {
     expect(screen.getByTestId("shell-main")).toContainElement(page);
     expect(document.querySelector("[data-shell-frame]")).not.toBeNull();
     expect(await screen.findByTestId("demo-nav")).toHaveAttribute("data-pathname", path.split("?")[0]);
-    expect(screen.getByTestId("demo-nav")).toHaveAttribute("data-signed-in", "false");
-    expect(screen.getByTestId("demo-nav")).toHaveAttribute("data-user", "anonymous");
+    expect(screen.getByTestId("demo-nav")).toHaveAttribute("data-signed-in", "true");
+    expect(screen.getByTestId("demo-nav")).toHaveAttribute("data-user", APP_USER.id);
     // No Setup Guide: the demo has nothing to set up.
     expect(screen.queryByTestId("setup-guide")).toBeNull();
   });
@@ -214,6 +234,40 @@ describe("the demo shell's routes", () => {
     expect(router.state.location.pathname).toBe("/forge/p/shop");
     expect(router.state.location.searchStr).toContain("rid=abcdefgh1234");
     expect(router.state.location.searchStr).toContain("utm_source=landing");
+  });
+});
+
+describe("the demo's Agents pages", () => {
+  it.each([
+    ["/project/shop-proj-shop", "agents-app"],
+    ["/c/shop-chat-cart-totals", "agents-app"],
+    ["/c/shop-chat-cart-totals/t/thread-1", "agents-app"],
+    ["/new", "agents-app"],
+    ["/inbox", "agents-inbox"],
+    ["/connectors", "agents-connectors"],
+    ["/workflows/library", "agents-workflows"],
+    ["/workflows/runs", "agents-runs"],
+    ["/settings/machines", "agents-sandboxes"],
+  ])("opens %s at its own path, in the shell, without a bounce", async (path, testId) => {
+    const router = renderDemoShell(path);
+    const page = await screen.findByTestId(testId);
+    expect(router.state.location.pathname).toBe(path);
+    expect(screen.getByTestId("shell-main")).toContainElement(page);
+  });
+
+  it("opens one sandbox at its own path, and sends the /machines alias to the list", async () => {
+    renderDemoShell("/settings/machines/shop-d-cloud");
+    expect(await screen.findByTestId("agents-sandboxes")).toHaveAttribute("data-machine", "shop-d-cloud");
+    cleanup();
+    const alias = renderDemoShell("/machines?from=chat");
+    await screen.findByTestId("agents-sandboxes");
+    expect(alias.state.location.pathname).toBe("/settings/machines");
+    expect(alias.state.location.search).toMatchObject({ from: "chat" });
+  });
+
+  it("signs the visitor in as the shop's Alex Demo, with no token", async () => {
+    expect(DEMO_SESSION).toMatchObject({ isAuthenticated: true, isLoading: false, user: { id: APP_USER.id, name: "Alex Demo" } });
+    expect(await DEMO_SESSION.getToken()).toBeNull();
   });
 });
 

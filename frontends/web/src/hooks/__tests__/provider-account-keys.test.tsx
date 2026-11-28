@@ -18,6 +18,7 @@ import type { ReactNode } from "react";
 
 import { setTransport } from "@/lib/connect";
 import { queryClient } from "@/lib/query-client";
+import { fixedSession, SessionProvider } from "@/lib/session";
 import { mockTransport } from "@/lib/test-utils";
 import { useAuthStore } from "@/store/authStore";
 import { accountToProto } from "@/test/providerAccountTransport";
@@ -31,8 +32,14 @@ import { providerAccountServiceKeys } from "../provider-account-service-hooks_ge
 import { settingsServiceKeys } from "../settings-service-hooks_gen";
 import { useChatAccountUsage } from "../useChatAccountUsage";
 
+const signedIn = fixedSession({ id: "u1" });
+
 function wrapper({ children }: { children: ReactNode }) {
-  return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
+  return (
+    <SessionProvider auth={signedIn}>
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    </SessionProvider>
+  );
 }
 
 const account = (id: string, label: string): ProviderAccount => ({

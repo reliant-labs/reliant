@@ -50,7 +50,7 @@ import type { SessionOwner } from "../lib/auth/sessionOwner";
 import { connectClient } from "../lib/connect";
 import { logger } from "../lib/logger";
 import { queryClient } from "../lib/query-client";
-import { useAuthStore } from "@/store/authStore";
+import { useHasAuthSession } from "./useHasAuthSession";
 import {
   settingsServiceKeys,
   settingsServiceMutations,
@@ -69,11 +69,10 @@ import {
  * is an IPC round-trip — see AuthInitializer.waitForAccessToken), and every
  * RPC issued in that window goes out with no Authorization header and comes
  * back "missing authorization token". Gating on `user` would leave that window
- * open, which is most of the bug.
+ * open, which is most of the bug. Through useHasAuthSession, so the public
+ * demo (no auth store) swaps that one hook and keeps these reads.
  */
-function useHasSession(): boolean {
-  return useAuthStore((state) => !!state.session);
-}
+const useHasSession = useHasAuthSession;
 
 // --- Provider statuses ---
 

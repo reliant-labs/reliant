@@ -24,7 +24,7 @@ import { useProjectStore } from "../../store/projectStore";
 import { focusChatInput } from "../../hooks/useFocusManager";
 import { useShortcutHost } from "../../hooks/useShortcutHost";
 import type { SettingsSection } from "../../routeSchemas";
-import { showDeveloperSettings } from "../Settings/SettingsNavigation";
+import { showDeveloperSettings } from "../../lib/developerSettings";
 import { useTourNavigation } from "../Onboarding/useTourNavigation";
 import { availableJourneys } from "../Onboarding/journeys/registry";
 import { inboxPath, runsPath, sandboxesPath, settingsPath, usageBillingPath, workflowsPath } from "@/lib/paths";
@@ -48,6 +48,11 @@ interface CommandPaletteProps {
   onClose: () => void;
   /** Whether the workspace is the page behind the palette. */
   inWorkspace: boolean;
+  /**
+   * Command ids a host leaves out because it has no page for them (the public
+   * demo: Settings and Usage & billing, Forge/Demo/DemoShellFrame.tsx).
+   */
+  omitCommands?: readonly string[];
 }
 
 /** Element focused when the palette opened, if focus can go back to it. */
@@ -56,7 +61,7 @@ function restorableFocus(element: Element | null): HTMLElement | null {
   return element;
 }
 
-export function CommandPalette({ isOpen, onClose, inWorkspace }: CommandPaletteProps) {
+export function CommandPalette({ isOpen, onClose, inWorkspace, omitCommands }: CommandPaletteProps) {
     const [query, setQuery] = useState("");
     const [highlightedIndex, setHighlightedIndex] = useState(0);
 
@@ -327,7 +332,7 @@ export function CommandPalette({ isOpen, onClose, inWorkspace }: CommandPaletteP
         action: () => host?.run("onNewTerminal"),
       },
     ];
-    const allCommands = commands.filter((command) => command.available !== false);
+    const allCommands = commands.filter((command) => command.available !== false && !omitCommands?.includes(command.id));
 
     // Filter commands based on query
     const filteredCommands = query.trim()

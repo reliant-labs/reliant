@@ -11,9 +11,9 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { create, equals, fromBinary, isMessage, toBinary, type DescMessage, type DescMethod, type DescMethodStreaming, type DescMethodUnary, type DescService } from "@bufbuild/protobuf";
-import { timestampMs } from "@bufbuild/protobuf/wkt";
+import { MethodOptions_IdempotencyLevel, timestampMs } from "@bufbuild/protobuf/wkt";
 import { createClient, createRouterTransport, type Transport } from "@connectrpc/connect";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { BillingService } from "@/gen/controlplane/services/billing/v1/billing_pb";
 import { GitCredentialService } from "@/gen/controlplane/services/git_credential/v1/git_credential_pb";
@@ -38,6 +38,7 @@ import { ProviderAccountService } from "@/gen/reliant/v1/provider_account_pb";
 import { QuestionService } from "@/gen/reliant/v1/question_pb";
 import { RunService } from "@/gen/reliant/v1/run_pb";
 import { SettingsService } from "@/gen/reliant/v1/settings_pb";
+import { ConnectionService } from "@/gen/reliant/v1/connection_pb";
 import { SharingService } from "@/gen/reliant/v1/sharing_pb";
 import { StreamingService } from "@/gen/reliant/v1/streaming_pb";
 import { SystemService } from "@/gen/reliant/v1/system_pb";
@@ -53,7 +54,7 @@ import stripeSdk from "../data/transcripts/stripe-sdk.json?raw";
 import subAgents from "../data/transcripts/sub-agents.json?raw";
 import taxRates from "../data/transcripts/tax-rates.json?raw";
 import { createFixtureTransport } from "../../transport";
-import { APP_LAYER_ANSWERS, appLayerScenarioHandlers, shopAppPack } from "../app";
+import { APP_LAYER_ANSWERS, appLayerScenarioHandlers, createShopAppTransport, shopAppPack } from "../app";
 import { FAKE_MCP_HEADER } from "../handlers/reliant/mcp";
 import { chatStreamEvents, streamingImpl } from "../handlers/reliant/streaming";
 import { SHOP_READ_ONLY_MESSAGE, shopScenario } from "../index";
@@ -66,7 +67,7 @@ const FIXED_NOW = Date.UTC(2026, 10, 18, 15, 30);
 const SERVICES: DescService[] = [
   ApprovalService, AttachmentService, CatalogService, ChatService, DaemonRegistryService, ForgeService, MCPService, ProjectService, QuestionService, RunService,
   SettingsService, StreamingService, TriggerService, WorkflowService, WorktreeService, BillingService, UserService, ObservabilityBillingService,
-  BackgroundService, ConnectorService, InboxService, PresetService, ProviderAccountService, SharingService, SystemService,
+  BackgroundService, ConnectionService, ConnectorService, InboxService, PresetService, ProviderAccountService, SharingService, SystemService,
   DaemonService, LLMGatewayService, OrganizationService, GitCredentialService,
 ];
 const METHODS = new Map<string, DescMethod>(SERVICES.flatMap((s) => s.methods.map((m) => [`${s.typeName}/${m.name}`, m] as const)));
@@ -84,6 +85,9 @@ const RELIANT_KEYS = [
   "SettingsService/GetConfigHealth", "SettingsService/GetPrivacySettings", "SettingsService/GetProviderStatuses", "SettingsService/ListSettings",
   "StreamingService/StreamChatUpdates", "StreamingService/StreamUserUpdates", "TriggerService/ListTriggers", "WorkflowService/ListWorkflows",
   "WorktreeService/GetWorktree", "WorktreeService/ListWorktrees",
+  // The public demo's Agents pages: Connectors' integrations, a thread's and a run's workflow.
+  "ConnectionService/ListIntegrations", "ConnectionService/ListConnections", "ConnectionService/GetConnection",
+  "ChatService/GetThreadWorkflowInputs", "ChatService/GetWorkflowNodeExecutions",
 ].map((k) => `reliant.v1.${k}`);
 const CONTROL_PLANE_KEYS = [
   ...["GetCurrentUserBillingEmail", "GetCurrentUserComputeEligibility", "GetCurrentUserComputeSubscription", "GetCurrentUserComputeUsage",
@@ -93,6 +97,7 @@ const CONTROL_PLANE_KEYS = [
   "controlplane.v1.OrganizationService/ListMembers",
   "controlplane.v1.LLMGatewayService/GetLLMSpend",
   "controlplane.v1.DaemonService/GetDaemon",
+  "controlplane.v1.DaemonService/ListPortAccessRules",
   "observability_billing.v1.ObservabilityBillingService/GetObservabilityUsage",
   "controlplane.v1.GitCredentialService/GetGitCredential",
   "controlplane.v1.OrganizationService/ListGitHubAppInstallations",
@@ -119,6 +124,10 @@ const REQUESTS: Record<string, Record<string, unknown>> = {
   "reliant.v1.WorkflowService/GetWorkflow": { projectId: PROJECT_IDS.shop, name: "builtin://agent" },
   "controlplane.v1.OrganizationService/ListMembers": { orgId: "org-acme" },
   "controlplane.v1.DaemonService/GetDaemon": { daemonId: "shop-d-cloud" },
+  "controlplane.v1.DaemonService/ListPortAccessRules": { daemonId: "shop-d-cloud" },
+  "reliant.v1.ConnectionService/GetConnection": { id: "shop-conn-github" },
+  "reliant.v1.ChatService/GetThreadWorkflowInputs": { chatId: CHAT_IDS.cartTotals, threadId: "th-c1-review" },
+  "reliant.v1.ChatService/GetWorkflowNodeExecutions": { chatId: CHAT_IDS.cartTotals, workflowId: "wf-c1-review" },
   "controlplane.v1.OrganizationService/ListGitHubAppInstallations": { orgId: "org-acme" },
   "controlplane.v1.OrganizationService/ListLinkableGitHubAppInstallations": { orgId: "org-acme" },
 };
@@ -142,7 +151,7 @@ describe("the app layer", () => {
     const keys = Object.keys(appLayerScenarioHandlers()).sort();
     expect(keys).toEqual([...RELIANT_KEYS, ...CONTROL_PLANE_KEYS].sort());
     for (const key of keys) expect(METHODS.has(key), key).toBe(true);
-    expect(RELIANT_KEYS).toHaveLength(49);
+    expect(RELIANT_KEYS).toHaveLength(54);
   });
 
   it.each([...RELIANT_KEYS, ...CONTROL_PLANE_KEYS].filter((k) => METHODS.get(k)?.methodKind === "unary"))("%s answers a schema-valid, wire-safe message", async (key) => {
@@ -184,6 +193,26 @@ describe("the app layer", () => {
       expectWireSafe(method.output, res.message);
     }
     await expect(createClient(ChatService, strict).deleteChat({ chatId: CHAT_IDS.cartTotals })).rejects.toThrow(SHOP_READ_ONLY_MESSAGE);
+  });
+
+  it("refuses app-layer mutations without forwarding them to real services", async () => {
+    const unary = vi.fn<Transport["unary"]>();
+    const stream = vi.fn<Transport["stream"]>();
+    const transport = createShopAppTransport({ now: FIXED_NOW, passthrough: { fallback: { unary, stream } } });
+    // Prove the public demo's app layer is selected, not just an unavailable service.
+    const chats = createClient(ChatService, transport);
+    expect((await chats.listMessages({ chatId: CHAT_IDS.cartTotals })).messages.length).toBeGreaterThan(0);
+    // Exercise writes across the app services, not just a hand-picked delete.
+    const mutations = SERVICES.flatMap((service) => service.methods).filter((method) =>
+      method.methodKind === "unary" && /^(Create|Update|Delete)/.test(method.name) &&
+      method.proto.options?.idempotencyLevel !== MethodOptions_IdempotencyLevel.NO_SIDE_EFFECTS,
+    );
+    expect(mutations.length).toBeGreaterThan(0);
+    for (const method of mutations) {
+      await expect(transport.unary(method as DescMethodUnary, undefined, undefined, undefined, create(method.input), undefined)).rejects.toThrow(SHOP_READ_ONLY_MESSAGE);
+    }
+    expect(unary).not.toHaveBeenCalled();
+    expect(stream).not.toHaveBeenCalled();
   });
 
   it("tells the fixture chat's story: the transcript without the client-only failed send, the stream with it", async () => {
@@ -301,13 +330,41 @@ describe("the app layer's data/*.json", () => {
   });
 });
 
-describe("the demo pack", () => {
+describe("the packs' boundaries", () => {
   const SRC = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
-  const FORBIDDEN = [/\/fixtures\/shop\/app\.ts$/, /\/fixtures\/shop\/workspace\.ts$/, /\/fixtures\/shop\/handlers\/reliant\//, /\/fixtures\/shop\/handlers\/(billing|account|serve)\.ts$/];
+  const APP_LAYER = [/\/fixtures\/shop\/app\.ts$/, /\/fixtures\/shop\/workspace\.ts$/, /\/fixtures\/shop\/handlers\/reliant\//, /\/fixtures\/shop\/handlers\/(billing|account|serve)\.ts$/];
+  /** Fixture mode's install (the app bundle's), the fake Supabase it serves, and sign-in code. */
+  const NEVER_IN_THE_DEMO = [
+    /\/fixtures\/install\.ts$/,
+    /\/fixtures\/outside\.ts$/,
+    /\/fixtures\/previewBoot\.ts$/,
+    /\/lib\/fixturesBoot\.ts$/,
+    /\/lib\/supabase\.ts$/,
+    // lib/auth/ but its demo twins and apiKeyUser.ts, as the guard allows (vite-plugin-demo-bundle.ts).
+    /\/lib\/auth\/(?!apiKeyUser\.ts$)(?!.*\.demo\.tsx?$)/,
+    /\/store\/authStore\.ts$/,
+    /\/api\/authProvider\.ts$/,
+  ];
 
-  /** Every module under src/ that `entry` reaches by static or dynamic import. */
-  function reach(entry: string): Set<string> {
+  const exists = (p: string) => {
+    try {
+      return readFileSync(p) && true;
+    } catch {
+      return false;
+    }
+  };
+
+  /**
+   * Every module under src/ that `entry` reaches by static or dynamic import.
+   * `demo`: as the demo build resolves them, where a module `x.ts` with a
+   * sibling `x.demo.ts(x)` is that twin (vite-plugin-demo-bundle.ts demoSubstitutes).
+   */
+  function reach(entry: string, { demo = false } = {}): Set<string> {
     const seen = new Set<string>();
+    const twinOf = (file: string) => {
+      if (!demo || /\.demo\.tsx?$/.test(file)) return file;
+      return [file.replace(/\.tsx?$/, ".demo.ts"), file.replace(/\.tsx?$/, ".demo.tsx")].find(exists) ?? file;
+    };
     const visit = (file: string) => {
       if (seen.has(file)) return;
       seen.add(file);
@@ -315,23 +372,23 @@ describe("the demo pack", () => {
       for (const [, spec] of text.matchAll(/(?:from|import)\s*\(?\s*["']([^"']+)["']/g)) {
         if (!spec.startsWith(".") && !spec.startsWith("@/")) continue;
         const base = spec.startsWith("@/") ? join(SRC, spec.slice(2)) : resolve(dirname(file), spec);
-        const target = [base, `${base}.ts`, `${base}.tsx`, join(base, "index.ts"), join(base, "index.tsx")].find((p) => {
-          try {
-            return readFileSync(p) && true;
-          } catch {
-            return false;
-          }
-        });
-        if (target && /\.tsx?$/.test(target)) visit(target);
+        const target = [base, `${base}.ts`, `${base}.tsx`, join(base, "index.ts"), join(base, "index.tsx")].find(exists);
+        if (target && /\.tsx?$/.test(target)) visit(twinOf(target));
       }
     };
     visit(entry);
     return seen;
   }
 
-  it("reaches nothing of the app layer, so the demo bundle never carries it", () => {
+  it("the console's pack (index.ts, the forge tour's sample in the app) reaches nothing of the app layer", () => {
     const reached = [...reach(join(SRC, "fixtures/shop/index.ts"))];
     expect(reached.length).toBeGreaterThan(10);
-    expect(reached.filter((f) => FORBIDDEN.some((re) => re.test(f)))).toEqual([]);
+    expect(reached.filter((f) => APP_LAYER.some((re) => re.test(f)))).toEqual([]);
+  });
+
+  it("the public demo's transport serves the app layer, and reaches nothing of fixture mode, its fake Supabase or sign-in", () => {
+    const reached = [...reach(join(SRC, "components/Forge/Demo/demoTransport.ts"), { demo: true })];
+    expect(reached.some((f) => /\/fixtures\/shop\/app\.ts$/.test(f))).toBe(true);
+    expect(reached.filter((f) => NEVER_IN_THE_DEMO.some((re) => re.test(f)))).toEqual([]);
   });
 });

@@ -202,6 +202,19 @@ export function chatHandlers() {
         return { messages, total: messages.length, count: messages.length, hasMore: false, oldestSeq: 1n };
       },
       getWorkflowExecutions: (req) => ({ allRootWorkflows: req.chatId === MAIN ? workflowTree() : [] }),
+      // No node history is recorded for any run: the run page shows its nodes from the tree alone.
+      getWorkflowNodeExecutions: () => ({ updates: [] }),
+      // A thread's workflow (the fixture chat's tree names its threads; any other chat is its one
+      // thread), run with its defaults: nobody set an input.
+      getThreadWorkflowInputs: (req) => {
+        const thread = req.threadId || req.chatId;
+        const flat = (nodes: ExecutionInit[]): ExecutionInit[] => nodes.flatMap((n) => [n, ...flat((n.children ?? []) as ExecutionInit[])]);
+        const node = req.chatId === MAIN ? flat(workflowTree()).find((n) => n.thread === thread) : undefined;
+        const chat = thread === req.chatId ? chats().find((c) => c.id === req.chatId) : undefined;
+        if (!node && !chat) throw new ConnectError("thread not found", Code.NotFound);
+        const [workflowName, state] = node ? [node.workflowName ?? "", node.state] : [chat!.workflowName, chat!.workflowState];
+        return { workflowName, inputs: {}, isRunning: state === WorkflowState.ACTIVE, resumable: false };
+      },
       listChatProjects: chatProjects,
       // Nothing is queued for an agent: every message Alex sent has been delivered.
       listQueuedAgentMessages: () => ({ messages: [] }),

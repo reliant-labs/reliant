@@ -26,3 +26,6 @@ const view: SidebarProjectPrefsView = Object.freeze({
 });
 
 export const useSidebarProjectPrefs: typeof Real.useSidebarProjectPrefs = () => view;
+
+/** No account settings in the demo: chat navigation (store/chatNavigationStore.ts) reads the defaults. */
+export const cachedSidebarProjectSettings: typeof Real.cachedSidebarProjectSettings = () => ({});
