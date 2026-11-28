@@ -121,7 +121,7 @@ export interface NavRow extends NavItemBase {
   match?: NavMatch;
   /**
    * The kind of console page the row opens, when it always opens one kind
-   * (Services, Usage, Speed insights…). It is what a host that does not serve
+   * (Services, Usage, Site insights…). It is what a host that does not serve
    * a page prunes by (navConfig/prune.ts `withoutPages`); rows that open no
    * console page, or several kinds, leave it unset.
    */

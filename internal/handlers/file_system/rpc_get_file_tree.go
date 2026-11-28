@@ -53,6 +53,10 @@ func (s *Service) GetFileTree(
 		"path":        resolvedPath,
 		"show_hidden": req.Msg.ShowHidden,
 		"depth":       req.Msg.Depth,
+		// The tree expands symlinked directories, which can lead anywhere on
+		// the machine: the daemon refuses a credential store as the viewer
+		// does, judged against the workspace (an older daemon ignores it).
+		"viewer_root": scope.basePath,
 	}
 
 	var cmdResp struct {
@@ -60,7 +64,7 @@ func (s *Service) GetFileTree(
 		Truncated bool              `json:"truncated"`
 		NodeCount int               `json:"node_count"`
 	}
-	if err := s.sendCommand(ctx, userID, scope.target, "fs.get_tree", cmdReq, &cmdResp, 30000); err != nil {
+	if err := s.sendCommand(ctx, userID, scope.target, "fs.get_tree", cmdReq, &cmdResp, fsCommandTimeoutMs); err != nil {
 		if missing := s.checkoutMissingError(ctx, userID, req.Msg.ProjectId, req.Msg.WorktreeId, scope, resolvedPath, err); missing != nil {
 			return nil, missing
 		}
@@ -110,15 +114,39 @@ type fsProxyFileNode struct {
 	Size        int64             `json:"size"`
 	Modified    string            `json:"modified,omitempty"`
 	HasChildren bool              `json:"has_children"`
+	// SymlinkTarget and SymlinkStatus are set for a symbolic link; a daemon
+	// that predates them sends neither.
+	SymlinkTarget string `json:"symlink_target,omitempty"`
+	SymlinkStatus string `json:"symlink_status,omitempty"`
+}
+
+// symlinkStatusFromWire maps the daemon's symlink status onto the proto enum.
+func symlinkStatusFromWire(s string) reliantv1.FileNodeSymlinkStatus {
+	switch s {
+	case "resolved":
+		return reliantv1.FileNodeSymlinkStatus_FILE_NODE_SYMLINK_STATUS_RESOLVED
+	case "broken":
+		return reliantv1.FileNodeSymlinkStatus_FILE_NODE_SYMLINK_STATUS_BROKEN
+	case "loop":
+		return reliantv1.FileNodeSymlinkStatus_FILE_NODE_SYMLINK_STATUS_LOOP
+	case "denied":
+		return reliantv1.FileNodeSymlinkStatus_FILE_NODE_SYMLINK_STATUS_DENIED
+	default:
+		return reliantv1.FileNodeSymlinkStatus_FILE_NODE_SYMLINK_STATUS_UNSPECIFIED
+	}
 }
 
 func convertFsProxyNode(n *fsProxyFileNode) *reliantv1.FileNode {
 	node := &reliantv1.FileNode{
-		Name: n.Name,
-		Path: n.Path,
+		Name:          n.Name,
+		Path:          n.Path,
+		SymlinkStatus: symlinkStatusFromWire(n.SymlinkStatus),
 	}
 	if n.Modified != "" {
 		node.Modified = proto.String(n.Modified)
+	}
+	if n.SymlinkTarget != "" {
+		node.SymlinkTarget = proto.String(n.SymlinkTarget)
 	}
 
 	if n.Type == "directory" {

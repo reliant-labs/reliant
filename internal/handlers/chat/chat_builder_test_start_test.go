@@ -56,7 +56,7 @@ func newBuilderTestFixture(t *testing.T) *builderTestFixture {
 				Workflows:   store.NewWorkflowExtStore(repo.ORM()),
 				Worktrees:   store.NewWorktreeExtStore(repo.ORM()),
 				ProjectRows: store.NewProjectExtStore(repo.ORM()), TriggerEvents: store.NewTriggerEventExtStore(repo.ORM()),
-				Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo}), AgentMessages: store.NewAgentMessageExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()),
+				Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo.UpdateWriter()}), AgentMessages: store.NewAgentMessageExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()),
 				Temporal: temporal,
 			}, threads: threads.New(threads.Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())}), runs: runs.New(runs.Deps{Repo: repo, Resolver: questions.NewFromRepo(repo), Chats: store.NewChatsWithActivityExtStore(repo.ORM()), Workflows: store.NewWorkflowExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal, Pause: nil}),
 		},
@@ -102,7 +102,7 @@ func TestStartChat_BuilderTestRecordsBuilderTestKind(t *testing.T) {
 	chatID := resp.Msg.GetChat().GetId()
 
 	assert.Equal(t, "builder.test", f.launchKind(t, chatID))
-	event, err := f.repo.GetTriggerEventByChatID(f.ctx, chatID)
+	event, err := store.GetTriggerEventByChatID(f.ctx, f.repo.ORM(), chatID)
 	require.NoError(t, err)
 	assert.Equal(t, core.TriggerEventKindBuilderTest, event.Kind)
 	assert.Equal(t, chatID, event.DedupeKey, "attended: deduped on the chat id, like chat.start")

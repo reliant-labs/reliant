@@ -23,30 +23,41 @@ import (
 
 // Executor names, as the manifest writes them after "go:".
 const (
-	SendExecutor = "gmail.message_send"
-	GetExecutor  = "gmail.message_get"
+	SendExecutor        = "gmail.message_send"
+	GetExecutor         = "gmail.message_get"
+	DraftCreateExecutor = "gmail.draft_create"
 )
 
 func init() {
 	httpaction.Executors().MustRegister(SendExecutor, send)
 	httpaction.Executors().MustRegister(GetExecutor, get)
+	httpaction.Executors().MustRegister(DraftCreateExecutor, draftCreate)
 }
 
-// sendResponse is messages.send's answer (a Message with id, threadId,
-// labelIds).
-type sendResponse struct {
+// messageResponse is the Message resource messages.send answers with, and
+// the nested message of drafts.create's Draft (id, threadId, labelIds).
+type messageResponse struct {
 	ID       string   `json:"id"`
 	ThreadID string   `json:"threadId"`
 	LabelIDs []string `json:"labelIds"`
 }
 
-// send is message.send: build the RFC 2822 message, base64url it, POST it.
-func send(ctx context.Context, call httpaction.ExecutorCall) (*httpaction.Result, error) {
-	p := call.Params
+// draftResponse is drafts.create's answer: the draft's own id and the message
+// it holds.
+type draftResponse struct {
+	ID      string          `json:"id"`
+	Message messageResponse `json:"message"`
+}
+
+// outgoing builds the request body both message.send and draft.create post: the
+// base64url RFC 2822 message under "raw", plus "threadId" for a reply. A draft
+// may name no recipient yet; a sent message may not.
+func outgoing(p map[string]any, draft bool) (map[string]any, error) {
 	msg := Message{
 		To: strings2(p["to"]), Cc: strings2(p["cc"]), Bcc: strings2(p["bcc"]),
 		Subject: str(p["subject"]), Text: str(p["text"]), HTML: str(p["html"]),
 		InReplyTo: str(p["in_reply_to"]), References: str(p["references"]),
+		Draft: draft,
 	}
 	threadID := str(p["thread_id"])
 	if msg.InReplyTo != "" && threadID == "" {
@@ -61,20 +72,50 @@ func send(ctx context.Context, call httpaction.ExecutorCall) (*httpaction.Result
 	if err != nil {
 		return nil, fmt.Errorf("invalid params: %w", err)
 	}
-	c, err := newAPI(call.Manifest.GetConnection().GetBaseUrl(), call.Runner.Client(), call.Credential)
-	if err != nil {
-		return nil, err
-	}
 	body := map[string]any{"raw": EncodeRaw(raw)}
 	if threadID != "" {
 		body["threadId"] = threadID
 	}
-	var out sendResponse
+	return body, nil
+}
+
+// send is message.send: build the RFC 2822 message, base64url it, POST it.
+func send(ctx context.Context, call httpaction.ExecutorCall) (*httpaction.Result, error) {
+	body, err := outgoing(call.Params, false)
+	if err != nil {
+		return nil, err
+	}
+	c, err := newAPI(call.Manifest.GetConnection().GetBaseUrl(), call.Runner.Client(), call.Credential)
+	if err != nil {
+		return nil, err
+	}
+	var out messageResponse
 	if err := c.do(ctx, "POST", "/messages/send", nil, body, &out); err != nil {
 		return asResult(err)
 	}
 	return &httpaction.Result{StatusCode: 200, Data: map[string]any{
 		"id": out.ID, "thread_id": out.ThreadID, "label_ids": anyStrings(out.LabelIDs),
+	}}, nil
+}
+
+// draftCreate is draft.create: the same message as send, saved to Drafts
+// through drafts.create. Nothing is sent.
+func draftCreate(ctx context.Context, call httpaction.ExecutorCall) (*httpaction.Result, error) {
+	msg, err := outgoing(call.Params, true)
+	if err != nil {
+		return nil, err
+	}
+	c, err := newAPI(call.Manifest.GetConnection().GetBaseUrl(), call.Runner.Client(), call.Credential)
+	if err != nil {
+		return nil, err
+	}
+	var out draftResponse
+	if err := c.do(ctx, "POST", "/drafts", nil, map[string]any{"message": msg}, &out); err != nil {
+		return asResult(err)
+	}
+	return &httpaction.Result{StatusCode: 200, Data: map[string]any{
+		"draft_id": out.ID, "message_id": out.Message.ID, "thread_id": out.Message.ThreadID,
+		"label_ids": anyStrings(out.Message.LabelIDs),
 	}}, nil
 }
 

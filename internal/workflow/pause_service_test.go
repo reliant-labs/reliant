@@ -167,7 +167,7 @@ func (m *mockPauseRepo) status(id string) db.WorkflowStatus {
 
 // newPauseServiceOver builds a PauseService that writes and reads repo.
 func newPauseServiceOver(tc client.Client, repo *mockPauseRepo) *PauseService {
-	return NewPauseService(PauseServiceDeps{Temporal: tc, Store: repo, Workflows: repo})
+	return NewPauseService(PauseServiceDeps{Temporal: tc, Store: repo, Workflows: repo, Updates: repo})
 }
 
 func (m *mockPauseRepo) LoadWorkflow(_ context.Context, id string) (*db.Workflow, error) {
@@ -273,7 +273,7 @@ func TestIsWorkflowAlreadyDoneErr_TimeoutError(t *testing.T) {
 func TestPauseWorkflow_Success(t *testing.T) {
 	tc := &mockPauseTemporalClient{}
 	repo := newMockPauseRepo()
-	ps := NewPauseService(PauseServiceDeps{Temporal: tc, Store: repo, Workflows: repo})
+	ps := NewPauseService(PauseServiceDeps{Temporal: tc, Store: repo, Workflows: repo, Updates: repo})
 
 	err := ps.PauseWorkflow(context.Background(), "wf-1", "chat-1", "user paused")
 	require.NoError(t, err)
@@ -297,7 +297,7 @@ func TestPauseWorkflow_AlreadyCompleted_ReconcilesAndReturnsNil(t *testing.T) {
 		},
 	}
 	repo := newMockPauseRepo()
-	ps := NewPauseService(PauseServiceDeps{Temporal: tc, Store: repo, Workflows: repo})
+	ps := NewPauseService(PauseServiceDeps{Temporal: tc, Store: repo, Workflows: repo, Updates: repo})
 
 	err := ps.PauseWorkflow(context.Background(), "wf-1", "chat-1", "user paused")
 	require.NoError(t, err, "should return nil when workflow already completed")
@@ -312,7 +312,7 @@ func TestPauseWorkflow_NotFound_ReconcilesAndReturnsNil(t *testing.T) {
 		describeErr: fmt.Errorf("workflow not found"),
 	}
 	repo := newMockPauseRepo()
-	ps := NewPauseService(PauseServiceDeps{Temporal: tc, Store: repo, Workflows: repo})
+	ps := NewPauseService(PauseServiceDeps{Temporal: tc, Store: repo, Workflows: repo, Updates: repo})
 
 	err := ps.PauseWorkflow(context.Background(), "wf-1", "chat-1", "user paused")
 	require.NoError(t, err, "should return nil when workflow not found")
@@ -331,7 +331,7 @@ func TestPauseWorkflow_FailedWorkflow_ReconcilesCorrectStatus(t *testing.T) {
 		},
 	}
 	repo := newMockPauseRepo()
-	ps := NewPauseService(PauseServiceDeps{Temporal: tc, Store: repo, Workflows: repo})
+	ps := NewPauseService(PauseServiceDeps{Temporal: tc, Store: repo, Workflows: repo, Updates: repo})
 
 	err := ps.PauseWorkflow(context.Background(), "wf-1", "chat-1", "user paused")
 	require.NoError(t, err)
@@ -357,7 +357,7 @@ func TestPauseWorkflow_CancelledWorkflow_ReconcilesCorrectStatus(t *testing.T) {
 		},
 	}
 	repo := newMockPauseRepo()
-	ps := NewPauseService(PauseServiceDeps{Temporal: tc, Store: repo, Workflows: repo})
+	ps := NewPauseService(PauseServiceDeps{Temporal: tc, Store: repo, Workflows: repo, Updates: repo})
 
 	err := ps.PauseWorkflow(context.Background(), "wf-1", "chat-1", "user paused")
 	require.NoError(t, err)
@@ -370,7 +370,7 @@ func TestPauseWorkflow_GenuineError_ReturnsError(t *testing.T) {
 		signalErr: fmt.Errorf("connection refused"),
 	}
 	repo := newMockPauseRepo()
-	ps := NewPauseService(PauseServiceDeps{Temporal: tc, Store: repo, Workflows: repo})
+	ps := NewPauseService(PauseServiceDeps{Temporal: tc, Store: repo, Workflows: repo, Updates: repo})
 
 	err := ps.PauseWorkflow(context.Background(), "wf-1", "chat-1", "user paused")
 	require.Error(t, err)
@@ -385,7 +385,7 @@ func TestPauseWorkflow_DBUpdateFails_ReturnsError(t *testing.T) {
 	tc := &mockPauseTemporalClient{} // signal succeeds
 	repo := newMockPauseRepo()
 	repo.updateErr = fmt.Errorf("database is locked")
-	ps := NewPauseService(PauseServiceDeps{Temporal: tc, Store: repo, Workflows: repo})
+	ps := NewPauseService(PauseServiceDeps{Temporal: tc, Store: repo, Workflows: repo, Updates: repo})
 
 	err := ps.PauseWorkflow(context.Background(), "wf-1", "chat-1", "user paused")
 	require.Error(t, err)
@@ -415,7 +415,7 @@ func TestResumeInterruptedWorkflow_Failed_ResetsResumesAndMarksRunning(t *testin
 		resetResp:     &workflowservice.ResetWorkflowExecutionResponse{RunId: "new-run"},
 	}
 	repo := newMockPauseRepo()
-	ps := NewPauseService(PauseServiceDeps{Temporal: tc, Store: repo, Workflows: repo})
+	ps := NewPauseService(PauseServiceDeps{Temporal: tc, Store: repo, Workflows: repo, Updates: repo})
 	ps.SetResetGuard(NewResetAttemptGuard(2))
 
 	newRunID, err := ps.ResumeInterruptedWorkflow(context.Background(), "wf-1", "chat-1", nil)
@@ -461,7 +461,7 @@ func TestResumeInterruptedWorkflow_RevivesSubtreeBeforeMarkingRootActive(t *test
 		resetResp:     &workflowservice.ResetWorkflowExecutionResponse{RunId: "new-run"},
 	}
 	repo := newMockPauseRepo()
-	ps := NewPauseService(PauseServiceDeps{Temporal: tc, Store: repo, Workflows: repo})
+	ps := NewPauseService(PauseServiceDeps{Temporal: tc, Store: repo, Workflows: repo, Updates: repo})
 
 	_, err := ps.ResumeInterruptedWorkflow(context.Background(), "wf-1", "chat-1", nil)
 	require.NoError(t, err)
@@ -494,7 +494,7 @@ func TestResumeInterruptedWorkflow_ReviveFailure_StillResumes(t *testing.T) {
 	}
 	repo := newMockPauseRepo()
 	repo.reviveErr = errors.New("database is down")
-	ps := NewPauseService(PauseServiceDeps{Temporal: tc, Store: repo, Workflows: repo})
+	ps := NewPauseService(PauseServiceDeps{Temporal: tc, Store: repo, Workflows: repo, Updates: repo})
 
 	newRunID, err := ps.ResumeInterruptedWorkflow(context.Background(), "wf-1", "chat-1", nil)
 	require.NoError(t, err)

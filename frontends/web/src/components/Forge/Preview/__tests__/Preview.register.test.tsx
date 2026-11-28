@@ -121,14 +121,13 @@ function forgeReport(report: Record<string, unknown>) {
 /** What Live holds. Mutated by Register, as the server would. */
 let liveEnvs: LiveEnv[] = [];
 
-/** The declaration Register recorded, served per environment (GetEnvironmentShape). */
-let declaredShapes: Record<string, unknown> = {};
+/** The declaration Register recorded, served per environment (GetEnvironmentShape, at the transport below). */
+let declaredShapes: Record<string, ShapeLike> = {};
 
 const getLiveView = vi.fn(() => Promise.resolve(liveEnvs));
 vi.mock("@/services/forge/live", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/services/forge/live")>()),
   getLiveView: () => getLiveView(),
-  getEnvironmentShape: (_transport: unknown, id: string) => Promise.resolve(declaredShapes[id] ?? null),
 }));
 
 /** EnsureEnvironment, as called straight from the browser. */
@@ -187,22 +186,24 @@ vi.mock("@/services/controlPlane/client", () => ({
 
 const listSecrets = vi.fn<() => Promise<unknown>>(() => Promise.resolve({ secrets: [], protected: false }));
 const setSecret = vi.fn((_input: unknown) => Promise.resolve({ version: 1 }));
-vi.mock("@/services/forge/secretStore", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/services/forge/secretStore")>()),
-  listSecrets: () => listSecrets(),
-  setSecret: (_transport: unknown, input: unknown) => setSecret(input),
-  getSecretVersions: () => Promise.resolve({ name: "", versions: [] }),
-}));
+// Answered at the transport (the generated hooks' seam), beside the registry's.
+const secretStore = () =>
+  secretStoreHandlers({
+    listSecrets: () => listSecrets() as never,
+    setSecret,
+    getSecretVersions: () => ({ summary: null, versions: [] }),
+  });
 
 vi.mock("@/services/forge/cloudEnvs", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/services/forge/cloudEnvs")>()),
-  getEnvironmentStatus: () => Promise.resolve({ verdict: "unknown", workloads: [], currentPromotion: null }),
   listEnvironmentPromotions: () => Promise.resolve([]),
 }));
 
 import { ForgeEnvPage } from "../../EnvPage/ForgeEnvPage";
 import { setTransport } from "@/lib/connect";
 import { daemonRegistryTransport } from "@/test/daemonRegistry";
+import { environmentShapeHandlers, environmentStatusHandlers, type ShapeLike } from "@/test/deployReads";
+import { secretStoreHandlers } from "@/test/secretStoreTransport";
 import { ForgeService } from "@/gen/reliant/v1/forge_pb";
 
 // The registry's daemon list, which a daemon tab reads to learn whether a
@@ -217,7 +218,12 @@ beforeEach(() =>
         "ForgeService.GetTopology": () => getTopology(),
         "ForgeService.GetEnvShape": () => getEnvShape(),
         "ForgeService.GetEnvStatus": () => getEnvStatus(),
-      }
+        ...secretStore(),
+      },
+      // The control plane's per-environment reads: the declaration Register
+      // recorded, and a status that has observed nothing yet.
+      environmentShapeHandlers((id) => declaredShapes[id] ?? null),
+      environmentStatusHandlers(() => ({ verdict: "unknown", workloads: [], currentPromotion: null })),
     )
   )
 );

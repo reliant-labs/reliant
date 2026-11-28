@@ -9,6 +9,7 @@ import (
 	"github.com/reliant-labs/forge/pkg/testkit"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 func insertTestSpawnToolCall(t *testing.T, repo *Repo, id, chatID, threadID string, childWorkflowID *string, status core.ToolCallStatus) {
@@ -95,7 +96,7 @@ func TestListStrandedSpawnToolCalls(t *testing.T) {
 		t.Fatalf("UpsertToolCallResult: %v", err)
 	}
 
-	stranded, err := repo.ListStrandedSpawnToolCalls(ctx)
+	stranded, err := store.ListStrandedSpawnToolCalls(ctx, repo.ORM())
 	if err != nil {
 		t.Fatalf("ListStrandedSpawnToolCalls: %v", err)
 	}

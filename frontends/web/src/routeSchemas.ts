@@ -391,6 +391,14 @@ export const SETTINGS_SECTION_IDS = [
   // member, account and model, with estimated list costs. billing:read
   // holders read it. Cloud-only, beside AI accounts.
   "org-ai-usage",
+  // The GitHub App installations linked to the active org (control-plane
+  // OrganizationService's GitHub App rpcs, docs/design/org-sharing.md §7.1):
+  // what lets the org's automations act as the App's bot and its
+  // repositories' GitHub Actions sign in to it. Members read the list, owners
+  // and admins link and unlink. Cloud-only, beside the personal GitHub
+  // connection. Also where the App's setup redirect lands an org install
+  // (GitHubOAuthCallback), with `installation_id` and `link_state`.
+  "org-github",
   // Machines. Shown in every build: registered machines, and the outside AI
   // apps granted access to each, exist without a control plane too. Was
   // `environments`; /settings/environments redirects here.
@@ -425,6 +433,7 @@ export const SETTINGS_SECTION_ALIASES: Readonly<Record<string, SettingsSection>>
   profile: "account",
   organization: "member-permissions",
   members: "member-permissions",
+  "github-app": "org-github",
 };
 
 // Billing sub-navigation. This was `useState` inside BillingSection, with a
@@ -535,6 +544,12 @@ export const settingsSearchSchema = z.object({
   // it to /settings/machines/$machineId (settingsSectionRoutes.tsx);
   // declared so validation does not strip it before that redirect reads it.
   daemon: z.string().optional(),
+  // An org install of the GitHub App, back from GitHub (GitHubOAuthCallback
+  // forwards the App's setup redirect here): the installation GitHub named and
+  // the signed state StartGitHubAppInstall issued. /settings/org-github links
+  // them (LinkGitHubAppInstallation, which trusts neither) and drops both.
+  installation_id: z.coerce.string().optional().catch(undefined),
+  link_state: z.string().optional().catch(undefined),
   // The slug of a /settings/<slug> URL that matched no section. Set only by
   // that redirect; the page explains it and offers to dismiss.
   notFound: z.string().optional(),
@@ -657,6 +672,9 @@ export const forgeResolveSearchSchema = z.object({
 export const CONSOLE_CHECKOUT_PARAM = "project";
 export const forgeConsoleCheckoutSearchSchema = z.object({
   project: z.union([z.string(), z.number().transform(String)]).optional().catch(undefined),
+  // Several projects in the shell: the in-page project filter every page across them shares
+  // (Console/severalProjects.tsx useOnlyFilter), on every console page.
+  only: z.string().optional().catch(undefined),
 });
 
 /**
@@ -985,6 +1003,22 @@ export const forgeConsoleServicesSearchSchema = z.object({
 export const forgeConsoleAnalyticsSearchSchema = z.object({
   env: envScopeParam,
   range: z.enum(RANGE_PRESETS).optional().catch(undefined),
+});
+
+/**
+ * Site insights (Forge/Analytics/SiteInsightsPage.tsx): the scope, the window,
+ * the site (`site`, one site's telemetry service.name; absent, every site),
+ * and the Speed view's choices (`device`, `pct`, `metric`), which its model
+ * reads back with a default for anything it does not know.
+ */
+export const forgeConsoleSiteInsightsSearchSchema = z.object({
+  env: envScopeParam,
+  range: z.enum(RANGE_PRESETS).optional().catch(undefined),
+  site: textParam,
+  device: textParam,
+  pct: textParam,
+  metric: textParam,
+  only: z.string().optional().catch(undefined),
 });
 
 export const forgeConsoleWorkloadSearchSchema = z.object({

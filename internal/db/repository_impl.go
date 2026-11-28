@@ -713,16 +713,6 @@ func (r *Repo) CountMessagesInThread(ctx context.Context, threadID string) (int,
 	return r.countMessages(ctx, orm.WhereEq(store.MessageFieldThreadID, threadID))
 }
 
-// ClaimUserActivation records messageID as userID's activation when it is
-// their first typed message ever and no activation is recorded, reporting
-// whether this call recorded it (store.ClaimUserActivation).
-func (r *Repo) ClaimUserActivation(ctx context.Context, userID, chatID, messageID string) (bool, error) {
-	if userID == "" || chatID == "" || messageID == "" {
-		return false, fmt.Errorf("user, chat and message IDs are required")
-	}
-	return store.ClaimUserActivation(ctx, r.ORM(), userID, chatID, messageID)
-}
-
 // GetMessagesByContextWindow loads messages from a specific context window.
 // This is used by the threads package for CW chain resolution.
 func (r *Repo) GetMessagesByContextWindow(ctx context.Context, contextWindowID string, maxOrdinal *int64) ([]*Message, error) {
@@ -1600,21 +1590,46 @@ func (r *Repo) ListAttachedDaemonIDsForUser(ctx context.Context, userID string, 
 // project has no record. Prefer it (and GetProjectPresetsJSON) to
 // store.GetProjectConfigRecord whenever that column is all a caller needs: the
 // full row carries every indexed skill body and can run to tens of MB.
+//
+// A value this Repo read before is served again while the record is
+// unchanged (catalogColumnCache).
 func (r *Repo) GetProjectWorkflowsJSON(ctx context.Context, projectID string) (*string, error) {
 	if projectID == "" {
 		return nil, fmt.Errorf("project ID cannot be empty")
 	}
-	return store.GetProjectWorkflowsJSON(ctx, r.ORM(), projectID)
+	return r.projectConfigColumn(ctx, "project.workflows", projectID, store.GetProjectWorkflowsJSONVersioned)
 }
 
 // GetProjectPresetsJSON reads one column of the project config record: the
 // synced .reliant/presets. It returns svcerr.NotFound when the
-// project has no record.
+// project has no record. Cached as GetProjectWorkflowsJSON is.
 func (r *Repo) GetProjectPresetsJSON(ctx context.Context, projectID string) (*string, error) {
 	if projectID == "" {
 		return nil, fmt.Errorf("project ID cannot be empty")
 	}
-	return store.GetProjectPresetsJSON(ctx, r.ORM(), projectID)
+	return r.projectConfigColumn(ctx, "project.presets", projectID, store.GetProjectPresetsJSONVersioned)
+}
+
+// projectConfigColumn reads one JSON column of projectID's config record
+// through the catalog column cache, svcerr.NotFound when there is none.
+func (r *Repo) projectConfigColumn(ctx context.Context, column, projectID string,
+	versioned func(ctx context.Context, db orm.Context, projectID string) (*string, string, bool, error),
+) (*string, error) {
+	value, found, err := r.catalogColumns().read(ctx, catalogColumnKey{column: column, projectID: projectID}, catalogColumnReads{
+		version: func(ctx context.Context) (string, bool, error) {
+			return store.ProjectConfigVersion(ctx, r.ORM(), projectID)
+		},
+		versioned: func(ctx context.Context) (*string, string, bool, error) {
+			return versioned(ctx, r.ORM(), projectID)
+		},
+	}, r.fillsCatalogColumns(ctx))
+	if err != nil {
+		return nil, err
+	}
+	if !found {
+		return nil, store.MissingProjectConfig()
+	}
+	return value, nil
 }
 
 func (r *Repo) CreateWorktree(ctx context.Context, worktree *Worktree) error {
@@ -2005,6 +2020,13 @@ func (r *Repo) ListPlansByChatID(ctx context.Context, chatID string) ([]*Plan, e
 	}
 
 	return store.ListPlansByChatID(ctx, r.ORM(), chatID)
+}
+
+// CopyChatPlans gives toThreadID a pending copy of every plan of fromChatID
+// and of their tasks, in one statement (store.CopyChatPlans). A branch
+// starts with its source chat's plans this way.
+func (r *Repo) CopyChatPlans(ctx context.Context, fromChatID, toThreadID string) error {
+	return store.CopyChatPlans(ctx, r.ORM(), fromChatID, toThreadID, int32(PlanStatusPending), int32(TaskStatusPending))
 }
 
 // ==================== Tasks ====================
@@ -2744,17 +2766,6 @@ func (r *Repo) LockUserOrgs(ctx context.Context, userID string, reads ...OrgRead
 	return store.LockUserOrgs(ctx, r.ORM(), userID, reads...)
 }
 
-func (r *Repo) GetTrigger(ctx context.Context, id string) (*core.Trigger, error) {
-	return store.GetTrigger(ctx, r.ORM(), id)
-}
-
-func (r *Repo) ListTriggers(ctx context.Context, f core.TriggerFilters) ([]*core.Trigger, error) {
-	if f.UserID == "" {
-		return nil, fmt.Errorf("user ID cannot be empty; use ListAllTriggers to list every user's triggers")
-	}
-	return store.ListTriggersForUser(ctx, r.ORM(), f)
-}
-
 // CreateTriggerEvent records one firing. The insert is ON CONFLICT
 // (kind, dedupe_key) DO NOTHING, so created=false means a firing for that
 // key already existed and nothing was written. That constraint is what
@@ -2778,22 +2789,6 @@ func (r *Repo) GetTriggerEventByDedupe(ctx context.Context, kind core.TriggerEve
 		return nil, fmt.Errorf("trigger event dedupe key cannot be empty")
 	}
 	return store.GetTriggerEventByDedupe(ctx, r.ORM(), kind, dedupeKey)
-}
-
-func (r *Repo) GetTriggerEventByChatID(ctx context.Context, chatID string) (*core.TriggerEvent, error) {
-	if chatID == "" {
-		return nil, fmt.Errorf("chat ID cannot be empty")
-	}
-	return store.GetTriggerEventByChatID(ctx, r.ORM(), chatID)
-}
-
-// GetTriggerEventByChat returns the event of the given kind that launched
-// chatID (core.ErrTriggerEventNotFound when none did).
-func (r *Repo) GetTriggerEventByChat(ctx context.Context, kind core.TriggerEventKind, chatID string) (*core.TriggerEvent, error) {
-	if chatID == "" {
-		return nil, fmt.Errorf("chat ID cannot be empty")
-	}
-	return store.GetTriggerEventByChat(ctx, r.ORM(), kind, chatID)
 }
 
 // UpdateTriggerEventOutcome is store.UpdateTriggerEventOutcome.
@@ -2832,6 +2827,8 @@ func (r *Repo) ClaimRunEvents(ctx context.Context, now, leaseUntil time.Time, ma
 // FiringsSinceLastSuccess returns each trigger's firings since its newest
 // success, newest first, capped at perTrigger: the current failure episode.
 // The events carry no body (payload, sender, origin): an episode is counted.
+//
+// Deprecated: use store.TriggerEventExtStore.FiringsSinceLastSuccess.
 func (r *Repo) FiringsSinceLastSuccess(ctx context.Context, userID string, triggerIDs []string, perTrigger int) (map[string][]*core.TriggerEventWithRun, error) {
 	if userID == "" {
 		return nil, fmt.Errorf("user ID cannot be empty")

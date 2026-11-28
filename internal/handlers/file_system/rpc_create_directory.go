@@ -42,7 +42,7 @@ func (s *Service) CreateDirectory(
 		return nil, err
 	}
 	var cmdResp struct{}
-	if err := s.sendCommand(ctx, userID, target, "fs.mkdir", cmdReq, &cmdResp, 5000); err != nil {
+	if err := s.sendCommand(ctx, userID, target, "fs.mkdir", cmdReq, &cmdResp, pickerTimeoutMs); err != nil {
 		return nil, err
 	}
 

@@ -126,7 +126,7 @@ type triggerTestEnv struct {
 func setupTriggerTest(t *testing.T) *triggerTestEnv {
 	t.Helper()
 	repo := db.NewTestRepo(t)
-	backend := &fakeTriggerBackend{repo: repo}
+	backend := &fakeTriggerBackend{repo: store.NewTriggerExtStore(repo.ORM())}
 
 	userID := uuid.NewString()
 	projectID := uuid.NewString()
@@ -221,7 +221,7 @@ func TestCreateTriggerStoresAndSyncs(t *testing.T) {
 	assert.Equal(t, reliantv1.TriggerOverlapPolicy_TRIGGER_OVERLAP_POLICY_SKIP, sched.GetOverlap())
 	assert.Equal(t, "10m0s", sched.GetCatchupWindow())
 
-	stored, err := env.repo.GetTrigger(context.Background(), got.GetId())
+	stored, err := store.GetTrigger(context.Background(), env.repo.ORM(), got.GetId())
 	require.NoError(t, err)
 	assert.Equal(t, env.userID, stored.UserID, "the trigger must be owned by the caller")
 	assert.Equal(t, core.TriggerKindSchedule, stored.Kind)
@@ -251,7 +251,7 @@ func TestCreateTriggerRollsBackWhenSyncFails(t *testing.T) {
 	require.Error(t, err)
 	assert.Equal(t, connect.CodeUnavailable, svcerr.Code(err))
 
-	stored, err := env.repo.ListTriggers(context.Background(), core.TriggerFilters{UserID: env.userID})
+	stored, err := store.ListTriggersForUser(context.Background(), env.repo.ORM(), core.TriggerFilters{UserID: env.userID})
 	require.NoError(t, err)
 	assert.Empty(t, stored, "a trigger whose schedule could not be created must not survive")
 }
@@ -356,7 +356,7 @@ func TestCreateTriggerWithoutABackendIsUnavailable(t *testing.T) {
 	t.Parallel()
 
 	env := setupTriggerTest(t)
-	svc := NewTestTrigger(t, WithTriggerDeps(realStores(env.repo, Deps{Repo: env.repo, Projects: projectaccesstest.For(env.repo)})))
+	svc := NewTestTrigger(t, WithTriggerDeps(realStores(env.repo, Deps{Repo: env.repo, Triggers: store.NewTriggerExtStore(env.repo.ORM()), FiringReads: store.NewTriggerEventExtStore(env.repo.ORM()), Registrations: store.NewTriggerRegistrationExtStore(env.repo.ORM()), Projects: projectaccesstest.For(env.repo)})))
 
 	_, err := svc.CreateTrigger(env.ctx,
 		connect.NewRequest(&reliantv1.CreateTriggerRequest{Trigger: env.definition(nil)}))
@@ -380,8 +380,8 @@ func TestServiceWithoutTemporal(t *testing.T) {
 	require.Nil(t, fires, "TemporalBackend without a client must return a nil interface")
 
 	for name, deps := range map[string]Deps{
-		"nil Syncer and Fires":             realStores(env.repo, Deps{Repo: env.repo, Projects: projectaccesstest.For(env.repo)}),
-		"TemporalBackend without a client": realStores(env.repo, Deps{Repo: env.repo, Projects: projectaccesstest.For(env.repo), Syncer: syncer, Fires: fires}),
+		"nil Syncer and Fires":             realStores(env.repo, Deps{Repo: env.repo, Triggers: store.NewTriggerExtStore(env.repo.ORM()), FiringReads: store.NewTriggerEventExtStore(env.repo.ORM()), Registrations: store.NewTriggerRegistrationExtStore(env.repo.ORM()), Projects: projectaccesstest.For(env.repo)}),
+		"TemporalBackend without a client": realStores(env.repo, Deps{Repo: env.repo, Triggers: store.NewTriggerExtStore(env.repo.ORM()), FiringReads: store.NewTriggerEventExtStore(env.repo.ORM()), Registrations: store.NewTriggerRegistrationExtStore(env.repo.ORM()), Projects: projectaccesstest.For(env.repo), Syncer: syncer, Fires: fires}),
 	} {
 		t.Run(name, func(t *testing.T) {
 			// Stored while Temporal was available; served without it.
@@ -521,7 +521,7 @@ func TestSetTriggerEnabledPersistsAndReconverges(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, resp.Msg.GetTrigger().GetEnabled())
 
-	stored, err := env.repo.GetTrigger(context.Background(), created.GetId())
+	stored, err := store.GetTrigger(context.Background(), env.repo.ORM(), created.GetId())
 	require.NoError(t, err)
 	assert.False(t, stored.Enabled)
 
@@ -549,7 +549,7 @@ func TestDeleteTriggerRemovesTheScheduleFirst(t *testing.T) {
 	assert.Equal(t, []string{created.GetId()}, env.backend.deleted)
 	env.backend.mu.Unlock()
 
-	_, err = env.repo.GetTrigger(context.Background(), created.GetId())
+	_, err = store.GetTrigger(context.Background(), env.repo.ORM(), created.GetId())
 	assert.ErrorIs(t, err, core.ErrTriggerNotFound)
 }
 
@@ -567,7 +567,7 @@ func TestDeleteTriggerKeepsTheRowWhenTheScheduleCannotBeRemoved(t *testing.T) {
 
 	// The row must survive: deleting it while the schedule lives on would
 	// create exactly the orphan this ordering exists to prevent.
-	_, err = env.repo.GetTrigger(context.Background(), created.GetId())
+	_, err = store.GetTrigger(context.Background(), env.repo.ORM(), created.GetId())
 	require.NoError(t, err)
 }
 
@@ -751,7 +751,7 @@ func TestCreateTriggerPersistsAndRoundTripsTheDaemon(t *testing.T) {
 	created := env.create(t, env.definition(nil))
 	assert.Equal(t, env.daemonID, created.GetDaemonId())
 
-	stored, err := env.repo.GetTrigger(context.Background(), created.GetId())
+	stored, err := store.GetTrigger(context.Background(), env.repo.ORM(), created.GetId())
 	require.NoError(t, err)
 	assert.Equal(t, env.daemonID, stored.DaemonID)
 

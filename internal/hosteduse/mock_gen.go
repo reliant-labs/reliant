@@ -18,14 +18,15 @@ import (
 )
 
 // forge:section MockService
-// forge:hash=16840343c63edeb5dbd32054a5ba83f5fa666916db99bf7e56a9a7a99d7a0f51
+// forge:hash=fd13bda7804484d5f98f3b1fde7c75262548d20e4e133857c47d83c52eb6c6e0
 
 // MockService is a test mock for the Service interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockService.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockService.<Method>Func not set" error.
 type MockService struct {
 	contractkit.Recorder
 	IssueFunc          func(context.Context, string, string, string, hostedhttp.Request) (string, error)
@@ -60,18 +61,95 @@ func (m *MockService) ResolveSecrets(ctx context.Context, runID string, nodeID s
 	return nil, contractkit.MockNotSet("MockService", "ResolveSecrets")
 }
 
+// MockServiceIssueCall is one recorded call of MockService.Issue, one
+// field per parameter.
+type MockServiceIssueCall struct {
+	Ctx     context.Context
+	RunID   string
+	NodeID  string
+	GrantID string
+	Req     hostedhttp.Request
+}
+
+// IssueCalls returns every recorded Issue call, oldest first, with
+// its arguments typed. It reads the same log as Calls("Issue").
+func (m *MockService) IssueCalls() []MockServiceIssueCall {
+	var out []MockServiceIssueCall
+	for _, c := range m.Recorder.Calls("Issue") {
+		var r MockServiceIssueCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.RunID, _ = c.Args[1].(string)
+		r.NodeID, _ = c.Args[2].(string)
+		r.GrantID, _ = c.Args[3].(string)
+		r.Req, _ = c.Args[4].(hostedhttp.Request)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceExecuteActionCall is one recorded call of MockService.ExecuteAction, one
+// field per parameter.
+type MockServiceExecuteActionCall struct {
+	Ctx     context.Context
+	RunID   string
+	NodeID  string
+	GrantID string
+	Req     hostedhttp.Request
+}
+
+// ExecuteActionCalls returns every recorded ExecuteAction call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ExecuteAction").
+func (m *MockService) ExecuteActionCalls() []MockServiceExecuteActionCall {
+	var out []MockServiceExecuteActionCall
+	for _, c := range m.Recorder.Calls("ExecuteAction") {
+		var r MockServiceExecuteActionCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.RunID, _ = c.Args[1].(string)
+		r.NodeID, _ = c.Args[2].(string)
+		r.GrantID, _ = c.Args[3].(string)
+		r.Req, _ = c.Args[4].(hostedhttp.Request)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceResolveSecretsCall is one recorded call of MockService.ResolveSecrets, one
+// field per parameter.
+type MockServiceResolveSecretsCall struct {
+	Ctx    context.Context
+	RunID  string
+	NodeID string
+	Refs   []stepsecrets.Ref
+}
+
+// ResolveSecretsCalls returns every recorded ResolveSecrets call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ResolveSecrets").
+func (m *MockService) ResolveSecretsCalls() []MockServiceResolveSecretsCall {
+	var out []MockServiceResolveSecretsCall
+	for _, c := range m.Recorder.Calls("ResolveSecrets") {
+		var r MockServiceResolveSecretsCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.RunID, _ = c.Args[1].(string)
+		r.NodeID, _ = c.Args[2].(string)
+		r.Refs, _ = c.Args[3].([]stepsecrets.Ref)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ Service = (*MockService)(nil)
 
 // forge:section MockStore
-// forge:hash=d718a3ed0e3a478423e0c36156e0e802eec400a05838e286bfb4aa83247bfe37
+// forge:hash=4b8b1eb4893d1ad830a2587768de2931956c414212d9a3024c58eb9db3a8d724
 
 // MockStore is a test mock for the Store interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockStore.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockStore.<Method>Func not set" error.
 type MockStore struct {
 	contractkit.Recorder
 	CreateHostedHTTPActionTicketFunc func(context.Context, core.HostedHTTPActionTicket) (bool, error)
@@ -94,6 +172,50 @@ func (m *MockStore) RedeemHostedHTTPActionTicket(p0 context.Context, p1 string, 
 		return m.RedeemHostedHTTPActionTicketFunc(p0, p1, p2, p3)
 	}
 	return nil, contractkit.MockNotSet("MockStore", "RedeemHostedHTTPActionTicket")
+}
+
+// MockStoreCreateHostedHTTPActionTicketCall is one recorded call of MockStore.CreateHostedHTTPActionTicket, one
+// field per parameter.
+type MockStoreCreateHostedHTTPActionTicketCall struct {
+	P0 context.Context
+	P1 core.HostedHTTPActionTicket
+}
+
+// CreateHostedHTTPActionTicketCalls returns every recorded CreateHostedHTTPActionTicket call, oldest first, with
+// its arguments typed. It reads the same log as Calls("CreateHostedHTTPActionTicket").
+func (m *MockStore) CreateHostedHTTPActionTicketCalls() []MockStoreCreateHostedHTTPActionTicketCall {
+	var out []MockStoreCreateHostedHTTPActionTicketCall
+	for _, c := range m.Recorder.Calls("CreateHostedHTTPActionTicket") {
+		var r MockStoreCreateHostedHTTPActionTicketCall
+		r.P0, _ = c.Args[0].(context.Context)
+		r.P1, _ = c.Args[1].(core.HostedHTTPActionTicket)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockStoreRedeemHostedHTTPActionTicketCall is one recorded call of MockStore.RedeemHostedHTTPActionTicket, one
+// field per parameter.
+type MockStoreRedeemHostedHTTPActionTicketCall struct {
+	P0 context.Context
+	P1 string
+	P2 string
+	P3 string
+}
+
+// RedeemHostedHTTPActionTicketCalls returns every recorded RedeemHostedHTTPActionTicket call, oldest first, with
+// its arguments typed. It reads the same log as Calls("RedeemHostedHTTPActionTicket").
+func (m *MockStore) RedeemHostedHTTPActionTicketCalls() []MockStoreRedeemHostedHTTPActionTicketCall {
+	var out []MockStoreRedeemHostedHTTPActionTicketCall
+	for _, c := range m.Recorder.Calls("RedeemHostedHTTPActionTicket") {
+		var r MockStoreRedeemHostedHTTPActionTicketCall
+		r.P0, _ = c.Args[0].(context.Context)
+		r.P1, _ = c.Args[1].(string)
+		r.P2, _ = c.Args[2].(string)
+		r.P3, _ = c.Args[3].(string)
+		out = append(out, r)
+	}
+	return out
 }
 
 // Compile-time check.

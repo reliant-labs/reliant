@@ -695,7 +695,7 @@ schema DaemonConfigInstance:
     workspace: str = ""
 
 # forge:section schema DaemonConfig
-# forge:hash=4be5cf857d4f32a35c78fd3f27f82862de8d40f7977a63619b8050a0b23b05d8
+# forge:hash=2e50cde65c0939d97cbccb44dba865abf40f8af50714bf213414de6e07ebcf69
 schema DaemonConfig:
     # Daemon gateway URL to dial (default: the credential's gateway, else localhost on --port)
     gateway_url: str = ""
@@ -755,6 +755,16 @@ schema DaemonConfig:
     labels: str = ""
     # Install new signed releases of reliant at quiet moments, restarting in place (a self-owned install only; off by default)
     auto_update: bool = False
+    # Image merge-queue gates run in on this machine (empty: refuse gates)
+    gate_image: str = ""
+    # Grype database directory mounted read-only into merge-queue gates (empty: scans are unproven)
+    gate_vuln_db_dir: str = ""
+    # cpu.weight of a heavy-slot command while it runs, against 100 for other commands (0: 25; 100 or more: not lowered)
+    heavy_cpu_weight: int = 0
+    # memory.high of a heavy-slot command while it runs: off, or a size such as 16G (unset: 1.5x one slot's part of the memory, at least 12GiB)
+    heavy_memory_high: str = ""
+    # Trusted Go build cache mounted read-only into merge-queue gates: off, or a directory (unset: /var/cache/workspace/go-build-trusted when it exists)
+    gate_trusted_go_cache: str = ""
     # instance config block (DaemonInstanceConfig). Set its fields as `instance.<field> = ...`.
     instance: DaemonConfigInstance = DaemonConfigInstance {}
 
@@ -814,7 +824,7 @@ daemonConfigEnvMap = lambda c: DaemonConfig, config_secrets: [str] -> {str: str 
         "RELIANT_INSTANCE_WORKSPACE" = c.instance.workspace
 
         # forge:section daemonConfigEnvMap values (root)
-        # forge:hash=2408933b35dc915dfb6f50b70dbb9c72852c4e6fca18129611777a763c89a9d2
+        # forge:hash=f8901b5835fbf5e433625d5fec3d14bea80382df9bc5b9c6a80c81e97d73a1d1
         "DAEMON_GRPC_URL" = c.gateway_url
         "TOOLS_DAEMON_PORT" = str(c.gateway_port)
         "DAEMON_TLS_MODE" = c.tls_mode
@@ -844,6 +854,11 @@ daemonConfigEnvMap = lambda c: DaemonConfig, config_secrets: [str] -> {str: str 
         "RELIANT_DAEMON_EGRESS_HOST_MAX_CONCURRENT" = str(c.egress_host_max_concurrent)
         "RELIANT_DAEMON_LABELS" = c.labels
         "RELIANT_DAEMON_AUTO_UPDATE" = "true" if c.auto_update else "false"
+        "RELIANT_DAEMON_GATE_IMAGE" = c.gate_image
+        "RELIANT_DAEMON_GATE_VULN_DB_DIR" = c.gate_vuln_db_dir
+        "RELIANT_HEAVY_CPU_WEIGHT" = str(c.heavy_cpu_weight)
+        "RELIANT_HEAVY_MEMORY_HIGH" = c.heavy_memory_high
+        "RELIANT_DAEMON_GATE_TRUSTED_GO_CACHE" = c.gate_trusted_go_cache
 
         # forge:section daemonConfigEnvMap values (end)
         # forge:hash=06d93ea6019c14e6397469374bab99b5c2725f7353c6e9a894aa0b0ce1f5d421
@@ -1595,8 +1610,27 @@ schema ServerProcessConfigClientVersions:
     # Refuse reliant.v1 calls (SystemService exempt) that carry no Reliant-Client header: HTTP 404 for browser-origin calls, FailedPrecondition upgrade_required for the rest
     refuse_unidentified: bool = False
 
+# forge:section schema ServerProcessConfigPipeline
+# forge:hash=d5b9568b9a39abb1a5aa25f803ca130c1ed28d03c8bbfaed3b9901c253ce0666
+# ServerProcessConfigPipeline is the pipeline block (PipelineConfig) — author its values in config.k as `pipeline.<field> = ...`.
+schema ServerProcessConfigPipeline:
+    # Run Reliant's PR and release pipeline on this server: its server actions (uses: reliant/...) and RPCs; off refuses them
+    enabled: bool = False
+    # Worker only: signs the merge queue's Queue App token requests to control-plane; unset lands as the Reliant App, unenforced
+    github_queue_app_caller_secret: ConfigSecretRef = ConfigSecretRef { name = "reliant-secrets", key = "github_queue_app_caller_secret" }
+
+# forge:section schema ServerProcessConfigReconciler
+# forge:hash=e7bfa70a2e0f7539d0ee0de18a45da2ad480e8698bc4b7e555fc2dc058a2b41d
+# ServerProcessConfigReconciler is the reconciler block (ReconcilerConfig) — author its values in config.k as `reconciler.<field> = ...`.
+schema ServerProcessConfigReconciler:
+    # Workflow reconciler stall watchdog: off (no work), report (log, count and record stalled runs) or enforce (also stop them)
+    stall_watchdog: str = "off"
+
+    check:
+        stall_watchdog != "", "stall_watchdog = \"\" cannot reach the process: an empty RELIANT_RECONCILER_STALL_WATCHDOG counts as unset, so it would load the default \"off\" — set a value, or change its default in the proto"
+
 # forge:section schema ServerProcessConfig
-# forge:hash=614c18572d2f924b654cfd1351804396d241aae091a9e21c4999b33cc1356746
+# forge:hash=8a0a8e3ac4a7b600c452e4933eca1d47d4ae9208eb5b4233b8796efcb281a271
 schema ServerProcessConfig:
     # Data directory for logs and certs
     data_dir: str = "./data"
@@ -1626,6 +1660,10 @@ schema ServerProcessConfig:
     org_policy_enforcement: ServerProcessConfigOrgPolicyEnforcement = ServerProcessConfigOrgPolicyEnforcement {}
     # client_versions config block (ClientVersionPolicy). Set its fields as `client_versions.<field> = ...`.
     client_versions: ServerProcessConfigClientVersions = ServerProcessConfigClientVersions {}
+    # pipeline config block (PipelineConfig). Set its fields as `pipeline.<field> = ...`.
+    pipeline: ServerProcessConfigPipeline = ServerProcessConfigPipeline {}
+    # reconciler config block (ReconcilerConfig). Set its fields as `reconciler.<field> = ...`.
+    reconciler: ServerProcessConfigReconciler = ServerProcessConfigReconciler {}
 
     check:
         data_dir != "", "data_dir = \"\" cannot reach the process: an empty DATA_DIR counts as unset, so it would load the default \"./data\" — set a value, or pass --data-dir= in the workload's args to make it empty"
@@ -1655,6 +1693,10 @@ SERVER_PROCESS_CONFIG_SENSITIVE_ENV: [str] = [
     "RELIANT_GITHUB_WEBHOOK_SECRET"
     "RELIANT_TEST_INTEGRATION_SECRET"
 
+    # forge:section SERVER_PROCESS_CONFIG_SENSITIVE_ENV pipeline
+    # forge:hash=6594ffda7535afb64244644b45d9c43800553c8535ee696b11b5ab413288d403
+    "GITHUB_QUEUE_APP_CALLER_SECRET"
+
     # forge:section SERVER_PROCESS_CONFIG_SENSITIVE_ENV (root)
     # forge:hash=fa807b1957f7aadf24512d851ee31f0a3cce8a592088aa1c8c31993baf88d46c
     "RELIANT_OAUTH_<KEY>_CLIENT_SECRET"
@@ -1683,6 +1725,10 @@ SERVER_PROCESS_CONFIG_OPTIONAL_SECRET_ENV: [str] = [
     "RELIANT_SLACK_SIGNING_SECRET"
     "RELIANT_GITHUB_WEBHOOK_SECRET"
     "RELIANT_TEST_INTEGRATION_SECRET"
+
+    # forge:section SERVER_PROCESS_CONFIG_OPTIONAL_SECRET_ENV pipeline
+    # forge:hash=c7f4d0012220917673ad816e9119ec61101768b73e2b640f49ba438c01fc155a
+    "GITHUB_QUEUE_APP_CALLER_SECRET"
 
     # forge:section SERVER_PROCESS_CONFIG_OPTIONAL_SECRET_ENV (root)
     # forge:hash=ba93ebc6a133877e7d793fafefbd1983453237ac12c4626f0f9d7b18d2613c3f
@@ -1723,6 +1769,10 @@ serverProcessConfigEnvMap = lambda c: ServerProcessConfig, config_secrets: [str]
         "RELIANT_SLACK_SIGNING_SECRET" = forge.SecretRef {name = c.integrations.slack_signing_secret.name, key = c.integrations.slack_signing_secret.key, store_key = "RELIANT_SLACK_SIGNING_SECRET", optional = True}
         "RELIANT_GITHUB_WEBHOOK_SECRET" = forge.SecretRef {name = c.integrations.github_webhook_secret.name, key = c.integrations.github_webhook_secret.key, store_key = "RELIANT_GITHUB_WEBHOOK_SECRET", optional = True}
         "RELIANT_TEST_INTEGRATION_SECRET" = forge.SecretRef {name = c.integrations.test_integration_secret.name, key = c.integrations.test_integration_secret.key, store_key = "RELIANT_TEST_INTEGRATION_SECRET", optional = True}
+
+        # forge:section serverProcessConfigEnvMap secrets pipeline
+        # forge:hash=7943ac5c471d0f0980b001af916026aca87ecfb896d6016baed95fec58c48cdd
+        "GITHUB_QUEUE_APP_CALLER_SECRET" = forge.SecretRef {name = c.pipeline.github_queue_app_caller_secret.name, key = c.pipeline.github_queue_app_caller_secret.key, store_key = "GITHUB_QUEUE_APP_CALLER_SECRET", optional = True}
 
         # forge:section serverProcessConfigEnvMap secrets (end)
         # forge:hash=efede3d8161a204eb8a0d16899c8d3af3adbc86ab32cabf0dd06f8ee1f72642c
@@ -1833,6 +1883,14 @@ serverProcessConfigEnvMap = lambda c: ServerProcessConfig, config_secrets: [str]
         "RELIANT_CLIENT_VERSION_ENFORCE" = "true" if c.client_versions.enforce else "false"
         "RELIANT_CLIENT_VERSION_ENFORCE_LEGACY_UNIDENTIFIED" = "true" if c.client_versions.enforce_legacy_unidentified else "false"
         "RELIANT_CLIENT_VERSION_REFUSE_UNIDENTIFIED" = "true" if c.client_versions.refuse_unidentified else "false"
+
+        # forge:section serverProcessConfigEnvMap values pipeline
+        # forge:hash=5c89bfa1b8721707c20667f38e4688778c8a40aff69dd3408ea896474ba96378
+        "RELIANT_PIPELINE_ENABLED" = "true" if c.pipeline.enabled else "false"
+
+        # forge:section serverProcessConfigEnvMap values reconciler
+        # forge:hash=60e60ef61f114e977ffdcd6e05ca15e52e835e4dd1f9627665b5aa867b27f5e2
+        "RELIANT_RECONCILER_STALL_WATCHDOG" = c.reconciler.stall_watchdog
 
         # forge:section serverProcessConfigEnvMap values (end)
         # forge:hash=6e40ebe66a4bd1160f079d94eae59be0c27a98446b351e00c478d59941a3fc6d
@@ -2028,7 +2086,7 @@ workerConfigEnvMap = lambda c: WorkerConfig, config_secrets: [str] -> {str: str 
 }
 
 # forge:section process-selector ReliantProcess
-# forge:hash=7de625ed40fbd6d5d8e9c212aaff96a06110702898c8d2f10a2032e375b6cd0a
+# forge:hash=9605edd0c8e8d438c0848683c8853ec2ad63e2b99d6c2faa3c001977def94b66
 # The `reliant` binary binds a config per subcommand, so a workload's env is the
 # binary's root config PLUS the config of the subcommand its process runs.
 # ReliantProcess carries the instances (config.k declares one); reliantProcessEnvMap
@@ -2038,7 +2096,7 @@ schema ReliantProcess:
     reliant_config?: ReliantConfig
     # Every process at or below `reliant auth`, `reliant update`.
     auth_config?: AuthConfig
-    # Every process at or below `reliant auth`, `reliant chat`, `reliant daemon`, `reliant github`, `reliant integrations`, `reliant machine`, `reliant mcp`, `reliant models`, `reliant preview`, `reliant project`, `reliant providers`, `reliant trigger`, `reliant workflow`, `reliant worktree`.
+    # Every process at or below `reliant auth`, `reliant chat`, `reliant daemon`, `reliant github`, `reliant integrations`, `reliant machine`, `reliant mcp`, `reliant models`, `reliant pipeline`, `reliant preview`, `reliant project`, `reliant providers`, `reliant trigger`, `reliant workflow`, `reliant worktree`.
     cli_config?: CLIConfig
     # Every process at or below `reliant server`, `reliant db migrate`, `reliant db vault`.
     database_config?: DatabaseConfig
@@ -2092,7 +2150,7 @@ reliantProcessEnvMap = lambda p: ReliantProcess, argv: [str], config_secrets: [s
     _cmd = "api_server_config" if _path[:2] == ["server", "api"] else "daemon_config" if _path[:2] == ["daemon", "start"] else "daemon_status_config" if _path[:2] == ["daemon", "status"] else "daemon_stop_config" if _path[:2] == ["daemon", "stop"] else "daemon_logs_config" if _path[:2] == ["daemon", "logs"] else "daemon_register_config" if _path[:2] == ["daemon", "register"] else "gateway_config" if _path[:2] == ["server", "gateway"] else "worker_config" if _path[:2] == ["server", "worker"] else "preview_url_config" if _path[:1] == ["preview-url"] else ""
     _root_sensitive: [str] = RELIANT_CONFIG_SENSITIVE_ENV
     _in_auth_config = any _p in [["auth"], ["update"]] { _path[:len(_p)] == _p }
-    _in_cli_config = any _p in [["auth"], ["chat"], ["daemon"], ["github"], ["integrations"], ["machine"], ["mcp"], ["models"], ["preview"], ["project"], ["providers"], ["trigger"], ["workflow"], ["worktree"]] { _path[:len(_p)] == _p }
+    _in_cli_config = any _p in [["auth"], ["chat"], ["daemon"], ["github"], ["integrations"], ["machine"], ["mcp"], ["models"], ["pipeline"], ["preview"], ["project"], ["providers"], ["trigger"], ["workflow"], ["worktree"]] { _path[:len(_p)] == _p }
     _in_database_config = any _p in [["server"], ["db", "migrate"], ["db", "vault"]] { _path[:len(_p)] == _p }
     _in_server_process_config = any _p in [["server"]] { _path[:len(_p)] == _p }
     _in_vault_maintenance_config = any _p in [["db", "vault"]] { _path[:len(_p)] == _p }
@@ -2349,6 +2407,14 @@ ROOTS: {str: Root} = {
             "RELIANT_CLIENT_VERSION_ENFORCE",
             "RELIANT_CLIENT_VERSION_ENFORCE_LEGACY_UNIDENTIFIED",
             "RELIANT_CLIENT_VERSION_REFUSE_UNIDENTIFIED",
+
+            # forge:section root api env pipeline
+            # forge:hash=0e71b6105d66bad2787bd7538cd7a189ee0e45ba94e236489091a35fad76da09
+            "RELIANT_PIPELINE_ENABLED",
+
+            # forge:section root api env reconciler
+            # forge:hash=61e1f0cf7fe0f4ecadd5042d5200121cc2fd39886496cc144a3210dea72032f5
+            "RELIANT_RECONCILER_STALL_WATCHDOG",
 
             # forge:section root api env (end)
             # forge:hash=7cce70f80c7f09e7d6d0f6dadef2f51be26ee5e885d6331fc33ef3bad4a54a1a
@@ -2670,6 +2736,10 @@ ROOTS: {str: Root} = {
             "RELIANT_ORGS_POLICY_ENFORCEMENT_MCP",
             "RELIANT_ORGS_POLICY_ENFORCEMENT_PROVIDERS",
 
+            # forge:section root worker env pipeline
+            # forge:hash=27b08e9cee28d1479b57db4d6024cdfbb3be3797490236cbe08a4927cea191bb
+            "RELIANT_PIPELINE_ENABLED",
+
             # forge:section root worker env (root) #3
             # forge:hash=70d220a87f5a1a77143da462766d214493a2c6a59bee71c9f8c96ba9896ae6b8
             "RELIANT_WORKER_HOSTED_ACTIONS_URL",
@@ -2717,6 +2787,10 @@ ROOTS: {str: Root} = {
             "RELIANT_SLACK_SIGNING_SECRET",
             "RELIANT_GITHUB_WEBHOOK_SECRET",
             "RELIANT_TEST_INTEGRATION_SECRET",
+
+            # forge:section root worker secrets pipeline
+            # forge:hash=a077fb7d21011d7bf8648cfea9e6441e8f0bcb0e42a7d2a101cdd2ffc8d6aaa9
+            "GITHUB_QUEUE_APP_CALLER_SECRET",
 
             # forge:section root worker secrets (end)
             # forge:hash=edcab42e181091b2db15b9c6ce9c0fc7d7517adfa83aff3ab74182a177bb91cf

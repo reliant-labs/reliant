@@ -28,7 +28,7 @@ import { mobileChatPath, mobileWorkflowsPath } from "@/lib/paths";
 
 function Centered({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex flex-1 items-center justify-center px-8 text-center text-sm text-muted-foreground">
+    <div className="flex flex-1 items-center justify-center px-8 text-center text-ui text-muted-foreground">
       {children}
     </div>
   );

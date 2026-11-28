@@ -211,6 +211,10 @@ func (s *Service) refreshTriggerAccess(ctx context.Context, trigger *core.Trigge
 	if access == nil {
 		return nil
 	}
+	// Credential reads and renewal must retain the caller's transaction:
+	// ManageActivation holds SHARE locks on connections, so renewing through
+	// a detached connection would wait for the caller's own locks. The access
+	// refresher detaches only its independent snapshot persistence.
 	refresh := func() error { return access.Refresh(ctx, trigger.UserID) }
 	if memo := accessRefreshMemoFrom(ctx); memo != nil {
 		err = memo.refresh(accessRefreshKey{integration: cfg.Integration, userID: trigger.UserID}, refresh)

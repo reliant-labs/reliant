@@ -110,7 +110,10 @@ export function ChatContainer({
   const errorEvents = useErrorEvents(chatId);
   const infoEvents = useInfoEvents(chatId);
   const runOutputs = useRunOutputs(chatId);
-  const connectionStatus = useGlobalUpdatesStore((s) => s.connectionStatus);
+  const userFeedStatus = useGlobalUpdatesStore((s) => s.connectionStatus);
+  const chatConnectionStatus = useGlobalUpdatesStore((s) =>
+    s.subscribedChatId === chatId ? s.chatConnectionStatus : "disconnected",
+  );
   const isChatBusy = useIsChatRunning(chatId);
   const pendingApprovals = usePendingApprovals(approvalsChatId).data?.approvals ?? NO_APPROVALS;
 
@@ -131,7 +134,7 @@ export function ChatContainer({
     // through selectChat) is set up once the subscription is asserted, here.
     // selectChat's own opens are armed already, so this is a no-op for them.
     armChatOpen(chatId);
-  }, [chatId, connectionStatus, reconcileChatSubscription]);
+  }, [chatId, userFeedStatus, reconcileChatSubscription]);
 
   // Process messages: canonical order (lib/messageOrder), filter out tool messages
   const processedMessages = useMemo(() => {
@@ -159,7 +162,7 @@ export function ChatContainer({
       logger.info("🚀 Sending message:", {
         content,
         attachmentIds,
-        connectionStatus,
+        connectionStatus: userFeedStatus,
         currentChat: currentChat?.id,
         currentWorktreeId,
         workflow,
@@ -255,7 +258,7 @@ export function ChatContainer({
         throw error;
       }
     },
-    [currentChat, currentWorktreeId, chatId, connectionStatus],
+    [currentChat, currentWorktreeId, chatId, userFeedStatus],
   );
 
   // Handle stop streaming (pause the workflow so it can be resumed)
@@ -326,7 +329,7 @@ export function ChatContainer({
       chatId={chatId}
       isChatBusy={isChatBusy}
       pendingApprovals={pendingApprovals}
-      connectionStatus={connectionStatus}
+      connectionStatus={chatConnectionStatus}
       worktreeId={currentChat?.worktreeId ?? undefined}
       projectId={currentProjectId ?? undefined}
       needsRecovery={currentChat?.needsRecovery}

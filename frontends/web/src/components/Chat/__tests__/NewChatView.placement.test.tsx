@@ -26,6 +26,7 @@ const startChat = vi.hoisted(() => vi.fn(async () => ({ id: "chat-new" })));
 const installState = vi.hoisted(() => ({
   rows: [] as Array<{ project_id: string; daemon_id: string; install_state: number }>,
 }));
+const refetchInstalls = vi.hoisted(() => vi.fn(async () => undefined));
 const createProjectFromRepo = vi.hoisted(() => vi.fn(async () => ({ queued: true })));
 const detachProjectFromDaemon = vi.hoisted(() => vi.fn(async () => ({})));
 const previewRequests = vi.hoisted(() => [] as Array<{ projectId: string; daemonId: string }>);
@@ -52,7 +53,7 @@ vi.mock("@/hooks/useMakeDefaultMachine", () => ({
 }));
 vi.mock("@/hooks/project-queries", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/hooks/project-queries")>()),
-  useProjectDaemonInstalls: () => ({ data: installState.rows, isLoading: false }),
+  useProjectDaemonInstalls: () => ({ data: installState.rows, isLoading: false, refetch: refetchInstalls }),
   createProjectFromRepo,
 }));
 // What stays on laptop when temp moves: one uncommitted file.
@@ -123,7 +124,7 @@ vi.mock("@/hooks/useBundledDaemonPending", () => ({ useBundledDaemonPending: () 
 vi.mock("@/services/controlPlane/capabilities", () => ({ capabilities: { cloudDaemons: true } }));
 vi.mock("../ChatInput", () => ({
   ChatInput: ({ onSend, disabled }: { onSend: (c: string) => Promise<void>; disabled?: boolean }) => (
-    <button type="button" disabled={disabled} onClick={() => void onSend("hello")}>
+    <button type="button" disabled={disabled} onClick={() => void onSend("hello").catch(() => undefined)}>
       Send
     </button>
   ),
@@ -142,7 +143,11 @@ vi.mock("../../../lib/analytics", () => ({ trackEvent: vi.fn() }));
 vi.mock("../../../lib/logger", () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
 vi.mock("sonner", () => ({ toast: { error: vi.fn(), success: vi.fn() } }));
 
+import { Code, ConnectError } from "@connectrpc/connect";
+import { toast } from "sonner";
+
 import { NewChatView } from "../NewChatView";
+import { useNewChatMachineStore } from "../../../store/newChatMachineStore";
 
 // DaemonStatus: ACTIVE = 1. cicd is the user's default machine, but temp
 // lives on the laptop.
@@ -157,6 +162,8 @@ beforeEach(() => {
   createProjectFromRepo.mockClear();
   detachProjectFromDaemon.mockClear();
   previewRequests.length = 0;
+  useNewChatMachineStore.setState({ pending: null });
+  vi.mocked(toast.error).mockClear();
   project.current = { ...project.current, remote_url: "https://github.com/acme/temp" };
   daemonState.current = { activeDaemon: cicd, daemons: [laptop, cicd], loading: false };
   installState.rows = [{ project_id: "temp", daemon_id: "d-laptop", install_state: ProjectInstallState.INSTALLED }];
@@ -291,6 +298,111 @@ describe("NewChatView: the project and machine always go together", () => {
     fireEvent.click(screen.getByTestId("machine-picker"));
     expect(screen.getByText("temp is a folder on another machine, so it can't be cloned here.")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Set up temp/ })).toBeNull();
+  });
+
+  // The owner's report (2026-11-25): a chat started with a project that isn't
+  // on the machine should offer to add it there, right where the composer is.
+  it("offers \"Add to <machine>\" inline when the chosen machine lacks the project, and opens once it lands", async () => {
+    useNewChatMachineStore.getState().offer({ projectId: "temp", daemonId: "d-cicd" });
+    const view = render(<NewChatView tabId="t1" />);
+    expect(sendButton()).toBeDisabled();
+    expect(screen.getByTestId("new-chat-placement-note")).toHaveTextContent(
+      "temp isn't on cicd yet. Add it there, or pick a machine it's on.",
+    );
+    // The machine it is on is one click away too.
+    expect(screen.getByTestId("new-chat-placement-switch")).toHaveTextContent("Use laptop instead");
+
+    createProjectFromRepo.mockImplementationOnce(async () => {
+      installState.rows = [
+        ...installState.rows,
+        { project_id: "temp", daemon_id: "d-cicd", install_state: ProjectInstallState.INSTALLING },
+      ];
+      return { queued: true };
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Add to cicd" }));
+    });
+    expect(createProjectFromRepo).toHaveBeenCalledWith({
+      cloneUrl: "https://github.com/acme/temp",
+      daemonId: "d-cicd",
+      name: "temp",
+    });
+    // No machine like cicd has temp, so it lands in cicd's default folder
+    // (setUpPathOn), never the laptop's path.
+    expect((createProjectFromRepo.mock.calls[0] as unknown[])[0]).not.toHaveProperty("path");
+    // The machine stays cicd (not the default, which would move to laptop).
+    expect(screen.getByTestId("machine-picker")).toHaveTextContent("cicd");
+    expect(screen.getByTestId("new-chat-placement-note")).toHaveTextContent("Setting up temp on cicd.");
+    expect(screen.queryByTestId("new-chat-placement-add")).toBeNull();
+
+    installState.rows = [
+      { project_id: "temp", daemon_id: "d-laptop", install_state: ProjectInstallState.INSTALLED },
+      { project_id: "temp", daemon_id: "d-cicd", install_state: ProjectInstallState.INSTALLED },
+    ];
+    view.rerender(<NewChatView tabId="t1" />);
+    expect(screen.queryByTestId("new-chat-placement-note")).toBeNull();
+    fireEvent.click(sendButton());
+    await waitFor(() => expect(startChat).toHaveBeenCalled());
+    expect(machineArg()).toEqual({ daemonId: "d-cicd", noMachine: undefined });
+  });
+
+  it("switches to a machine the project is on from the note", () => {
+    useNewChatMachineStore.getState().offer({ projectId: "temp", daemonId: "d-cicd" });
+    render(<NewChatView tabId="t1" />);
+    fireEvent.click(screen.getByTestId("new-chat-placement-switch"));
+    expect(screen.getByTestId("machine-picker")).toHaveTextContent("laptop");
+    expect(screen.queryByTestId("new-chat-placement-note")).toBeNull();
+    expect(sendButton()).toBeEnabled();
+  });
+
+  it("says why a failed add failed, inline", async () => {
+    useNewChatMachineStore.getState().offer({ projectId: "temp", daemonId: "d-cicd" });
+    render(<NewChatView tabId="t1" />);
+    createProjectFromRepo.mockImplementationOnce(async () => {
+      throw new Error("no git credential found for provider github");
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Add to cicd" }));
+    });
+    expect(screen.getByRole("alert")).toHaveTextContent("no git credential found for provider github");
+    expect(sendButton()).toBeDisabled();
+  });
+
+  it("offers no add for a plain folder, only a machine it's on or a folder on this one", () => {
+    project.current = { ...project.current, remote_url: undefined };
+    useNewChatMachineStore.getState().offer({ projectId: "temp", daemonId: "d-cicd" });
+    render(<NewChatView tabId="t1" />);
+    expect(screen.getByTestId("new-chat-placement-note")).toHaveTextContent(
+      "temp is a folder on another machine, so it can't be copied to cicd.",
+    );
+    expect(screen.queryByTestId("new-chat-placement-add")).toBeNull();
+    expect(screen.getByTestId("new-chat-placement-switch")).toHaveTextContent("Use laptop instead");
+    expect(screen.getByTestId("new-chat-placement-use-folder")).toHaveTextContent("Choose a folder on cicd");
+  });
+
+  it("offers the add from the error when the send is refused for the project's machine", async () => {
+    // The composer's record said cicd had it; the server knew better.
+    installState.rows = [
+      { project_id: "temp", daemon_id: "d-laptop", install_state: ProjectInstallState.INSTALLED },
+      { project_id: "temp", daemon_id: "d-cicd", install_state: ProjectInstallState.INSTALLED },
+    ];
+    useNewChatMachineStore.getState().offer({ projectId: "temp", daemonId: "d-cicd" });
+    startChat.mockImplementationOnce(async () => {
+      throw new ConnectError("project is not installed on that daemon", Code.FailedPrecondition);
+    });
+    render(<NewChatView tabId="t1" />);
+    fireEvent.click(sendButton());
+    await waitFor(() => expect(toast.error).toHaveBeenCalled());
+    const [title, options] = vi.mocked(toast.error).mock.calls.at(-1) as [string, { description: string; action?: { label: string; onClick: () => void } }];
+    expect(title).toBe("Couldn't start the chat");
+    expect(options.description).toBe("temp isn't on cicd. Your message is back in the box.");
+    // The stale record is re-read, so the note takes over from here.
+    expect(refetchInstalls).toHaveBeenCalled();
+    expect(options.action?.label).toBe("Add to cicd");
+    await act(async () => {
+      options.action?.onClick();
+    });
+    expect(createProjectFromRepo).toHaveBeenCalledWith(expect.objectContaining({ daemonId: "d-cicd", name: "temp" }));
   });
 
   it("constrains nothing for a project with no install record (the server accepts any machine)", async () => {

@@ -42,10 +42,11 @@ import {
 import { obsRetry, obsRetryDelay, releaseHealthErrorKind } from "@/services/controlPlane/observability/errors";
 import { keepsLastResult } from "@/services/controlPlane/observability/quota";
 import type { Issue } from "@/services/controlPlane/observability/issuesTypes";
-import { useObsReadApi } from "@/hooks/observability-queries";
+import { useObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
 import type { ObsScope, Panel, PanelResult, TimeWindow } from "@/services/controlPlane/observability/types";
 import { cn } from "@/lib/utils";
 
+import { siteInsightsPath, withSearch, type SiteInsightsView } from "../Console/paths";
 import { changeText, formatSpan, movement, shortCommit, type CompareRef, type Movement } from "./deliveryScope";
 import { StatusBadge } from "./Errors/IssueBits";
 import { formatAgo, formatBytes, formatCores, formatCount, formatDuration, formatPercent, formatRate, formatWhen } from "./format";
@@ -92,7 +93,7 @@ export function compareWorkloads(before: PanelResult | undefined, after: PanelRe
 }
 
 function useResources(scope: ObsScope, side: "before" | "after", window: TimeWindow | null) {
-  const api = useObsReadApi();
+  const api = useObservabilityApi();
   const usable = !!window && window.endMs > window.startMs;
   return useQuery({
     queryKey: [...obsKeys.all(scope), "compare", RESOURCES_PANEL.id, side, window?.startMs ?? 0, window?.endMs ?? 0] as const,
@@ -197,7 +198,7 @@ export function ReleaseComparison({ scope, subject, target, envName, width, back
         <WindowsLine health={h} width={width} />
       </div>
 
-      <Verdict health={h} version={h.promotion?.version || target.promotionId.slice(0, 12)} envName={envName} />
+      <Verdict health={h} version={h.promotion?.version || target.promotionId.slice(0, 12)} envName={envName} project={scope.projectId} />
 
       <Card padding="none" data-testid="obs-compare-services">
         <SectionTitle title="Requests, errors and latency" note="Server spans per service, weighted for sampling, before and after the promotion." />
@@ -319,10 +320,37 @@ export const FINDING_LABEL: Record<ReleaseFindingCode, string> = {
   regressed_issue: "Regressed issues",
   alert_firing: "Firing alerts",
   workload_restarts: "Workload restarts",
+  seo_regressed: "SEO regressed",
+  a11y_regressed: "Accessibility regressed",
 };
 
 export function findingLabel(code: string): string {
   return (FINDING_LABEL as Record<string, string>)[code] ?? code.replace(/_/g, " ");
+}
+
+/** The Site insights view a site-audit finding opens; null for every other code. */
+const SITE_AUDIT_VIEW: Partial<Record<ReleaseFindingCode, SiteInsightsView>> = { seo_regressed: "seo", a11y_regressed: "accessibility" };
+
+/**
+ * Which of its two forms a site-audit finding takes: a route's score dropped
+ * past the limit, or new errors appeared. ReleaseFinding carries no `ref`, so
+ * the message is the only tell (forge pkg/releasehealth writes "<site>: SEO
+ * score dropped …" for the first, "<site>: N new SEO errors …" for the second).
+ */
+export function siteAuditFindingKind(f: ReleaseFinding): "score" | "new_errors" | null {
+  if (!f.code || !SITE_AUDIT_VIEW[f.code]) return null;
+  return / score dropped/.test(f.message) ? "score" : "new_errors";
+}
+
+/**
+ * Where a site-audit finding is read in full: its site's SEO or Accessibility
+ * view of Site insights, in the promotion's environment. Null for every other
+ * code, and without the app's name to build the path.
+ */
+export function siteAuditFindingHref(f: ReleaseFinding, project: string | undefined, envName?: string): string | null {
+  const view = f.code ? SITE_AUDIT_VIEW[f.code] : undefined;
+  if (!view || !project) return null;
+  return withSearch(siteInsightsPath(project, view), { site: f.service || undefined, env: envName });
 }
 
 /** A finding's measured value against its limit, in the unit its code implies. */
@@ -332,6 +360,12 @@ export function findingFigure(f: ReleaseFinding): string {
       return `${formatPercent(f.value)} vs ${formatPercent(f.threshold)}`;
     case "latency":
       return `${f.value.toFixed(2)}× vs ${f.threshold.toFixed(2)}×`;
+    case "seo_regressed":
+    case "a11y_regressed":
+      // A score drop's value is the worst route's drop in points; new errors' is their count.
+      return siteAuditFindingKind(f) === "score"
+        ? `−${formatCount(f.value)} points vs ${formatCount(f.threshold)}`
+        : `${formatCount(f.value)} new`;
     default:
       return `${formatCount(f.value)} vs ${formatCount(f.threshold)}`;
   }
@@ -342,7 +376,7 @@ function inconclusiveWhy(h: ReleaseHealth): string {
   return "Too little traffic on either side to judge (every service is below the minimum request count).";
 }
 
-function Verdict({ health: h, version, envName }: { health: ReleaseHealth; version: string; envName?: string }) {
+function Verdict({ health: h, version, envName, project }: { health: ReleaseHealth; version: string; envName?: string; project?: string }) {
   const v = VERDICT[h.verdict];
   // A release that made things worse, or could not be proven good, is one to hand to an agent.
   const askable = h.verdict === "fail" || h.verdict === "inconclusive";
@@ -374,18 +408,26 @@ function Verdict({ health: h, version, envName }: { health: ReleaseHealth; versi
       </div>
       {h.findings.length > 0 && (
         <ul className="divide-y divide-border/50 border-t border-border/60" data-testid="obs-compare-findings">
-          {[...fails, ...warns].map((f, index) => (
-            <li key={`${f.code}-${f.service}-${index}`} className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 px-4 py-2 text-xs" data-testid="obs-compare-finding" data-policy={f.policy} data-code={f.code ?? ""}>
-              <span className={cn("inline-flex items-center gap-1 font-medium", f.policy === "fail" ? "text-danger-ink" : "text-warning-ink")}>
-                <AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />
-                {f.policy === "fail" ? "Fail" : "Warn"}
-              </span>
-              <span className="font-medium text-ink">{f.code ? FINDING_LABEL[f.code] : "Finding"}</span>
-              {f.service && <span className="font-mono text-ink">{f.service}</span>}
-              <span className="tabular-nums text-ink-muted">{findingFigure(f)}</span>
-              {f.message && <span className="basis-full text-ink-muted">{f.message}</span>}
-            </li>
-          ))}
+          {[...fails, ...warns].map((f, index) => {
+            const siteAudit = siteAuditFindingHref(f, project, envName);
+            return (
+              <li key={`${f.code}-${f.service}-${index}`} className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 px-4 py-2 text-xs" data-testid="obs-compare-finding" data-policy={f.policy} data-code={f.code ?? ""}>
+                <span className={cn("inline-flex items-center gap-1 font-medium", f.policy === "fail" ? "text-danger-ink" : "text-warning-ink")}>
+                  <AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />
+                  {f.policy === "fail" ? "Fail" : "Warn"}
+                </span>
+                <span className="font-medium text-ink">{f.code ? FINDING_LABEL[f.code] : "Finding"}</span>
+                {f.service && <span className="font-mono text-ink">{f.service}</span>}
+                <span className="tabular-nums text-ink-muted">{findingFigure(f)}</span>
+                {siteAudit && (
+                  <Link href={siteAudit} className="font-medium text-primary-ink underline-offset-2 hover:underline" data-testid="obs-compare-finding-site-insights">
+                    Open in Site insights
+                  </Link>
+                )}
+                {f.message && <span className="basis-full text-ink-muted">{f.message}</span>}
+              </li>
+            );
+          })}
         </ul>
       )}
       {h.notEvaluated.length > 0 && (

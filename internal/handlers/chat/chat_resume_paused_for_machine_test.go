@@ -55,7 +55,7 @@ func newPausedFixture(t *testing.T) pausedFixture {
 	require.NoError(t, f.repo.UpdateWorkflowStatus(f.ctx, f.chatID, db.Paused()))
 	pause := &countingPause{resetPause: resetPause{repo: f.repo, replays: true}}
 	f.temporal.status = 1 // RUNNING
-	f.svc = &Service{deps: Deps{Repo: f.repo, Workflows: store.NewWorkflowExtStore(f.repo.ORM()), Worktrees: store.NewWorktreeExtStore(f.repo.ORM()), ProjectRows: store.NewProjectExtStore(f.repo.ORM()), TriggerEvents: store.NewTriggerEventExtStore(f.repo.ORM()), Questions: store.NewQuestionExtStore(f.repo.ORM()), Spawns: store.NewToolCallExtStore(f.repo.ORM()), Selections: store.NewChatSelectionExtStore(f.repo.ORM()), Messages: store.NewMessageExtStore(f.repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(f.repo.ORM()), Senders: store.NewThreadExtStore(f.repo.ORM()), Temporal: f.temporal, Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(f.repo.ORM()), Announcer: f.repo}), AgentMessages: store.NewAgentMessageExtStore(f.repo.ORM())}, runs: runs.New(runs.Deps{Repo: f.repo, Resolver: questions.NewFromRepo(f.repo), Chats: store.NewChatsWithActivityExtStore(f.repo.ORM()), Workflows: store.NewWorkflowExtStore(f.repo.ORM()), Questions: store.NewQuestionExtStore(f.repo.ORM()), Temporal: f.temporal, Pause: pause})}
+	f.svc = &Service{deps: Deps{Repo: f.repo, Workflows: store.NewWorkflowExtStore(f.repo.ORM()), Worktrees: store.NewWorktreeExtStore(f.repo.ORM()), ProjectRows: store.NewProjectExtStore(f.repo.ORM()), TriggerEvents: store.NewTriggerEventExtStore(f.repo.ORM()), Questions: store.NewQuestionExtStore(f.repo.ORM()), Spawns: store.NewToolCallExtStore(f.repo.ORM()), Selections: store.NewChatSelectionExtStore(f.repo.ORM()), Messages: store.NewMessageExtStore(f.repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(f.repo.ORM()), Senders: store.NewThreadExtStore(f.repo.ORM()), Temporal: f.temporal, Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(f.repo.ORM()), Announcer: f.repo.UpdateWriter()}), AgentMessages: store.NewAgentMessageExtStore(f.repo.ORM())}, runs: runs.New(runs.Deps{Repo: f.repo, Resolver: questions.NewFromRepo(f.repo), Chats: store.NewChatsWithActivityExtStore(f.repo.ORM()), Workflows: store.NewWorkflowExtStore(f.repo.ORM()), Questions: store.NewQuestionExtStore(f.repo.ORM()), Temporal: f.temporal, Pause: pause})}
 	return pausedFixture{continueFixture: f, pause: pause}
 }
 
@@ -68,7 +68,7 @@ func (f pausedFixture) markBreakerPause(t *testing.T) {
 
 func (f pausedFixture) isMarked(t *testing.T) bool {
 	t.Helper()
-	paused, err := f.repo.ListChatsPausedForMachine(f.ctx, "", 100)
+	paused, err := store.ListChatsPausedForMachine(f.ctx, f.repo.ORM(), "", 100)
 	require.NoError(t, err)
 	for _, c := range paused {
 		if c.ChatID == f.chatID {

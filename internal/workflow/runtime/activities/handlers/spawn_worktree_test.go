@@ -3,6 +3,7 @@ package handlers
 
 import (
 	"context"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -250,6 +251,64 @@ func TestLoadWorktreeInfo_ThreadBoundRoutesToWorktreeOwner(t *testing.T) {
 		assert.Empty(t, tec.worktree.Path, "%s runs without the archived workspace", name)
 		assert.False(t, tec.worktreeThreadBound, name)
 	}
+}
+
+// obs 0cea454a: a parent archived its idle sub-agent's worktree with the
+// worktree tool's delete, then resumed the sub-agent, and every machine tool
+// refused ("archived with preserved work ... recovery UI"), so the sub-agent
+// could not continue. The resumed sub-agent's first batch now takes the
+// worktree back while its directory is in place: the row is live, the daemon
+// retires the archive's fence, and the model is told. A hand-made archive
+// whose work was saved is still refused, with the way out for a sub-agent.
+func TestEnsureBatchWorkspace_ResumedSubAgentGetsItsHandArchivedWorktreeBack(t *testing.T) {
+	t.Parallel()
+
+	f := newSpawnWorktreeFixture(t)
+	ctx := context.Background()
+	wtID := f.worktree(t, "feature-x", "daemon-b")
+	spawned := f.spawn(t, "feature-x", "")
+	require.Empty(t, spawned.Refusal)
+	require.NoError(t, f.repo.ArchiveWorktree(ctx, wtID))
+	archived := mustWorktree(t, f, wtID)
+	require.NotNil(t, archived.DeletedAt)
+
+	executor := &daemonLikeExecutor{}
+	executor.ensure = func(req toolexec.WorkspaceEnsureRequest) (*toolexec.WorkspaceEnsureResponse, error) {
+		return &toolexec.WorkspaceEnsureResponse{Status: toolexec.WorkspacePresent, Path: req.Path}, nil
+	}
+	a := NewExecuteToolsActivity(ExecuteToolsDeps{Store: tools.WithChats(f.repo), Rows: workspaceRowsOf(f.repo), ToolCalls: toolCallsOf(f.repo), ToolExecutor: executor, Preemption: store.NewAgentMessageExtStore(f.repo.ORM())}).
+		WithWorktreeReviver(store.NewWorktreeExtStore(f.repo.ORM()))
+	rtx := &types.RuntimeContext{ChatID: f.chatID, Thread: spawned.ThreadID, ProjectPath: "/home/u/projects/p"}
+	calls := []message.ToolCall{bashCall("git status")}
+	runsAll := func(message.ToolCall) bool { return false }
+
+	got := a.ensureBatchWorkspace(ctx, rtx, calls, runsAll)
+	require.Empty(t, got.blocked)
+	require.Equal(t, 1, executor.ensureCount())
+	req := executor.ensures[0]
+	assert.Equal(t, archived.Path, req.Path)
+	assert.Equal(t, strconv.FormatInt(archived.DeletedAt.UnixNano(), 10), req.Retire, "the daemon retires the archive's fence first")
+	assert.Contains(t, got.note, "[Workspace restored]")
+	assert.Contains(t, got.note, "archived by hand")
+	wt := mustWorktree(t, f, wtID)
+	assert.Nil(t, wt.DeletedAt, "the worktree is live again")
+
+	// The calls after it load the workspace as live.
+	_, errMsg := a.loadToolExecutionContext(ctx, f.chatID, spawned.ThreadID, "shell", "{}", "call-1", "")
+	assert.Empty(t, errMsg)
+
+	// Saved work is never revived from the branch: refused, naming the way out.
+	require.NoError(t, f.repo.ArchiveWorktree(ctx, wtID))
+	require.NoError(t, f.repo.MergeWorktreeCleanupMetadata(ctx, wtID, func(m *db.CleanupMetadata, _ bool) bool {
+		m.SnapshotRefs = []string{"refs/reliant/wip/" + wtID + "/root/1"}
+		return true
+	}))
+	got = a.ensureBatchWorkspace(ctx, rtx, calls, runsAll)
+	assert.Contains(t, got.blocked, "preserved work")
+	assert.Contains(t, got.blocked, `spawn_send to "parent"`)
+	assert.Contains(t, got.blocked, "branch `feature-x`")
+	assert.Equal(t, 1, executor.ensureCount(), "nothing is sent to the machine")
+	assert.NotNil(t, mustWorktree(t, f, wtID).DeletedAt)
 }
 
 // capturingExecutor records the ToolRequest it is handed.

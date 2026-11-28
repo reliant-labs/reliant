@@ -318,15 +318,15 @@ describe("assignee, incident and the discussion", () => {
   it("adds a comment, assigns with the version echoed, and links a chat without a title", async () => {
     client.addIssueComment.mockResolvedValue({ comment: { id: "c1", issueId: "iss-1", body: "hi" } });
     expect(await addIssueComment({ issueId: "iss-1", body: "hi" })).toMatchObject({ id: "c1", body: "hi" });
-    expect(client.addIssueComment).toHaveBeenCalledWith({ issueId: "iss-1", body: "hi" }, undefined);
+    expect(client.addIssueComment).toHaveBeenCalledWith({ issueId: "iss-1", body: "hi" });
 
     client.assignIssue.mockResolvedValue({ issue: create(IssueSchema, { id: "iss-1", version: 8 }) });
     expect((await assignIssue({ issueId: "iss-1", assigneeUserId: "u1", expectedVersion: 7 })).version).toBe(8);
-    expect(client.assignIssue).toHaveBeenCalledWith({ issueId: "iss-1", assigneeUserId: "u1", expectedVersion: 7 }, undefined);
+    expect(client.assignIssue).toHaveBeenCalledWith({ issueId: "iss-1", assigneeUserId: "u1", expectedVersion: 7 });
 
     client.linkIssueChat.mockResolvedValue({ link: { issueId: "iss-1", chatId: "chat-1", chatTitle: "" }, created: true });
     expect(await linkIssueChat({ issueId: "iss-1", chatId: "chat-1" })).toMatchObject({ created: true, link: { chatId: "chat-1", chatTitle: "" } });
-    expect(client.linkIssueChat).toHaveBeenCalledWith({ issueId: "iss-1", chatId: "chat-1", chatTitle: "" }, undefined);
+    expect(client.linkIssueChat).toHaveBeenCalledWith({ issueId: "iss-1", chatId: "chat-1", chatTitle: "" });
   });
 
   it("reads Aborted from an assignment as a conflict, and a write on a merged issue as a refusal naming the target", () => {

@@ -68,8 +68,11 @@ type Firings interface {
 	// RecentTriggerOutcomes, not RecentTriggerFirings: the Inbox judges
 	// health and never shows an event, so it does not read their bodies.
 	RecentTriggerOutcomes(ctx context.Context, userID string, triggerIDs []string, perTrigger int) (map[string][]*core.TriggerEventWithRun, error)
-	FiringsSinceLastSuccess(ctx context.Context, userID string, triggerIDs []string, perTrigger int) (map[string][]*core.TriggerEventWithRun, error)
-	FiringsSinceLastUnmanagedSuccess(ctx context.Context, userID string, triggerIDs []string, perTrigger int) (map[string][]*core.TriggerEventWithRun, error)
+	// InboxEpisodes and InboxEpisodeFailures, not FiringsSinceLastUnmanagedSuccess
+	// and FiringsSinceLastSuccess: the same episodes, without the skipped
+	// firings that cannot change what the Inbox derives from them.
+	InboxEpisodes(ctx context.Context, userID string, triggerIDs []string, perTrigger, window int) (map[string][]*core.TriggerEventWithRun, error)
+	InboxEpisodeFailures(ctx context.Context, userID string, triggerIDs []string, perTrigger int) (map[string][]*core.TriggerEventWithRun, error)
 	// GetLatestTriggerEvent is a trigger's newest event with outcome, nil
 	// when it has none.
 	GetLatestTriggerEvent(ctx context.Context, triggerID string, outcome *core.TriggerEventOutcome) (*core.TriggerEvent, error)
@@ -99,6 +102,8 @@ type Notices interface {
 	HasNoOrgAccountPauses(ctx context.Context) (bool, error)
 	ListNoOrgAccountPauses(ctx context.Context, userID string, adminOrgIDs []string) ([]*core.Trigger, error)
 	ListPersonallyFundedTriggers(ctx context.Context, userID string) ([]*core.Trigger, error)
+	// ListTriggersForUser is the caller's own triggers (UserID is required).
+	ListTriggersForUser(ctx context.Context, f core.TriggerFilters) ([]*core.Trigger, error)
 }
 
 // Storage is what the storage view, the forget and the clean-up read: the
@@ -128,8 +133,6 @@ type Repository interface {
 	// AssignUnassignedOrg stamps the caller's rows that have no org with
 	// their default org (the lazy backfill, orgs.ListScope).
 	AssignUnassignedOrg(ctx context.Context, userID, orgID string) error
-
-	ListTriggers(ctx context.Context, f core.TriggerFilters) ([]*core.Trigger, error)
 
 	ListDaemonsByUserID(ctx context.Context, userID string) ([]*db.Daemon, error)
 }

@@ -73,7 +73,7 @@ func TestForkOrphanedWorkflow(t *testing.T) {
 	}
 	orphan, livs := saved(cora), saved("liv")
 	adasProject := project("ada")
-	svc := NewTestWorkflow(t, WithWorkflowDeps(Deps{Repo: repo, Drafts: workflowdraftstest.New(t, repo), Projects: projectaccesstest.For(repo)}))
+	svc := NewTestWorkflow(t, WithWorkflowDeps(Deps{Repo: repo, Triggers: &MockTriggers{}, Drafts: workflowdraftstest.New(t, repo), Projects: projectaccesstest.For(repo)}))
 	fork := func(ctx context.Context, id, projectID string) (*reliantv1.ForkOrphanedWorkflowResponse, error) {
 		resp, err := svc.ForkOrphanedWorkflow(ctx, connect.NewRequest(&reliantv1.ForkOrphanedWorkflowRequest{WorkflowId: id, ProjectId: projectID}))
 		if err != nil {

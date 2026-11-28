@@ -83,6 +83,9 @@ const (
 	FailureCodeNodeError = "node_error"
 	FailureCodeOutcome   = "outcome"
 	FailureCodePanic     = "panic"
+	// FailureCodeRunTimeout: the run's timeout (Workflow.timeout) ended it
+	// (workflow_timeout.go).
+	FailureCodeRunTimeout = "run_timeout"
 )
 
 // CELValue is the `failure` namespace. Every key is always present, so a
@@ -176,10 +179,16 @@ func failureFor(rec *failureRecorder, retErr error, runOutcome string, outcomeNo
 		var panicErr *WorkflowPanicError
 		if errors.As(retErr, &panicErr) {
 			f.ErrorCode = FailureCodePanic
+		} else if isRunTimeout(retErr) {
+			f.ErrorCode = FailureCodeRunTimeout
 		} else {
 			f.ErrorCode = FailureCodeNodeError
 		}
 		f.Error = oneLineError(retErr)
+		if f.ErrorCode == FailureCodeRunTimeout {
+			// Already one line, and not a provider error to summarize.
+			f.Error = retErr.Error()
+		}
 	default:
 		f.ErrorCode = FailureCodeOutcome
 		f.Error = "the run reached a node that declares outcome: failure"

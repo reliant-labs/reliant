@@ -18,7 +18,7 @@ import {
 } from "../gen/reliant/v1/streaming_pb";
 import { connectClient } from "../lib/connect";
 import { logger } from "../lib/logger";
-import { pageActivity } from "../lib/pageActivity";
+import { streamPageEnvironment } from "../lib/pageActivity";
 
 export interface OrgFeedCallbacks {
   /** Rows after the cursor, in feed order. Never the caller's own. */
@@ -55,7 +55,7 @@ export class OrgFeedStream extends ReconnectingStream<OrgStreamEvent> {
   private cursor = 0n;
 
   constructor(callbacks: OrgFeedCallbacks, client: () => OrgFeedClient = () => connectClient(StreamingService)) {
-    super("[📡 OrgFeed]", {}, { logger, onConnectionLost: () => pageActivity().noteConnectionLost() });
+    super("[📡 OrgFeed]", {}, { logger, ...streamPageEnvironment() });
     this.callbacks = callbacks;
     this.client = client;
   }

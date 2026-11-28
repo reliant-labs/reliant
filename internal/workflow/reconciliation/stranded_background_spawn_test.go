@@ -34,7 +34,7 @@ func TestRepairStrandedBackgroundSpawns_EnqueuesCompletion(t *testing.T) {
 	repo.strandedBackgroundSpawns = []*db.StrandedBackgroundSpawn{
 		strandedBackgroundSpawn("tc-1", "chat-1", "parent-thread-1", "child-thread-1", db.Completed()),
 	}
-	reconciler := New(Deps{Store: repo, RunEvents: repo, Chats: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: &mockReconcilerTemporalClient{}, Config: DefaultConfig(), Mailbox: repo, Orphans: repo})
+	reconciler := New(Deps{Store: repo, RunEvents: repo, Chats: repo, ToolCalls: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: &mockReconcilerTemporalClient{}, Config: DefaultConfig(), Mailbox: repo, Orphans: repo})
 
 	repaired, err := reconciler.repairStrandedBackgroundSpawns(context.Background(), &passStats{})
 	require.NoError(t, err)
@@ -66,7 +66,7 @@ func TestRepairStrandedBackgroundSpawns_ClosesAReportedSpawnWithoutReReporting(t
 	reported := strandedBackgroundSpawn("tc-reported", "chat-1", "parent-thread-1", "child-thread-1", db.Failed())
 	reported.HasReport = true
 	repo.strandedBackgroundSpawns = []*db.StrandedBackgroundSpawn{reported}
-	reconciler := New(Deps{Store: repo, RunEvents: repo, Chats: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: &mockReconcilerTemporalClient{}, Config: DefaultConfig(), Mailbox: repo, Orphans: repo})
+	reconciler := New(Deps{Store: repo, RunEvents: repo, Chats: repo, ToolCalls: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: &mockReconcilerTemporalClient{}, Config: DefaultConfig(), Mailbox: repo, Orphans: repo})
 
 	repaired, err := reconciler.repairStrandedBackgroundSpawns(context.Background(), &passStats{})
 	require.NoError(t, err)
@@ -99,7 +99,7 @@ func TestRepairStrandedBackgroundSpawns_MapsTerminalStatusToKind(t *testing.T) {
 			repo.strandedBackgroundSpawns = []*db.StrandedBackgroundSpawn{
 				strandedBackgroundSpawn("tc-status", "chat-1", "parent-thread-1", "child-thread-1", tc.wfStatus),
 			}
-			reconciler := New(Deps{Store: repo, RunEvents: repo, Chats: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: &mockReconcilerTemporalClient{}, Config: DefaultConfig(), Mailbox: repo, Orphans: repo})
+			reconciler := New(Deps{Store: repo, RunEvents: repo, Chats: repo, ToolCalls: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: &mockReconcilerTemporalClient{}, Config: DefaultConfig(), Mailbox: repo, Orphans: repo})
 
 			_, err := reconciler.repairStrandedBackgroundSpawns(context.Background(), &passStats{})
 			require.NoError(t, err)
@@ -118,7 +118,7 @@ func TestRepairStrandedBackgroundSpawns_SkipsMissingParentThread(t *testing.T) {
 	repo.strandedBackgroundSpawns = []*db.StrandedBackgroundSpawn{
 		{ToolCallID: "tc-no-parent", ChatID: "chat-1", ParentThreadID: nil, ChildThreadID: "child-thread-1", WorkflowStatus: db.Completed()},
 	}
-	reconciler := New(Deps{Store: repo, RunEvents: repo, Chats: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: &mockReconcilerTemporalClient{}, Config: DefaultConfig(), Mailbox: repo, Orphans: repo})
+	reconciler := New(Deps{Store: repo, RunEvents: repo, Chats: repo, ToolCalls: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: &mockReconcilerTemporalClient{}, Config: DefaultConfig(), Mailbox: repo, Orphans: repo})
 
 	repaired, err := reconciler.repairStrandedBackgroundSpawns(context.Background(), &passStats{})
 	require.NoError(t, err)
@@ -145,7 +145,7 @@ func TestRepairStrandedBackgroundSpawns_IdempotentAcrossPasses(t *testing.T) {
 		calls++
 		return calls == 1, nil
 	}
-	reconciler := New(Deps{Store: repo, RunEvents: repo, Chats: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: &mockReconcilerTemporalClient{}, Config: DefaultConfig(), Mailbox: repo, Orphans: repo})
+	reconciler := New(Deps{Store: repo, RunEvents: repo, Chats: repo, ToolCalls: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: &mockReconcilerTemporalClient{}, Config: DefaultConfig(), Mailbox: repo, Orphans: repo})
 
 	stats := &passStats{}
 	repaired1, err := reconciler.repairStrandedBackgroundSpawns(context.Background(), stats)
@@ -188,7 +188,7 @@ func TestRepairStrandedBackgroundSpawns_DeadParentGetsUndeliveredReport(t *testi
 	repo.strandedBackgroundSpawns = []*db.StrandedBackgroundSpawn{
 		strandedBackgroundSpawn("tc-dead-parent", "chat-1", "parent-thread-1", "child-thread-1", db.Completed()),
 	}
-	reconciler := New(Deps{Store: repo, RunEvents: repo, Chats: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: &mockReconcilerTemporalClient{}, Config: DefaultConfig(), Mailbox: repo, Orphans: repo})
+	reconciler := New(Deps{Store: repo, RunEvents: repo, Chats: repo, ToolCalls: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: &mockReconcilerTemporalClient{}, Config: DefaultConfig(), Mailbox: repo, Orphans: repo})
 
 	repaired, err := reconciler.repairStrandedBackgroundSpawns(context.Background(), &passStats{})
 	require.NoError(t, err)
@@ -215,7 +215,7 @@ func TestRepairStrandedBackgroundSpawns_LiveParentStaysQueued(t *testing.T) {
 	repo.strandedBackgroundSpawns = []*db.StrandedBackgroundSpawn{
 		strandedBackgroundSpawn("tc-live-parent", "chat-1", "parent-thread-1", "child-thread-1", db.Completed()),
 	}
-	reconciler := New(Deps{Store: repo, RunEvents: repo, Chats: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: &mockReconcilerTemporalClient{}, Config: DefaultConfig(), Mailbox: repo, Orphans: repo})
+	reconciler := New(Deps{Store: repo, RunEvents: repo, Chats: repo, ToolCalls: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: &mockReconcilerTemporalClient{}, Config: DefaultConfig(), Mailbox: repo, Orphans: repo})
 
 	_, err := reconciler.repairStrandedBackgroundSpawns(context.Background(), &passStats{})
 	require.NoError(t, err)
@@ -237,7 +237,7 @@ func TestRepairStrandedBackgroundSpawns_UnreadableParentThreadStaysQueued(t *tes
 	repo.strandedBackgroundSpawns = []*db.StrandedBackgroundSpawn{
 		strandedBackgroundSpawn("tc-unknown-parent", "chat-1", "parent-thread-1", "child-thread-1", db.Completed()),
 	}
-	reconciler := New(Deps{Store: repo, RunEvents: repo, Chats: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: &mockReconcilerTemporalClient{}, Config: DefaultConfig(), Mailbox: repo, Orphans: repo})
+	reconciler := New(Deps{Store: repo, RunEvents: repo, Chats: repo, ToolCalls: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: &mockReconcilerTemporalClient{}, Config: DefaultConfig(), Mailbox: repo, Orphans: repo})
 
 	_, err := reconciler.repairStrandedBackgroundSpawns(context.Background(), &passStats{})
 	require.NoError(t, err)
@@ -263,7 +263,7 @@ func TestRepairStrandedBackgroundSpawns_ClosesBackgroundedToolCall(t *testing.T)
 	repo.strandedBackgroundSpawns = []*db.StrandedBackgroundSpawn{
 		strandedBackgroundSpawn("tc-still-backgrounded", "chat-1", "parent-thread-1", "child-thread-1", db.Completed()),
 	}
-	reconciler := New(Deps{Store: repo, RunEvents: repo, Chats: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: &mockReconcilerTemporalClient{}, Config: DefaultConfig(), Mailbox: repo, Orphans: repo})
+	reconciler := New(Deps{Store: repo, RunEvents: repo, Chats: repo, ToolCalls: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: &mockReconcilerTemporalClient{}, Config: DefaultConfig(), Mailbox: repo, Orphans: repo})
 
 	_, err := reconciler.repairStrandedBackgroundSpawns(context.Background(), &passStats{})
 	require.NoError(t, err)
@@ -290,7 +290,7 @@ func TestRepairStrandedBackgroundSpawns_ClosesToolCallWhenReportAlreadyExists(t 
 		strandedBackgroundSpawn("tc-already-reported", "chat-1", "parent-thread-1", "child-thread-1", db.Completed()),
 	}
 	repo.enqueueAgentMessageInsertsFn = func(*db.AgentMessage) (bool, error) { return false, nil }
-	reconciler := New(Deps{Store: repo, RunEvents: repo, Chats: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: &mockReconcilerTemporalClient{}, Config: DefaultConfig(), Mailbox: repo, Orphans: repo})
+	reconciler := New(Deps{Store: repo, RunEvents: repo, Chats: repo, ToolCalls: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: &mockReconcilerTemporalClient{}, Config: DefaultConfig(), Mailbox: repo, Orphans: repo})
 
 	repaired, err := reconciler.repairStrandedBackgroundSpawns(context.Background(), &passStats{})
 	require.NoError(t, err)
@@ -321,7 +321,7 @@ func TestRepairStrandedBackgroundSpawns_UndeliverableIsIdempotent(t *testing.T) 
 		calls++
 		return calls == 1, nil
 	}
-	reconciler := New(Deps{Store: repo, RunEvents: repo, Chats: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: &mockReconcilerTemporalClient{}, Config: DefaultConfig(), Mailbox: repo, Orphans: repo})
+	reconciler := New(Deps{Store: repo, RunEvents: repo, Chats: repo, ToolCalls: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: &mockReconcilerTemporalClient{}, Config: DefaultConfig(), Mailbox: repo, Orphans: repo})
 
 	stats := &passStats{}
 	first, err := reconciler.repairStrandedBackgroundSpawns(context.Background(), stats)
@@ -356,7 +356,7 @@ func TestRepairStrandedBackgroundSpawns_LeavesAStoppedSpawnToItsOpenRun(t *testi
 	temporal := &mockReconcilerTemporalClient{describeResponses: map[string]mockDescribeResponse{
 		"root-wf": {resp: makeRunningDescribeResp("run-1")},
 	}}
-	reconciler := New(Deps{Store: repo, RunEvents: repo, Chats: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: temporal, Config: DefaultConfig(), Mailbox: repo, Orphans: repo})
+	reconciler := New(Deps{Store: repo, RunEvents: repo, Chats: repo, ToolCalls: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: temporal, Config: DefaultConfig(), Mailbox: repo, Orphans: repo})
 
 	repaired, err := reconciler.repairStrandedBackgroundSpawns(context.Background(), &passStats{})
 	require.NoError(t, err)
@@ -388,7 +388,7 @@ func TestRepairStrandedBackgroundSpawns_StoppedSpawnWaitsWhenTemporalCannotBeAsk
 		"chat-1": {err: errors.New("connection refused")},
 	}}
 
-	repaired, err := New(Deps{Store: repo, RunEvents: repo, Chats: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: temporal, Config: DefaultConfig(), Mailbox: repo, Orphans: repo}).repairStrandedBackgroundSpawns(context.Background(), &passStats{})
+	repaired, err := New(Deps{Store: repo, RunEvents: repo, Chats: repo, ToolCalls: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: temporal, Config: DefaultConfig(), Mailbox: repo, Orphans: repo}).repairStrandedBackgroundSpawns(context.Background(), &passStats{})
 	require.NoError(t, err)
 	assert.Equal(t, 0, repaired)
 	assert.Empty(t, repo.enqueuedAgentMessages)
@@ -407,7 +407,7 @@ func TestRepairStrandedBackgroundSpawns_RepairsACompletedChildEvenWhileItsRunIsO
 		"root-wf": {resp: makeRunningDescribeResp("run-1")},
 	}}
 
-	repaired, err := New(Deps{Store: repo, RunEvents: repo, Chats: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: temporal, Config: DefaultConfig(), Mailbox: repo, Orphans: repo}).repairStrandedBackgroundSpawns(context.Background(), &passStats{})
+	repaired, err := New(Deps{Store: repo, RunEvents: repo, Chats: repo, ToolCalls: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: temporal, Config: DefaultConfig(), Mailbox: repo, Orphans: repo}).repairStrandedBackgroundSpawns(context.Background(), &passStats{})
 	require.NoError(t, err)
 	assert.Equal(t, 1, repaired)
 	require.Len(t, repo.enqueuedAgentMessages, 1)
@@ -421,7 +421,7 @@ func TestReconcileRunningWorkflows_RepairsStrandedBackgroundSpawns(t *testing.T)
 	repo.strandedBackgroundSpawns = []*db.StrandedBackgroundSpawn{
 		strandedBackgroundSpawn("tc-wired", "chat-1", "parent-thread-1", "child-thread-1", db.Completed()),
 	}
-	reconciler := New(Deps{Store: repo, RunEvents: repo, Chats: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: &mockReconcilerTemporalClient{}, Config: DefaultConfig(), Mailbox: repo, Orphans: repo})
+	reconciler := New(Deps{Store: repo, RunEvents: repo, Chats: repo, ToolCalls: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: &mockReconcilerTemporalClient{}, Config: DefaultConfig(), Mailbox: repo, Orphans: repo})
 
 	_, errs := reconciler.ReconcileRunningWorkflows(context.Background())
 	require.Empty(t, errs)

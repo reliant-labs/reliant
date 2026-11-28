@@ -130,6 +130,20 @@ describe("Coverage: the tree", () => {
     expect(within(raise).getByRole("button")).toHaveAccessibleDescription(AGENT_REASON.noProject);
   });
 
+  it("below the root, says the view is a subtree, its share of the report, and links back to all code; the root says nothing", async () => {
+    renderCoverage({ path: "internal/billing", lane: "unit" });
+    const notice = await screen.findByTestId("tests-coverage-subtree");
+    expect(notice).toHaveTextContent("Showing only internal/billing/");
+    await waitFor(() => expect(notice).toHaveTextContent(/of 48,210 statements/));
+    expect(within(notice).getByRole("link", { name: "View all code" })).toHaveAttribute("href", "/forge/p/shopfront/tests/coverage?lane=unit");
+  });
+
+  it("the root view carries no subtree notice", async () => {
+    renderCoverage({});
+    await screen.findAllByTestId("tests-coverage-row");
+    expect(screen.queryByTestId("tests-coverage-subtree")).not.toBeInTheDocument();
+  });
+
   it("Raise coverage hands Ask Reliant the package's figures and uncovered line numbers, never its source", async () => {
     ask.mockClear();
     const source = fixtureCoverageSource("github");

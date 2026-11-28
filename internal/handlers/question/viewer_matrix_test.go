@@ -22,7 +22,7 @@ func TestQuestionServiceViewerMatrix(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 	f := viewertest.New(t, repo)
-	svc := NewTestQuestion(t, WithQuestionDeps(Deps{Repo: repo, ChatRows: store.NewChatExtStore(repo.ORM()), Resolver: questions.NewFromRepo(repo), ChatViews: store.NewChatsWithActivityExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo})}))
+	svc := NewTestQuestion(t, WithQuestionDeps(Deps{Repo: repo, ChatRows: store.NewChatExtStore(repo.ORM()), Resolver: questions.NewFromRepo(repo), ChatViews: store.NewChatsWithActivityExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo.UpdateWriter()})}))
 	viewertest.RunService(t, f, svc, "reliant.v1.QuestionService", nil)
 }
 
@@ -50,7 +50,7 @@ func TestViewerQuestionsCarryNoResolvedPrompt(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	svc := NewTestQuestion(t, WithQuestionDeps(Deps{Repo: repo, ChatRows: store.NewChatExtStore(repo.ORM()), Resolver: questions.NewFromRepo(repo), ChatViews: store.NewChatsWithActivityExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo})}))
+	svc := NewTestQuestion(t, WithQuestionDeps(Deps{Repo: repo, ChatRows: store.NewChatExtStore(repo.ORM()), Resolver: questions.NewFromRepo(repo), ChatViews: store.NewChatsWithActivityExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo.UpdateWriter()})}))
 	list := func(ctx context.Context) map[string]*reliantv1.QuestionInfo {
 		resp, err := svc.ListAsyncQuestions(ctx, connect.NewRequest(&reliantv1.ListAsyncQuestionsRequest{ChatId: f.ChatID}))
 		if err != nil {

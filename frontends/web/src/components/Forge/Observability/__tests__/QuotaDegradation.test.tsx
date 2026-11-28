@@ -9,11 +9,14 @@
  *   - one banner says it, however many views are watching;
  *   - N observers of one key poll once; a hidden tab does not poll;
  *   - a tight (soft) quota slows polls instead of stopping them;
- *   - background polls are the only reads marked as polls.
+ *   - background polls are the only reads marked as polls;
+ *   - a read during the pause never leaves the browser: every read goes through
+ *     the control-plane transport's read stage (obsInterceptors.ts), as in the app.
  */
 
 import { act, render, renderHook, screen, within } from "@testing-library/react";
-import { QueryClientProvider, focusManager, useQuery, type QueryClient } from "@tanstack/react-query";
+import { focusManager, useQuery, type QueryClient } from "@tanstack/react-query";
+import { createRouterTransport, type HandlerContext } from "@connectrpc/connect";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -23,14 +26,19 @@ import { obsKeys, useServiceOverview } from "@/hooks/observability-queries";
 import { ObservabilityApiProvider, type ObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
 import { ObsQuotaProvider, RESUME_JITTER_MS, useObsQuota } from "@/services/controlPlane/observability/ObsQuotaContext";
 import { formatClock, quotaPausedError } from "@/services/controlPlane/observability/quota";
-import { SOFT_POLL_FACTOR, isPollRead } from "@/services/controlPlane/observability/quotaStore";
+import { SOFT_POLL_FACTOR, resetObsQuotaStore } from "@/services/controlPlane/observability/quotaStore";
+import { obsReadInterceptor } from "@/services/controlPlane/observability/obsInterceptors";
+import { resetObsReadScheduler } from "@/services/controlPlane/observability/readScheduler";
+import { ObservabilityService } from "@/gen/controlplane/services/observability/v1/observability_pb";
+import { observabilityHandlers } from "@/fixtures/shop/handlers/observability";
+import { createTransportScope, TransportScopeProvider } from "@/lib/transportScope";
 import type { ObsScope } from "@/services/controlPlane/observability/types";
 
 import { createFixtureApi } from "../__fixtures__/fixtureApi";
 import { OverviewHome } from "../../Workloads/OverviewHome";
 import { STRIP_ENVS, WORKLOADS_PROJECT, createRepoMetaFixture } from "../../Workloads/__fixtures__/workloadFixtures";
 import { createReleasesFixtureApi } from "../../Releases/__fixtures__/releaseFixtures";
-import { ReleasesApiProvider } from "@/services/forge/ReleasesApiContext";
+import { ledgerTransport } from "../../Releases/__fixtures__/releaseFixtureTransport";
 import { RepoMetaProvider } from "@/services/forge/RepoMetaContext";
 import { ObsAsOf, ObsQuotaBanner } from "../ObsStates";
 
@@ -58,6 +66,7 @@ function useOverview(scope: ObsScope | null, range: "1h" | "6h") {
 
 interface Rig {
   client: QueryClient;
+  /** Every overview read that reached control-plane, and whether it came as a poll (Forge-Poll). */
   calls: { poll: boolean }[];
   api: ObservabilityApi;
   /** What the next call does: "ok" answers, "quota"/"soft" refuse the way the server does. */
@@ -65,27 +74,40 @@ interface Rig {
   wrapper: ({ children }: { children: ReactNode }) => ReactNode;
 }
 
-function rig(random = () => 0.5): Rig {
+function rig(random = () => 0.5, withReleases = false): Rig {
   const client = createTestQueryClient();
   const calls: Rig["calls"] = [];
   const mode: Rig["mode"] = { value: "ok" };
-  const base = createFixtureApi();
-  const api: ObservabilityApi = {
-    ...base,
-    getServiceOverview: async (req) => {
-      calls.push({ poll: isPollRead() });
-      if (mode.value !== "ok") {
-        throw quotaPausedError({ limit: "queries", lane: "interactive", resetsAtMs: RESET, soft: mode.value === "soft" });
-      }
-      return base.getServiceOverview(req);
-    },
+  const api = createFixtureApi();
+  // control-plane behind the app's read stage, answering every ObservabilityService
+  // read from the fixture (the shop pack's wire handlers over it). It records the
+  // overview reads that reach it, and refuses them the way the server does in
+  // "quota"/"soft". The test's QueryClient reads it, as the generated hooks read the app's.
+  const handlers = observabilityHandlers(api, { clock: START }) as Record<string, (req: unknown) => Promise<unknown>>;
+  const impl: Record<string, (req: unknown, ctx: HandlerContext) => Promise<unknown>> = {};
+  for (const method of ObservabilityService.methods) {
+    const handler = handlers[`${ObservabilityService.typeName}/${method.name}`];
+    if (handler) impl[method.localName] = (req) => handler(req);
+  }
+  impl.getServiceOverview = (req, ctx) => {
+    calls.push({ poll: ctx.requestHeader.get("Forge-Poll") === "1" });
+    if (mode.value !== "ok") {
+      throw quotaPausedError({ limit: "queries", lane: "interactive", resetsAtMs: RESET, soft: mode.value === "soft" });
+    }
+    return handlers[`${ObservabilityService.typeName}/GetServiceOverview`]!(req);
   };
+  const controlPlane = createRouterTransport((router) => router.service(ObservabilityService, impl as never), {
+    transport: { interceptors: [obsReadInterceptor()] },
+  });
+  // Compose the fixture handlers before binding the client to its one transport.
+  const transport = withReleases ? ledgerTransport(createReleasesFixtureApi(), controlPlane) : controlPlane;
+  const scope = createTransportScope({ id: "quota-degradation", transport, queryClient: client });
   const wrapper = ({ children }: { children: ReactNode }) => (
-    <QueryClientProvider client={client}>
+    <TransportScopeProvider scope={scope}>
       <ObservabilityApiProvider api={api}>
         <ObsQuotaProvider random={random}>{children}</ObsQuotaProvider>
       </ObservabilityApiProvider>
-    </QueryClientProvider>
+    </TransportScopeProvider>
   );
   return { client, calls, api, mode, wrapper };
 }
@@ -95,6 +117,8 @@ const advance = (ms: number) => act(async () => void (await vi.advanceTimersByTi
 
 /** Quota exhaustion is a soft-reporting error too; "soft" mode reuses the exhausted shape with the soft reason. */
 beforeEach(() => {
+  resetObsQuotaStore();
+  resetObsReadScheduler();
   vi.useFakeTimers();
   vi.setSystemTime(START);
   focusManager.setFocused(true);
@@ -261,15 +285,13 @@ describe("when the allowance runs out", () => {
   });
 
   it("retains the Services list's request figures and error-log links with an as-of badge during the pause", async () => {
-    const r = rig();
+    const r = rig(() => 0.5, true);
     render(
-      <ReleasesApiProvider api={createReleasesFixtureApi()}>
-        <RepoMetaProvider api={createRepoMetaFixture()}>
-          <OverviewHome project={WORKLOADS_PROJECT} env="prod" envs={STRIP_ENVS} envsLoading={false}
-            search={{ range: "1h" }} onSearch={vi.fn()} navigateTo={vi.fn()}
-            hrefs={{ workload: (name) => `/workloads/${name}`, release: (version) => `/releases/${version}`, releases: "/releases", alerts: "/alerts", scoped: (env) => `/overview?env=${env}` }} />
-        </RepoMetaProvider>
-      </ReleasesApiProvider>,
+      <RepoMetaProvider api={createRepoMetaFixture()}>
+        <OverviewHome project={WORKLOADS_PROJECT} env="prod" envs={STRIP_ENVS} envsLoading={false}
+          search={{ range: "1h" }} onSearch={vi.fn()} navigateTo={vi.fn()}
+          hrefs={{ workload: (name) => `/workloads/${name}`, release: (version) => `/releases/${version}`, releases: "/releases", alerts: "/alerts", scoped: (env) => `/overview?env=${env}` }} />
+      </RepoMetaProvider>,
       { wrapper: r.wrapper }
     );
     await flush();

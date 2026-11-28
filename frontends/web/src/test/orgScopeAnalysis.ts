@@ -63,8 +63,8 @@ export interface Site {
 // `scopedClient(Service, connectClient(Service))` is the generated hooks'
 // per-call client (forge-web-runtime/transport-scope): its first argument is
 // the service too.
-const CLIENT_FACTORIES = new Set(["connectClient", "getControlPlaneClient", "createClient", "obsClient", "createPromiseClient", "scopedClient"]);
-const CLIENT_FACTORY_CALL = /\b(?:connectClient|getControlPlaneClient|createClient|obsClient|createPromiseClient|scopedClient)\s*[(<]/;
+const CLIENT_FACTORIES = new Set(["connectClient", "getControlPlaneClient", "createClient", "createPromiseClient", "scopedClient"]);
+const CLIENT_FACTORY_CALL = /\b(?:connectClient|getControlPlaneClient|createClient|createPromiseClient|scopedClient)\s*[(<]/;
 
 const IMPERATIVE_READS = new Set(["fetchQuery", "ensureQueryData", "prefetchQuery", "fetchInfiniteQuery", "prefetchInfiniteQuery", "ensureInfiniteQueryData"]);
 
@@ -489,7 +489,7 @@ export class OrgScopeAnalysis {
           if (this.namesOrg(fn.node, fn.file, depth + 1)) found = true;
         } else if (ts.isPropertyAccessExpression(callee)) {
           // `api.getRelease(…)` on an api nothing here can resolve: what the
-          // receiver was made from (`useReleasesApi(org.orgId)`) says.
+          // receiver was made from (`useSomeApi(org.orgId)`) says.
           visit(callee.expression);
         }
         // The arguments still count; a resolved callee was judged by its body alone.

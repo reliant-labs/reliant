@@ -121,6 +121,61 @@ func ListPlansByChatID(ctx context.Context, db orm.Context, chatID string) ([]*c
 	return plansToCore(rows), nil
 }
 
+// copyChatPlansSQL copies every plan of a chat (all its threads, as
+// ListPlansByChatID reads them) and every task of those plans onto one
+// thread, in one statement.
+//
+// Each copy gets a fresh id; a task's parent is mapped to its parent's copy
+// (a parent outside the task's own plan maps to none). Plans and tasks start
+// over as pending with no completion. A copied plan keeps its source's
+// created_at, so the branch lists its plans in the source's order, newest
+// first.
+//
+// One statement, not a round trip per row: a chat with 20 plans and 116 tasks
+// took ~140 sequential inserts, about half a second, inside BranchChat's
+// transaction. The tasks are copied from the plans ins_plans RETURNED, so the
+// task insert depends on the plan insert and cannot copy a task whose plan
+// was not inserted. Their foreign keys to those plans are checked after the
+// whole statement, when the plan rows exist.
+const copyChatPlansSQL = `
+WITH src_plans AS (
+    SELECT p.id, p.title, p.description, p.complexity, p.created_at,
+           gen_random_uuid()::text AS new_id
+    FROM plans p
+    JOIN threads t ON t.id = p.thread_id
+    WHERE t.chat_id = ?0
+),
+ins_plans AS (
+    INSERT INTO plans (id, thread_id, title, description, status, complexity, created_at, updated_at)
+    SELECT new_id, ?1, title, description, ?2, complexity, created_at, now()
+    FROM src_plans
+    RETURNING id
+),
+src_tasks AS (
+    SELECT tk.id, tk.parent_task_id, tk.title, tk.description, tk.position,
+           sp.new_id AS new_plan_id,
+           gen_random_uuid()::text AS new_id
+    FROM tasks tk
+    JOIN src_plans sp ON sp.id = tk.plan_id
+    JOIN ins_plans ip ON ip.id = sp.new_id
+)
+INSERT INTO tasks (id, plan_id, parent_task_id, title, description, status, position, created_at, updated_at)
+SELECT s.new_id, s.new_plan_id, parent.new_id, s.title, s.description, ?3, s.position, now(), now()
+FROM src_tasks s
+LEFT JOIN src_tasks parent ON parent.id = s.parent_task_id AND parent.new_plan_id = s.new_plan_id`
+
+// CopyChatPlans gives toThreadID a copy of every plan of fromChatID, with
+// their tasks, reset to planStatus and taskStatus (see copyChatPlansSQL).
+func CopyChatPlans(ctx context.Context, db orm.Context, fromChatID, toThreadID string, planStatus, taskStatus int32) error {
+	if fromChatID == "" || toThreadID == "" {
+		return fmt.Errorf("both the source chat and the target thread are required")
+	}
+	if _, err := db.Bun().NewRaw(copyChatPlansSQL, fromChatID, toThreadID, planStatus, taskStatus).Exec(ctx); err != nil {
+		return fmt.Errorf("failed to copy the chat's plans: %w", err)
+	}
+	return nil
+}
+
 // ReplacePlan rewrites the plan's mutable columns (title, description,
 // status, complexity, completed_at) from p and stamps updated_at, which is
 // written back onto p. A missing plan is orm.ErrNoRows.

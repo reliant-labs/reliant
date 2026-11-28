@@ -48,13 +48,23 @@ import DataTable, { type DataTableColumn } from "@/components/forge-ui/data_tabl
 import DropdownMenu, { type MenuGroup } from "@/components/forge-ui/dropdown_menu";
 import Link from "@/components/forge-ui/link";
 import Modal from "@/components/forge-ui/modal";
-import { useIdentityMutation, useIdentityUser, useIdentityUsers } from "@/hooks/identity-queries";
-import type {
-  IdentityRole,
-  IdentityStatus,
-  IdentityUser,
-  IdentityUserFilter,
-  IdentityUserState,
+import {
+  useDeleteUser,
+  useInviteUser,
+  useLockUser,
+  useRevokeSessions,
+  useSendPasswordReset,
+  useSetUserRoles,
+  useUnlockUser,
+} from "@/hooks/controlplane/identity-service-hooks_gen";
+import { useIdentityUser, useIdentityUsers, useIdentityWriteOptions } from "@/hooks/identity-queries";
+import {
+  toIdentityPasswordCode,
+  type IdentityRole,
+  type IdentityStatus,
+  type IdentityUser,
+  type IdentityUserFilter,
+  type IdentityUserState,
 } from "@/services/controlPlane/identity/api";
 import { identityErrorKind, identityErrorMessage } from "@/services/controlPlane/identity/errors";
 import { toast } from "@/lib/toast-manager";
@@ -205,31 +215,34 @@ function IdentityUsersBody({
   // The only copy of a returned code: dropped when the dialog closes.
   const [issued, setIssued] = useState<IssuedCode | null>(null);
 
-  const reset = useIdentityMutation(orgId, envId, (api, o, e, u: IdentityUser) => api.sendPasswordReset(o, e, u.userId));
-  const resetLink = useIdentityMutation(
-    orgId,
-    envId,
-    (api, o, e, u: IdentityUser) => api.sendPasswordReset(o, e, u.userId, { returnCode: true }),
-    { secret: true }
-  );
+  // Every verb names the user in this org and environment.
+  const target = (user: IdentityUser) => ({ orgId, environmentId: envId, userId: user.userId });
+  const writes = useIdentityWriteOptions(orgId, envId);
+  const reset = useSendPasswordReset(writes);
+  const resetLink = useSendPasswordReset(useIdentityWriteOptions(orgId, envId, { secret: true }));
   const getResetLink = (user: IdentityUser) =>
-    resetLink.mutate(user, {
-      onSuccess: (code) =>
-        setIssued(
-          code
-            ? { email: user.email, purpose: "reset", code }
-            : { email: user.email, purpose: "reset", error: new Error("The server returned no code.") }
-        ),
-      onError: (error) => setIssued({ email: user.email, purpose: "reset", error }),
-    });
+    resetLink.mutate(
+      { ...target(user), returnCode: true },
+      {
+        onSuccess: (r) => {
+          const code = toIdentityPasswordCode(r.code);
+          setIssued(
+            code
+              ? { email: user.email, purpose: "reset", code }
+              : { email: user.email, purpose: "reset", error: new Error("The server returned no code.") }
+          );
+        },
+        onError: (error) => setIssued({ email: user.email, purpose: "reset", error }),
+      }
+    );
   const closeIssued = () => {
     setIssued(null);
     resetLink.reset();
   };
-  const lock = useIdentityMutation(orgId, envId, (api, o, e, u: IdentityUser) => api.lockUser(o, e, u.userId));
-  const unlock = useIdentityMutation(orgId, envId, (api, o, e, u: IdentityUser) => api.unlockUser(o, e, u.userId));
-  const remove = useIdentityMutation(orgId, envId, (api, o, e, u: IdentityUser) => api.deleteUser(o, e, u.userId));
-  const revoke = useIdentityMutation(orgId, envId, (api, o, e, u: IdentityUser) => api.revokeSessions(o, e, u.userId));
+  const lock = useLockUser(writes);
+  const unlock = useUnlockUser(writes);
+  const remove = useDeleteUser(writes);
+  const revoke = useRevokeSessions(writes);
 
   const confirming = confirm?.kind === "delete" ? remove : confirm?.kind === "lock" ? lock : revoke;
   const runConfirmed = () => {
@@ -237,7 +250,7 @@ function IdentityUsersBody({
     const { kind, user } = confirm;
     const settle = () => setConfirm(null);
     if (kind === "delete") {
-      remove.mutate(user, {
+      remove.mutate(target(user), {
         onSuccess: () => {
           toast.success(`${user.email} was deleted`);
           if (opened.userId === user.userId) close();
@@ -246,10 +259,10 @@ function IdentityUsersBody({
         onSettled: settle,
       });
     } else if (kind === "lock") {
-      lock.mutate(user, { onSuccess: done(`${user.email} is locked`), onError: failed("Couldn't lock"), onSettled: settle });
+      lock.mutate(target(user), { onSuccess: done(`${user.email} is locked`), onError: failed("Couldn't lock"), onSettled: settle });
     } else {
-      revoke.mutate(user, {
-        onSuccess: (n) => toast.success(`Ended ${n} session${n === 1 ? "" : "s"} for ${user.email}`),
+      revoke.mutate(target(user), {
+        onSuccess: ({ sessionsRevoked: n }) => toast.success(`Ended ${n} session${n === 1 ? "" : "s"} for ${user.email}`),
         onError: failed("Couldn't end sessions"),
         onSettled: settle,
       });
@@ -263,9 +276,9 @@ function IdentityUsersBody({
     busy: reset.isPending || resetLink.isPending || unlock.isPending,
     declared,
     open,
-    reset: (user) => reset.mutate(user, { onSuccess: done(`Emailed ${user.email} a password reset link`), onError: failed("Couldn't send the reset") }),
+    reset: (user) => reset.mutate({ ...target(user), returnCode: false }, { onSuccess: done(`Emailed ${user.email} a password reset link`), onError: failed("Couldn't send the reset") }),
     resetLink: getResetLink,
-    unlock: (user) => unlock.mutate(user, { onSuccess: done(`${user.email} is unlocked`), onError: failed("Couldn't unlock") }),
+    unlock: (user) => unlock.mutate(target(user), { onSuccess: done(`${user.email} is unlocked`), onError: failed("Couldn't unlock") }),
     confirm: (kind, user) => setConfirm({ kind, user }),
   };
 
@@ -779,7 +792,7 @@ function RoleEditor({
   const [selected, setSelected] = useState<Set<string>>(
     () => new Set(user.roles.filter((r) => managed.some((m) => m.key === r)))
   );
-  const save = useIdentityMutation(orgId, envId, (api, o, e, next: string[]) => api.setUserRoles(o, e, { userId: user.userId, roles: next }));
+  const save = useSetUserRoles(useIdentityWriteOptions(orgId, envId));
   return (
     <div className="space-y-3 rounded-md border border-border/60 bg-surface-sunken p-3" data-testid="identity-role-editor">
       <RoleChecklist roles={roles} selected={selected} onChange={setSelected} heldDeclared={new Set(user.roles)} />
@@ -797,7 +810,7 @@ function RoleEditor({
           loading={save.isPending}
           disabled={managed.length === 0}
           onClick={() =>
-            save.mutate([...selected], {
+            save.mutate({ orgId, environmentId: envId, userId: user.userId, roles: [...selected] }, {
               onSuccess: () => {
                 toast.success(`Updated ${user.email}'s roles`);
                 onDone();
@@ -894,12 +907,7 @@ function InvitePanel({
   // With no mail delivery the link is the only way; with smtp it is opt-in.
   const [wantLink, setWantLink] = useState(false);
   const returnCode = !canEmail || wantLink;
-  const invite = useIdentityMutation(
-    orgId,
-    envId,
-    (api, o, e, args: { email: string; roles: string[]; returnCode: boolean }) => api.inviteUser(o, e, args),
-    { secret: true }
-  );
+  const invite = useInviteUser(useIdentityWriteOptions(orgId, envId, { secret: true }));
   const valid = EMAIL.test(email.trim());
   return (
     <Panel
@@ -925,12 +933,13 @@ function InvitePanel({
             invite.reset();
           };
           invite.mutate(
-            { email: to, roles: [...selected], returnCode },
+            { orgId, environmentId: envId, email: to, roles: [...selected], returnCode },
             {
               onSuccess: (r) => {
                 clear();
-                if (r.code) {
-                  onIssued({ email: to, purpose: "invite", code: r.code });
+                const code = toIdentityPasswordCode(r.code);
+                if (code) {
+                  onIssued({ email: to, purpose: "invite", code });
                 } else if (!r.created) {
                   toast.success(
                     returnCode

@@ -10,12 +10,21 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { create, fromJson } from "@bufbuild/protobuf";
 
-import { GetReleaseHealthResponseSchema } from "@/gen/controlplane/services/observability/v1/observability_pb";
+import { GetReleaseHealthResponseSchema, ReleaseFindingCode } from "@/gen/controlplane/services/observability/v1/observability_pb";
 import { DurationSchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
 import { Code, ConnectError } from "@connectrpc/connect";
 
 import { msOf } from "../api";
-import { durationMs, getDoraMetrics, getReleaseHealth, listReleases, mapReleaseHealth } from "../deliveryApi";
+import {
+  durationMs,
+  findingCodeOf,
+  getDoraMetrics,
+  getReleaseHealth,
+  listReleases,
+  mapReleaseHealth,
+  WIRE_FINDING_A11Y_REGRESSED,
+  WIRE_FINDING_SEO_REGRESSED,
+} from "../deliveryApi";
 import { deliveryErrorKind } from "../errors";
 
 const client = { listReleases: vi.fn(), getDoraMetrics: vi.fn(), getReleaseHealth: vi.fn() };
@@ -155,8 +164,10 @@ describe("GetReleaseHealth", () => {
     await getReleaseHealth({ orgId: "org-1", projectId: "shop", envIds: ["env-prod"], promotionId: "promo-9", windowMs: 30 * 60_000 });
     const req = client.getReleaseHealth.mock.calls[0][0];
     expect(req.scope).toMatchObject({ orgId: "org-1", projectId: "shop", envIds: ["env-prod"] });
-    // QueryScope.time_range is required by the validator and ignored by the rpc: a token minute.
-    expect(msOf(req.scope.timeRange.end) - msOf(req.scope.timeRange.start)).toBe(60_000);
+    // QueryScope.time_range is required by the validator and ignored by the rpc: a token minute,
+    // relative to the server's now, so the request (the generated hook's key) never moves.
+    expect(req.scope.timeRange.start).toBeUndefined();
+    expect(durationMs(req.scope.timeRange.relative.last)).toBe(60_000);
     expect(req.subject).toEqual({ case: "promotionId", value: "promo-9" });
     expect(durationMs(req.window)).toBe(30 * 60_000);
   });
@@ -206,6 +217,16 @@ describe("GetReleaseHealth", () => {
     expect(h.thresholds).toEqual([{ name: "max_p95_ratio", value: "1.25", source: "default" }]);
     // Kept raw, unknown codes included: a newer server's code is still something the PASS does not cover.
     expect(h.notEvaluated).toEqual(["alert_firing", "new_issue", "some_future_code"]);
+  });
+
+  it("names the site-audit codes by their wire numbers (10, 11), and a code it does not know as null", () => {
+    const finding = (code: number) => ({ code: code as ReleaseFindingCode, service: "shop-web", value: 1, threshold: 1, policy: "warn", message: "m" });
+    const h = mapReleaseHealth(
+      create(GetReleaseHealthResponseSchema, { findings: [finding(WIRE_FINDING_SEO_REGRESSED), finding(WIRE_FINDING_A11Y_REGRESSED), finding(99), finding(ReleaseFindingCode.ERROR_RATE)] })
+    );
+    expect(h.findings.map((f) => f.code)).toEqual(["seo_regressed", "a11y_regressed", null, "error_rate"]);
+    expect(findingCodeOf(ReleaseFindingCode.UNSPECIFIED)).toBeNull();
+    expect(findingCodeOf(ReleaseFindingCode.BROWSER_ERRORS)).toBeNull();
   });
 
   it("keeps an unset promotion, window and stats as null, and an unspecified verdict as unknown", () => {

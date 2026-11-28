@@ -38,7 +38,7 @@ func (b *blockingReapRepo) ReapOrphanedWorkflowDescendants(ctx context.Context) 
 // its queries with "sql: database is closed" (prod 758bde53).
 func TestStopCancelsThePassInFlight(t *testing.T) {
 	repo := &blockingReapRepo{mockRepo: newMockRepo(), entered: make(chan struct{}, 1), ended: make(chan error, 1)}
-	r := New(Deps{Store: repo, RunEvents: repo, Chats: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: &mockReconcilerTemporalClient{}, Config: &ReconcilerConfig{PollInterval: 5 * time.Millisecond}, Mailbox: repo, Orphans: repo})
+	r := New(Deps{Store: repo, RunEvents: repo, Chats: repo, ToolCalls: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: &mockReconcilerTemporalClient{}, Config: &ReconcilerConfig{PollInterval: 5 * time.Millisecond}, Mailbox: repo, Orphans: repo})
 
 	r.StartBackgroundReconciliation(context.Background())
 	select {

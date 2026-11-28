@@ -66,10 +66,32 @@ const DefaultPort = 19284
 // distinguishes reliant from any other process holding this port.
 const ServiceName = "reliant"
 
-// hostedWebOrigin is the production reliant web app's origin — the same
-// hosted address as frontends/web/src/lib/constants.ts's DEFAULT_APP_URL and
-// electron/release.config.json's VITE_APP_URL.
-const hostedWebOrigin = "https://app.reliantlabs.io"
+// hostedWebOrigins are every origin the hosted reliant web app is served on.
+// It is ONE bundle on several hosts, so a helper that admits only one of them
+// works from one tab and silently not from another: the browser drops a
+// response without Access-Control-Allow-Origin, the availability probe reads
+// nothing, and the Connect button never enables, while the helper itself
+// served a 200 and has nothing to report.
+//
+//   - app.reliantlabs.io: the agent app, and frontends/web/src/lib/constants.ts's
+//     DEFAULT_APP_URL / electron/release.config.json's VITE_APP_URL.
+//   - forge.reliantlabs.io: the forge console, the same bundle on a second
+//     custom domain.
+//   - reliant-prod.web.app: the Firebase hosting origin behind both.
+//
+// Keep this in step with the first-party browser origins in control-plane's
+// prod CORS_ORIGINS (deploy/kcl/prod/main.k, _cors_origins). The demo shell
+// and the packaged desktop renderer (app://bundle) are deliberately absent:
+// the demo signs nobody in, and the desktop app runs its own receiver.
+//
+// Exact origins, never a *.reliantlabs.io suffix: this surface starts a
+// browser and hands back authorization codes, so only hosts that serve OUR
+// bundle may call it.
+var hostedWebOrigins = []string{
+	"https://app.reliantlabs.io",
+	"https://forge.reliantlabs.io",
+	"https://reliant-prod.web.app",
+}
 
 // HealthResponse is the /health document. It is a stable contract with the web
 // app's availability probe, so field names must not change casually.
@@ -147,6 +169,8 @@ type Server struct {
 	// flowGen identifies the current flow, so a finishing flow only clears
 	// its OWN cancel rather than a newer one's.
 	flowGen uint64
+	// rejected is the set of refused origins already logged (noteRejectedOrigin).
+	rejected map[string]bool
 
 	idleTimeout time.Duration
 	onIdle      func()
@@ -468,11 +492,44 @@ func (s *Server) handleOAuthStart(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) setCORS(w http.ResponseWriter, r *http.Request) {
-	if origin := r.Header.Get("Origin"); origin != "" && s.allowed[origin] {
+	origin := r.Header.Get("Origin")
+	switch {
+	case origin == "":
+	case s.allowed[origin]:
 		w.Header().Set("Access-Control-Allow-Origin", origin)
+		// Private Network Access: Chrome preflights a public page's request to
+		// a loopback address with Access-Control-Request-Private-Network and
+		// refuses the request unless the preflight answers it. Only for an
+		// allowed origin — the header is a grant, not a courtesy.
+		if r.Header.Get("Access-Control-Request-Private-Network") == "true" {
+			w.Header().Set("Access-Control-Allow-Private-Network", "true")
+		}
+	default:
+		s.noteRejectedOrigin(origin)
 	}
 	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
 	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+}
+
+// noteRejectedOrigin logs, once per origin, a caller this helper refused.
+//
+// A refused CORS probe is otherwise invisible from this end: the helper
+// answers 200, the browser discards the body, and the web app only sees "no
+// helper" — so the user is told to start a helper that is already running.
+// Once per origin because the web app polls every few seconds.
+func (s *Server) noteRejectedOrigin(origin string) {
+	s.mu.Lock()
+	if s.rejected == nil {
+		s.rejected = make(map[string]bool)
+	}
+	seen := s.rejected[origin]
+	s.rejected[origin] = true
+	s.mu.Unlock()
+	if seen {
+		return
+	}
+	logging.Warn("OAuth helper refused a browser origin; the page will not see this helper. "+
+		"Add it with RELIANT_WEB_ORIGIN if it is a reliant web app you run", "origin", origin)
 }
 
 // WebOrigins is the process's configured web origins in the form
@@ -502,11 +559,11 @@ func WebOrigins(origins []string, frontendPort string) []string {
 // is the reliant web app: the static defaults plus extra (WebOrigins and the
 // caller's own).
 func buildAllowedOrigins(extra []string) map[string]bool {
-	origins := []string{
-		hostedWebOrigin,
+	origins := append([]string(nil), hostedWebOrigins...)
+	origins = append(origins,
 		"http://localhost:5173", // vite dev default (frontends/web/README.md)
 		"http://localhost:3000", // common dev port (frontends/web/src/routes.tsx)
-	}
+	)
 	origins = append(origins, extra...)
 
 	set := make(map[string]bool, len(origins))

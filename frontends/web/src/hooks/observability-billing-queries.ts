@@ -1,81 +1,74 @@
 // Copyright (c) 2026 Reliant Labs
-import { createContext, useContext } from "react";
-import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, type Query } from "@tanstack/react-query";
 import { timestampFromDate } from "@bufbuild/protobuf/wkt";
-import { Code, ConnectError, type Client } from "@connectrpc/connect";
-import { ObservabilityBillingService } from "@/gen/controlplane/services/observability_billing/v1/observability_billing_pb";
-import { BillingService } from "@/gen/controlplane/services/billing/v1/billing_pb";
+import { Code, ConnectError } from "@connectrpc/connect";
+import { billingServiceKeys, useListOrgLimitChangesInfinite } from "@/hooks/controlplane/billing-service-hooks_gen";
 import { deployServiceKeys } from "@/hooks/controlplane/deploy-service-hooks_gen";
-import { transport as appTransport } from "@/lib/connect";
-import { useTransport } from "@/lib/transportScope";
-import { getControlPlaneClient } from "@/services/controlPlane/client";
+import {
+  observabilityBillingServiceKeys,
+  useGetObservabilityLimits,
+  useGetObservabilityStorage,
+  useGetObservabilityUsage,
+  useListObservabilityUsageInfinite,
+  useUpdateObservabilityLimits,
+} from "@/hooks/controlplane/observability-billing-service-hooks_gen";
 
-export const ObservabilityBillingApiContext = createContext<Client<typeof ObservabilityBillingService> | null>(null);
-export function useObservabilityBillingApi() {
-  // Defer transport creation until a query runs: local-only installs and the
-  // no-org state must render unavailable rather than throw during render.
-  // The nearest TransportScope's transport, else the app's (lib/transportScope.tsx).
-  const override = useContext(ObservabilityBillingApiContext);
-  const transport = useTransport(appTransport);
-  const api: Client<typeof ObservabilityBillingService> = override ?? {
-    getObservabilityUsage: (request, options) => getControlPlaneClient(ObservabilityBillingService, transport).getObservabilityUsage(request, options),
-    listObservabilityUsage: (request, options) => getControlPlaneClient(ObservabilityBillingService, transport).listObservabilityUsage(request, options),
-    getObservabilityStorage: (request, options) => getControlPlaneClient(ObservabilityBillingService, transport).getObservabilityStorage(request, options),
-    getObservabilityLimits: (request, options) => getControlPlaneClient(ObservabilityBillingService, transport).getObservabilityLimits(request, options),
-    updateObservabilityLimits: (request, options) => getControlPlaneClient(ObservabilityBillingService, transport).updateObservabilityLimits(request, options),
-  };
-  return api;
-}
-export const obsBillingKey = (orgId: string | null) => ["observability-billing", orgId] as const;
+/*
+ * Every read runs on ObservabilityBillingService's generated hooks (the limit
+ * history on BillingService's), which resolve their client from the
+ * QueryClient they run on (scopedClient). Their roots are in activeOrgStore's
+ * ORG_SCOPED_QUERY_ROOTS, so an org switch drops them.
+ */
+
 // Rollout and permissions failures are not transient, and must never turn into zero usage.
 export const retryObsBilling = (count: number, error: unknown) => count < 1 && !(error instanceof ConnectError && [Code.Unimplemented, Code.PermissionDenied, Code.InvalidArgument, Code.Unauthenticated].includes(error.code));
+/** The limit-change history's request: its infinite key is what a limits save refreshes. */
+export const obsLimitHistoryRequest = (orgId: string) => ({ orgId, pageSize: 50 });
+/** Whether a cached read's request names this org. */
+const readsOrg = (orgId: string) => (query: Query) => (query.queryKey.find((part) => typeof part === "object" && part !== null) as { orgId?: string } | undefined)?.orgId === orgId;
+
 export function useObsBillingUsage(orgId: string | null) {
-  const api = useObservabilityBillingApi();
-  return useQuery({ queryKey: [...obsBillingKey(orgId), "usage"], enabled: !!orgId,
-    queryFn: () => api.getObservabilityUsage({ orgId: orgId! }), retry: retryObsBilling, staleTime: 60_000 });
+  return useGetObservabilityUsage({ orgId: orgId ?? "" }, { enabled: !!orgId, retry: retryObsBilling, staleTime: 60_000 });
 }
 export function useObsBillingLimits(orgId: string) {
-  const api = useObservabilityBillingApi();
-  return useQuery({ queryKey: [...obsBillingKey(orgId), "limits"], enabled: !!orgId, queryFn: () => api.getObservabilityLimits({ orgId }), retry: retryObsBilling });
+  return useGetObservabilityLimits({ orgId }, { enabled: !!orgId, retry: retryObsBilling });
 }
 export function useObsBillingStorage(orgId: string) {
-  const api = useObservabilityBillingApi();
-  return useQuery({ queryKey: [...obsBillingKey(orgId), "storage"], enabled: !!orgId, queryFn: () => api.getObservabilityStorage({ orgId }), retry: retryObsBilling, staleTime: 60_000 });
+  return useGetObservabilityStorage({ orgId }, { enabled: !!orgId, retry: retryObsBilling, staleTime: 60_000 });
 }
 export function useObsBillingDays(orgId: string, month: string) {
-  const api = useObservabilityBillingApi();
   const start = new Date(`${month}-01T00:00:00Z`);
   const end = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + 1, 1));
-  return useInfiniteQuery({ queryKey: [...obsBillingKey(orgId), "days", month], initialPageParam: "", enabled: !!orgId,
-    queryFn: ({ pageParam }) => api.listObservabilityUsage({ orgId, start: timestampFromDate(start), end: timestampFromDate(end), granularity: 2, groupBy: 2, pageSize: 5000, pageToken: pageParam }),
-    getNextPageParam: (last) => last.nextPageToken || undefined, retry: retryObsBilling });
+  return useListObservabilityUsageInfinite({ orgId, start: timestampFromDate(start), end: timestampFromDate(end), granularity: 2, groupBy: 2, pageSize: 5000 },
+    { enabled: !!orgId, retry: retryObsBilling });
 }
 export function useObsLimitHistory(orgId: string) {
-  const transport = useTransport(appTransport);
-  return useInfiniteQuery({ queryKey: [...obsBillingKey(orgId), "history"], initialPageParam: "", enabled: !!orgId,
-    queryFn: ({ pageParam }) => getControlPlaneClient(BillingService, transport).listOrgLimitChanges({ orgId, pageSize: 50, pageToken: pageParam }),
-    getNextPageParam: (last) => last.nextPageToken || undefined, retry: retryObsBilling });
+  return useListOrgLimitChangesInfinite(obsLimitHistoryRequest(orgId), { enabled: !!orgId, retry: retryObsBilling });
 }
 export function useUpdateObsLimits(orgId: string) {
-  const api = useObservabilityBillingApi();
   const cache = useQueryClient();
-  return useMutation({
+  return useUpdateObservabilityLimits({
     // Changing organizations detaches this observer from the old pending write,
     // without cancelling that organization's valid server-side save.
-    mutationKey: [...obsBillingKey(orgId), "update-limits"],
-    mutationFn: (request: Parameters<typeof api.updateObservabilityLimits>[0]) => api.updateObservabilityLimits(request),
+    mutationKey: [...observabilityBillingServiceKeys.all, "updateObservabilityLimits", orgId],
     // Never retry a money-moving write, especially not after Aborted.
     retry: false,
-    onSuccess: async (response, request) => {
+    // The refresh is the saved org's (below), never the whole service's.
+    invalidate: false,
+    onSuccess: (response, request) => {
       // Mutation options can change while a request is in flight. Its immutable
       // variables, never the current render's organization, own the result.
-      const key = obsBillingKey(request.orgId ?? null);
-      if (response.limits) cache.setQueryData([...key, "limits"], response.limits);
-      await Promise.all([
-        cache.invalidateQueries({ queryKey: key }),
-        // The org's collection policy (ObservabilityCollectionPolicy) refetches after a save, as it
-        // did under this prefix before it moved to the generated DeployService.ListEnvironments key.
-        ...(request.orgId ? [cache.invalidateQueries({ queryKey: deployServiceKeys.listEnvironments({ orgId: request.orgId }) })] : []),
+      const saved = request.orgId ?? "";
+      if (response.limits) cache.setQueryData(observabilityBillingServiceKeys.getObservabilityLimits({ orgId: saved }), response.limits);
+      if (!saved) return;
+      // Every observability-billing read of the org (usage, limits, storage,
+      // daily rows), its limit-change history, and its collection policy
+      // (ObservabilityCollectionPolicy, on DeployService.ListEnvironments).
+      void Promise.all([
+        cache.invalidateQueries({ queryKey: observabilityBillingServiceKeys.all, predicate: readsOrg(saved) }),
+        cache.invalidateQueries({ queryKey: billingServiceKeys.listOrgLimitChangesInfinite(obsLimitHistoryRequest(saved)) }),
+        cache.invalidateQueries({ queryKey: deployServiceKeys.listEnvironments({ orgId: saved }) }),
       ]);
-    } });
+    },
+  });
 }

@@ -14,14 +14,15 @@ import (
 )
 
 // forge:section MockService
-// forge:hash=a63c6d16fb5aa970e33820fcee23aa38a7076e8355de04713fcba3e68ab91da6
+// forge:hash=f407303f7146e365995fc20f8b3976d9dff203cb97ca979964628c004ac973b5
 
 // MockService is a test mock for the Service interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockService.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockService.<Method>Func not set" error.
 type MockService struct {
 	contractkit.Recorder
 	WrapUnaryFunc            func(connect.UnaryFunc) connect.UnaryFunc
@@ -56,18 +57,73 @@ func (m *MockService) WrapStreamingHandler(next connect.StreamingHandlerFunc) co
 	return *new(connect.StreamingHandlerFunc)
 }
 
+// MockServiceWrapUnaryCall is one recorded call of MockService.WrapUnary, one
+// field per parameter.
+type MockServiceWrapUnaryCall struct {
+	Next connect.UnaryFunc
+}
+
+// WrapUnaryCalls returns every recorded WrapUnary call, oldest first, with
+// its arguments typed. It reads the same log as Calls("WrapUnary").
+func (m *MockService) WrapUnaryCalls() []MockServiceWrapUnaryCall {
+	var out []MockServiceWrapUnaryCall
+	for _, c := range m.Recorder.Calls("WrapUnary") {
+		var r MockServiceWrapUnaryCall
+		r.Next, _ = c.Args[0].(connect.UnaryFunc)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceWrapStreamingClientCall is one recorded call of MockService.WrapStreamingClient, one
+// field per parameter.
+type MockServiceWrapStreamingClientCall struct {
+	Next connect.StreamingClientFunc
+}
+
+// WrapStreamingClientCalls returns every recorded WrapStreamingClient call, oldest first, with
+// its arguments typed. It reads the same log as Calls("WrapStreamingClient").
+func (m *MockService) WrapStreamingClientCalls() []MockServiceWrapStreamingClientCall {
+	var out []MockServiceWrapStreamingClientCall
+	for _, c := range m.Recorder.Calls("WrapStreamingClient") {
+		var r MockServiceWrapStreamingClientCall
+		r.Next, _ = c.Args[0].(connect.StreamingClientFunc)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceWrapStreamingHandlerCall is one recorded call of MockService.WrapStreamingHandler, one
+// field per parameter.
+type MockServiceWrapStreamingHandlerCall struct {
+	Next connect.StreamingHandlerFunc
+}
+
+// WrapStreamingHandlerCalls returns every recorded WrapStreamingHandler call, oldest first, with
+// its arguments typed. It reads the same log as Calls("WrapStreamingHandler").
+func (m *MockService) WrapStreamingHandlerCalls() []MockServiceWrapStreamingHandlerCall {
+	var out []MockServiceWrapStreamingHandlerCall
+	for _, c := range m.Recorder.Calls("WrapStreamingHandler") {
+		var r MockServiceWrapStreamingHandlerCall
+		r.Next, _ = c.Args[0].(connect.StreamingHandlerFunc)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ Service = (*MockService)(nil)
 
 // forge:section MockProcedure
-// forge:hash=b289cf914881ce9fe47b50c930266ae148d43f6ff4d8e10b9c527a217c2245a0
+// forge:hash=036d4c2d3895ad097d21a0b5f38a72c7424cbfceb8e5ec74efa6e11c31ebc738
 
 // MockProcedure is a test mock for the Procedure interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockProcedure.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockProcedure.<Method>Func not set" error.
 type MockProcedure struct {
 	contractkit.Recorder
 	NameFunc    func() string
@@ -90,6 +146,40 @@ func (m *MockProcedure) Respond(msg proto.Message) connect.AnyResponse {
 		return m.RespondFunc(msg)
 	}
 	return nil
+}
+
+// MockProcedureNameCall is one recorded call of MockProcedure.Name, one
+// field per parameter.
+type MockProcedureNameCall struct {
+}
+
+// NameCalls returns every recorded Name call, oldest first, with
+// its arguments typed. It reads the same log as Calls("Name").
+func (m *MockProcedure) NameCalls() []MockProcedureNameCall {
+	var out []MockProcedureNameCall
+	for range m.Recorder.Calls("Name") {
+		var r MockProcedureNameCall
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockProcedureRespondCall is one recorded call of MockProcedure.Respond, one
+// field per parameter.
+type MockProcedureRespondCall struct {
+	Msg proto.Message
+}
+
+// RespondCalls returns every recorded Respond call, oldest first, with
+// its arguments typed. It reads the same log as Calls("Respond").
+func (m *MockProcedure) RespondCalls() []MockProcedureRespondCall {
+	var out []MockProcedureRespondCall
+	for _, c := range m.Recorder.Calls("Respond") {
+		var r MockProcedureRespondCall
+		r.Msg, _ = c.Args[0].(proto.Message)
+		out = append(out, r)
+	}
+	return out
 }
 
 // Compile-time check.

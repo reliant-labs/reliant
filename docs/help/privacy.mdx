@@ -202,13 +202,32 @@ For deployment administrators, the renderer runtime configuration's `OTEL_ENDPOI
 
 Turning off analytics also stops the analytics events our servers record about your account. The switches don't cover:
 
-- **Server logs.** They record identifiers (such as user, chat and run IDs, and sometimes your email address), counts, durations, status codes and IP addresses, not the content of your prompts, chats, tool inputs or outputs, or files. (Server logs are separate from browser telemetry, whose IP address is discarded as described in [Approximate location](#approximate-location).) File paths can appear in error logs for file operations. Server logs are kept for up to 30 days, depending on severity (3, 14 or 30 days), and metrics for 30 days.
+- **Server logs.** They record identifiers (such as user, chat and run IDs, and sometimes your email address), counts, durations, status codes and IP addresses, not the content of your prompts, chats, tool inputs or outputs, or files. (Server logs are separate from browser telemetry, whose IP address is discarded as described in [Approximate location](#approximate-location).) File paths can appear in error logs for file operations. Server logs are kept for 3 days at TRACE and DEBUG and for 30 days at INFO and above, and metrics for 30 days.
 - **Server-side error reports**, which go to our own telemetry store with the same shortening and credential redaction.
 - **Billing usage records:** the model, token count and cost of each request, which we need to bill you. These cover Reliant AI. Usage on your own keys and logins is covered by [Model usage records](#model-usage-records).
 - **Model usage records:** the counts described under [Model usage records](#model-usage-records).
 - **Update checks:** the desktop app checks `downloads.reliantlabs.io` for updates, which sends your IP address and app version. Updates download only after you agree.
 
 This docs site is hosted by Mintlify, which may collect usage analytics about it under [its privacy policy](https://www.mintlify.com/legal/privacy). Our marketing site, reliantlabs.io, has its own cookie choices under **Your privacy choices** in its footer; they don't apply to this docs site.
+
+### The forge command-line tool
+
+The forge CLI (the standalone `forge` program, which you may run on its own or through an agent) has its own usage telemetry, separate from the switches in Settings → Privacy. It is **on by default**, tells you so once on stderr, and sends only two events, each tied to a random install ID that forge makes on first run and that carries no account, email or name:
+
+- **First run of an install:** forge's version, your operating system and processor architecture, and which coding agent is running it.
+- **A refused no-account deploy** (`forge_claimable_refused`): when `forge env deploy --claimable` refuses before our servers record an attempt, forge sends the reason from a fixed list (for example `claimable_signed_in`, `unmerged_migrations`, `lint`, `build` or `unavailable`), forge's version, your operating system and architecture, the agent harness, the app's template kind and its auth mode (both described below). It never sends a path, code, an error message or a name.
+
+Telemetry is off when `DO_NOT_TRACK=1` or `FORGE_TELEMETRY=off` is set, after you run `forge telemetry off`, and always on a CI runner. Development builds never send anything, and neither does the `forge` that ships inside the Reliant CLI (`reliant forge`). `forge telemetry status` says whether events are being sent and why.
+
+#### No-account (`--claimable`) deploys
+
+A [deploy without an account](/forge/deploy-without-an-account) tells our servers a little more about the app than a signed-in deploy does, so that we can see where such deploys fail and which kinds of app people publish:
+
+- **The app's template kind**, one of `vite`, `nextjs-static`, `dockerfile-app`, `forge-native` or `other`.
+- **Its auth mode**, `managed` when the app declares Reliant's managed sign-in and `none` otherwise.
+- **The forge install ID**, only while forge telemetry is on. It is the same random ID the CLI events above carry, which lets us connect a deploy to the install that made it.
+
+We record these with that deploy's funnel events (started, live, claim page viewed, claimed, suspended, expired) in our own product-events store, for up to 90 days. These are fixed values, never the app's name, files or code. Turning forge telemetry off leaves the install ID out; the template kind and auth mode are still part of a no-account deploy.
 
 ### Visitors to apps you host with us
 
@@ -303,16 +322,19 @@ Go to **Settings → Account → Delete account**, or email support@reliantlabs.
 | Credentials | Until you remove or disconnect them |
 | Record of what an agent did in a connected integration (what it wrote, and where) | 30 days |
 | Cloud machine disks | Until you delete the machine, except as described in [Local daemon vs. cloud machine](#local-daemon-vs-cloud-machine) |
-| Hosted app databases | Until you delete them. **They are not backed up** |
-| Database backups | Nightly backups are kept for 7 days. Backups taken on demand, for example before maintenance, are deleted when they're no longer needed |
-| Server logs | Up to 30 days, by severity (3, 14 or 30 days) |
+| Hosted app databases | Until you delete them. Databases in an account's environments are backed up continuously, with point-in-time restore over the last 7 days, and a deleted database's backups are purged about 14 days after it is deleted. The database of a [no-account deploy](/forge/deploy-without-an-account) is **not** backed up |
+| No-account (`--claimable`) deploys | Live for 72 hours, then offline for 7 days awaiting a claim, then deleted |
+| Database backups of Reliant's own service | Nightly backups are kept for 7 days. Backups taken on demand, for example before maintenance, are deleted when they're no longer needed |
+| Server logs | 3 days at TRACE and DEBUG, 30 days at INFO and above |
 | Server metrics | 30 days |
-| Request traces in our telemetry store | 7 days |
+| Request traces in our telemetry store | 30 days |
 | Model usage records, per call | 90 days |
 | Model usage daily totals | Until you delete your account |
 | Insights daily totals per member | Until you delete your account, or the project they belong to |
 | Insights daily totals per organization (no account IDs) | As long as the organization uses Reliant |
 | Analytics events | Up to 90 days |
+| Funnel events of no-account (`--claimable`) deploys, with the template kind, auth mode and forge install ID | Up to 90 days |
+| forge CLI usage events (first run, refused no-account deploy), with the random install ID | Up to 90 days |
 | Usage data about the visitors to a hosted app, including the daily visitor code | Up to 90 days by default, or the shorter period the app is set to |
 | A day's random value for the daily visitor code | Held in memory only and deleted shortly after its day ends (never more than 48 hours). Never written to disk or to a backup |
 | Crash and error data in our telemetry store | 30 days |

@@ -23,9 +23,9 @@ func (unavailableInboxPending) ListInboxPending(context.Context, string) ([]*cor
 	return nil, errors.New("pending unavailable")
 }
 
-type unavailableInboxTriggers struct{ Repository }
+type unavailableInboxTriggers struct{ Notices }
 
-func (unavailableInboxTriggers) ListTriggers(context.Context, core.TriggerFilters) ([]*core.Trigger, error) {
+func (unavailableInboxTriggers) ListTriggersForUser(context.Context, core.TriggerFilters) ([]*core.Trigger, error) {
 	return nil, errors.New("automation health unavailable")
 }
 
@@ -39,7 +39,7 @@ func TestListInbox_HousekeepingDoesNotReadUnrelatedSections(t *testing.T) {
 			if section == "pending" {
 				f.inbox.deps.Items = unavailableInboxPending{f.inbox.deps.Items}
 			} else {
-				f.inbox.deps.Repo = unavailableInboxTriggers{f.inbox.deps.Repo}
+				f.inbox.deps.Notices = unavailableInboxTriggers{f.inbox.deps.Notices}
 			}
 			_, err := f.inbox.ListInbox(f.ctx, connect.NewRequest(&reliantv1.ListInboxRequest{}))
 			require.Error(t, err, "the unrelated section really is unavailable")

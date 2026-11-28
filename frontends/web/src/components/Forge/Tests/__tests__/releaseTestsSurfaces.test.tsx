@@ -12,18 +12,15 @@
 import { useState, type ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor, within } from "@testing-library/react";
-import { QueryClientProvider } from "@tanstack/react-query";
 
 import { useReleaseTests } from "@/hooks/test-queries";
 import { createTestQueryClient } from "@/test/renderWithQuery";
-import { ObservabilityApiProvider } from "@/services/controlPlane/observability/ObservabilityApiContext";
 import { TestApiProvider, type TestApi } from "@/services/controlPlane/tests/TestApiContext";
-import { ReleasesApiProvider } from "@/services/forge/ReleasesApiContext";
 
 import { ReleaseDetail, type ReleaseDetailSearch } from "../../Releases/ReleaseDetail";
 import { ReleasesList, type ReleasesSearch } from "../../Releases/ReleasesList";
 import { RELEASE_ENVS, RELEASE_PROJECT, RELEASES, createReleasesFixtureApi } from "../../Releases/__fixtures__/releaseFixtures";
-import { fixtureObsApi } from "../../Releases/__tests__/releasesTestUtils";
+import { fixtureObsApi, ReleasesTestScope } from "../../Releases/__tests__/releasesTestUtils";
 import { FIXTURE_COMMIT, FIXTURE_NOW, FIXTURE_PROJECT, FIXTURE_RELEASES, fixtureSummaryResponse, fixtureTestApi, type TestsScenario } from "../fixtures";
 import { FIXTURE_RELEASE_COMMITS, FIXTURE_RELEASE_VERSIONS, fixtureReleaseCommit } from "../fixtureReleases";
 import { releaseTestsColumnShown, useReleaseTestsColumn } from "../surfaces/ReleaseTestsColumn";
@@ -196,13 +193,9 @@ describe("the Releases list's Tests column", () => {
 
 function Providers({ api, children }: { api: TestApi; children: ReactNode }) {
   return (
-    <QueryClientProvider client={createTestQueryClient()}>
-      <ObservabilityApiProvider api={fixtureObsApi()}>
-        <ReleasesApiProvider api={createReleasesFixtureApi()}>
-          <TestApiProvider api={api}>{children}</TestApiProvider>
-        </ReleasesApiProvider>
-      </ObservabilityApiProvider>
-    </QueryClientProvider>
+    <ReleasesTestScope api={createReleasesFixtureApi()} obs={fixtureObsApi()} client={createTestQueryClient()}>
+      <TestApiProvider api={api}>{children}</TestApiProvider>
+    </ReleasesTestScope>
   );
 }
 

@@ -455,7 +455,7 @@ export function MachinesSection() {
             />
             {!cloud && (
               <p className="mb-4 text-sm text-muted-foreground">
-                Cloud machines are managed by the Reliant control plane, which isn&apos;t configured for this build.
+                Sandboxes are managed by the Reliant control plane, which isn&apos;t configured for this build.
                 Self-hosted sandboxes you connect still appear here.
               </p>
             )}

@@ -101,4 +101,12 @@ output = forge.render(dsi.only_in_dev("release", forge.Bundle {
         _cli
         wl.desktop_app
     ]
+    # Every release cut records an SBOM per artifact and judges it: a KEV or
+    # fixable critical finding refuses the cut (`vuln_gate (release,
+    # enforce)`). The gate needs the SBOMs, so provenance_sbom is enforced too.
+    # This env has no control_plane; only the signing verifiers need one.
+    delivery_policy = forge.DeliveryPolicy {
+        vuln_gate = forge.VulnPolicy {mode = "enforce"}
+        provenance_sbom = forge.Control {mode = "enforce"}
+    }
 }))

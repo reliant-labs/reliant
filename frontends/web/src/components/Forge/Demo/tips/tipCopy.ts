@@ -167,6 +167,13 @@ export const DEMO_TIPS: Record<DemoTipKey, DemoTip> = {
     help: "Your agent can list and query the same metrics.",
     command: "forge obs metrics list prod",
   },
+  experiments: {
+    title: "Experiments",
+    body: "Change what your app does without a deploy: one version for everyone, a share of users that you raise as you gain confidence, or two versions compared on one goal. In prod, the payment retry behind the checkout incident was switched off minutes ago, and express checkout is winning its test.",
+    help: "Your agent can turn a change off, raise a rollout or read a test's results through the same API, and every action it takes lands in the change's history.",
+    command: "forge generate",
+    target: tid("change-row-express-checkout"),
+  },
   "obs-overview": {
     title: "Observability",
     body: "Every service's traffic, failures and response times, the top errors, the slowest operations and the alerts firing, on one page. Open any of them to follow it into requests and logs.",
@@ -222,12 +229,19 @@ export const DEMO_TIPS: Record<DemoTipKey, DemoTip> = {
     command: "forge obs status prod",
     target: tid("obs-alert-CheckoutP95High"),
   },
-  "speed-insights": {
-    title: "Speed insights",
+  "site-insights": {
+    title: "Site insights",
     body: "How fast each page of your site loads and responds for real visitors, on desktop and mobile. The worst-scoring pages come first, so you know where speeding things up helps people most.",
     help: "Your agent can query the same page-load measurements before it changes a slow page.",
     command: "forge obs query prod --sql \"<select>\"",
     target: tid("speed-insights-routes"),
+  },
+  "site-insights-seo": {
+    title: "SEO",
+    body: "After every release, each page of your site is checked the way search engines and link previews read it. The worst pages come first: open one for what to fix and how its link looks in Slack, X and LinkedIn.",
+    help: "Your agent can audit the built site locally before the next release, with the same rules.",
+    command: "forge site audit dist",
+    target: tid("site-insights-seo-routes"),
   },
   sessions: {
     title: "Sessions",

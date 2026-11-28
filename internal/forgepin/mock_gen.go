@@ -13,14 +13,15 @@ import (
 )
 
 // forge:section MockService
-// forge:hash=f1c9ff14d5d2f6fd9fadc9c5affbdd13ca539caff56814a833d8552b330c8ea4
+// forge:hash=a8c8375b70358319eca30df039d1159505c283058a355d9ea221e69bbb3b24a6
 
 // MockService is a test mock for the Service interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockService.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockService.<Method>Func not set" error.
 type MockService struct {
 	contractkit.Recorder
 	PinnedFunc func(string, string) (forgecli.PinnedForge, bool, error)
@@ -43,6 +44,50 @@ func (m *MockService) Output(pf forgecli.PinnedForge, dir string, name string, t
 		return m.OutputFunc(pf, dir, name, tries...)
 	}
 	return nil, contractkit.MockNotSet("MockService", "Output")
+}
+
+// MockServicePinnedCall is one recorded call of MockService.Pinned, one
+// field per parameter.
+type MockServicePinnedCall struct {
+	Root    string
+	Command string
+}
+
+// PinnedCalls returns every recorded Pinned call, oldest first, with
+// its arguments typed. It reads the same log as Calls("Pinned").
+func (m *MockService) PinnedCalls() []MockServicePinnedCall {
+	var out []MockServicePinnedCall
+	for _, c := range m.Recorder.Calls("Pinned") {
+		var r MockServicePinnedCall
+		r.Root, _ = c.Args[0].(string)
+		r.Command, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceOutputCall is one recorded call of MockService.Output, one
+// field per parameter.
+type MockServiceOutputCall struct {
+	Pf    forgecli.PinnedForge
+	Dir   string
+	Name  string
+	Tries [][]string
+}
+
+// OutputCalls returns every recorded Output call, oldest first, with
+// its arguments typed. It reads the same log as Calls("Output").
+func (m *MockService) OutputCalls() []MockServiceOutputCall {
+	var out []MockServiceOutputCall
+	for _, c := range m.Recorder.Calls("Output") {
+		var r MockServiceOutputCall
+		r.Pf, _ = c.Args[0].(forgecli.PinnedForge)
+		r.Dir, _ = c.Args[1].(string)
+		r.Name, _ = c.Args[2].(string)
+		r.Tries, _ = c.Args[3].([][]string)
+		out = append(out, r)
+	}
+	return out
 }
 
 // Compile-time check.

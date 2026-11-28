@@ -56,7 +56,7 @@ func TestReconciler_InterventionsDisabled_AttemptCountAloneIsNotAWedge(t *testin
 	tempClient.setPollersActive(true)
 
 	terminatedBefore := anomalyCount(anomalyWedgeTerminated)
-	reconciler := New(Deps{Store: repo, RunEvents: repo, Chats: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: tempClient, Config: disabledWedgeConfig(2), Mailbox: repo, Orphans: repo})
+	reconciler := New(Deps{Store: repo, RunEvents: repo, Chats: repo, ToolCalls: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: tempClient, Config: disabledWedgeConfig(2), Mailbox: repo, Orphans: repo})
 	wf := runningWorkflow()
 
 	// Six passes: the debounce confirms on pass 2 and stays confirmed.
@@ -84,7 +84,7 @@ func TestReconciler_InterventionsDisabled_PausedAttemptCountAloneIsNotAWedge(t *
 	}
 	tempClient.setPollersActive(true)
 
-	reconciler := New(Deps{Store: repo, RunEvents: repo, Chats: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: tempClient, Config: disabledWedgeConfig(2), Mailbox: repo, Orphans: repo})
+	reconciler := New(Deps{Store: repo, RunEvents: repo, Chats: repo, ToolCalls: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: tempClient, Config: disabledWedgeConfig(2), Mailbox: repo, Orphans: repo})
 	wf := runningWorkflow()
 	wf.Status = db.Paused()
 
@@ -110,7 +110,7 @@ func TestReconciler_InterventionsDisabled_StuckActivity_NoResetNoTerminate(t *te
 	tempClient.setPollersActive(true)
 
 	resetBefore := anomalyCount(anomalyStuckReset)
-	reconciler := New(Deps{Store: repo, RunEvents: repo, Chats: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: tempClient, Config: disabledWedgeConfig(2), Mailbox: repo, Orphans: repo})
+	reconciler := New(Deps{Store: repo, RunEvents: repo, Chats: repo, ToolCalls: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: tempClient, Config: disabledWedgeConfig(2), Mailbox: repo, Orphans: repo})
 	wf := runningWorkflow()
 
 	for i := 1; i <= 6; i++ {
@@ -139,7 +139,7 @@ func TestReconciler_InterventionsDisabled_StuckWorkflowTask_NoResetNoTerminate(t
 	}
 	tempClient.setPollersActive(true)
 
-	reconciler := New(Deps{Store: repo, RunEvents: repo, Chats: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: tempClient, Config: disabledWedgeConfig(2), Mailbox: repo, Orphans: repo})
+	reconciler := New(Deps{Store: repo, RunEvents: repo, Chats: repo, ToolCalls: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: tempClient, Config: disabledWedgeConfig(2), Mailbox: repo, Orphans: repo})
 	wf := runningWorkflow()
 
 	for i := 1; i <= 4; i++ {
@@ -164,7 +164,7 @@ func TestReconciler_InterventionsDisabled_ProgressStall_NoTerminate(t *testing.T
 
 	confirmedBefore := anomalyCount(anomalyProgressStallConfirmed)
 	// Detect at 2 quiescent passes, confirm at 4.
-	reconciler := New(Deps{Store: repo, RunEvents: repo, Chats: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: tempClient, Config: disabledProgressConfig(2), Mailbox: repo, Orphans: repo})
+	reconciler := New(Deps{Store: repo, RunEvents: repo, Chats: repo, ToolCalls: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: tempClient, Config: disabledProgressConfig(2), Mailbox: repo, Orphans: repo})
 	wf := runningWorkflow()
 
 	for i := 1; i <= 8; i++ {
@@ -195,7 +195,7 @@ func TestReconciler_InterventionsDisabled_ProgressStallStillDetected(t *testing.
 	tempClient.setPollersActive(true)
 
 	detectedBefore := anomalyCount(anomalyProgressStallDetected)
-	reconciler := New(Deps{Store: repo, RunEvents: repo, Chats: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: tempClient, Config: disabledProgressConfig(2), Mailbox: repo, Orphans: repo})
+	reconciler := New(Deps{Store: repo, RunEvents: repo, Chats: repo, ToolCalls: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: tempClient, Config: disabledProgressConfig(2), Mailbox: repo, Orphans: repo})
 	wf := runningWorkflow()
 
 	for i := 1; i <= 6; i++ {
@@ -223,7 +223,7 @@ func TestReconciler_InterventionsDisabled_StatusDriftStillRepaired(t *testing.T)
 	}
 	tempClient.setPollersActive(true)
 
-	reconciler := New(Deps{Store: repo, RunEvents: repo, Chats: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: tempClient, Config: disabledWedgeConfig(2), Mailbox: repo, Orphans: repo})
+	reconciler := New(Deps{Store: repo, RunEvents: repo, Chats: repo, ToolCalls: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: tempClient, Config: disabledWedgeConfig(2), Mailbox: repo, Orphans: repo})
 	wf := runningWorkflow()
 
 	result := reconciler.ReconcileWorkflow(context.Background(), wf)
@@ -244,7 +244,7 @@ func TestReconciler_InterventionsDisabled_LostWorkflowStillRepaired(t *testing.T
 		describeResponses: map[string]mockDescribeResponse{}, // not found
 	}
 
-	reconciler := New(Deps{Store: repo, RunEvents: repo, Chats: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: tempClient, Config: DefaultConfig(), Mailbox: repo, Orphans: repo})
+	reconciler := New(Deps{Store: repo, RunEvents: repo, Chats: repo, ToolCalls: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: tempClient, Config: DefaultConfig(), Mailbox: repo, Orphans: repo})
 
 	result := reconciler.ReconcileWorkflow(context.Background(), runningWorkflow())
 	require.NoError(t, result.Error)
@@ -257,7 +257,7 @@ func TestReconciler_InterventionsDisabled_LostWorkflowStillRepaired(t *testing.T
 func TestDefaultConfig_InterventionsOff(t *testing.T) {
 	assert.False(t, DefaultConfig().Interventions,
 		"interventions default off: see dev-docs/incidents/2026-09-29-reconciler-false-wedge.md")
-	assert.False(t, New(Deps{Store: nil, Questions: nil, Temporal: nil, Config: nil}).interventions)
-	assert.True(t, New(Deps{Store: nil, Questions: nil, Temporal: nil, Config: &ReconcilerConfig{Interventions: true}}).interventions,
+	assert.False(t, New(Deps{Store: nil, RunEvents: nil, Questions: nil, Temporal: nil, Config: nil}).interventions)
+	assert.True(t, New(Deps{Store: nil, RunEvents: nil, Questions: nil, Temporal: nil, Config: &ReconcilerConfig{Interventions: true}}).interventions,
 		"the switch must be carried from config onto the reconciler")
 }

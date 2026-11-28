@@ -117,11 +117,14 @@ type WorkflowStatusOutput struct {
 // This activity writes workflow status updates to chat_updates for UI notifications
 type WorkflowStatusActivity struct {
 	repo      WorkflowStatusStore
+	triggers  StatusTriggers
 	runs      RunRecords
 	workflows WorkflowRuns
 	attention AttentionRecorder
 	// runEvents records the terminal run event (deps.RunEvents).
 	runEvents runevents.Store
+	// updates announces the run's change to the chat's clients (deps.Updates).
+	updates ChatRefetcher
 	// pauser pauses a trigger whose run an org policy refused; nil pauses
 	// nothing (deps.TriggerPauser).
 	pauser TriggerPauser
@@ -134,10 +137,12 @@ type WorkflowStatusActivity struct {
 func NewWorkflowStatusActivity(deps WorkflowStatusDeps) *WorkflowStatusActivity {
 	return &WorkflowStatusActivity{
 		repo:       deps.Repo,
+		triggers:   deps.Triggers,
 		runs:       deps.Runs,
 		workflows:  deps.Workflows,
 		attention:  deps.Attention,
 		runEvents:  deps.RunEvents,
+		updates:    deps.Updates,
 		pauser:     deps.Pauser,
 		trackerFor: analytics.ForUser,
 	}
@@ -152,7 +157,7 @@ func (a *WorkflowStatusActivity) Name() string {
 func (a *WorkflowStatusActivity) Execute(ctx context.Context, input WorkflowStatusInput) (WorkflowStatusOutput, error) {
 	// A worker built without a database cannot record a run's outcome: say so
 	// (Temporal retries the activity) rather than dereference a missing store.
-	if a.repo == nil || a.runs == nil || a.workflows == nil || a.runEvents == nil {
+	if a.repo == nil || a.triggers == nil || a.runs == nil || a.workflows == nil || a.runEvents == nil {
 		return WorkflowStatusOutput{}, errors.New("workflow status: the run record store is not configured")
 	}
 	// How the run ended, judged before the status write it lands with.
@@ -302,8 +307,10 @@ func (a *WorkflowStatusActivity) Execute(ctx context.Context, input WorkflowStat
 	}
 
 	// Emit refetch signal so frontend updates workflow executions without polling
-	if err := a.repo.EmitChatRefetch(ctx, input.ChatID, db.RefetchWorkflowExecutions); err != nil {
-		logging.WarnContext(ctx, "[WorkflowStatus] Failed to emit workflow executions refetch", "error", err)
+	if a.updates != nil {
+		if err := a.updates.EmitChatRefetch(ctx, input.ChatID, db.RefetchWorkflowExecutions); err != nil {
+			logging.WarnContext(ctx, "[WorkflowStatus] Failed to emit workflow executions refetch", "error", err)
+		}
 	}
 
 	return WorkflowStatusOutput{Success: true}, nil
@@ -360,7 +367,7 @@ func (a *WorkflowStatusActivity) completionNotifies(ctx context.Context, input W
 	}
 	// An unattended automation run stays silent unless its automation opted in.
 	if triggerID := automationTrigger(chat); triggerID != "" {
-		trigger, err := a.repo.GetTrigger(ctx, triggerID)
+		trigger, err := a.triggers.GetTrigger(ctx, triggerID)
 		return err == nil && trigger != nil && trigger.NotifyOnComplete
 	}
 	return false
@@ -389,7 +396,7 @@ func (a *WorkflowStatusActivity) failureNotifies(ctx context.Context, input Work
 	if triggerID == "" {
 		return true
 	}
-	firings, err := a.repo.FiringsSinceLastSuccess(ctx, chat.UserID, []string{triggerID}, triggers.EpisodeFirings)
+	firings, err := a.triggers.FiringsSinceLastSuccess(ctx, chat.UserID, []string{triggerID}, triggers.EpisodeFirings)
 	if err != nil {
 		logging.WarnContext(ctx, "[WorkflowStatus] Could not read trigger firings; notifying", "chat_id", input.ChatID, "error", err)
 		return true

@@ -24,7 +24,6 @@ type PauseStore interface {
 	ReviveSubtreeLiveAt(ctx context.Context, rootWorkflowID string, at time.Time) (workflowsRevived, threadsRevived int64, err error)
 	CascadeTerminalStatusToDescendants(ctx context.Context, parentWorkflowID string, reason db.WorkflowStopReason) error
 	CascadeTerminalStatusToThreadSubtree(ctx context.Context, workflowID string, reason db.WorkflowStopReason) error
-	EmitChatRefetch(ctx context.Context, chatID string, refetchType db.RefetchType) error
 	RunTx(ctx context.Context, policy orm.TxPolicy, f func(ctx context.Context) error) error
 }
 

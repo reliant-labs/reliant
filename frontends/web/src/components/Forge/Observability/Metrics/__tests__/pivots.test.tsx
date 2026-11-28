@@ -16,7 +16,8 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { defaultParseSearch } from "@tanstack/react-router";
 
 import { createTestQueryClient } from "@/test/renderWithQuery";
-import { ObservabilityApiProvider, type ObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
+import { type ObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
+import { ObservabilityFixtures } from "@/test/observabilityFixtures";
 
 import { ForgeConsoleContext, type ForgeConsole } from "../../../Console/consoleContext";
 import { STRIP_ENVS, WORKLOADS_PROJECT, createWorkloadsFixtureApi, fixtureHostedObservation } from "../../../Workloads/__fixtures__/workloadFixtures";
@@ -321,7 +322,7 @@ describe("the pivot rules", () => {
 function renderWithApi(api: ObservabilityApi, ui: ReactNode) {
   return render(
     <QueryClientProvider client={createTestQueryClient()}>
-      <ObservabilityApiProvider api={api}>{ui}</ObservabilityApiProvider>
+      <ObservabilityFixtures api={api}>{ui}</ObservabilityFixtures>
     </QueryClientProvider>
   );
 }

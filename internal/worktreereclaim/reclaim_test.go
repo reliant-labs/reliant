@@ -52,6 +52,9 @@ func newFixture(t *testing.T) *fixture {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git not on PATH")
 	}
+	// Every reclaim inspects the tree through openat2; on a host that answers
+	// ENOSYS it holds every worktree, so no fixture test can see its outcome.
+	requireOpenat2(t)
 	// Canonical, because git reports canonical paths: on macOS t.TempDir() is
 	// under /var, a symlink to /private/var, and a fixture path compared with
 	// what git (or the repair report) says would never match.

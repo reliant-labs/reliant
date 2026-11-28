@@ -130,7 +130,7 @@ func TestGmailPollsIntoLaunchedRunsEndToEnd(t *testing.T) {
 		assert.Equal(t, "code", q.Get("response_type"))
 		assert.Equal(t, "https://reliant.example/integrations/oauth/gmail/callback", q.Get("redirect_uri"))
 		assert.ElementsMatch(t, []string{
-			"https://www.googleapis.com/auth/gmail.send", "https://www.googleapis.com/auth/gmail.readonly",
+			"https://www.googleapis.com/auth/gmail.send", "https://www.googleapis.com/auth/gmail.compose", "https://www.googleapis.com/auth/gmail.readonly",
 		}, strings.Fields(q.Get("scope")), "space-joined Google scopes")
 		done, err := conns.CompleteOAuth(ctx, userID, q.Get("state"), "4/code-"+email)
 		require.NoError(t, err)
@@ -454,7 +454,7 @@ func (g *fakeGoogle) serve(w http.ResponseWriter, r *http.Request) {
 			access, refresh := "ya29."+uuid.NewString(), "1//"+uuid.NewString()
 			g.tokens[access], g.refreshes[refresh] = email, email
 			_ = json.NewEncoder(w).Encode(map[string]any{"access_token": access, "refresh_token": refresh, "expires_in": 3599,
-				"token_type": "Bearer", "scope": "https://www.googleapis.com/auth/gmail.send https://www.googleapis.com/auth/gmail.readonly"})
+				"token_type": "Bearer", "scope": "https://www.googleapis.com/auth/gmail.send https://www.googleapis.com/auth/gmail.compose https://www.googleapis.com/auth/gmail.readonly"})
 		case "refresh_token":
 			g.nRefresh++
 			email, ok := g.refreshes[r.PostForm.Get("refresh_token")]

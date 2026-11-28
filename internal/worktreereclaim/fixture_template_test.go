@@ -15,7 +15,15 @@ import (
 	"testing"
 
 	"github.com/reliant-labs/reliant/internal/credsandbox"
+	"github.com/reliant-labs/reliant/internal/worktreereclaim/openat2test"
 )
+
+// requireOpenat2 skips a test that needs openat2 or renameat2 on a host whose
+// kernel or sandbox answers ENOSYS for them (openat2test.Require).
+func requireOpenat2(t testing.TB) {
+	t.Helper()
+	openat2test.Require(t)
+}
 
 // newFixture's repos are built once per test binary and copied per test.
 //
@@ -55,9 +63,12 @@ func heavyUnderShort(t *testing.T, why string) {
 
 // skipWithoutSafeInspection skips a test that needs the mount-safe, symlink-safe
 // file and tree inspection (openat2/fstatfs, Linux only). Elsewhere those
-// refuse by design and the reaper holds every worktree rather than guess.
+// refuse by design and the reaper holds every worktree rather than guess. On
+// Linux it skips only when the host's kernel or sandbox lacks the syscalls
+// (requireOpenat2, ENOSYS); any other failure there fails the test.
 func skipWithoutSafeInspection(t *testing.T) {
 	t.Helper()
+	requireOpenat2(t)
 	dir := t.TempDir()
 	file := filepath.Join(dir, "probe")
 	if err := os.WriteFile(file, nil, 0o600); err != nil {

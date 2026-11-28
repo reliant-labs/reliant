@@ -36,7 +36,9 @@ import { myOrgsHandlers } from "@/test/orgsTransport";
 import { projectRow } from "@/test/projectList";
 import { bindActiveOrgUser, setEffectiveOrg, useActiveOrgStore } from "@/store/activeOrgStore";
 import { useAuthStore } from "@/store/authStore";
-import { metricKeys } from "@/hooks/observability-queries";
+import { observabilityServiceKeys } from "@/hooks/controlplane/observability-service-hooks_gen";
+import { relativeWindow } from "@/services/controlPlane/observability/api";
+import { metricCatalogRequest } from "@/services/controlPlane/observability/metricsApi";
 import { sessionKeys } from "@/hooks/observability-session-queries";
 import { forgeCloudKeys } from "@/hooks/forge-queries";
 import { getOrgScope, keepPreviousInOrg, keepPreviousInOrgSegment, keyNamesOrg, resetAfterLeavingOrg } from "../orgScope";
@@ -238,16 +240,19 @@ describe("org-scoped product lists", () => {
 
   it("keeps an observability answer only in its org, and never when the scope becomes null", () => {
     const kept = { rows: 1 };
-    // The real keys: the org is a plain string segment, not a request field.
-    const scope = { orgId: "org-a", envIds: [] } as never;
-    const catalogA = { queryKey: metricKeys.catalog(scope, "1h", "", 0) as readonly unknown[] };
+    // The sessions list's key: the org is a plain string segment, not a request field.
     const sessionsA = { queryKey: sessionKeys.list({ orgId: "org-a", envIds: [] }, {} as never) as readonly unknown[] };
-    for (const previous of [catalogA, sessionsA]) {
-      expect(keepPreviousInOrgSegment("org-a")(kept, previous)).toBe(kept);
-      expect(keepPreviousInOrgSegment("org-b")(kept, previous)).toBeUndefined();
-      // An empty app selection (MetricsExplorerPage) makes the scope null: A's rows must go.
-      expect(keepPreviousInOrgSegment(null)(kept, previous)).toBeUndefined();
-    }
+    expect(keepPreviousInOrgSegment("org-a")(kept, sessionsA)).toBe(kept);
+    expect(keepPreviousInOrgSegment("org-b")(kept, sessionsA)).toBeUndefined();
+    // An empty app selection (MetricsExplorerPage) makes the scope null: A's rows must go.
+    expect(keepPreviousInOrgSegment(null)(kept, sessionsA)).toBeUndefined();
+    // The metric catalog's generated key: the org is in its request's QueryScope.
+    const catalogA = { queryKey: observabilityServiceKeys.listMetrics(metricCatalogRequest({ orgId: "org-a", envIds: [], filters: [], window: relativeWindow(3_600_000) })) };
+    expect(keepPreviousInOrg("org-a")(kept, catalogA)).toBe(kept);
+    expect(keepPreviousInOrg("org-b")(kept, catalogA)).toBeUndefined();
+    expect(keepPreviousInOrg(null)(kept, catalogA)).toBeUndefined();
+    expect(keyNamesOrg(catalogA.queryKey, "org-a")).toBe(true);
+    expect(keyNamesOrg(catalogA.queryKey, "org-b")).toBe(false);
   });
 
   it("the first org of a tab drops a list read with no org, and keeps the org's", () => {
@@ -276,7 +281,7 @@ describe("org-scoped product lists", () => {
       queryFn: () => (keyedFetches.push("org-a"), "a"),
     });
     const unkeyed = new QueryObserver(queryClient, {
-      queryKey: forgeCloudKeys.managedSecrets("p", "prod"),
+      queryKey: forgeCloudKeys.cloudPromotions(null, "env-prod"),
       queryFn: () => (unkeyedFetches.push("transport org"), "s"),
     });
     const unsubscribe = [keyed.subscribe(() => {}), unkeyed.subscribe(() => {})];

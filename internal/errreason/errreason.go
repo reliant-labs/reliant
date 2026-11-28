@@ -58,6 +58,9 @@ const (
 	// ForgeAPIDisabled: the operator turned the forge rpc surface off
 	// (RELIANT_DISABLE_FORGE_API). FailedPrecondition.
 	ForgeAPIDisabled = "forge_api_disabled"
+	// FileTooLargeToDownload: DownloadFile on a file over its whole-file cap
+	// (25 MB). FailedPrecondition; the message names the size and the cap.
+	FileTooLargeToDownload = "file_too_large_to_download"
 
 	// ScopeMissing is forge's accesstoken.ReasonScopeMissing: authenticated,
 	// but the credential lacks a scope; the scopes ride

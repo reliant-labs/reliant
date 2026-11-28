@@ -8,26 +8,12 @@ A forge app reports on itself from the first commit. Every inbound RPC, every ca
 
 The point is what you can do with it. Because the signals are on disk and behind commands that print JSON and exit with meaningful codes, you and an agent working on your project can answer "what did the user's browser do", "did that deploy make things worse" and "what is in the database" without opening a dashboard. The sections below follow the signals from where they are produced to what you do with them.
 
-<CardGroup cols={2}>
-  <Card title="What every boundary records" href="/hosting/observability/signals">
-    The logs, traces and metrics on RPCs, component calls, the database, outbound HTTP and the browser, and how browser and API traces join.
-  </Card>
-  <Card title="Where the telemetry goes" href="/hosting/observability/where-it-goes">
-    The local ClickStack, `.forge/logs/<env>/`, the browser console mirror, the hosted store, retention and opting out.
-  </Card>
-  <Card title="Querying with forge obs" href="/hosting/observability/forge-obs">
-    `obs check` and its exit codes, `status`, `issue`, `trace` and `db query`, the same locally and hosted.
-  </Card>
-  <Card title="Hosted dashboards, alerts and issues" href="/hosting/observability/dashboards-and-alerts">
-    Generated dashboards, the default alert rules, how errors are grouped, source maps and session replay.
-  </Card>
-  <Card title="Health probes and graceful shutdown" href="/forge/observability/health-and-shutdown">
-    `/healthz` and `/readyz`, what a booting process reports, and how a rollout drains a replica.
-  </Card>
-  <Card title="Why this helps an agent" href="/hosting/observability/agents">
-    Browser errors on disk, exit codes to branch on, recon commands, shipped skills, MCP and parallel agents.
-  </Card>
-</CardGroup>
+- [What every boundary records](/hosting/observability/signals): the logs, traces and metrics on RPCs, component calls, the database, outbound HTTP and the browser, and how browser and API traces join
+- [Where the telemetry goes](/hosting/observability/where-it-goes): the local ClickStack, `.forge/logs/<env>/`, the browser console mirror, the hosted store, retention and opting out
+- [Querying with forge obs](/hosting/observability/forge-obs): `obs check` and its exit codes, `status`, `issue`, `trace` and `db query`, the same locally and hosted
+- [Hosted dashboards, alerts and issues](/hosting/observability/dashboards-and-alerts): generated dashboards, the default alert rules, how errors are grouped, source maps and session replay
+- [Health probes and graceful shutdown](/forge/observability/health-and-shutdown): `/healthz` and `/readyz`, what a booting process reports, and how a rollout drains a replica
+- [Why this helps an agent](/hosting/observability/agents): browser errors on disk, exit codes to branch on, recon commands, shipped skills, MCP and parallel agents
 
 ## The shape of it
 

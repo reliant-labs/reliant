@@ -10,13 +10,16 @@
  * `step_up_required` reason in `x-forge-error-reason`.
  */
 
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Code, ConnectError } from "@connectrpc/connect";
 
 import type { LiveEnv } from "@/services/forge/live";
+import { setTransport } from "@/lib/connect";
+import { mockTransport } from "@/lib/test-utils";
+import { secretStoreHandlers } from "@/test/secretStoreTransport";
 
 vi.mock("@/services/controlPlane/config", () => ({
   CONTROL_PLANE_API_URL: "http://127.0.0.1:8090",
@@ -31,27 +34,15 @@ const beginStepUp = vi.fn();
 const completeStepUp = vi.fn();
 
 // The env's declared shape, served per environment (GetEnvironmentShape).
-const SHAPE = {
+const SHAPE: ShapeLike = {
   kind: "self_managed",
   workloads: [{ name: "api", runtime: "cluster", cluster: "gke" }],
   secrets: [{ name: "STRIPE_KEY", provider: "hosted", declaredBy: ["api"] }],
   domains: [],
   clusters: [],
 };
-vi.mock("@/services/forge/live", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/services/forge/live")>()),
-  getEnvironmentShape: () => Promise.resolve(SHAPE),
-}));
 
-vi.mock("@/services/forge/secretStore", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/services/forge/secretStore")>()),
-  listSecrets: (_transport: unknown, ...args: unknown[]) => listSecrets(...args),
-  setSecret: (_transport: unknown, ...args: unknown[]) => setSecret(...args),
-  deleteSecret: (_transport: unknown, ...args: unknown[]) => deleteSecret(...args),
-  getSecretVersions: (_transport: unknown, ...args: unknown[]) => getSecretVersions(...args),
-  beginStepUp: (_transport: unknown, ...args: unknown[]) => beginStepUp(...args),
-  completeStepUp: (_transport: unknown, ...args: unknown[]) => completeStepUp(...args),
-}));
+import { environmentShapeHandlers, type ShapeLike } from "@/test/deployReads";
 
 import { LiveSecretsSection } from "../LiveSecretsSection";
 
@@ -106,8 +97,17 @@ function renderSection(selectedSecret: string | null = null) {
   );
 }
 
+afterEach(() => setTransport(null));
+
 beforeEach(() => {
   vi.clearAllMocks();
+  // Both the declaration and SecretStoreService answer at the transport.
+  setTransport(
+    mockTransport({
+      ...environmentShapeHandlers(() => SHAPE),
+      ...secretStoreHandlers({ listSecrets, setSecret, deleteSecret, getSecretVersions, beginStepUp, completeStepUp }),
+    })
+  );
   listSecrets.mockResolvedValue({ secrets: [SUMMARY], protected: true });
   getSecretVersions.mockResolvedValue({
     summary: SUMMARY,

@@ -67,6 +67,7 @@ func TestRecoveryActivitySafeOpenRejectsAncestorSymlink(t *testing.T) {
 	}
 }
 func TestRecoveryActivitySafeReadBoundedRegular(t *testing.T) {
+	requireOpenat2(t)
 	path := filepath.Join(t.TempDir(), "file")
 	if err := os.WriteFile(path, []byte("plain"), 0600); err != nil {
 		t.Fatal(err)

@@ -158,27 +158,26 @@ func (s *Service) ListInbox(
 // from any one caller's cancellation.
 const inboxReadTimeout = 15 * time.Second
 
-// sharedRead is readInbox, shared by every ListInbox of the same user that
-// arrives while one is in flight: the reads are the same whatever the scope
+// sharedRead is readInbox, shared by the ListInbox calls of the same user that
+// arrive while one is in flight: the reads are the same whatever the scope
 // or limit (those are applied after), so N concurrent calls — a list and its
-// badge, several tabs, a reconnect replay — cost one set of queries and one
-// slice of the pool, not N. The read runs on a context detached from the
-// first caller's cancellation (so one caller giving up does not fail the
-// others) with its own deadline. Callers only read the result.
+// badge, several tabs, a reconnect replay — cost at most two sets of queries
+// and slices of the pool, not N. A call joins only a read that starts after
+// it arrived (freshFlight), never one already in flight: the refetch after
+// answering a question must not get the list from before the answer. The
+// read runs on a context detached from any caller's cancellation (so one
+// caller giving up does not fail the others) with its own deadline. Callers
+// only read the result.
 //
 // The read is shared only within one authorization class (sharedReadKey): what
 // it returns depends on the credential as well as the user, so a session's
 // read is never handed to an access token's call, nor the reverse.
 func (s *Service) sharedRead(ctx context.Context, userID string) (*inboxReads, error) {
-	v, err, _ := s.inboxReads.Do(sharedReadKey(ctx, userID), func() (any, error) {
+	return s.inboxReads.Do(ctx, sharedReadKey(ctx, userID), func() (*inboxReads, error) {
 		rctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), inboxReadTimeout)
 		defer cancel()
 		return s.readInbox(rctx, userID)
 	})
-	if err != nil {
-		return nil, err
-	}
-	return v.(*inboxReads), nil
 }
 
 // readHousekeeping keeps the machine settings surface independent of pending
@@ -241,7 +240,7 @@ func (s *Service) readInbox(ctx context.Context, userID string) (*inboxReads, er
 		// them once.
 		var stored []*core.Trigger
 		if err := lim.do(gctx, func() (err error) {
-			stored, err = s.deps.Repo.ListTriggers(gctx, core.TriggerFilters{UserID: userID})
+			stored, err = s.deps.Notices.ListTriggersForUser(gctx, core.TriggerFilters{UserID: userID})
 			// Automation health is the triggers the caller may read: none of
 			// an org they have left.
 			stored = authz.Visible(gctx, userID, stored, authz.CanReadTrigger)
@@ -381,7 +380,9 @@ func (s *Service) declarationItems(ctx context.Context, stored []*core.Trigger) 
 	// Prod ListInbox (2026-11-05, 22 activations): 13 catalog and 24 draft
 	// reads a call, p50 516ms, the most-called slow rpc of the web.
 	resolver := launch.NewRequestResolver(s.deps.Repo)
-	prefetchActivationDrafts(ctx, resolver, stored)
+	// Only enabled activations are resolved below, so only their drafts are
+	// worth reading together.
+	triggers.PrefetchActivationDrafts(ctx, resolver, slices.DeleteFunc(slices.Clone(stored), func(t *core.Trigger) bool { return !t.Enabled }), "inbox")
 	workflows := triggers.NewCachedWorkflows(triggers.LaunchWorkflows{Repo: resolver})
 	var out []*reliantv1.InboxItem
 	broken := &brokenDefinitions{byKey: map[string]*reliantv1.InboxItem{}}
@@ -664,7 +665,7 @@ func reclaimItem(m *worktreesweep.MachineStorage, name string) *reliantv1.InboxI
 	}
 	return &reliantv1.InboxItem{
 		Kind:         reliantv1.InboxItemKind_INBOX_ITEM_KIND_WORKTREE_RECLAIM,
-		ItemId:       reclaimItemID(m.DaemonID, undecided),
+		ItemId:       reclaimItemID(m.DaemonID, undecided, reclaimEpisode(m)),
 		WaitingSince: time.UnixMilli(since).UTC().Format(time.RFC3339Nano),
 		Payload:      &reliantv1.InboxItem_WorktreeReclaim{WorktreeReclaim: payload},
 	}
@@ -675,14 +676,34 @@ func reclaimItem(m *worktreesweep.MachineStorage, name string) *reliantv1.InboxI
 // fingerprints>. The same undecided set is one item however often the
 // machine reports it, so a dismissal holds for it; a new proposal, or a
 // worktree whose state changed, is a new set and a new item.
-func reclaimItemID(daemonID string, undecided []*reliantv1.WorktreeReclaimProposal) string {
+//
+// While the machine's disk is under pressure, or its disk guard is acting,
+// the episode's start is part of the id too: a dismissed set is asked about
+// again once per episode in which the machine is running out of space, when
+// what it holds is what would free it. Before, one dismissal hid the
+// proposals for good while their state held still: on 2026-11-26 a build
+// machine at 93% reported 127 proposals (45 GB) that no Inbox showed.
+func reclaimItemID(daemonID string, undecided []*reliantv1.WorktreeReclaimProposal, episodeMs int64) string {
 	keys := make([]string, 0, len(undecided))
 	for _, p := range undecided {
 		keys = append(keys, p.Key+"\x00"+p.Fingerprint)
 	}
 	sort.Strings(keys)
-	sum := sha256.Sum256([]byte(strings.Join(keys, "\n")))
+	joined := strings.Join(keys, "\n")
+	if episodeMs > 0 {
+		joined += "\nepisode:" + strconv.FormatInt(episodeMs, 10)
+	}
+	sum := sha256.Sum256([]byte(joined))
 	return inboxWorktreeReclaimPrefix + daemonID + ":" + hex.EncodeToString(sum[:8])
+}
+
+// reclaimEpisode is the start of the machine's current low-disk episode: its
+// pressure episode, else its disk guard's, else 0 (the disk is fine).
+func reclaimEpisode(m *worktreesweep.MachineStorage) int64 {
+	if since := m.Disk.GetPressureSinceMs(); since > 0 {
+		return since
+	}
+	return m.Disk.GetGuardSinceMs()
 }
 
 const storageViewTTL = 60 * time.Second

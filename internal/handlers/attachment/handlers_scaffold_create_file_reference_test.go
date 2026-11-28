@@ -13,11 +13,11 @@ import (
 	"github.com/reliant-labs/reliant/pkg/config"
 )
 
-// No row reaches the store: every one is refused first.
+// No row reaches the store: every one is refused first; DB is deliberately nil.
 func TestCreateFileReference_Generated(t *testing.T) {
 	t.Parallel()
 
-	svc := attachment.NewTestAttachment(t, attachment.WithAttachmentDeps(attachment.Deps{API: &config.ApiServerConfig{MaxUploadSize: 4}}))
+	svc := attachment.NewTestAttachment(t, attachment.WithAttachmentDeps(attachment.Deps{DB: nil, API: &config.ApiServerConfig{MaxUploadSize: 4}}))
 
 	tdd.RunRPCCases(t, []tdd.RPCCase[pb.CreateFileReferenceRequest, pb.CreateFileReferenceResponse]{
 		{

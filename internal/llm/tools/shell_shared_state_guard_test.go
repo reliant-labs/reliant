@@ -28,6 +28,7 @@ func testSharedState() sharedState {
 		},
 		roots: []sharedRoot{
 			{path: "/var/cache/workspace/go-build", label: "Go build cache"},
+			{path: "/var/cache/workspace/go-build-trusted", label: "Go build cache (trusted)"},
 			{path: "/var/cache/workspace/go-mod", label: "Go module cache"},
 			{path: "/var/cache/workspace/npm", label: "npm cache"},
 			{path: "/var/cache/workspace/golangci-lint", label: "golangci-lint cache"},
@@ -97,6 +98,8 @@ func TestSharedStateGuard_RefusesDestructiveCommands(t *testing.T) {
 		`rm -rf /var/cache/workspace/go-build/`,
 		`rm -rf /var/cache/workspace/go-build/??`,
 		`rm -rf /var/cache/workspace/go-build/9f/9fd1174b-d`,
+		`rm -rf /var/cache/workspace/go-build-trusted`,
+		`rm -rf /var/cache/workspace/go-build-trusted/9f/9fd1174b-d`,
 		`rm -rf /var/cache/workspace/go-mod`,
 		`rm -rf /var/cache/workspace/npm`,
 		`rm -rf /var/cache/workspace/golangci-lint`,
@@ -370,7 +373,7 @@ func TestDiscoverSharedState(t *testing.T) {
 		return false
 	}
 	for _, want := range []string{
-		"/data/gocache", "/var/cache/workspace/go-build", "/var/cache/workspace/go-mod",
+		"/data/gocache", "/var/cache/workspace/go-build", "/var/cache/workspace/go-build-trusted", "/var/cache/workspace/go-mod",
 		"/var/cache/workspace/npm", "/var/cache/workspace/golangci-lint", "/var/cache/workspace/xdg",
 	} {
 		if !has(want, false) {

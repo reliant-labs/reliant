@@ -37,7 +37,7 @@ export function MobileFilesPanel({ worktreeId }: MobileFilesPanelProps) {
             <ChevronLeft className="h-5 w-5" />
           </button>
           <FileText className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
-          <span className="truncate text-sm font-medium">{selectedFile.name}</span>
+          <span className="truncate text-ui font-medium">{selectedFile.name}</span>
         </div>
         <MobileFilePreview path={selectedFile.path} worktreeId={worktreeId} />
       </div>

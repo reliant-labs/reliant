@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/cel-go/cel"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/workflow/builtin"
 	wfcel "github.com/reliant-labs/reliant/internal/workflow/cel"
 	"github.com/reliant-labs/reliant/internal/workflow/core"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
@@ -480,7 +481,32 @@ func EvaluateDeclaredOutputs(
 // read validates known protobuf fields before considering the legacy syntax.
 // Explicit legacy shorthand is parsed only by the legacy parser, never by a
 // decoder that would discard its arguments.
+//
+// The definition comes back ready to RUN: every review node is lowered into
+// the workflow node that runs it (LowerForExecution). Every runtime load goes
+// through here or through parseResolvedWorkflow, so no executor ever sees a
+// `type: review` node.
 func LoadWorkflow(data []byte) (*reliantv1.Workflow, error) {
+	wf, err := decodeWorkflowJSON(data)
+	if err != nil {
+		return nil, err
+	}
+	return LowerForExecution(wf)
+}
+
+// LowerForExecution compiles the node kinds the runtime runs on other
+// machinery: a review node becomes the workflow node that runs the engine's
+// reviewer (model.LowerReviewNodes), its builtin prompt resolved from the
+// prompts this binary ships.
+func LowerForExecution(wf *reliantv1.Workflow) (*reliantv1.Workflow, error) {
+	lowered, err := model.LowerReviewNodes(wf, builtin.PromptFile)
+	if err != nil {
+		return nil, fmt.Errorf("lower workflow %q: %w", wf.GetName(), err)
+	}
+	return lowered, nil
+}
+
+func decodeWorkflowJSON(data []byte) (*reliantv1.Workflow, error) {
 	workflow := &reliantv1.Workflow{}
 	protoErr := protojson.Unmarshal(data, workflow)
 	if protoErr == nil {

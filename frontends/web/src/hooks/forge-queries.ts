@@ -74,17 +74,18 @@ import {
   useGetDeployStatus,
   useStartDeploy,
 } from "./forge-service-hooks_gen";
-import { releaseKeys } from "./release-queries";
+import { deployServiceKeys, deployServiceQueries } from "./controlplane/deploy-service-hooks_gen";
+import { invalidateReleaseReadsInOrg } from "./release-queries";
 import {
   cloudAvailabilityFromError,
   cloudErrorDetail,
   deleteEnvironment,
-  getEnvironmentStatus,
   hasCloudControlPlane,
   listEnvironmentPromotions,
   listProjectEnvironments,
   setEnvironmentRunState,
   setWorkloadRunState,
+  toCloudEnvStatus,
   type RunStateRequest,
   type CloudAvailability,
   type CloudEnv,
@@ -92,12 +93,12 @@ import {
   type CloudPromotion,
 } from "../services/forge/cloudEnvs";
 import {
-  getEnvironmentShape,
   getLiveView,
   hasLiveControlPlane,
   listEnvironmentConvergences,
   liveAvailabilityFromError,
   liveErrorDetail,
+  toLiveShape,
   type LiveAvailability,
   type LiveConvergence,
   type LiveEnv,
@@ -120,18 +121,20 @@ import { useProject } from "./project-queries";
 import { confirmationTokenFor, type ForgePromotePlan } from "../services/forge/promote";
 import {
   availabilityFromError,
-  deleteSecret,
-  destroySecret,
-  getSecretVersions,
-  listSecrets,
-  setSecret,
-  undeleteSecret,
-  type ManagedSecretHistory,
+  historyOf,
+  listingOf,
+  setSecretResultOf,
   type ManagedSecretListing,
   type ManagedStoreAvailability,
   type ManagedStoreTarget,
   type SetSecretResult,
 } from "../services/forge/secretStore";
+import {
+  secretStoreServiceKeys,
+  secretStoreServiceMutations,
+  secretStoreServiceQueries,
+  useGetSecretVersions,
+} from "./controlplane/secret-store-service-hooks_gen";
 import { isLocalLifecycle } from "../services/forge/status";
 import { forgeEnvRoster } from "../services/forge/roster";
 import { environments, type ForgeOutcome, type ForgeVerifyReport } from "../services/forge/topology";
@@ -147,20 +150,12 @@ const forgeClient = connectClient(ForgeService);
 // ── Control-plane key factory ───────────────────────────────────────────────
 
 /**
- * One control-plane read's key, called per request, with the read's scope on
- * it as `.all` — the shape forge's generated keys have, so an invalidation
- * names a scope rather than spelling a tuple.
- */
-function cloudKey<Args extends readonly string[]>(name: string) {
-  const all = ["forge", name] as const;
-  return Object.assign((...args: Args) => [...all, ...args] as const, { all });
-}
-
-/**
- * `cloudKey` for an org-scoped read (its request has an org_id): the org it is
- * read in comes first, "" for none, so one org's answer is never served as
- * another's. A forge project name is unique only within an org. `.all` still
- * spans every org, for an invalidation.
+ * One org-scoped control-plane read's key (its request has an org_id), called
+ * per request, with the read's scope on it as `.all` — the shape forge's
+ * generated keys have, so an invalidation names a scope rather than spelling a
+ * tuple. The org it is read in comes first, "" for none, so one org's answer
+ * is never served as another's. A forge project name is unique only within an
+ * org. `.all` still spans every org, for an invalidation.
  */
 function orgCloudKey<Args extends readonly string[]>(name: string) {
   const all = ["forge", name] as const;
@@ -171,8 +166,9 @@ function orgCloudKey<Args extends readonly string[]>(name: string) {
  * The control plane's reads, which have no generated hooks. Keyed by the FORGE
  * project name and the control plane's environment id — not the Reliant
  * project id — because that is what the control plane knows them by. Under
- * ["forge"], beside the Releases (`releaseKeys`) and Domains (`domainKeys`)
- * families, which are control-plane reads too.
+ * ["forge"], beside the Domains (`domainKeys`) family, a control-plane read
+ * too. The Releases pages' reads are on DeployService's generated keys
+ * (hooks/release-queries.ts).
  */
 export const forgeCloudKeys = {
   all: ["forge"] as const,
@@ -183,19 +179,11 @@ export const forgeCloudKeys = {
   // every environment's whole Live answer, because GetLiveView returns them
   // together (see services/forge/live.ts on why it is one round trip).
   liveView: orgCloudKey<[forgeProject: string]>("live-view"),
-  // One environment's declared shape (GetEnvironmentShape): the document the
-  // Live roster deliberately does not carry.
-  environmentShape: orgCloudKey<[environmentId: string]>("environment-shape"),
-  cloudStatus: orgCloudKey<[environmentId: string]>("cloud-status"),
   cloudPromotions: orgCloudKey<[environmentId: string]>("cloud-promotions"),
   convergences: orgCloudKey<[environmentId: string]>("convergences"),
   // Databases kept by a keep-data environment delete: one org-wide list
   // (ListRetainedDatabases takes no project), filtered per app by the page.
   retainedDatabases: orgCloudKey<[]>("retained-databases"),
-  // The managed secret store (control-plane SecretStoreService), keyed by the
-  // Reliant project and env the screen shows it under.
-  managedSecrets: cloudKey<[projectId: string, env: string]>("managed-secrets"),
-  managedSecretVersions: cloudKey<[projectId: string, env: string, name: string]>("managed-secret-versions"),
 };
 
 /**
@@ -205,7 +193,7 @@ export const forgeCloudKeys = {
  * generated mutation's to refetch.
  */
 function invalidateCloudAfterWrite(queryClient: QueryClient) {
-  void queryClient.invalidateQueries({ queryKey: forgeCloudKeys.cloudStatus.all });
+  void queryClient.invalidateQueries({ queryKey: deployServiceKeys.getStatus.all });
   void queryClient.invalidateQueries({ queryKey: forgeCloudKeys.cloudPromotions.all });
 }
 
@@ -470,7 +458,7 @@ export function useInvalidateLiveView() {
   return useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: forgeCloudKeys.liveView.all });
     // A registration or deploy records a new declaration as well.
-    void queryClient.invalidateQueries({ queryKey: forgeCloudKeys.environmentShape.all });
+    void queryClient.invalidateQueries({ queryKey: deployServiceKeys.getEnvironmentShape.all });
   }, [queryClient]);
 }
 
@@ -485,23 +473,26 @@ export function useInvalidateLiveView() {
  * the workloads page share one request; no poll, since a declaration moves
  * only when somebody builds or deploys, and those paths invalidate it.
  */
-function environmentShapeQuery(transport: Transport, environmentId: string, org: OrgScope) {
+function environmentShapeQuery(environmentId: string, org: OrgScope) {
   return withOrgFailure(
-    {
-      queryKey: forgeCloudKeys.environmentShape(org.orgId, environmentId),
-      queryFn: () => getEnvironmentShape(transport, environmentId, org.orgId),
+    deployServiceQueries.getEnvironmentShape(orgRequest({ environmentId }, org.orgId), {
       enabled: environmentId !== "" && hasLiveControlPlane() && orgQueryEnabled(org),
       staleTime: 60_000,
       retry: forgeRetry,
-    },
+      select: selectEnvironmentShape,
+    }),
     org,
   );
 }
 
+/** Module-level, so React Query re-parses a shape only when the cached response changes. */
+function selectEnvironmentShape(res: { declaredShape?: Parameters<typeof toLiveShape>[0] }): LiveShape | null {
+  return toLiveShape(res.declaredShape);
+}
+
 export function useEnvironmentShape(environmentId: string | null | undefined) {
   const org = useOrgScope();
-  const transport = useTransport(appTransport);
-  return useQuery<LiveShape | null>(environmentShapeQuery(transport, environmentId ?? "", org));
+  return useQuery(environmentShapeQuery(environmentId ?? "", org));
 }
 
 /**
@@ -525,7 +516,6 @@ export interface EnvironmentShapeEntry {
  */
 export function useEnvironmentShapes(environmentIds: readonly string[]): Map<string, EnvironmentShapeEntry> {
   const org = useOrgScope();
-  const transport = useTransport(appTransport);
   const key = environmentIds.join("\n");
   const combine = useCallback(
     (results: { data?: LiveShape | null; isLoading: boolean; error: unknown }[]) => {
@@ -539,7 +529,7 @@ export function useEnvironmentShapes(environmentIds: readonly string[]): Map<str
     },
     [key]
   );
-  return useQueries({ queries: environmentIds.map((id) => environmentShapeQuery(transport, id, org)), combine });
+  return useQueries({ queries: environmentIds.map((id) => environmentShapeQuery(id, org)), combine });
 }
 
 /**
@@ -553,24 +543,22 @@ export function useEnvironmentShapes(environmentIds: readonly string[]): Map<str
  */
 const CLOUD_STATUS_POLL_MS = 30_000;
 
-function cloudStatusQuery(transport: Transport, environmentId: string, org: OrgScope) {
+function cloudStatusQuery(environmentId: string, org: OrgScope) {
   return withOrgFailure(
-    {
-      queryKey: forgeCloudKeys.cloudStatus(org.orgId, environmentId),
-      queryFn: () => getEnvironmentStatus(transport, environmentId, org.orgId),
+    deployServiceQueries.getStatus(orgRequest({ environmentId }, org.orgId), {
       enabled: environmentId !== "" && orgQueryEnabled(org),
       staleTime: 10_000,
       refetchInterval: CLOUD_STATUS_POLL_MS,
       retry: forgeRetry,
-    },
+      select: toCloudEnvStatus,
+    }),
     org,
   );
 }
 
 export function useCloudEnvStatus(environmentId: string | null | undefined) {
   const org = useOrgScope();
-  const transport = useTransport(appTransport);
-  return useQuery<CloudEnvStatus>(cloudStatusQuery(transport, environmentId ?? "", org));
+  return useQuery(cloudStatusQuery(environmentId ?? "", org));
 }
 
 /** The same query per environment, for the overview's rows. One cache entry per env, shared with the env page. */
@@ -582,8 +570,7 @@ export interface CloudStatusEntry {
 
 export function useCloudEnvStatuses(environmentIds: string[]): Map<string, CloudStatusEntry> {
   const org = useOrgScope();
-  const transport = useTransport(appTransport);
-  const results = useQueries({ queries: environmentIds.map((id) => cloudStatusQuery(transport, id, org)) });
+  const results = useQueries({ queries: environmentIds.map((id) => cloudStatusQuery(id, org)) });
   // Rebuilt per render on purpose: a handful of entries, and memoising on a
   // freshly-allocated results array would never hit.
   const byId = new Map<string, CloudStatusEntry>();
@@ -838,7 +825,7 @@ export function useInvalidateCloudEnvironments() {
   return useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: forgeCloudKeys.cloudEnvs.all });
     void queryClient.invalidateQueries({ queryKey: forgeCloudKeys.orgEnvs.all });
-    void queryClient.invalidateQueries({ queryKey: forgeCloudKeys.cloudStatus.all });
+    void queryClient.invalidateQueries({ queryKey: deployServiceKeys.getStatus.all });
     void queryClient.invalidateQueries({ queryKey: forgeCloudKeys.cloudPromotions.all });
   }, [queryClient]);
 }
@@ -1062,7 +1049,7 @@ export function useApplyForgePromote(projectId: string | null | undefined) {
         const response = await applyPromote(request);
         // The Releases pages (every ledger and rollout) and the Live view of
         // the org it ran in moved; another org's did not.
-        void queryClient.invalidateQueries({ queryKey: releaseKeys.org(orgId) });
+        void invalidateReleaseReadsInOrg(queryClient, orgId);
         void queryClient.invalidateQueries({ queryKey: [...forgeCloudKeys.liveView.all, orgId ?? ""] });
         return appliedPromoteOf(response);
       } catch (error) {
@@ -1302,54 +1289,62 @@ export function useForgeDeployStatus(
  * store; both mean "this deployment has no managed store", which is a
  * state the screen describes rather than a fault it reports. So the hook
  * resolves those into an `availability` the caller can render, and only a
- * genuine transport failure surfaces as `unreachable`.
+ * genuine transport failure surfaces as `unreachable`. The rejection stays in
+ * the query's own state; `data` (managedSecretsOf) carries only its
+ * classification, never the error or its message.
  *
  * `throwOnError: false` is deliberate: react-query's default of treating every
  * rejection as an error would put a red banner in front of a user whose only
- * crime is running reliant without a control plane.
+ * crime is running reliant without a control plane. `retry: false` for the
+ * same reason, and because it is what this read always did: the failure was
+ * an answer, so there was never a retry.
  *
  * staleTime is short (5s): this is the thing the user is actively changing.
  * They set a secret and come straight back expecting the row to have moved.
  */
-export function managedSecretsQueryOptions(
-  transport: Transport,
-  projectId: string | null | undefined,
-  env: string | null | undefined,
-  target: ManagedStoreTarget | null
-) {
+export function managedSecretsQueryOptions(env: string | null | undefined, target: ManagedStoreTarget | null) {
   const environmentId = target?.kind === "lookup" ? target.environmentId : "";
-  return {
-    queryKey: [...forgeCloudKeys.managedSecrets(projectId ?? "", env ?? ""), target?.kind ?? "", environmentId],
-    queryFn: async (): Promise<{ availability: ManagedStoreAvailability } & ManagedSecretListing> => {
-      // `protected: false` when nothing was read: an environment whose store
-      // could not be read offers no write at all, so there is nothing for a
-      // protection badge to qualify.
-      if (!target) return { availability: "unreachable" as const, secrets: [], protected: false };
-      if (target.kind === "none") return { availability: target.availability, secrets: [], protected: false };
-      try {
-        return { availability: "available" as const, ...(await listSecrets(transport, target.environmentId)) };
-      } catch (err) {
-        // The error object itself is NOT propagated into the cache or into any
-        // message. Only the classification survives — a Connect error's detail
-        // string is the kind of place a request echo could end up.
-        return { availability: availabilityFromError(err), secrets: [], protected: false };
-      }
-    },
-    // A cloud-only project has no local project id. Its live environment id
-    // is the lookup authority; keep project/env/org cache dimensions intact.
-    enabled: !!env && !!target && (target.kind !== "lookup" || !!environmentId),
-    staleTime: 5_000,
-    retry: forgeRetry,
-  };
+  return secretStoreServiceQueries.listSecrets(
+    { environmentId },
+    {
+      select: listingOf,
+      // A cloud-only project has no local project id. Its live environment id
+      // is the lookup authority.
+      enabled: !!env && target?.kind === "lookup" && !!environmentId,
+      staleTime: 5_000,
+      retry: false,
+      throwOnError: false,
+    }
+  );
 }
 
-export function useManagedSecrets(
-  projectId: string | null | undefined,
+/** One environment's managed store as a screen reads it: what it holds, or why that is not known. */
+export type ManagedSecrets = { availability: ManagedStoreAvailability } & ManagedSecretListing;
+
+/**
+ * What a managedSecretsQueryOptions read means for `target`: undefined while
+ * nothing is decided or the lookup is in flight, the target's own availability
+ * for a `none` target (no RPC was made), the failure's classification when
+ * the lookup failed (a failed refresh replaces what an earlier read listed),
+ * else the listing.
+ */
+export function managedSecretsOf(
+  query: Pick<UseQueryResult<ManagedSecretListing>, "data" | "error" | "status">,
   env: string | null | undefined,
   target: ManagedStoreTarget | null
-) {
-  const transport = useTransport(appTransport);
-  return useQuery(managedSecretsQueryOptions(transport, projectId, env, target));
+): ManagedSecrets | undefined {
+  // `protected: false` when nothing was read: an environment whose store
+  // could not be read offers no write at all, so there is nothing for a
+  // protection badge to qualify.
+  if (!env || !target) return undefined;
+  if (target.kind === "none") return { availability: target.availability, secrets: [], protected: false };
+  if (query.status === "error") return { availability: availabilityFromError(query.error), secrets: [], protected: false };
+  return query.data ? { availability: "available", ...query.data } : undefined;
+}
+
+export function useManagedSecrets(env: string | null | undefined, target: ManagedStoreTarget | null) {
+  const query = useQuery(managedSecretsQueryOptions(env, target));
+  return { ...query, data: managedSecretsOf(query, env, target) };
 }
 
 /**
@@ -1366,43 +1361,45 @@ export function useManagedSecretVersions(
   environmentId: string | null | undefined,
   name: string | null | undefined
 ) {
-  const transport = useTransport(appTransport);
-  return useQuery<ManagedSecretHistory>({
-    queryKey: forgeCloudKeys.managedSecretVersions(projectId ?? "", env ?? "", name ?? ""),
-    queryFn: () => getSecretVersions(transport, environmentId as string, name as string),
-    enabled: !!projectId && !!env && !!environmentId && !!name,
-    staleTime: 5_000,
-    retry: forgeRetry,
-  });
+  return useGetSecretVersions(
+    { environmentId: environmentId ?? "", name: name ?? "" },
+    {
+      select: historyOf,
+      enabled: !!projectId && !!env && !!environmentId && !!name,
+      staleTime: 5_000,
+      retry: forgeRetry,
+    }
+  );
 }
 
 /**
- * Invalidate both managed views for one (project, env).
+ * What a write to one environment's managed store refreshes: its listing,
+ * every open version history of it, and the Live view.
  *
- * Every mutation below calls this rather than writing into the cache directly.
- * An optimistic cache write would mean this module CONSTRUCTING a summary, and
- * the only honest source for "what version does this secret have now" is the
- * store — KV-v2's cas can reject a write, another actor can write between our
- * read and our write, and a fabricated row would paper over both.
+ * Every mutation below refreshes this rather than writing into the cache
+ * directly. An optimistic cache write would mean this module CONSTRUCTING a
+ * summary, and the only honest source for "what version does this secret
+ * have now" is the store — KV-v2's cas can reject a write, another actor can
+ * write between our read and our write, and a fabricated row would paper over
+ * both.
  */
-export function useInvalidateManagedSecrets(
-  projectId: string | null | undefined,
-  env: string | null | undefined
-) {
+function invalidateManagedSecrets(queryClient: QueryClient, environmentId: string | null | undefined) {
+  if (environmentId) {
+    void queryClient.invalidateQueries({ queryKey: secretStoreServiceKeys.listSecrets({ environmentId }) });
+    // The versions queries are per-name; a key naming only the environment is
+    // a partial match for every name's, so whichever detail panel happens to
+    // be open refetches.
+    void queryClient.invalidateQueries({ queryKey: secretStoreServiceKeys.getSecretVersions({ environmentId }) });
+  }
+  // The declared names ride on the environment record, and setting a secret
+  // that was declared-unset changes that row's origin on the next read.
+  void queryClient.invalidateQueries({ queryKey: forgeCloudKeys.liveView.all });
+}
+
+/** Refresh both managed views of one environment (invalidateManagedSecrets). */
+export function useInvalidateManagedSecrets(environmentId: string | null | undefined) {
   const queryClient = useQueryClient();
-  return useCallback(() => {
-    void queryClient.invalidateQueries({
-      queryKey: forgeCloudKeys.managedSecrets(projectId ?? "", env ?? ""),
-    });
-    // The versions queries are per-name; invalidating the prefix catches
-    // whichever detail panel happens to be open.
-    void queryClient.invalidateQueries({
-      queryKey: [...forgeCloudKeys.managedSecretVersions.all, projectId ?? "", env ?? ""],
-    });
-    // The declared names ride on the environment record, and setting a secret
-    // that was declared-unset changes that row's origin on the next read.
-    void queryClient.invalidateQueries({ queryKey: forgeCloudKeys.liveView.all });
-  }, [queryClient, projectId, env]);
+  return useCallback(() => invalidateManagedSecrets(queryClient, environmentId), [queryClient, environmentId]);
 }
 
 /**
@@ -1419,7 +1416,32 @@ function requireEnvironmentId(environmentId: string | null | undefined): string 
 }
 
 /**
+ * The writes, on the generated imperative calls of the QueryClient they run
+ * on (so a TransportScope's writes reach its transport), each refreshing
+ * exactly invalidateManagedSecrets. A hand mutation around the call rather
+ * than the generated mutation hook, because the environment id is the hook's
+ * argument and its absence must reject as the mutation's own error (the
+ * set-secret form renders it), not throw at the call site.
+ */
+function useManagedSecretsWrite() {
+  const queryClient = useQueryClient();
+  return useMemo(() => {
+    const writes = secretStoreServiceMutations(queryClient);
+    const options = (environmentId: string) => ({
+      invalidate: (client: QueryClient) => invalidateManagedSecrets(client, environmentId),
+    });
+    return { writes, options };
+  }, [queryClient]);
+}
+
+/**
  * useSetManagedSecret writes a new version.
+ *
+ * `cas` is KV-v2 check-and-set and is how CREATE is distinguished from UPDATE:
+ * passing 0 means "must not exist yet", so a create that races another create
+ * fails loudly instead of silently clobbering. Passing the current version
+ * means "update, and only if nobody else has written since I read this".
+ * Omitting it writes unconditionally.
  *
  * THE VALUE PASSES THROUGH AND IS NOT RETAINED. It is a mutation VARIABLE, so
  * react-query holds it in `mutation.variables` for the lifetime of the
@@ -1427,17 +1449,17 @@ function requireEnvironmentId(environmentId: string | null | undefined): string 
  * rather than leaving it parked in the hook's state. Nothing here logs it, and
  * the success payload is a version number.
  */
-export function useSetManagedSecret(
-  projectId: string | null | undefined,
-  env: string | null | undefined,
-  environmentId: string | null | undefined
-) {
-  const invalidate = useInvalidateManagedSecrets(projectId, env);
-  const transport = useTransport(appTransport);
+export function useSetManagedSecret(environmentId: string | null | undefined) {
+  const { writes, options } = useManagedSecretsWrite();
   return useMutation<SetSecretResult, Error, { name: string; value: string; cas?: number }>({
-    mutationFn: ({ name, value, cas }) =>
-      setSecret(transport, { environmentId: requireEnvironmentId(environmentId), name, value, cas }),
-    onSuccess: invalidate,
+    mutationFn: async ({ name, value, cas }) => {
+      const id = requireEnvironmentId(environmentId);
+      const res = await writes.setSecret(
+        { environmentId: id, name, secretValue: value, ...(cas === undefined ? {} : { cas }) },
+        options(id)
+      );
+      return setSecretResultOf(res);
+    },
   });
 }
 
@@ -1457,32 +1479,29 @@ export function useSetManagedSecret(
  * that already exists, which is what `requireEnvironmentId` above asserts.
  */
 
-/** useDeleteManagedSecret soft-deletes. Recoverable — see useUndeleteManagedSecret. */
-export function useDeleteManagedSecret(
-  projectId: string | null | undefined,
-  env: string | null | undefined,
-  environmentId: string | null | undefined
-) {
-  const invalidate = useInvalidateManagedSecrets(projectId, env);
-  const transport = useTransport(appTransport);
+/**
+ * useDeleteManagedSecret soft-deletes. Recoverable — see useUndeleteManagedSecret.
+ * An empty `versions` means the current version only, which is KV-v2's own
+ * default.
+ */
+export function useDeleteManagedSecret(environmentId: string | null | undefined) {
+  const { writes, options } = useManagedSecretsWrite();
   return useMutation<void, Error, { name: string; versions?: number[] }>({
-    mutationFn: ({ name, versions }) =>
-      deleteSecret(transport, { environmentId: requireEnvironmentId(environmentId), name, versions }),
-    onSuccess: invalidate,
+    mutationFn: async ({ name, versions }) => {
+      const id = requireEnvironmentId(environmentId);
+      await writes.deleteSecret({ environmentId: id, name, versions: versions ?? [] }, options(id));
+    },
   });
 }
 
-export function useUndeleteManagedSecret(
-  projectId: string | null | undefined,
-  env: string | null | undefined,
-  environmentId: string | null | undefined
-) {
-  const invalidate = useInvalidateManagedSecrets(projectId, env);
-  const transport = useTransport(appTransport);
+/** Restore soft-deleted versions. Cannot restore a destroyed one — that data is gone. */
+export function useUndeleteManagedSecret(environmentId: string | null | undefined) {
+  const { writes, options } = useManagedSecretsWrite();
   return useMutation<void, Error, { name: string; versions: number[] }>({
-    mutationFn: ({ name, versions }) =>
-      undeleteSecret(transport, { environmentId: requireEnvironmentId(environmentId), name, versions }),
-    onSuccess: invalidate,
+    mutationFn: async ({ name, versions }) => {
+      const id = requireEnvironmentId(environmentId);
+      await writes.undeleteSecret({ environmentId: id, name, versions }, options(id));
+    },
   });
 }
 
@@ -1493,17 +1512,13 @@ export function useUndeleteManagedSecret(
  * distinction is visible at every layer from the Bao path up, and the UI adds a
  * confirmation on top of that rather than relying on it alone.
  */
-export function useDestroyManagedSecret(
-  projectId: string | null | undefined,
-  env: string | null | undefined,
-  environmentId: string | null | undefined
-) {
-  const invalidate = useInvalidateManagedSecrets(projectId, env);
-  const transport = useTransport(appTransport);
+export function useDestroyManagedSecret(environmentId: string | null | undefined) {
+  const { writes, options } = useManagedSecretsWrite();
   return useMutation<void, Error, { name: string; versions: number[] }>({
-    mutationFn: ({ name, versions }) =>
-      destroySecret(transport, { environmentId: requireEnvironmentId(environmentId), name, versions }),
-    onSuccess: invalidate,
+    mutationFn: async ({ name, versions }) => {
+      const id = requireEnvironmentId(environmentId);
+      await writes.destroySecret({ environmentId: id, name, versions }, options(id));
+    },
   });
 }
 
@@ -1514,7 +1529,7 @@ export function useDestroyManagedSecret(
 function useInvalidateAfterRunStateWrite() {
   const queryClient = useQueryClient();
   return useCallback(() => {
-    void queryClient.invalidateQueries({ queryKey: forgeCloudKeys.cloudStatus.all });
+    void queryClient.invalidateQueries({ queryKey: deployServiceKeys.getStatus.all });
     void queryClient.invalidateQueries({ queryKey: forgeCloudKeys.liveView.all });
   }, [queryClient]);
 }
@@ -1565,8 +1580,14 @@ export function useInvalidateAfterEnvironmentDelete(environmentId: string | null
     void queryClient.invalidateQueries({ queryKey: forgeCloudKeys.retainedDatabases.all });
     // In every org's entry: an environment id names one environment anywhere.
     void queryClient.removeQueries({
-      queryKey: forgeCloudKeys.cloudStatus.all,
-      predicate: (query) => query.queryKey[query.queryKey.length - 1] === (environmentId ?? ""),
+      queryKey: deployServiceKeys.getStatus.all,
+      predicate: (query) => requestEnvironmentOf(query.queryKey) === (environmentId ?? ""),
     });
   }, [queryClient, environmentId]);
+}
+
+/** The environment id a generated DeployService key's protojson request names ("" for none). */
+function requestEnvironmentOf(queryKey: readonly unknown[]): string {
+  const request = queryKey.find((part): part is { environment_id?: unknown } => typeof part === "object" && part !== null);
+  return typeof request?.environment_id === "string" ? request.environment_id : "";
 }

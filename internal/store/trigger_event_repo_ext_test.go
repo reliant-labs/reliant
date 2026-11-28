@@ -107,7 +107,7 @@ func TestTriggerEventQueries(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetTriggerEventByChatID: %v", err)
 	}
-	twinByChat, err := env.Repo.GetTriggerEventByChatID(ctx, "chat-ev")
+	twinByChat, err := store.GetTriggerEventByChatID(ctx, env.Repo.ORM(), "chat-ev")
 	if err != nil {
 		t.Fatalf("Repo.GetTriggerEventByChatID: %v", err)
 	}
@@ -120,7 +120,7 @@ func TestTriggerEventQueries(t *testing.T) {
 		if err != nil {
 			t.Fatalf("GetTriggerEventByChat(%s): %v", kind, err)
 		}
-		twin, err := env.Repo.GetTriggerEventByChat(ctx, kind, "chat-ev")
+		twin, err := store.GetTriggerEventByChat(ctx, env.Repo.ORM(), kind, "chat-ev")
 		if err != nil {
 			t.Fatalf("Repo.GetTriggerEventByChat(%s): %v", kind, err)
 		}
@@ -200,7 +200,7 @@ func TestTriggerEventQueries(t *testing.T) {
 	if err := store.SetLaunchEventRunStatus(ctx, env.ORM, "chat-none", core.TriggerRunFailed); err != nil {
 		t.Fatalf("SetLaunchEventRunStatus(no launch event): %v", err)
 	}
-	if l, _ := env.Repo.GetTriggerEventByChatID(ctx, "chat-ev"); l.RunStatus != core.TriggerRunCompleted {
+	if l, _ := store.GetTriggerEventByChatID(ctx, env.Repo.ORM(), "chat-ev"); l.RunStatus != core.TriggerRunCompleted {
 		t.Fatalf("launch run status = %q, want completed", l.RunStatus)
 	}
 	if r, _ := store.GetTriggerEventByDedupe(ctx, env.ORM, core.TriggerEventKindSchedule, replay.DedupeKey); r.RunStatus != "" {
@@ -383,15 +383,9 @@ func TestTriggerFiringQueries(t *testing.T) {
 		}
 		sameValue(t, "RecentTriggerFirings", port, viaExt)
 
-		port, err = store.FiringsSinceLastSuccess(ctx, env.ORM, storetest.SeedUserID, triggerIDs, per)
-		if err != nil {
+		if _, err = store.FiringsSinceLastSuccess(ctx, env.ORM, storetest.SeedUserID, triggerIDs, per); err != nil {
 			t.Fatalf("FiringsSinceLastSuccess(%d): %v", per, err)
 		}
-		twin, err := env.Repo.FiringsSinceLastSuccess(ctx, storetest.SeedUserID, triggerIDs, per)
-		if err != nil {
-			t.Fatalf("Repo.FiringsSinceLastSuccess(%d): %v", per, err)
-		}
-		sameValue(t, "FiringsSinceLastSuccess", port, twin)
 	}
 	recent, _ := store.RecentTriggerFirings(ctx, env.ORM, storetest.SeedUserID, triggerIDs, 2)
 	if len(recent) != 1 || !reflect.DeepEqual(pageIDs(recent["trg-f1"]), []string{"f1-live", "f1-fail-b"}) {
@@ -407,6 +401,21 @@ func TestTriggerFiringQueries(t *testing.T) {
 	full, _ := store.RecentTriggerFirings(ctx, env.ORM, storetest.SeedUserID, triggerIDs, 50)
 	if f := full["trg-f1"][0].Event; f.Payload["n"] != float64(1) || f.Sender == nil {
 		t.Fatalf("RecentTriggerFirings(f1-live) = %+v, want its payload and sender", f)
+	}
+	// Only the newest firing is shown (last_event), so only it carries a
+	// body: the older ones are judged, never rendered, and decoding every
+	// body was most of ListTriggers' CPU in prod.
+	if len(full["trg-f1"]) < 2 {
+		t.Fatalf("RecentTriggerFirings(trg-f1) = %d firings, want several", len(full["trg-f1"]))
+	}
+	for _, f := range full["trg-f1"][1:] {
+		if len(f.Event.Payload) != 0 || f.Event.Sender != nil || f.Event.Origin != nil || f.Event.Definition != nil {
+			t.Fatalf("RecentTriggerFirings(%s) = payload %v, sender %v, origin %v, definition %v; want the body on the newest firing only",
+				f.Event.ID, f.Event.Payload, f.Event.Sender, f.Event.Origin, f.Event.Definition)
+		}
+		if f.Event.Outcome == "" || f.Event.OccurredAt.IsZero() {
+			t.Fatalf("RecentTriggerFirings(%s) = %+v, want its outcome columns", f.Event.ID, f.Event)
+		}
 	}
 	outcomes, _ := store.RecentTriggerOutcomes(ctx, env.ORM, storetest.SeedUserID, triggerIDs, 50)
 	for name, read := range map[string]map[string][]*core.TriggerEventWithRun{"RecentTriggerOutcomes": outcomes, "FiringsSinceLastSuccess": since} {

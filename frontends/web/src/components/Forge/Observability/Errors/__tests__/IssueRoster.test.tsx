@@ -6,7 +6,7 @@ import { describe, expect, it, vi } from "vitest";
 import { Code, ConnectError } from "@connectrpc/connect";
 import { peopleKeys } from "@/hooks/observability-queries";
 import { createTestQueryClient } from "@/test/renderWithQuery";
-import { ObservabilityApiProvider } from "@/services/controlPlane/observability/ObservabilityApiContext";
+import { ObservabilityFixtures } from "@/test/observabilityFixtures";
 import type { IssueRoster } from "@/services/controlPlane/observability/membersApi";
 import { createFixtureApi } from "../../__fixtures__/fixtureApi";
 import { IssueAssignee } from "../IssueAssignee";
@@ -19,10 +19,10 @@ async function rig(reader: "ada" | "grace" = "ada") {
   client.setDefaultOptions({ queries: { ...client.getDefaultOptions().queries, gcTime: Infinity } });
   const view = (orgId: string) => (
     <QueryClientProvider client={client}>
-      <ObservabilityApiProvider api={api}>
+      <ObservabilityFixtures api={api}>
         <IssueAssignee issue={detail.issue} orgId={orgId} />
         <IssueTimeline issueId={detail.issue.id} orgId={orgId} />
-      </ObservabilityApiProvider>
+      </ObservabilityFixtures>
     </QueryClientProvider>
   );
   return { api, client, view };

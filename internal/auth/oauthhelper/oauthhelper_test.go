@@ -112,19 +112,25 @@ func TestAllowedOrigins_HonoursWebOriginsAndFrontendPort(t *testing.T) {
 	allowed := buildAllowedOrigins(WebOrigins([]string{"http://localhost:4321", " http://localhost:4322"}, " 3600 "))
 
 	for _, want := range []string{
-		"http://localhost:4321",      // from RELIANT_WEB_ORIGIN
-		"http://localhost:4322",      // second entry, whitespace trimmed
-		"http://localhost:3600",      // derived from FRONTEND_PORT
-		"http://127.0.0.1:3600",      // loopback twin
-		"https://app.reliantlabs.io", // hosted default
-		"http://localhost:5173",      // vite default
+		"http://localhost:4321",        // from RELIANT_WEB_ORIGIN
+		"http://localhost:4322",        // second entry, whitespace trimmed
+		"http://localhost:3600",        // derived from FRONTEND_PORT
+		"http://127.0.0.1:3600",        // loopback twin
+		"https://app.reliantlabs.io",   // hosted default
+		"https://forge.reliantlabs.io", // the same bundle on the forge host
+		"http://localhost:5173",        // vite default
 	} {
 		if !allowed[want] {
 			t.Errorf("origin %q should be allowed", want)
 		}
 	}
-	if allowed["http://evil.example.com"] {
-		t.Error("an undeclared origin must not be allowed")
+	for _, never := range []string{
+		"http://evil.example.com",
+		"https://evil.reliantlabs.io", // exact origins, never a suffix match
+	} {
+		if allowed[never] {
+			t.Errorf("undeclared origin %q must not be allowed", never)
+		}
 	}
 }
 
@@ -155,6 +161,66 @@ func TestCORS_OnlyReflectsAllowedOrigins(t *testing.T) {
 			defer resp.Body.Close()
 			if got := resp.Header.Get("Access-Control-Allow-Origin"); got != tc.want {
 				t.Errorf("Access-Control-Allow-Origin = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+// The hosted app is one bundle on several hosts. A helper started with no
+// configuration (plain `reliant auth serve`) must answer every one of them, on
+// the probe and on its preflight: admitting only app.reliantlabs.io made the
+// forge.reliantlabs.io tab report "helper not running" against a running
+// helper.
+func TestCORS_AdmitsEveryHostedWebOrigin(t *testing.T) {
+	srv := startTestServer(t, "auth-serve")
+
+	for _, origin := range []string{
+		"https://app.reliantlabs.io",
+		"https://forge.reliantlabs.io",
+		"https://reliant-prod.web.app",
+	} {
+		t.Run(origin, func(t *testing.T) {
+			for _, method := range []string{http.MethodGet, http.MethodOptions} {
+				req, _ := http.NewRequest(method, "http://"+srv.Addr()+"/health", nil)
+				req.Header.Set("Origin", origin)
+				resp, err := http.DefaultClient.Do(req)
+				if err != nil {
+					t.Fatalf("%s: %v", method, err)
+				}
+				resp.Body.Close()
+				if got := resp.Header.Get("Access-Control-Allow-Origin"); got != origin {
+					t.Errorf("%s Access-Control-Allow-Origin = %q, want %q", method, got, origin)
+				}
+			}
+		})
+	}
+}
+
+// Chrome's Private Network Access preflight must be granted to an allowed
+// origin, or a public page cannot reach loopback at all, and never to any
+// other origin.
+func TestCORS_PrivateNetworkPreflight(t *testing.T) {
+	srv := startTestServer(t, "auth-serve")
+
+	for name, tc := range map[string]struct {
+		origin string
+		want   string
+	}{
+		"allowed":    {"https://forge.reliantlabs.io", "true"},
+		"disallowed": {"https://evil.example.com", ""},
+	} {
+		t.Run(name, func(t *testing.T) {
+			req, _ := http.NewRequest(http.MethodOptions, "http://"+srv.Addr()+"/health", nil)
+			req.Header.Set("Origin", tc.origin)
+			req.Header.Set("Access-Control-Request-Method", http.MethodGet)
+			req.Header.Set("Access-Control-Request-Private-Network", "true")
+			resp, err := http.DefaultClient.Do(req)
+			if err != nil {
+				t.Fatalf("OPTIONS: %v", err)
+			}
+			resp.Body.Close()
+			if got := resp.Header.Get("Access-Control-Allow-Private-Network"); got != tc.want {
+				t.Errorf("Access-Control-Allow-Private-Network = %q, want %q", got, tc.want)
 			}
 		})
 	}
