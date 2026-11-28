@@ -1,8 +1,9 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * control-plane `controlplane.v1.IdentityService`, mapped into the console's
- * model. The only file that knows its wire shape.
+ * control-plane `controlplane.v1.IdentityService`'s answers, mapped into the
+ * console's model. The calls are the generated hooks'; this is the only file
+ * that knows the wire shape of what they return.
  *
  * WHAT IT IS. An environment's managed identity is a Zitadel instance the
  * control plane runs for it. platform-api relays every call to the identity
@@ -26,8 +27,8 @@
  * it and hands it to the screen, and nothing logs it.
  */
 
+import type { MessageInitShape } from "@bufbuild/protobuf";
 import type { Timestamp } from "@bufbuild/protobuf/wkt";
-import type { Client, Transport } from "@connectrpc/connect";
 
 import {
   IdentityDeliveryState as WireDeliveryState,
@@ -39,13 +40,15 @@ import {
   type IdentityPasswordCode as WirePasswordCode,
   type IdentityUser as WireUser,
 } from "@/gen/controlplane/controlplane/v1/identity_pb";
-import { IdentityService } from "@/gen/controlplane/services/identity/v1/identity_pb";
-
-import { getControlPlaneClient } from "../client";
-
-function client(transport?: Transport) {
-  return getControlPlaneClient(IdentityService, transport);
-}
+import type {
+  GetIdentityExportURLResponse,
+  GetIdentityStatusResponse,
+  GetIdentityUserResponse,
+  ListIdentityUsersRequestSchema,
+  ListIdentityUsersResponse,
+  RequestIdentityExportResponse,
+  SetIdentityUserRolesResponse,
+} from "@/gen/controlplane/services/identity/v1/identity_pb";
 
 function msOf(ts: Timestamp | undefined): number | null {
   if (!ts) return null;
@@ -268,16 +271,18 @@ function mapUser(u: WireUser): IdentityUser {
   };
 }
 
-// ── RPCs ─────────────────────────────────────────────────────────────────────
+// ── Wire → model ─────────────────────────────────────────────────────────────
+//
+// The calls themselves are the generated hooks'
+// (hooks/controlplane/identity-service-hooks_gen.ts, through
+// hooks/identity-queries.ts); these map their answers, as each hook's
+// `select` or a write's onSuccess.
 
-export { currentOrgId } from "../orgs";
-
-export function createIdentityReadApi(readerClient: Pick<Client<typeof IdentityService>, "getIdentityStatus" | "getUser" | "listUsers">) {
-async function getIdentityStatus(orgId: string, environmentId: string): Promise<IdentityStatus> {
-  const r = await readerClient.getIdentityStatus({ orgId, environmentId });
+/** GetIdentityStatus' answer. Module-level, so a hook's `select` keeps one result per response. */
+export function toIdentityStatus(r: GetIdentityStatusResponse): IdentityStatus {
   return {
     hasInstance: r.hasInstance,
-    state: STATE[r.state] ?? "unknown",
+    state: identityStateOf(r.state),
     issuer: r.issuer,
     domain: r.domain,
     public: r.public,
@@ -312,26 +317,36 @@ async function getIdentityStatus(orgId: string, environmentId: string): Promise<
   };
 }
 
-async function getIdentityUser(orgId: string, environmentId: string, userId: string): Promise<IdentityUser | null> {
-  const r = await readerClient.getUser({ orgId, environmentId, userId });
+/** An instance's state as a word: the status poll reads it off the wire answer before `select` runs. */
+export function identityStateOf(state: WireState): IdentityState {
+  return STATE[state] ?? "unknown";
+}
+
+/** GetUser's answer: null when the instance has no such user. */
+export function toIdentityUser(r: GetIdentityUserResponse): IdentityUser | null {
   return r.user ? mapUser(r.user) : null;
 }
 
-async function listIdentityUsers(
+export const USERS_PAGE_SIZE = 50;
+
+/** ListUsers' first-page request for a filter; the infinite read adds each next page's token. */
+export function listIdentityUsersRequest(
   orgId: string,
   environmentId: string,
-  filter: IdentityUserFilter,
-  pageToken: string
-): Promise<IdentityUsersPage> {
+  filter: IdentityUserFilter
+): MessageInitShape<typeof ListIdentityUsersRequestSchema> {
   const query = filter.query?.trim();
-  const r = await readerClient.listUsers({
+  return {
     orgId,
     environmentId,
     query: query ? query : undefined,
     state: filter.state ? USER_STATE_TO_WIRE[filter.state] : undefined,
     pageSize: USERS_PAGE_SIZE,
-    pageToken,
-  });
+  };
+}
+
+/** One page of ListUsers. */
+export function toIdentityUsersPage(r: ListIdentityUsersResponse): IdentityUsersPage {
   return {
     users: r.users.map(mapUser),
     nextPageToken: r.nextPageToken,
@@ -341,113 +356,25 @@ async function listIdentityUsers(
   };
 }
 
-return { getStatus: getIdentityStatus, getUser: getIdentityUser, listUsers: listIdentityUsers };
+/** SetUserRoles' answer: the user with their new roles. */
+export function toUpdatedIdentityUser(r: SetIdentityUserRolesResponse): IdentityUser | null {
+  return r.user ? mapUser(r.user) : null;
 }
-export const USERS_PAGE_SIZE = 50;
-export const getIdentityStatus = (...args: Parameters<ReturnType<typeof createIdentityReadApi>["getStatus"]>) => createIdentityReadApi(client()).getStatus(...args);
-export const getIdentityUser = (...args: Parameters<ReturnType<typeof createIdentityReadApi>["getUser"]>) => createIdentityReadApi(client()).getUser(...args);
-export const listIdentityUsers = (...args: Parameters<ReturnType<typeof createIdentityReadApi>["listUsers"]>) => createIdentityReadApi(client()).listUsers(...args);
-
-type IdentityReads = ReturnType<typeof createIdentityReadApi>;
 
 /**
- * The same three reads on `transport`: a TransportScope's (the Identity tab's
- * context default, IdentityApiContext), or none for the app's. The client is
- * still resolved per call.
+ * A returned password-set code (InviteUser, SendPasswordReset with
+ * `returnCode`): null when there is none — an absent or empty code is never a
+ * blank credential.
  */
-export function identityReadsOn(transport?: Transport): IdentityReads {
-  return {
-    getStatus: (...args) => createIdentityReadApi(client(transport)).getStatus(...args),
-    getUser: (...args) => createIdentityReadApi(client(transport)).getUser(...args),
-    listUsers: (...args) => createIdentityReadApi(client(transport)).listUsers(...args),
-  };
-}
-
-function mapCode(c: WirePasswordCode | undefined): IdentityPasswordCode | null {
+export function toIdentityPasswordCode(c: WirePasswordCode | undefined): IdentityPasswordCode | null {
   if (!c?.code) return null;
   return { code: c.code, expiresAtMs: msOf(c.expiresAt), resetUrl: c.resetUrl };
 }
 
 /**
- * Creates the account if needed and grants the console-managed roles. Without
- * `returnCode` the instance emails the invitation (refused when mail delivery
- * is none); with it the password-set code comes back instead, for an account
- * that has no credential yet.
+ * RequestExport's or GetExportURL's signed download. The URL is a bearer
+ * credential for every password hash: never log, toast or cache it.
  */
-export async function inviteIdentityUser(
-  orgId: string,
-  environmentId: string,
-  args: { email: string; roles: string[]; returnCode?: boolean },
-  transport?: Transport
-): Promise<{ userId: string; created: boolean; code: IdentityPasswordCode | null }> {
-  const r = await client(transport).inviteUser({
-    orgId,
-    environmentId,
-    email: args.email.trim(),
-    roles: args.roles,
-    returnCode: args.returnCode ?? false,
-  });
-  return { userId: r.userId, created: r.created, code: mapCode(r.code) };
-}
-
-/** Replaces the user's COMPLETE set of console-managed roles. Declared roles are left as they are. */
-export async function setIdentityUserRoles(
-  orgId: string,
-  environmentId: string,
-  args: { userId: string; roles: string[] },
-  transport?: Transport
-): Promise<IdentityUser | null> {
-  const r = await client(transport).setUserRoles({ orgId, environmentId, userId: args.userId, roles: args.roles });
-  return r.user ? mapUser(r.user) : null;
-}
-
-/**
- * Without `returnCode` the instance emails a reset link and this returns null;
- * with it, the password-set code is handed back instead (it needs the
- * identity:manage permission, not only the admin role).
- */
-export async function sendIdentityPasswordReset(
-  orgId: string,
-  environmentId: string,
-  userId: string,
-  opts: { returnCode?: boolean } = {},
-  transport?: Transport
-): Promise<IdentityPasswordCode | null> {
-  const r = await client(transport).sendPasswordReset({ orgId, environmentId, userId, returnCode: opts.returnCode ?? false });
-  return mapCode(r.code);
-}
-
-export async function lockIdentityUser(orgId: string, environmentId: string, userId: string, transport?: Transport): Promise<void> {
-  await client(transport).lockUser({ orgId, environmentId, userId });
-}
-
-export async function unlockIdentityUser(orgId: string, environmentId: string, userId: string, transport?: Transport): Promise<void> {
-  await client(transport).unlockUser({ orgId, environmentId, userId });
-}
-
-export async function deleteIdentityUser(orgId: string, environmentId: string, userId: string, transport?: Transport): Promise<void> {
-  await client(transport).deleteUser({ orgId, environmentId, userId });
-}
-
-/** Ends the user's sign-in sessions; returns how many. Access tokens already issued stay valid until they expire. */
-export async function revokeIdentitySessions(orgId: string, environmentId: string, userId: string, transport?: Transport): Promise<number> {
-  const r = await client(transport).revokeSessions({ orgId, environmentId, userId });
-  return r.sessionsRevoked;
-}
-
-/**
- * Exports the instance now — every user, password hashes included — and signs
- * a download of it (requests within the same 15 minutes share one export).
- * Needs the identity:manage permission. The URL is a bearer credential for
- * every password hash: never log, toast or cache it.
- */
-export async function requestIdentityExport(orgId: string, environmentId: string, transport?: Transport): Promise<IdentityExportURL> {
-  const r = await client(transport).requestExport({ orgId, environmentId });
-  return { url: r.exportUrl, expiresAtMs: msOf(r.expiresAt) };
-}
-
-/** A fresh signed URL for the export that already exists. The URL is a bearer credential: never log it. */
-export async function getIdentityExportURL(orgId: string, environmentId: string, transport?: Transport): Promise<IdentityExportURL> {
-  const r = await client(transport).getExportURL({ orgId, environmentId });
+export function toIdentityExportURL(r: RequestIdentityExportResponse | GetIdentityExportURLResponse): IdentityExportURL {
   return { url: r.exportUrl, expiresAtMs: msOf(r.expiresAt) };
 }

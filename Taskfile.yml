@@ -67,6 +67,27 @@ vars:
   # overridden from the command line (`task test GOTESTRACE=`). Clearing it
   # drops the race detector for one run; leave it set otherwise.
   GOTESTRACE: '-race'
+  # GO_TEST_VET is every Go test lane's vet switch, empty by default: go test
+  # runs its built-in vet subset (atomic, bool, buildtags, directive,
+  # errorsas, ifaceassert, nilfunc, printf, stringintconv, tests) over each
+  # package it tests, and over every dependency for printf facts, under
+  # action IDs no `go vet` run shares. A gate that runs `go vet` over the same
+  # packages (test files included) sets it to -vet=off for its test step: the
+  # merge gate's default tier (scripts/merge-gate.sh, whose vet phase covers
+  # every package its test phase tests) and the release gate's test-go
+  # (scripts/release-gate.sh, beside its `vet.sh ./...` step). The flag is
+  # not in Go's test-result cache key, so a lane with vet off replays the
+  # results of one with it on. Leave it empty in your inner loop: no other
+  # step vets what `task test:short` tests. `GO_TEST_VET=-vet=off task test`
+  # or `task test GO_TEST_VET=-vet=off` turns it off for one run, and an
+  # exported GO_TEST_VET (empty included) wins over a gate's default.
+  #
+  # Not -ldflags=-w: `go test` already links every test binary it runs with
+  # `-s -w` (cmd/go's OmitDebug for a test main), so the flag would only move
+  # every link's action ID. Only `go test -c`, `-o` and the profile flags
+  # keep DWARF; build:packages' -c link passes -w itself.
+  GO_TEST_VET:
+    sh: 'printf %s "${GO_TEST_VET-}"'
   # SLOT runs the heavy lanes (`test`, `test:integration`, `coverage`, a full
   # `test:affected` lane, the docs check) inside one of this machine's
   # host-wide heavy slots: `forge machine slot run` waits while N other heavy jobs
@@ -254,10 +275,14 @@ tasks:
     # The e2e stories' imports are compiled too, and every test package
     # (scripts/test-build.sh, the merge gate's testbuild phase), so the merge
     # queue recompiles only the test packages its change reaches.
+    # The e2e binary is linked with -ldflags=-w: `go test -c` keeps DWARF
+    # (only a test binary go test runs itself is linked -s -w), and nothing
+    # reads /dev/null's. Not when your GOFLAGS has -ldflags, which a
+    # command-line -ldflags would replace rather than join.
     desc: Compile every package and every test package (and what the e2e stories import) into the Go build cache
     cmds:
       - go build ./...
-      - go test -tags e2e -c -o /dev/null ./e2e/stories
+      - 'case " $GOFLAGS " in *" -ldflags"*|*" --ldflags"*) w= ;; *) w=-ldflags=-w ;; esac; go test -tags e2e -c -o /dev/null $w ./e2e/stories'
       - scripts/test-build.sh
 
   build:dev-cli:
@@ -304,7 +329,7 @@ tasks:
     # dev-docs/testing-affected.md.
     desc: "Run ONLY the tests and codegen checks your diff can reach, and say why (LANES=go,web,electron,forge-generate,docs-generate)"
     cmds:
-      - TEST_AFFECTED_SLOT='{{.SLOT}}' go run ./tools/test-affected run {{if .LANES}}-lanes {{.LANES}} {{end}}{{.CLI_ARGS}}
+      - TEST_AFFECTED_SLOT='{{.SLOT}}' GO_TEST_VET='{{.GO_TEST_VET}}' go run ./tools/test-affected run {{if .LANES}}-lanes {{.LANES}} {{end}}{{.CLI_ARGS}}
 
   test:affected:plan:
     desc: Print what test:affected would run and why, without running it
@@ -342,7 +367,7 @@ tasks:
     # Go only — web and electron run in `task test` / `task test:web`.
     desc: "Inner-loop Go tests: -short, cached, no race. Scope it: task test:short -- ./internal/foo/..."
     cmds:
-      - go test -short -timeout 5m {{if .CLI_ARGS}}{{.CLI_ARGS}}{{else}}./...{{end}}
+      - go test {{.GO_TEST_VET}} -short -timeout 5m {{if .CLI_ARGS}}{{.CLI_ARGS}}{{else}}./...{{end}}
 
   test:sdk:
     # The Go SDK (sdk/go) is its own module: the root `./...` stops at its
@@ -352,7 +377,7 @@ tasks:
     desc: "Go SDK module tests (sdk/go): -short, no workspace. Scope it: task test:sdk -- ./reliant/follow/..."
     dir: sdk/go
     cmds:
-      - env GOWORK=off go test -short -timeout 5m {{if .CLI_ARGS}}{{.CLI_ARGS}}{{else}}./...{{end}}
+      - env GOWORK=off go test {{.GO_TEST_VET}} -short -timeout 5m {{if .CLI_ARGS}}{{.CLI_ARGS}}{{else}}./...{{end}}
 
   test:sdk:full:
     # The SDK module without -short, as `task test` (the release gate) runs it:
@@ -361,7 +386,7 @@ tasks:
     desc: "Go SDK module tests (sdk/go), the full tier: no -short, no workspace"
     dir: sdk/go
     cmds:
-      - env GOWORK=off go test {{.GOTESTRACE}} -count=1 -timeout 10m {{if .CLI_ARGS}}{{.CLI_ARGS}}{{else}}./...{{end}}
+      - env GOWORK=off go test {{.GO_TEST_VET}} {{.GOTESTRACE}} -timeout 10m {{if .CLI_ARGS}}{{.CLI_ARGS}}{{else}}./...{{end}}
 
   test:
     # Everything after `--` REPLACES the default `./...`, so it takes both
@@ -384,9 +409,9 @@ tasks:
     # coverage under .forge/tests/runs/), the web tests as lane `frontend`
     # (scripts/test-capture.sh); `forge test report` summarises them. The
     # verdict is the tests' own; FORGE_TESTS=off records nothing.
-    desc: Run Go unit tests (-race -count=1) and the web and electron tests (excludes integration + e2e)
+    desc: Run Go unit tests (-race, cached) and the web and electron tests (excludes integration + e2e)
     cmds:
-      - '{{.SLOT}} ./scripts/test-capture.sh go unit {{.GOTESTRACE}} -count=1 -timeout 300s {{if .CLI_ARGS}}{{.CLI_ARGS}}{{else}}./...{{end}}'
+      - '{{.SLOT}} ./scripts/test-capture.sh go unit {{.GO_TEST_VET}} {{.GOTESTRACE}} -timeout 300s {{if .CLI_ARGS}}{{.CLI_ARGS}}{{else}}./...{{end}}'
       - task: test:sdk:full
         if: '[ -z "{{.CLI_ARGS}}" ]'
       - task: test:web
@@ -404,7 +429,7 @@ tasks:
         pkgs="{{.CLI_ARGS}}"
         [ -n "$pkgs" ] || pkgs=$(./scripts/integration-packages.sh | tr '\n' ' ')
         if [ -z "$pkgs" ]; then echo "test:integration: no integration-tagged test files; nothing to run"; exit 0; fi
-        {{.SLOT}} ./scripts/test-capture.sh go integration {{.GOTESTRACE}} -tags=integration -count=1 -timeout=10m $pkgs
+        {{.SLOT}} ./scripts/test-capture.sh go integration {{.GO_TEST_VET}} {{.GOTESTRACE}} -tags=integration -timeout=10m $pkgs
 
   test:e2e:
     # e2e/stories: real Postgres (pgtest's, as every DB-backed test) + an
@@ -413,7 +438,7 @@ tasks:
     # (scripts/test-capture.sh), its -v output printed as before.
     desc: Run the hermetic story e2e tests (-tags e2e, ./e2e/stories/)
     cmds:
-      - ./scripts/test-capture.sh go e2e -tags e2e -count=1 -timeout=10m -v {{if .CLI_ARGS}}{{.CLI_ARGS}}{{else}}./e2e/stories/{{end}}
+      - ./scripts/test-capture.sh go e2e {{.GO_TEST_VET}} -tags e2e -count=1 -timeout=10m -v {{if .CLI_ARGS}}{{.CLI_ARGS}}{{else}}./e2e/stories/{{end}}
 
   test:all:
     desc: Run the unit (Go + web + electron) and integration suites (e2e has its own task)
@@ -421,16 +446,33 @@ tasks:
       - task: test
       - task: test:integration
 
+  test:report:
+    # Test runs are recorded. `task test` and `task test:integration` run
+    # their commands through `forge test capture`, which changes nothing
+    # about how the tests run or what they exit with, and records each lane
+    # under .forge/tests/runs/<id>/ (gitignored): the results, the coverage,
+    # the command and its exit status. FORGE_TESTS=off records nothing.
+    #
+    # This summarises them: results, coverage merged across lanes, diff
+    # coverage against your base. `task test:report -- --upload` also sends
+    # the clean-tree runs to the project's control plane (no source: results,
+    # coverage counts and changed line ranges), with your `forge login` or a
+    # FORGE_CONTROL_PLANE_TOKEN holding tests:write. CI uploads by default;
+    # without a credential that is one line on stderr, never a failure.
+    desc: "Summarise the recorded test runs (results, merged coverage); -- --upload sends them to the control plane"
+    cmds:
+      - '{{.FORGE}} test report {{.CLI_ARGS}}'
+
   coverage:
     desc: Run Go unit tests with coverage and emit coverage.html
     cmds:
-      - '{{.SLOT}} go test -race -coverprofile=coverage.out -covermode=atomic ./...'
+      - '{{.SLOT}} go test {{.GO_TEST_VET}} -race -coverprofile=coverage.out -covermode=atomic ./...'
       - go tool cover -html=coverage.out -o coverage.html
 
   bench:
     desc: Run Go benchmarks (go test -bench=. across the module)
     cmds:
-      - go test -bench=. -benchmem -run=^$ ./...
+      - go test {{.GO_TEST_VET}} -bench=. -benchmem -run=^$ ./...
 
   replay-fixtures:
     # See internal/workflow/runtime/replaytest/fixtures/README.md: regenerating
@@ -589,6 +631,20 @@ tasks:
     desc: "Is HEAD (or `-- <rev>`) release-ready? exit 0 green | 1 red | 3 no record"
     cmds:
       - ./scripts/release-gate.sh check {{.CLI_ARGS}}
+
+  gate:
+    # The Reliant merge queue's gate (.reliant/pipeline.yaml's test stage):
+    # today's main push suite as one command, on HEAD. The release gate's four
+    # parts (each in a private checkout), Playwright and the electron package
+    # smoke, migration order and the repo checks, concurrently, in one table.
+    # scripts/gate.sh says what each lane runs and what it leaves out. Never
+    # recorded or published. Exit 0 pass | 1 fail | 2 unproven (a lane could
+    # not run, or failed only on the host); task itself turns any failure into
+    # 201, so `task --exit-code gate` keeps them. 40-70 minutes: run it in the
+    # background. GATE_LANES=go,web narrows it; GATE_BASE names the base.
+    desc: "The merge queue's gate: the main push suite on HEAD (release gate parts, Playwright, electron package, repo checks); exit 0 pass | 1 fail | 2 unproven"
+    cmds:
+      - ./scripts/gate.sh
 
   # ── What CI adds to the two gates ─────────────────────────────────────
   # .github/workflows/ci.yml is a thin wrapper: a pull request runs
@@ -782,16 +838,20 @@ tasks:
       - task: generate:controlplane
 
   licenses:
-    desc: "Every Go and npm dependency is on the license allowlist (.license-allowlist, .license-allowlist-npm)"
+    desc: "Every Go and npm dependency's license is allowed (forge.yaml ci.license, .license-allowlist-npm)"
     cmds:
       - task: licenses:go
       - task: licenses:npm
 
   licenses:go:
-    desc: Every Go dependency's license is allowlisted (scripts/check-licenses.sh)
+    # forge's license-check row under forge.yaml ci.license (an allowlist
+    # plus reasoned per-module exceptions); replaced scripts/check-licenses.sh.
+    desc: Every Go dependency's license is allowed (forge ci gate license-check, forge.yaml ci.license)
+    env:
+      CI_ONLY: license-check
     cmds:
       - go mod download
-      - ./scripts/check-licenses.sh {{.CLI_ARGS}}
+      - '{{.FORGE}} ci gate checks'
 
   licenses:npm:
     desc: Every npm dependency of frontends/web is allowlisted (scripts/check-npm-licenses.sh)

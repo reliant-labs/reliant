@@ -14,6 +14,22 @@ enum FileNodeType {
   FILE_NODE_TYPE_DIRECTORY = 2;
 }
 
+// FileNodeSymlinkStatus says whether a symbolic link in the file tree can be
+// followed. UNSPECIFIED means the entry is not a symbolic link (or the daemon
+// predates this field).
+enum FileNodeSymlinkStatus {
+  FILE_NODE_SYMLINK_STATUS_UNSPECIFIED = 0;
+  // The link resolves to an existing file or directory.
+  FILE_NODE_SYMLINK_STATUS_RESOLVED = 1;
+  // The link's target does not exist, or the link is part of a cycle of links.
+  FILE_NODE_SYMLINK_STATUS_BROKEN = 2;
+  // The link points at a directory that contains it (itself or an ancestor).
+  FILE_NODE_SYMLINK_STATUS_LOOP = 3;
+  // The link points at a directory the tree does not list: a credential store
+  // (~/.ssh, ~/.aws, ...), or a place outside a confined caller's root.
+  FILE_NODE_SYMLINK_STATUS_DENIED = 4;
+}
+
 // FileViewerKind describes how Reliant should render a file.
 enum FileViewerKind {
   FILE_VIEWER_KIND_UNSPECIFIED = 0;
@@ -93,6 +109,15 @@ service FileSystemService {
       activity: {none: "filesystem edit through the daemon: an empty directory is not even something git records"}
     };
   }
+
+  // DownloadFile returns the whole content of a file of any kind (text,
+  // image, spreadsheet, archive, ...), for saving it on the user's device.
+  // It is scoped and guarded exactly like the viewer reads (GetFilePreview),
+  // and refuses a file over 25 MB with FailedPrecondition and the error
+  // reason "file_too_large_to_download".
+  rpc DownloadFile(DownloadFileRequest) returns (DownloadFileResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 }
 
 // ============================================
@@ -112,6 +137,15 @@ message FileNode {
   // chevron for lazily-loaded directories without fetching their children.
   // Only meaningful when children are not eagerly included (depth-limited walks).
   bool has_children = 7;
+  // symlink_target is set when the entry is a symbolic link: the link's own
+  // text, as readlink reports it. type, size and modified then describe what
+  // the link resolves to, so a link to a directory is a DIRECTORY the UI
+  // expands like any other folder.
+  optional string symlink_target = 8;
+  // symlink_status is set for a symbolic link. A link that is not RESOLVED is
+  // listed but cannot be opened or expanded (has_children is false); the UI
+  // says why.
+  FileNodeSymlinkStatus symlink_status = 9;
 }
 
 // FileMetadata contains detailed information about a file or directory
@@ -457,5 +491,25 @@ message GetFilePreviewResponse {
   bytes content = 1; // Raw binary file content
   string content_type = 2; // MIME type (e.g. "image/png", "application/pdf")
   string filename = 3; // Base filename for Content-Disposition
+  int64 size = 4; // File size in bytes
+}
+
+// ============================================
+// DownloadFile
+// ============================================
+
+message DownloadFileRequest {
+  string project_id = 1;
+  // The file to download: relative to the workspace, or absolute on the
+  // machine that holds it (as the viewer reads accept).
+  string path = 2;
+  optional string worktree_id = 3;
+  optional string chat_id = 4;
+}
+
+message DownloadFileResponse {
+  bytes content = 1; // The file's raw bytes
+  string content_type = 2; // MIME type; "application/octet-stream" when unknown
+  string filename = 3; // Base filename to save as
   int64 size = 4; // File size in bytes
 }

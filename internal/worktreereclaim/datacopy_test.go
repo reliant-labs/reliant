@@ -14,7 +14,9 @@ import (
 // An ignored file that is a byte-identical copy of the source checkout's file
 // at the same path is not unique data: removing the worktree loses nothing.
 // That is how a worktree gets its dev secrets and .env, and it held every such
-// worktree forever. Both paths remove it.
+// worktree forever. Both paths remove it, the automatic one included (owner,
+// 2026-11-25: control-plane's secrets/dev.yaml held 35 worktrees on one
+// machine at "protected descendant: secrets").
 func TestReconcile_IgnoredCopyOfSourceDoesNotHold(t *testing.T) {
 	t.Parallel()
 	if testing.Short() {
@@ -29,12 +31,9 @@ func TestReconcile_IgnoredCopyOfSourceDoesNotHold(t *testing.T) {
 		w := f.worktree("copy-"+name, "feat/copy-"+name)
 		write(t, filepath.Join(w.Path, "secrets", "dev.yaml"), "token: abc\n")
 		write(t, filepath.Join(w.Path, ".env"), "KEY=1\n")
-		got := play(w)
-		if name == "auto" {
-			if got.Outcome != OutcomeHeld || !exists(filepath.Join(w.Path, ".env")) {
-				t.Fatalf("automatic cleanup must preserve protected paths even when copied: %+v", got)
-			}
-		} else if got.Outcome != OutcomeRemoved || exists(w.Path) {
+		// The automatic path too: the retirement inventory judges the
+		// never-listed copies as the classifier does (sourceCovers).
+		if got := play(w); got.Outcome != OutcomeRemoved || exists(w.Path) {
 			t.Fatalf("%s: got %+v, want removed", name, got)
 		}
 	}
@@ -124,6 +123,81 @@ func TestCopyInSource_RefusesPathsThatLeaveTheSource(t *testing.T) {
 		if got := d.copyInSource(rel, full, info); got != want {
 			t.Errorf("%s: got %v, want %v", rel, got, want)
 		}
+	}
+}
+
+// A source path through a symlink is never a copy, wherever the link leads: out
+// of the source to an unrelated file, to another file in the checkout being
+// removed, or even to a file elsewhere in the source. The copy is opened with no
+// symlink followed at any component (openSourceCopy), so no check of where the
+// path resolves can be raced by swapping the link before the open (review B1,
+// PR #3646: a worktree-only secret judged covered by an external file).
+func TestSourceCovers_RefusesASymlinkedSourcePath(t *testing.T) {
+	const secret = "token: only-here\n"
+	for _, c := range []struct {
+		name string
+		rel  string
+		// setup builds the source's side; the checkout holds secret at rel.
+		setup func(t *testing.T, checkout, source, outside string)
+		want  bool
+	}{
+		{"a real directory in the source", "secrets/dev.yaml", func(t *testing.T, _, source, _ string) {
+			write(t, filepath.Join(source, "secrets", "dev.yaml"), secret)
+		}, true},
+		{"secrets links out of the source", "secrets/dev.yaml", func(t *testing.T, _, source, outside string) {
+			write(t, filepath.Join(outside, "dev.yaml"), secret)
+			symlink(t, outside, filepath.Join(source, "secrets"))
+		}, false},
+		{"secrets links into the checkout being removed", "secrets/dev.yaml", func(t *testing.T, checkout, source, _ string) {
+			write(t, filepath.Join(checkout, "stash", "dev.yaml"), secret)
+			symlink(t, filepath.Join(checkout, "stash"), filepath.Join(source, "secrets"))
+		}, false},
+		{"secrets links elsewhere in the source", "secrets/dev.yaml", func(t *testing.T, _, source, _ string) {
+			write(t, filepath.Join(source, "vault", "dev.yaml"), secret)
+			symlink(t, filepath.Join(source, "vault"), filepath.Join(source, "secrets"))
+		}, false},
+		{"a deeper parent links out of the source", "config/secrets/dev.yaml", func(t *testing.T, _, source, outside string) {
+			write(t, filepath.Join(outside, "secrets", "dev.yaml"), secret)
+			symlink(t, outside, filepath.Join(source, "config"))
+		}, false},
+		{"the file itself is a link", "secrets/dev.yaml", func(t *testing.T, _, source, outside string) {
+			write(t, filepath.Join(outside, "dev.yaml"), secret)
+			if err := os.MkdirAll(filepath.Join(source, "secrets"), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			symlink(t, filepath.Join(outside, "dev.yaml"), filepath.Join(source, "secrets", "dev.yaml"))
+		}, false},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			base, err := filepath.EvalSymlinks(t.TempDir())
+			if err != nil {
+				t.Fatal(err)
+			}
+			checkout, source, outside := filepath.Join(base, "wt"), filepath.Join(base, "src"), filepath.Join(base, "other")
+			for _, dir := range []string{source, outside} {
+				if err := os.MkdirAll(dir, 0o755); err != nil {
+					t.Fatal(err)
+				}
+			}
+			full := filepath.Join(checkout, filepath.FromSlash(c.rel))
+			write(t, full, secret)
+			c.setup(t, checkout, source, outside)
+			have, err := os.Open(full)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer have.Close()
+			if got := sourceCovers(source, checkout, c.rel, have); got != c.want {
+				t.Fatalf("sourceCovers = %v, want %v", got, c.want)
+			}
+		})
+	}
+}
+
+func symlink(t *testing.T, target, link string) {
+	t.Helper()
+	if err := os.Symlink(target, link); err != nil {
+		t.Fatal(err)
 	}
 }
 

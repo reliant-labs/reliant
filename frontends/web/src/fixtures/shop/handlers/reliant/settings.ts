@@ -2,12 +2,13 @@
 
 /**
  * SettingsService and CatalogService: Alex is past onboarding (the wizard and
- * the getting-started guide dismissed), shares no analytics, has Anthropic
- * and OpenAI connected, and picks from four models with a smart / default /
- * fast tier each.
+ * the getting-started guide dismissed), shares no analytics, keeps the
+ * default shortcuts and preferences, has Anthropic and OpenAI connected, and
+ * picks from four models with a smart / default / fast tier each.
  */
 import type { ChecklistItemId } from "@/components/Onboarding/types";
 import { CatalogService, type ModelInfo } from "@/gen/reliant/v1/catalog_pb";
+import { ConfigScope } from "@/gen/reliant/v1/common_pb";
 import { SettingsService } from "@/gen/reliant/v1/settings_pb";
 
 import { DAY } from "../../shopStory";
@@ -64,6 +65,14 @@ export function settingsHandlers() {
       // Alex's config is healthy. (The server heals a stale legacy key as it reads, so the rpc
       // declares no NO_SIDE_EFFECTS: it is one of the app pack's named `answers`, app.ts.)
       getConfigHealth: () => ({ errors: [], errorCount: 0, warningCount: 0 }),
+      // Every shortcut at its default binding.
+      getShortcuts: () => ({ shortcuts: "{}" }),
+      // The defaults a new account starts with (hooks/settings-queries.ts DEFAULT_PREFERENCES).
+      getPreferences: () => ({
+        streamingEnabled: true, worktreeArchiveMode: "ask_me", worktreeDefaultDeleteBranch: false, additional: {}, defaultAutoApprove: false,
+        branchCopyUncommittedFilesDefault: false, defaultPlanningMode: false, defaultMcpScope: ConfigScope.PROJECT, defaultWorkflowScope: ConfigScope.PROJECT,
+        defaultWorkflow: "builtin://agent", hideBuiltinWorkflows: false, hideBuiltinPresets: false, hiddenWorkflowSlugs: [], hiddenPresetSlugs: [],
+      }),
       getProviderStatuses: () => ({
         providers: [
           { provider: "anthropic", configured: true, displayName: "Anthropic", outputModalities: ["text"], accountCount: 1 },
@@ -80,6 +89,8 @@ export function settingsHandlers() {
           { tag: "fast", modelId: "claude-haiku-4-5", thinkingLevel: "" },
         ],
       }),
+      // The workflow catalog's search: nothing published to it matches (the library lists Alex's own and the built-ins).
+      searchCatalog: () => ({ entries: [], nextPageToken: "", totalSize: 0, categoryFacets: [] }),
       listAvailableModels: () => ({
         models: MODELS.map((m) => ({
           id: m.id, displayName: m.name, provider: m.provider, family: m.provider, apiModel: m.id, contextWindow: m.contextWindow,

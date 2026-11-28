@@ -16,20 +16,31 @@ import { createClient, createRouterTransport, type Transport } from "@connectrpc
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { BillingService } from "@/gen/controlplane/services/billing/v1/billing_pb";
+import { GitCredentialService } from "@/gen/controlplane/services/git_credential/v1/git_credential_pb";
 import { ObservabilityBillingService } from "@/gen/controlplane/services/observability_billing/v1/observability_billing_pb";
+import { DaemonService } from "@/gen/controlplane/services/daemon/v1/daemon_pb";
+import { LLMGatewayService } from "@/gen/controlplane/services/llm_gateway/v1/llm_gateway_pb";
+import { OrganizationService } from "@/gen/controlplane/services/organization/v1/organization_pb";
 import { UserService } from "@/gen/controlplane/services/user/v1/user_pb";
 import { ApprovalService } from "@/gen/reliant/v1/approval_pb";
 import { AttachmentService, GetAttachmentResponseSchema } from "@/gen/reliant/v1/attachment_pb";
+import { BackgroundService } from "@/gen/reliant/v1/background_pb";
 import { CatalogService } from "@/gen/reliant/v1/catalog_pb";
 import { ChatService, ListMessagesResponseSchema } from "@/gen/reliant/v1/chat_pb";
+import { ConnectorService } from "@/gen/reliant/v1/connector_pb";
 import { DaemonRegistryService } from "@/gen/reliant/v1/daemon_registry_pb";
 import { ForgeService } from "@/gen/reliant/v1/forge_pb";
+import { InboxItemKind, InboxService } from "@/gen/reliant/v1/inbox_pb";
 import { MCPService } from "@/gen/reliant/v1/mcp_pb";
+import { PresetService } from "@/gen/reliant/v1/preset_pb";
 import { ListProjectsWithAppsResponseSchema, ProjectService } from "@/gen/reliant/v1/project_pb";
+import { ProviderAccountService } from "@/gen/reliant/v1/provider_account_pb";
 import { QuestionService } from "@/gen/reliant/v1/question_pb";
 import { RunService } from "@/gen/reliant/v1/run_pb";
 import { SettingsService } from "@/gen/reliant/v1/settings_pb";
+import { SharingService } from "@/gen/reliant/v1/sharing_pb";
 import { StreamingService } from "@/gen/reliant/v1/streaming_pb";
+import { SystemService } from "@/gen/reliant/v1/system_pb";
 import { TriggerService } from "@/gen/reliant/v1/trigger_pb";
 import { WorkflowService } from "@/gen/reliant/v1/workflow_pb";
 import { WorktreeService } from "@/gen/reliant/v1/worktree_pb";
@@ -55,14 +66,20 @@ const FIXED_NOW = Date.UTC(2026, 10, 18, 15, 30);
 const SERVICES: DescService[] = [
   ApprovalService, AttachmentService, CatalogService, ChatService, DaemonRegistryService, ForgeService, MCPService, ProjectService, QuestionService, RunService,
   SettingsService, StreamingService, TriggerService, WorkflowService, WorktreeService, BillingService, UserService, ObservabilityBillingService,
+  BackgroundService, ConnectorService, InboxService, PresetService, ProviderAccountService, SharingService, SystemService,
+  DaemonService, LLMGatewayService, OrganizationService, GitCredentialService,
 ];
 const METHODS = new Map<string, DescMethod>(SERVICES.flatMap((s) => s.methods.map((m) => [`${s.typeName}/${m.name}`, m] as const)));
 
 /** What the app layer answers: phase 2's Appendix A b-rl and b-cp rows, plus the observability usage the visual harness answers and forge's reports the console preview reads. */
 const RELIANT_KEYS = [
-  "ApprovalService/ListApprovalsByChat", "AttachmentService/GetAttachment", "CatalogService/ListAvailableModels", "CatalogService/ListModels",
-  "ChatService/GetChat", "ChatService/GetWorkflowExecutions", "ChatService/ListArchivedChats", "ChatService/ListChats", "ChatService/ListMessages",
-  "DaemonRegistryService/ListDaemons", "MCPService/ListRecommended", "MCPService/ListServers", "ForgeService/GetEnvShape", "ForgeService/GetEnvStatus", "ForgeService/GetTopology", "ProjectService/GetProject", "ProjectService/ListProjects", "ProjectService/ListProjectsWithApps",
+  "ApprovalService/ListApprovalsByChat", "AttachmentService/GetAttachment", "BackgroundService/ListProcesses", "CatalogService/ListAvailableModels",
+  "CatalogService/ListModels", "CatalogService/SearchCatalog", "ChatService/GetChat", "ChatService/GetWorkflowExecutions", "ChatService/ListArchivedChats",
+  "ChatService/ListChatProjects", "ChatService/ListChats", "ChatService/ListMessages", "ChatService/ListQueuedAgentMessages", "ConnectorService/ListConnectors",
+  "DaemonRegistryService/ListDaemons", "InboxService/ListInbox", "PresetService/GetDefaultPresetsBatch", "PresetService/ListPresetsForWorkflow",
+  "ProjectService/ListProjectDaemons", "ProviderAccountService/GetChatProviderAccount", "ProviderAccountService/ListProviderAccounts",
+  "SettingsService/GetPreferences", "SettingsService/GetShortcuts", "SharingService/ListSharedChats", "StreamingService/StreamOrgUpdates",
+  "SystemService/Version", "WorkflowService/GetWorkflow", "MCPService/ListRecommended", "MCPService/ListServers", "ForgeService/GetEnvShape", "ForgeService/GetEnvStatus", "ForgeService/GetTopology", "ProjectService/GetProject", "ProjectService/ListProjects", "ProjectService/ListProjectsWithApps",
   "QuestionService/ListAsyncQuestions", "QuestionService/ListPendingQuestions", "RunService/LastRunPerWorkflow", "RunService/ListRuns",
   "SettingsService/GetConfigHealth", "SettingsService/GetPrivacySettings", "SettingsService/GetProviderStatuses", "SettingsService/ListSettings",
   "StreamingService/StreamChatUpdates", "StreamingService/StreamUserUpdates", "TriggerService/ListTriggers", "WorkflowService/ListWorkflows",
@@ -73,7 +90,13 @@ const CONTROL_PLANE_KEYS = [
     "GetCurrentUserReliantOverview", "GetCurrentUserSubscription", "GetCurrentUserWalletOverview", "GetProjectCost", "GetStorageUsage",
     "ListCurrentUserInvoices", "ListOrganizationUsage", "ListPlans"].map((m) => `controlplane.v1.BillingService/${m}`),
   "controlplane.v1.UserService/GetCurrentUser",
+  "controlplane.v1.OrganizationService/ListMembers",
+  "controlplane.v1.LLMGatewayService/GetLLMSpend",
+  "controlplane.v1.DaemonService/GetDaemon",
   "observability_billing.v1.ObservabilityBillingService/GetObservabilityUsage",
+  "controlplane.v1.GitCredentialService/GetGitCredential",
+  "controlplane.v1.OrganizationService/ListGitHubAppInstallations",
+  "controlplane.v1.OrganizationService/ListLinkableGitHubAppInstallations",
 ];
 
 /** The request each key is asked with: one that names something the story has. */
@@ -91,6 +114,13 @@ const REQUESTS: Record<string, Record<string, unknown>> = {
   "reliant.v1.StreamingService/StreamChatUpdates": { chatId: CHAT_IDS.cartTotals },
   "reliant.v1.WorktreeService/GetWorktree": { worktreeId: WORKTREE_IDS.main },
   "controlplane.v1.BillingService/GetProjectCost": { projectId: "shop" },
+  "reliant.v1.ChatService/ListChatProjects": { chatId: CHAT_IDS.cartTotals },
+  "reliant.v1.ProviderAccountService/GetChatProviderAccount": { chatId: CHAT_IDS.cartTotals },
+  "reliant.v1.WorkflowService/GetWorkflow": { projectId: PROJECT_IDS.shop, name: "builtin://agent" },
+  "controlplane.v1.OrganizationService/ListMembers": { orgId: "org-acme" },
+  "controlplane.v1.DaemonService/GetDaemon": { daemonId: "shop-d-cloud" },
+  "controlplane.v1.OrganizationService/ListGitHubAppInstallations": { orgId: "org-acme" },
+  "controlplane.v1.OrganizationService/ListLinkableGitHubAppInstallations": { orgId: "org-acme" },
 };
 
 /** The app pack, served as fixture mode serves it (today's read-only classifier, the pack clock). */
@@ -112,7 +142,7 @@ describe("the app layer", () => {
     const keys = Object.keys(appLayerScenarioHandlers()).sort();
     expect(keys).toEqual([...RELIANT_KEYS, ...CONTROL_PLANE_KEYS].sort());
     for (const key of keys) expect(METHODS.has(key), key).toBe(true);
-    expect(RELIANT_KEYS).toHaveLength(32);
+    expect(RELIANT_KEYS).toHaveLength(49);
   });
 
   it.each([...RELIANT_KEYS, ...CONTROL_PLANE_KEYS].filter((k) => METHODS.get(k)?.methodKind === "unary"))("%s answers a schema-valid, wire-safe message", async (key) => {
@@ -165,6 +195,28 @@ describe("the app layer", () => {
     expect(snapshot.case === "snapshot" && snapshot.value.otherUpdates).toHaveLength(2);
     const sub = await client.listMessages({ chatId: CHAT_IDS.cartTotals, threadId: "th-review-1" });
     expect(sub.messages.map((m) => m.thread)).toEqual(["th-review-1"]);
+  });
+
+  it("lists in the Inbox what the story already shows: the chat's approval and questions, and the failing automation", async () => {
+    const transport = appTransport();
+    const inbox = await createClient(InboxService, transport).listInbox({});
+    expect(inbox.items.map((i) => i.kind)).toEqual([InboxItemKind.APPROVAL, InboxItemKind.QUESTION, InboxItemKind.QUESTION, InboxItemKind.AUTOMATION_FAILING]);
+    expect([inbox.blockingCount, inbox.hasInformational]).toEqual([2, true]);
+    // The badge's counts-only read agrees, and docs has nothing waiting.
+    const counts = await createClient(InboxService, transport).listInbox({ limit: 0 });
+    expect([counts.items.length, counts.blockingCount]).toEqual([0, 2]);
+    expect(await createClient(InboxService, transport).listInbox({ projectId: PROJECT_IDS.docs })).toMatchObject({ items: [], blockingCount: 0, otherProjectsCount: 4 });
+
+    const [approval, asyncQuestion, blockingQuestion, automation] = inbox.items;
+    const { approvals } = await createClient(ApprovalService, transport).listApprovalsByChat({ chatId: CHAT_IDS.cartTotals });
+    expect(approval.payload.case === "approval" && approval.payload.value.approvalId).toBe(approvals[0].id);
+    const asked = await createClient(QuestionService, transport).listAsyncQuestions({ chatId: CHAT_IDS.cartTotals });
+    expect(asyncQuestion.payload.case === "question" && asyncQuestion.payload.value.questionId).toBe(asked.questions[0].questionId);
+    const pending = await createClient(QuestionService, transport).listPendingQuestions({ chatId: CHAT_IDS.rateLimit });
+    expect(blockingQuestion.payload.case === "question" && blockingQuestion.payload.value.questionId).toBe(pending.questions[0].questionId);
+    const { triggers } = await createClient(TriggerService, transport).listTriggers({});
+    const nightly = triggers.find((t) => t.id === automation.triggerId)!;
+    expect(automation.payload.case === "automationFailing" && automation.payload.value.health).toEqual(nightly.health);
   });
 
   it("answers the bearer-link reads with obviously fake links", async () => {

@@ -39,6 +39,7 @@ func connectorGrant(daemonID string) *connectorgrant.Grant {
 }
 
 func TestConnectorGrantExtQueries(t *testing.T) {
+	t.Parallel()
 	env, grants, daemonID := connectorFixture(t)
 	ctx := context.Background()
 
@@ -93,6 +94,7 @@ func TestConnectorGrantExtQueries(t *testing.T) {
 }
 
 func TestConnectorAuditExtQueries(t *testing.T) {
+	t.Parallel()
 	env, grants, daemonID := connectorFixture(t)
 	ctx := context.Background()
 	g := connectorGrant(daemonID)
@@ -140,6 +142,7 @@ func TestConnectorAuditExtQueries(t *testing.T) {
 }
 
 func TestConnectorClientBindingExtQueries(t *testing.T) {
+	t.Parallel()
 	env, grants, daemonID := connectorFixture(t)
 	ctx := context.Background()
 	first, second := connectorGrant(daemonID), connectorGrant(daemonID)

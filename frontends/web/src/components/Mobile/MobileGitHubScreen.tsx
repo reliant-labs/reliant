@@ -54,8 +54,8 @@ export function MobileGitHubScreen({ onBack }: { onBack?: () => void }) {
               >
                 <MobileRowIcon icon={Github} />
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium text-foreground">Clone a repo</p>
-                  <p className="truncate text-xs text-muted-foreground">
+                  <p className="text-ui font-medium text-foreground">Clone a repo</p>
+                  <p className="truncate text-meta text-muted-foreground">
                     Browse your repositories and clone one onto a machine
                   </p>
                 </div>

@@ -132,29 +132,3 @@ func (r *Repo) ListToolCallsByIDs(ctx context.Context, toolCallIDs []string) ([]
 	}
 	return calls, nil
 }
-
-// ListStrandedSpawnToolCalls reads spawn calls whose child workflow has
-// reached a terminal status but which never received a result — the join
-// from a finished sub-agent back to its parent, broken by a worker that died
-// between the two writes. Cleanup cannot find these: it is scoped to the
-// thread of the workflow that is ENDING, and a stranded row belongs to the
-// still-live parent's thread.
-func (r *Repo) ListStrandedSpawnToolCalls(ctx context.Context) ([]*ToolCall, error) {
-	return store.ListStrandedSpawnToolCalls(ctx, r.ORM())
-}
-
-// ListStrandedBackgroundSpawnToolCalls is the async-spawn counterpart to
-// ListStrandedSpawnToolCalls: a background=true spawn writes its tool_calls
-// row to status 6 (backgrounded) with a result AT DISPATCH TIME, so it can
-// never match the sync query's anchor. This one is anchored on the mailbox
-// instead (spec: async-spawn-and-agent-messaging.md, §7.1).
-func (r *Repo) ListStrandedBackgroundSpawnToolCalls(ctx context.Context) ([]*StrandedBackgroundSpawn, error) {
-	return store.ListStrandedBackgroundSpawnToolCalls(ctx, r.ORM())
-}
-
-// ListBackgroundedProcessToolCalls reads every backgrounded call whose
-// outcome lives in a daemon's process table (status 6, no child workflow),
-// for the reconciler sweep that closes them once the process has ended.
-func (r *Repo) ListBackgroundedProcessToolCalls(ctx context.Context) ([]*BackgroundedProcessCall, error) {
-	return store.ListBackgroundedProcessToolCalls(ctx, r.ORM())
-}

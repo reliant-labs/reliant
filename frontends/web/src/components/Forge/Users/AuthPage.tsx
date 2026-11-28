@@ -19,7 +19,7 @@ import type { ReactNode } from "react";
 import { ExternalLink } from "lucide-react";
 
 import Link from "@/components/forge-ui/link";
-import PageHeader from "@/components/forge-ui/page_header";
+import { ConsolePageHeader } from "../Console/severalSectionContext";
 import { cn } from "@/lib/utils";
 
 import { useForgeConsole } from "../Console/consoleContext";
@@ -37,7 +37,7 @@ export function AuthPage() {
   const tab: AuthTab = page.kind === "auth" ? (page.tab ?? "users") : "users";
   return (
     <div className="min-w-0 space-y-4" data-testid="console-auth" data-tab={tab}>
-      <PageHeader
+      <ConsolePageHeader
         density="compact"
         className="mb-0"
         title="Auth"

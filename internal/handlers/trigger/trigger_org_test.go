@@ -20,6 +20,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/orgs"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // triggerOrgSource: every caller is a live member of acme and home, not of
@@ -68,7 +69,7 @@ func (e *triggerTestEnv) createIn(ctx context.Context, projectID string, org *st
 
 func (e *triggerTestEnv) userTriggers(t *testing.T) []*core.Trigger {
 	t.Helper()
-	stored, err := e.repo.ListTriggers(context.Background(), core.TriggerFilters{UserID: e.userID})
+	stored, err := store.ListTriggersForUser(context.Background(), e.repo.ORM(), core.TriggerFilters{UserID: e.userID})
 	require.NoError(t, err)
 	return stored
 }
@@ -141,7 +142,7 @@ func TestUpdateTrigger_StaysInItsOrg(t *testing.T) {
 		return err
 	}
 	stored := func(id string) *core.Trigger {
-		tr, err := env.repo.GetTrigger(context.Background(), id)
+		tr, err := store.GetTrigger(context.Background(), env.repo.ORM(), id)
 		require.NoError(t, err)
 		return tr
 	}
@@ -188,7 +189,7 @@ func TestUpdateTrigger_ActsInTheTriggersOrg(t *testing.T) {
 	acmeProject, acmeOther := env.orgProject(t, &acme), env.orgProject(t, &acme)
 	created, err := env.createIn(env.ctx, acmeProject, nil)
 	require.NoError(t, err)
-	before, err := env.repo.GetTrigger(context.Background(), created.GetId())
+	before, err := store.GetTrigger(context.Background(), env.repo.ORM(), created.GetId())
 	require.NoError(t, err)
 
 	update := func(ctx context.Context, projectID string) error {
@@ -203,7 +204,7 @@ func TestUpdateTrigger_ActsInTheTriggersOrg(t *testing.T) {
 	}
 	unchanged := func() {
 		t.Helper()
-		after, err := env.repo.GetTrigger(context.Background(), created.GetId())
+		after, err := store.GetTrigger(context.Background(), env.repo.ORM(), created.GetId())
 		require.NoError(t, err)
 		assert.Equal(t, before.ProjectID, after.ProjectID)
 		assert.Equal(t, before.Message, after.Message)
@@ -301,7 +302,7 @@ func TestUpdateTrigger_ABackfillBetweenDecisionAndWriteIsRefused(t *testing.T) {
 		require.NoError(t, err)
 		_, err = env.repo.ORM().Bun().NewRaw(`UPDATE triggers SET org_id = NULL WHERE id = ?`, created.GetId()).Exec(context.Background())
 		require.NoError(t, err)
-		stored, err := env.repo.GetTrigger(context.Background(), created.GetId())
+		stored, err := store.GetTrigger(context.Background(), env.repo.ORM(), created.GetId())
 		require.NoError(t, err)
 		require.Nil(t, stored.OrgID)
 		return stored
@@ -325,7 +326,7 @@ func TestUpdateTrigger_ABackfillBetweenDecisionAndWriteIsRefused(t *testing.T) {
 	refused := func(name string, tr *core.Trigger, projectID string) {
 		t.Helper()
 		requireDenied(t, update(tr, projectID), connect.CodeFailedPrecondition, "")
-		after, err := env.repo.GetTrigger(context.Background(), tr.ID)
+		after, err := store.GetTrigger(context.Background(), env.repo.ORM(), tr.ID)
 		require.NoError(t, err)
 		assert.Equal(t, tr.ProjectID, after.ProjectID, name)
 		assert.Equal(t, tr.Message, after.Message, name)
@@ -363,7 +364,7 @@ func TestUpdateTrigger_ABackfillAfterAnEmptyDecisionIsRefused(t *testing.T) {
 	from, to := env.orgProject(t, nil), env.orgProject(t, nil)
 	created, err := env.createIn(env.ctx, from, nil)
 	require.NoError(t, err)
-	before, err := env.repo.GetTrigger(context.Background(), created.GetId())
+	before, err := store.GetTrigger(context.Background(), env.repo.ORM(), created.GetId())
 	require.NoError(t, err)
 	require.Nil(t, before.OrgID, "no default: created with no org")
 
@@ -375,7 +376,7 @@ func TestUpdateTrigger_ABackfillAfterAnEmptyDecisionIsRefused(t *testing.T) {
 		Trigger: env.definition(func(d *reliantv1.TriggerDefinition) { d.ProjectId = to }),
 	}))
 	requireDenied(t, err, connect.CodeFailedPrecondition, "")
-	after, err := env.repo.GetTrigger(context.Background(), created.GetId())
+	after, err := store.GetTrigger(context.Background(), env.repo.ORM(), created.GetId())
 	require.NoError(t, err)
 	assert.Equal(t, from, after.ProjectID, "the move did not land")
 	require.NotNil(t, after.OrgID)

@@ -8,7 +8,9 @@
 //
 // 1. PAGES: loads `/`, the build story and every forge console page by URL. Problems:
 //    - a request to any origin but the site's own (the demo reaches no backend);
-//    - a 4xx/5xx response from the site itself (other than /_otel);
+//    - a 4xx/5xx response from the site itself (other than /_otel, and a 404
+//      for /config.js on a local preview: the host serves config.js at runtime,
+//      so `vite preview --mode demo` has none, and the demo runs on its defaults);
 //    - an uncaught page error, or a console error naming CORS;
 //    - `/` not landing on the Home (/forge/demo?section=home, sections/DemoHome.tsx),
 //      or the Home missing any of: its one hero heading; its "Open the console",
@@ -22,7 +24,10 @@
 //      `[data-testid=shell-nav]`: every page of the demo is a page of the app's
 //      one shell, Layout/shell/AppShell.tsx, with the demo's nav, demoNavConfig.ts);
 //    - the sample image's preview (Storage, staging) not rendering, or its URL
-//      not same-origin or shaped like a presigned GCS/S3 link.
+//      not same-origin or shaped like a presigned GCS/S3 link;
+//    - Experiments listing no change, the A/B test showing no results readout,
+//      or either saying Experiments aren't available (the shop pack answers
+//      ChangesService, fixtures/shop/handlers/changes.ts).
 //    Per page it also prints how often "Sample data isn't available" showed (an
 //    RPC the demo has no sample data for): a content gap, not a failure.
 //
@@ -58,7 +63,8 @@
 // DEMO_AUDITED_ENVS (default "prod"): the environments the demo audits.
 // DEMO_SMOKE_RUN_ID (default: the start time): the run id in the reason.
 //
-// CHROME: PLAYWRIGHT_CHROMIUM_EXECUTABLE (default /usr/bin/google-chrome).
+// CHROME: PLAYWRIGHT_CHROMIUM_EXECUTABLE (default /usr/bin/google-chrome when it
+// exists, else Playwright's own chromium).
 // SCREENSHOT_DIR=<dir> saves each page (pass 1) as <dir>/<path>.png.
 // SETTLE_MS: how long a page gets to render (default 4000; nav clicks get half).
 
@@ -68,6 +74,8 @@ import { chromium } from "playwright";
 
 const base = (process.argv[2] ?? "http://127.0.0.1:4173").replace(/\/$/, "");
 const origin = new URL(base).origin;
+/** A local preview (vite preview), where no host serves the runtime config.js. */
+const localPreview = ["127.0.0.1", "localhost", "[::1]"].includes(new URL(base).hostname);
 const project = process.env.DEMO_PROJECT ?? "shop";
 const home = `/forge/p/${project}`;
 const settle = Number(process.env.SETTLE_MS ?? 4000);
@@ -84,6 +92,9 @@ const audited = [
 // SAMPLE_IMAGE_URL): same-origin, never shaped like a presigned GCS/S3 link.
 const sampleImagePage = `${home}/storage?env=staging&bucket=uploads&object=product-photo.png`;
 const PRESIGNED = /storage\.googleapis\.com|amazonaws\.com|X-Goog-|X-Amz-|Signature=|GoogleAccessId/i;
+// Experiments: the list, and the shop's A/B test (model/changes.ts), which has a readout.
+const experimentsPage = `${home}/experiments`;
+const experimentPage = `${home}/experiments/chg-express-checkout-prod`;
 // The demo's own pages, `?section=` of the demo console (demoPath.ts).
 const demoSection = (section) => `/forge/demo?section=${section}`;
 const pages = [
@@ -101,13 +112,15 @@ const pages = [
   `${home}/observability/logs`,
   `${home}/observability/dashboards`,
   `${home}/observability/alerts`,
-  `${home}/speed-insights`,
+  `${home}/site-insights`,
   `${home}/security/vulnerabilities`,
   `${home}/security/sboms`,
   `${home}/tests`,
   `${home}/tests/coverage`,
   `${home}/tests/runs`,
   `${home}/tests/flaky`,
+  experimentsPage,
+  experimentPage,
   ...(auditedEnvs.length ? audited.map((surface) => `${surface.path}?env=${auditedEnvs[0]}`) : []),
   sampleImagePage,
 ];
@@ -133,7 +146,7 @@ const tourStart = "forge:fg-intro";
 // these pages. A row is a link of its own: its label and where it goes.
 const navGroups = {
   Dashboards: [`${home}/observability/dashboards`],
-  Analytics: [`${home}/analytics`, ...["users", "product", "acquisition", "events"].map((tab) => `${home}/analytics/${tab}`)],
+  Analytics: [`${home}/analytics`, ...["users", "product", "acquisition", "events"].map((tab) => `${home}/analytics/${tab}`), experimentsPage],
   Deployments: [`${home}/services`, `${home}/releases`, `${home}/environments`],
   Tests: [`${home}/tests`, `${home}/tests/coverage`, `${home}/tests/runs`, `${home}/tests/flaky`],
   Security: [`${home}/security/vulnerabilities`, `${home}/security/sboms`],
@@ -148,7 +161,7 @@ const navDrill = {
     pages: [
       `${home}/observability`,
       ...["graph", "metrics", "logs", "rpc", "profiles", "errors", "alerts", "traces", "sessions"].map((view) => `${home}/observability/${view}`),
-      `${home}/speed-insights`,
+      `${home}/site-insights`,
     ],
   },
 };
@@ -173,7 +186,9 @@ const navKey = (href) => {
 /** A nav item the nav pass clicks: a project page, or a demo page of its own. */
 const inScope = (key) => key.startsWith(home) || key.startsWith("/forge/demo?section=");
 
-const browser = await chromium.launch({ executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE ?? "/usr/bin/google-chrome", args: ["--no-sandbox"] });
+const systemChrome = "/usr/bin/google-chrome";
+const executablePath = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE ?? (fs.existsSync(systemChrome) ? systemChrome : undefined);
+const browser = await chromium.launch({ executablePath, args: ["--no-sandbox"] });
 const failures = [];
 
 /** A page that records every problem the PAGES pass fails on. */
@@ -192,7 +207,9 @@ async function openPage(viewport) {
   });
   page.on("response", (res) => {
     const url = new URL(res.url());
-    if (url.origin === origin && res.status() >= 400 && !url.pathname.startsWith("/_otel")) problems.push(`${res.status()} ${url.pathname}`);
+    if (url.origin !== origin || res.status() < 400 || url.pathname.startsWith("/_otel")) return;
+    if (localPreview && res.status() === 404 && url.pathname === "/config.js") return;
+    problems.push(`${res.status()} ${url.pathname}`);
   });
   page.on("pageerror", (err) => problems.push(`page error: ${err.message}`));
   page.on("console", (msg) => {
@@ -506,6 +523,11 @@ try {
     if (!(await page.getByTestId("shell-nav").count())) problems.push("not in the app's shell (no [data-testid=shell-nav])");
     problems.push(...(await answerAudit(page, new Set())));
     if (path === sampleImagePage) problems.push(...(await checkSampleImage(page)));
+    if (path === experimentsPage || path === experimentPage) {
+      if (/Experiments aren't available/.test(text)) problems.push(`${path} says Experiments aren't available`);
+      if (path === experimentsPage && !(await page.locator("[data-testid^='change-row-']").count())) problems.push("Experiments lists no change");
+      if (path === experimentPage && !(await page.getByTestId("results-verdict").count())) problems.push("the A/B test shows no results readout");
+    }
     if (process.env.SCREENSHOT_DIR) {
       fs.mkdirSync(process.env.SCREENSHOT_DIR, { recursive: true });
       const name = path === "/" ? "root" : path.replace(/^\//, "").replace(/\//g, "_");

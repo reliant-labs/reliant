@@ -25,6 +25,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/models/message"
 	"github.com/reliant-labs/reliant/internal/nomachine"
 	"github.com/reliant-labs/reliant/internal/rctx"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 )
 
@@ -118,7 +119,7 @@ func TestStory13_NoMachineAutomationFiresEndToEnd(t *testing.T) {
 	launched := core.TriggerEventLaunched
 	var event *core.TriggerEvent
 	h.eventually("the fire to launch a run", func() (bool, string) {
-		ev, err := h.Stack.Repo.GetLatestTriggerEvent(h.Ctx, trigger.GetId(), &launched)
+		ev, err := store.GetLatestTriggerEvent(h.Ctx, h.Stack.Repo.ORM(), trigger.GetId(), &launched)
 		if err == nil && ev != nil && ev.ChatID != nil {
 			event = ev
 			return true, ""

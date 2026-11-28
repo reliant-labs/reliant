@@ -18,6 +18,7 @@ import (
 // to success, an earlier run's failure on the reused root id, and the
 // runtime's own bookkeeping steps are not one.
 func TestFirstHandledNodeFailure(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	seedChat(t, env, "chat-outcome")
@@ -110,6 +111,7 @@ func TestFirstHandledNodeFailure(t *testing.T) {
 // (RecordToleratedFailure). That row alone must make the run
 // failure_handled.
 func TestFirstHandledNodeFailure_ToleratedAgentEndedByTheBreaker(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	seedChat(t, env, "chat-tolerated")
@@ -162,6 +164,7 @@ func TestFirstHandledNodeFailure_ToleratedAgentEndedByTheBreaker(t *testing.T) {
 // by a time window around the run's start: a run that failed a node less than
 // the clock-skew allowance before its successor began is not the successor's.
 func TestFirstHandledNodeFailure_APriorRunJustBeforeTheSuccessorIsNotItsOwn(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	seedChat(t, env, "chat-adjacent")
@@ -219,6 +222,7 @@ func TestFirstHandledNodeFailure_APriorRunJustBeforeTheSuccessorIsNotItsOwn(t *t
 // successor's own execution began, and the chat's next run reads none of it.
 // Attempts recorded with no run id still fall back to the window.
 func TestFirstHandledNodeFailure_ContinueAsNewKeepsTheRunsAttempts(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	seedChat(t, env, "chat-can")
@@ -288,6 +292,7 @@ func TestFirstHandledNodeFailure_ContinueAsNewKeepsTheRunsAttempts(t *testing.T)
 // for FailStep: it names its run, and an attempt that names none (as FailStep
 // rows did) is never attributed to a known run by its time alone.
 func TestFirstHandledNodeFailure_AdjacentRunsFailStepIsNotTheCleanRuns(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	seedChat(t, env, "chat-failstep")

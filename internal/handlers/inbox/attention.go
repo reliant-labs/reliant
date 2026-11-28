@@ -49,7 +49,7 @@ func (s *Service) failingAutomations(ctx context.Context, lim readLimiter, reads
 			if len(ids) == 0 {
 				return nil
 			}
-			episodes, err = s.deps.Firings.FiringsSinceLastUnmanagedSuccess(gctx, userID, ids, triggers.EpisodeFirings)
+			episodes, err = s.deps.Firings.InboxEpisodes(gctx, userID, ids, triggers.EpisodeFirings, triggers.HealthWindow)
 			return err
 		})
 	})
@@ -60,7 +60,7 @@ func (s *Service) failingAutomations(ctx context.Context, lim readLimiter, reads
 			if len(ids) == 0 {
 				return nil
 			}
-			diagnosticEpisodes, err = s.deps.Firings.FiringsSinceLastSuccess(gctx, userID, ids, triggers.EpisodeFirings)
+			diagnosticEpisodes, err = s.deps.Firings.InboxEpisodeFailures(gctx, userID, ids, triggers.EpisodeFirings)
 			return err
 		})
 	})
@@ -71,7 +71,7 @@ func (s *Service) failingAutomations(ctx context.Context, lim readLimiter, reads
 			if len(ids) == 0 {
 				return nil
 			}
-			regs, err = s.deps.Repo.ListTriggerRegistrations(gctx, userID, ids)
+			regs, err = s.deps.Registrations.ListTriggerRegistrationsForUser(gctx, userID, ids)
 			return err
 		})
 	})

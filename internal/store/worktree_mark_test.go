@@ -18,6 +18,7 @@ import (
 // happened since it was placed.
 
 func TestMarkWorktreeForReclaim(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	c := landedFixture(t, env, "marked") // its rows quiet for an hour
@@ -57,6 +58,7 @@ func TestMarkWorktreeForReclaim(t *testing.T) {
 }
 
 func TestMarkWorktreeForReclaim_NotWhileARunIsGoing(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	c := landedFixture(t, env, "running")
@@ -68,6 +70,7 @@ func TestMarkWorktreeForReclaim_NotWhileARunIsGoing(t *testing.T) {
 }
 
 func TestArchiveMarkedWorktree(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	c := landedFixture(t, env, "reclaimed")
@@ -102,6 +105,7 @@ func TestArchiveMarkedWorktree(t *testing.T) {
 }
 
 func TestApproveAndListMarkedWorktrees(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	c := landedFixture(t, env, "listed")
@@ -151,6 +155,7 @@ func TestApproveAndListMarkedWorktrees(t *testing.T) {
 // list they saw, so a project that changed hands between the two keeps its
 // new owner's mark untouched.
 func TestMarkDecisions_FollowTheProjectsCurrentOwner(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	c := landedFixture(t, env, "transferred")

@@ -7,13 +7,14 @@ import { createClient } from "@connectrpc/connect";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { TestsService } from "@/gen/controlplane/services/tests/v1/tests_pb";
+import { BackgroundService } from "@/gen/reliant/v1/background_pb";
 import { ChatService } from "@/gen/reliant/v1/chat_pb";
 import { DaemonRegistryService } from "@/gen/reliant/v1/daemon_registry_pb";
-import { InboxService } from "@/gen/reliant/v1/inbox_pb";
 import { ProjectService } from "@/gen/reliant/v1/project_pb";
 import { SettingsService } from "@/gen/reliant/v1/settings_pb";
 import { StreamingService } from "@/gen/reliant/v1/streaming_pb";
-import { SystemService } from "@/gen/reliant/v1/system_pb";
+import { TokenService } from "@/gen/reliant/v1/token_pb";
+import { UsageService } from "@/gen/reliant/v1/usage_pb";
 
 import { createFixtureTransport, defineFixturePack } from "../../transport";
 import { shopAppPack } from "../app";
@@ -90,18 +91,18 @@ describe("the shop app pack's overlays", () => {
   it("empty-reads: an unanswered read is empty (a stream: one empty frame, held open) and noted; a write is still refused", async () => {
     window.__forgeFixtures = { unknown: [] } as never;
     const transport = served("empty-reads");
-    expect(await createClient(SystemService, transport).version({})).toBeDefined();
-    expect((await createClient(InboxService, transport).listInbox({})).items ?? []).toEqual([]);
+    expect(await createClient(UsageService, transport).getLLMUsage({})).toBeDefined();
+    expect((await createClient(TokenService, transport).listTokens({})).tokens ?? []).toEqual([]);
     const abort = new AbortController();
-    for await (const event of createClient(StreamingService, transport).streamOrgUpdates({}, { signal: abort.signal })) {
+    for await (const event of createClient(BackgroundService, transport).streamProcessOutput({}, { signal: abort.signal })) {
       expect(event.event.case).toBeUndefined();
       abort.abort();
       break;
     }
     expect((window.__forgeFixtures as unknown as { unknown: string[] }).unknown).toEqual([
-      "reliant.v1.SystemService/Version",
-      "reliant.v1.InboxService/ListInbox",
-      "reliant.v1.StreamingService/StreamOrgUpdates",
+      "reliant.v1.UsageService/GetLLMUsage",
+      "reliant.v1.TokenService/ListTokens",
+      "reliant.v1.BackgroundService/StreamProcessOutput",
     ]);
     // What the pack answers is untouched, and a write is refused, never answered empty.
     expect((await createClient(DaemonRegistryService, transport).listDaemons({})).daemons.length).toBeGreaterThan(0);

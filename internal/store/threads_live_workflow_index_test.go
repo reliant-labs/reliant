@@ -24,6 +24,7 @@ import (
 // statement settles on, with seq and bitmap scans off so an empty table cannot
 // make any plan acceptable.
 func TestLiveThreadStatementsUseLiveWorkflowIndex(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 

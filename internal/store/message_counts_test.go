@@ -95,6 +95,7 @@ func groupedRows(t *testing.T, env *storetest.Env, query string) string {
 // absorbed repeat), the atomic save, and a multi-row INSERT nobody has a Go
 // function for — moves the counts by exactly the rows it wrote.
 func TestMessageCounts_EveryInsertWriter(t *testing.T) {
+	t.Parallel()
 	f := newMsgFixture(t, "chat-count-insert")
 	ctx := context.Background()
 	requireCountsExact(t, f.env, f.chat, 0, f.main)
@@ -134,6 +135,7 @@ func TestMessageCounts_EveryInsertWriter(t *testing.T) {
 // transaction of the write, so a write that rolls back leaves them as they
 // were.
 func TestMessageCounts_RolledBackWriteCountsNothing(t *testing.T) {
+	t.Parallel()
 	f := newMsgFixture(t, "chat-count-rollback")
 	ctx := context.Background()
 	f.seedTranscript(t)
@@ -160,6 +162,7 @@ func TestMessageCounts_RolledBackWriteCountsNothing(t *testing.T) {
 // TestMessageCounts_ConcurrentWriters: savers racing on one chat, across its
 // threads, leave the counts exact.
 func TestMessageCounts_ConcurrentWriters(t *testing.T) {
+	t.Parallel()
 	f := newMsgFixture(t, "chat-count-race")
 	ctx := context.Background()
 
@@ -189,6 +192,7 @@ func TestMessageCounts_ConcurrentWriters(t *testing.T) {
 // row goes: a row exists exactly while its count is above zero), and a whole
 // project's chats leaves the counts exact and no row behind.
 func TestMessageCounts_Deletes(t *testing.T) {
+	t.Parallel()
 	f := newMsgFixture(t, "chat-count-delete")
 	ctx := context.Background()
 	f.seedTranscript(t)
@@ -213,6 +217,7 @@ func TestMessageCounts_Deletes(t *testing.T) {
 // TestMessageCounts_MovedMessageFollows: nothing moves a message to another
 // thread today, but if something does the counts follow it.
 func TestMessageCounts_MovedMessageFollows(t *testing.T) {
+	t.Parallel()
 	f := newMsgFixture(t, "chat-count-move")
 	ctx := context.Background()
 	f.seedTranscript(t)
@@ -234,6 +239,7 @@ func TestMessageCounts_MovedMessageFollows(t *testing.T) {
 // its counts are its own rows only — what count(*) by chat_id reports — and
 // the parent's are untouched by the branch's writes.
 func TestMessageCounts_BranchCountsOnlyItsOwnRows(t *testing.T) {
+	t.Parallel()
 	f := newMsgFixture(t, "chat-count-fork")
 	ctx := context.Background()
 	f.seedTranscript(t)
@@ -272,6 +278,7 @@ func TestMessageCounts_BranchCountsOnlyItsOwnRows(t *testing.T) {
 // come from the counts table and not from a count over messages: a bumped row
 // shows through.
 func TestMessageCounts_ReadFromTheCounts(t *testing.T) {
+	t.Parallel()
 	f := newMsgFixture(t, "chat-count-source")
 	ctx := context.Background()
 	f.seedTranscript(t)
@@ -329,6 +336,7 @@ func requirePending(t *testing.T, env *storetest.Env, chatID string, want bool) 
 // transaction counts the messages and leaves the chat pending; the first read
 // outside one initializes it, after which the rows are its counts.
 func TestMessageCounts_PendingChatInitializesOnFirstRead(t *testing.T) {
+	t.Parallel()
 	f := newMsgFixture(t, "chat-count-pending")
 	ctx := context.Background()
 	f.seedTranscript(t)
@@ -374,6 +382,7 @@ func TestMessageCounts_PendingChatInitializesOnFirstRead(t *testing.T) {
 // TestMessageCounts_ConcurrentInitialization: many reads initializing one
 // pending chat at once, while it is written to, add its older messages once.
 func TestMessageCounts_ConcurrentInitialization(t *testing.T) {
+	t.Parallel()
 	f := newMsgFixture(t, "chat-count-init-race")
 	ctx := context.Background()
 	f.seedTranscript(t)
@@ -410,6 +419,7 @@ func TestMessageCounts_ConcurrentInitialization(t *testing.T) {
 // TestMessageCounts_TruncateLeavesNothingToCount: emptying messages leaves no
 // counts and no pending chat behind.
 func TestMessageCounts_TruncateLeavesNothingToCount(t *testing.T) {
+	t.Parallel()
 	f := newMsgFixture(t, "chat-count-truncate")
 	ctx := context.Background()
 	f.seedTranscript(t)

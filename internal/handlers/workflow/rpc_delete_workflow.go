@@ -54,7 +54,7 @@ func (s *Service) DeleteWorkflow(
 			return err
 		}
 		for _, t := range removed {
-			if err := s.deps.Repo.DeleteTrigger(ctx, t.ID); err != nil {
+			if err := s.deps.Triggers.RemoveTrigger(ctx, t.ID); err != nil {
 				return fmt.Errorf("delete automation %q: %w", t.Name, err)
 			}
 		}
@@ -92,7 +92,7 @@ func plural(n int) string {
 // gone. One whose project still syncs a workflow of that name keeps working
 // (it resolves to the project's), so it stays.
 func (s *Service) automationsOfDeletedWorkflow(ctx context.Context, userID, slug string) ([]*core.Trigger, error) {
-	all, err := s.deps.Repo.ListTriggers(ctx, core.TriggerFilters{UserID: userID})
+	all, err := s.deps.Triggers.ListTriggersForUser(ctx, core.TriggerFilters{UserID: userID})
 	if err != nil {
 		return nil, fmt.Errorf("list automations: %w", err)
 	}

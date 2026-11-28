@@ -17,6 +17,7 @@ import (
 // the one column each selects, including a machine that synced nothing (NULL)
 // and one that never synced the project.
 func TestProjectMachineCatalogColumnReadsMatchTheRow(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	project := storetest.SeedProjectID
@@ -73,6 +74,7 @@ func TestProjectMachineCatalogColumnReadsMatchTheRow(t *testing.T) {
 // the trigger ids formatted into the text (pgdialect.Array), every distinct
 // set of ids was a new statement to parse and plan.
 func TestInboxTriggerFiringReadsBindTheirValues(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	// One connection, so every statement this test prepares is listed in
 	// the one session's pg_prepared_statements.

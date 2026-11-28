@@ -72,6 +72,7 @@ func seedDrafts(t *testing.T, env *storetest.Env) map[string]*core.WorkflowDraft
 }
 
 func TestWorkflowDraftReads(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	seeded := seedDrafts(t, env)
@@ -179,6 +180,7 @@ func TestWorkflowDraftReads(t *testing.T) {
 // whole stored row: the fields it changes, version bumped once, updated_at
 // restamped, and everything else as it was.
 func TestWorkflowDraftWrites(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 
@@ -296,6 +298,7 @@ func TestWorkflowDraftWrites(t *testing.T) {
 }
 
 func TestUpsertWorkflowDraftBySlug(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 
@@ -362,6 +365,7 @@ func TestUpsertWorkflowDraftBySlug(t *testing.T) {
 }
 
 func TestRemoveWorkflowDraft(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	seeded := seedDrafts(t, env)
@@ -430,6 +434,7 @@ func scenarioIDs(ss []*core.WorkflowScenario) []string {
 }
 
 func TestWorkflowScenarioReads(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	want := seedScenarios(t, env)
@@ -498,6 +503,7 @@ func TestWorkflowScenarioReads(t *testing.T) {
 }
 
 func TestWorkflowScenarioWrites(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	want := seedScenarios(t, env)
@@ -558,6 +564,7 @@ func TestWorkflowScenarioWrites(t *testing.T) {
 }
 
 func TestWorkflowScenarioRemoval(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	want := seedScenarios(t, env)

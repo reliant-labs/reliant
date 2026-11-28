@@ -94,7 +94,7 @@ func (e *adoptEnv) made(t *testing.T, def *reliantv1.TriggerDefinition) (*core.T
 
 func (e *adoptEnv) row(t *testing.T, id string) *core.Trigger {
 	t.Helper()
-	row, err := e.repo.GetTrigger(context.Background(), id)
+	row, err := store.GetTrigger(context.Background(), e.repo.ORM(), id)
 	require.NoError(t, err)
 	return row
 }
@@ -214,7 +214,7 @@ func TestAdoptAs_EveryCredentialBearingReferenceIsClearedOrReResolved(t *testing
 				rb.WebhookHmacSecret = &secret
 			},
 			check: func(t *testing.T, e *adoptEnv, old, adopted *core.Trigger, resp *reliantv1.AcceptTriggerOfferResponse, oldToken string) {
-				creds, err := e.repo.GetTriggerWebhookCredentials(context.Background(), adopted.ID)
+				creds, err := store.GetTriggerWebhookCredentials(context.Background(), e.repo.ORM(), adopted.ID)
 				require.NoError(t, err)
 				fresh := resp.GetWebhook().GetToken()
 				require.NotEmpty(t, fresh, "the adopter is shown a new token once")
@@ -327,7 +327,7 @@ func TestAdoptAs_EveryCredentialBearingReferenceIsClearedOrReResolved(t *testing
 				unchanged := e.row(t, old.ID)
 				assert.Equal(t, e.userID, unchanged.UserID, "a refused adoption changes nothing")
 				if old.Kind == core.TriggerKindWebhook {
-					creds, err := e.repo.GetTriggerWebhookCredentials(context.Background(), old.ID)
+					creds, err := store.GetTriggerWebhookCredentials(context.Background(), e.repo.ORM(), old.ID)
 					require.NoError(t, err)
 					h := sha256.Sum256([]byte(oldToken))
 					assert.Equal(t, h[:], creds.TokenHash, "a refused adoption leaves the token")

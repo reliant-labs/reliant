@@ -116,7 +116,7 @@ func newAsyncAnswerFixture(t *testing.T) *asyncAnswerFixture {
 	}))
 
 	messages := &recordingMessenger{}
-	svc := NewTestQuestion(t, WithQuestionDeps(Deps{Repo: repo, ChatRows: store.NewChatExtStore(repo.ORM()), Resolver: questions.NewFromRepo(repo), ChatViews: store.NewChatsWithActivityExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo}), Messages: messages, Signals: noSignals{t}}))
+	svc := NewTestQuestion(t, WithQuestionDeps(Deps{Repo: repo, ChatRows: store.NewChatExtStore(repo.ORM()), Resolver: questions.NewFromRepo(repo), ChatViews: store.NewChatsWithActivityExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo.UpdateWriter()}), Messages: messages, Signals: noSignals{t}}))
 	return &asyncAnswerFixture{
 		repo: repo, chatID: chatID, mainID: chatID, spawnID: "spawn-" + uuid.NewString(),
 		svc: svc, messages: messages,

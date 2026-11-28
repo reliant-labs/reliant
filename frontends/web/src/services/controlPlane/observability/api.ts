@@ -68,6 +68,7 @@ import {
 } from "@/gen/controlplane/services/observability/v1/observability_pb";
 import { DeclaredSpecGap as WireDeclaredSpecGap, WorkloadKind as WireWorkloadKind, type DeclaredWorkload as WireDeclaredWorkload } from "@/gen/controlplane/controlplane/v1/deploy_pb";
 import { ObservabilityBillingService, ObservabilityQuotaState } from "@/gen/controlplane/services/observability_billing/v1/observability_billing_pb";
+import type { GetObservabilityUsageResponse } from "@/gen/controlplane/services/observability_billing/v1/observability_billing_pb";
 
 import { getControlPlaneClient } from "../client";
 import { obsCall } from "./obsInterceptors";
@@ -686,6 +687,11 @@ const USAGE_SIGNALS: readonly UsageSignal[] = ["logs", "traces", "metrics", "pro
  */
 export async function getObservabilityUsage(orgId: string, transport?: Transport): Promise<ObservabilityUsage> {
   const res = await getControlPlaneClient(ObservabilityBillingService, transport).getObservabilityUsage({ orgId });
+  return toObservabilityUsage(res);
+}
+
+/** GetObservabilityUsage's answer as the legacy usage panel reads it (useObservabilityUsage's `select`). */
+export function toObservabilityUsage(res: GetObservabilityUsageResponse): ObservabilityUsage {
   const signal = (value: string): UsageSignal =>
     (USAGE_SIGNALS as readonly string[]).includes(value) ? (value as UsageSignal) : "logs";
   return {

@@ -134,16 +134,17 @@ func TestInboxApprovalIsTheOnlyApprovalTheDaemonActsOn(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	inboxSvc, err := inbox.New(inbox.Deps{
 		Logger: logger, Config: config.Defaults(), Repo: repo,
-		OrgKeys:     db.TestOrgAccounts(t, repo),
-		Chats:       store.NewChatsWithActivityExtStore(repo.ORM()),
-		ProjectRows: store.NewProjectExtStore(repo.ORM()),
-		Machines:    store.NewDaemonExtStore(repo.ORM()),
-		Items:       store.NewInboxDismissalExtStore(repo.ORM()),
-		Firings:     store.NewTriggerEventExtStore(repo.ORM()),
-		Notices:     store.NewTriggerExtStore(repo.ORM()),
-		Storage:     worktreesweep.NewStores(repo, store.NewWorktreeExtStore(repo.ORM())),
-		Recoveries:  store.NewWorktreeRecoveryExtStore(repo.ORM()),
-		Marks:       store.NewWorktreeExtStore(repo.ORM()),
+		OrgKeys:       db.TestOrgAccounts(t, repo),
+		Chats:         store.NewChatsWithActivityExtStore(repo.ORM()),
+		ProjectRows:   store.NewProjectExtStore(repo.ORM()),
+		Machines:      store.NewDaemonExtStore(repo.ORM()),
+		Items:         store.NewInboxDismissalExtStore(repo.ORM()),
+		Firings:       store.NewTriggerEventExtStore(repo.ORM()),
+		Notices:       store.NewTriggerExtStore(repo.ORM()),
+		Registrations: store.NewTriggerRegistrationExtStore(repo.ORM()),
+		Storage:       worktreesweep.NewStores(repo, store.NewWorktreeExtStore(repo.ORM())),
+		Recoveries:    store.NewWorktreeRecoveryExtStore(repo.ORM()),
+		Marks:         store.NewWorktreeExtStore(repo.ORM()),
 	})
 	if err != nil {
 		t.Fatal(err)

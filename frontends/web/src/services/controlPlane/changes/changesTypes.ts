@@ -160,6 +160,36 @@ export interface ChangeApprovalCode {
   expiresAt: Date | null;
 }
 
+// ── Delivery ────────────────────────────────────────────────────────────────
+
+/** Where the platform writes an environment's snapshot: a hosted static site, or the hosted workloads' ConfigMap. */
+export type ChangeDeliveryTargetKind = "static-site" | "config-map" | "unknown";
+
+/** GetChangesDeliveryStatus: the snapshot last written to one target. */
+export interface ChangeDeliveryTarget {
+  kind: ChangeDeliveryTargetKind;
+  /** The StaticSite's name, or the ConfigMap as <namespace>/<name>. */
+  name: string;
+  /** Where the app reads it: the site path, or the file path in the pod. */
+  location: string;
+  /** The environment snapshot revision last written there. */
+  revision: number;
+  /** When that content was first written there. */
+  deliveredAt: Date | null;
+  /** Whether the target's ETag matches the environment's current snapshot. */
+  current: boolean;
+}
+
+/**
+ * GetChangesDeliveryStatus: the revision of the snapshot the environment
+ * renders now (the ENVIRONMENT's, not one change's), and what each target
+ * last had written to it. An environment with no hosted apps has no targets.
+ */
+export interface ChangesDeliveryStatus {
+  revision: number;
+  targets: ChangeDeliveryTarget[];
+}
+
 // ── Draft edits ─────────────────────────────────────────────────────────────
 
 /** UpdateChangeDraft: each field changes only when set. */

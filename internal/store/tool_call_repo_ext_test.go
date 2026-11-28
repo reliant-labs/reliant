@@ -50,6 +50,7 @@ func renderCall(c *core.ToolCall) string {
 }
 
 func TestToolCalls_AcrossLayers(t *testing.T) {
+	t.Parallel()
 	f := newMsgFixture(t, "chat-tool-calls")
 	ctx := context.Background()
 	o := f.env.ORM
@@ -153,6 +154,7 @@ func callIDs(calls []*core.ToolCall) string {
 }
 
 func TestToolCallResults_AcrossLayers(t *testing.T) {
+	t.Parallel()
 	f := newMsgFixture(t, "chat-tool-results")
 	ctx := context.Background()
 	o := f.env.ORM
@@ -305,6 +307,7 @@ func spawnTree(t *testing.T, f *msgFixture) {
 }
 
 func TestSpawnReads_AgreeWithRepository(t *testing.T) {
+	t.Parallel()
 	f := newMsgFixture(t, "chat-spawns")
 	ctx := context.Background()
 	o := f.env.ORM

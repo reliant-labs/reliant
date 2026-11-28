@@ -163,6 +163,18 @@ func TestBuildRefusesHeaderInjection(t *testing.T) {
 	}
 }
 
+// Only a draft may omit the recipient; everything else is still checked.
+func TestBuildDraftMayHaveNoRecipient(t *testing.T) {
+	raw, err := gmail.Build(gmail.Message{Draft: true, Subject: "s", Text: "t"})
+	require.NoError(t, err)
+	assert.Empty(t, parse(t, raw).header.Get("To"))
+
+	_, err = gmail.Build(gmail.Message{Draft: true, Subject: "s"})
+	require.Error(t, err, "a draft still needs a body")
+	_, err = gmail.Build(gmail.Message{Draft: true, Subject: "hi\r\nBcc: evil@attacker.example", Text: "t"})
+	require.Error(t, err, "a draft is still checked for header injection")
+}
+
 func TestEncodeRawIsUnpaddedBase64URL(t *testing.T) {
 	in := []byte("Subject: ?>\r\n\r\n~~~ÿ")
 	enc := gmail.EncodeRaw(in)

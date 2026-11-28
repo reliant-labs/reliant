@@ -32,6 +32,10 @@ export interface ShellNavBodyProps {
   onNavigate: (href: string, options?: NavigateOptions) => void;
   /** Every row drawn as a top-level row (a phone's drawer; NavRenderer `flat`). */
   flat?: boolean;
+  /** Leaves a drill-in in place instead of navigating (NavRenderer `onBack`). */
+  onBack?: () => void;
+  /** Draws the top level on an area's route too (NavRenderer `topLevel`). */
+  topLevel?: boolean;
 }
 
 export function ShellNavBody(props: ShellNavBodyProps) {
@@ -83,7 +87,7 @@ const ScopedConsoleModel = memo(function ScopedConsoleModel({
   return null;
 });
 
-function NavBody({ config, shell, pathname, search, slots, onNavigate, flat, console }: ShellNavBodyProps & { console: GroupedNavInput | null }) {
+function NavBody({ config, shell, pathname, search, slots, onNavigate, flat, onBack, topLevel, console }: ShellNavBodyProps & { console: GroupedNavInput | null }) {
   const ctx = useMemo<NavCtx>(
     () => ({
       pathname,
@@ -98,5 +102,5 @@ function NavBody({ config, shell, pathname, search, slots, onNavigate, flat, con
     }),
     [pathname, search, shell.mode, shell.projectId, shell.name, shell.app, console],
   );
-  return <NavRenderer config={config} ctx={ctx} slots={slots} onNavigate={onNavigate} flat={flat} />;
+  return <NavRenderer config={config} ctx={ctx} slots={slots} onNavigate={onNavigate} flat={flat} onBack={onBack} topLevel={topLevel} />;
 }

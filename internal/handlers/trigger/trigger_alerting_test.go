@@ -16,6 +16,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/controlplane"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/triggers"
 )
 
@@ -123,7 +124,7 @@ func TestPauseResumeDeleteFollowTheReceiver(t *testing.T) {
 	require.NoError(t, err)
 	_, err = env.svc.SetTriggerEnabled(env.ctx, connect.NewRequest(&reliantv1.SetTriggerEnabledRequest{Id: id, Enabled: true}))
 	require.Equal(t, connect.CodeUnavailable, svcerr.Code(err), "%v", err)
-	stored, err := env.repo.GetTrigger(context.Background(), id)
+	stored, err := store.GetTrigger(context.Background(), env.repo.ORM(), id)
 	require.NoError(t, err)
 	assert.False(t, stored.Enabled, "an enabled trigger nothing delivers to looks working and is not")
 	fa.err = nil
@@ -139,7 +140,7 @@ func TestRotateManagedWebhookReprovisionsWithoutShowingTheToken(t *testing.T) {
 
 	env, fa := setupAlertingTest(t)
 	id := env.enableOncall(t).Results[0].Activation.GetId()
-	before, err := env.repo.GetTriggerWebhookCredentials(context.Background(), id)
+	before, err := store.GetTriggerWebhookCredentials(context.Background(), env.repo.ORM(), id)
 	require.NoError(t, err)
 
 	resp, err := env.svc.RotateWebhookToken(env.ctx, connect.NewRequest(&reliantv1.RotateWebhookTokenRequest{Id: id}))
@@ -154,7 +155,7 @@ func TestRotateManagedWebhookReprovisionsWithoutShowingTheToken(t *testing.T) {
 	require.NoError(t, err)
 	assert.Nil(t, resp.Msg.Webhook)
 	assert.Len(t, fa.provisioned, 2, "a paused trigger is not provisioned")
-	after, err := env.repo.GetTriggerWebhookCredentials(context.Background(), id)
+	after, err := store.GetTriggerWebhookCredentials(context.Background(), env.repo.ORM(), id)
 	require.NoError(t, err)
 	assert.NotEqual(t, before.TokenHash, after.TokenHash)
 }

@@ -23,6 +23,7 @@ import (
 // before. The arguments are fixed so the statement text, and with it the
 // prepared statement, repeats.
 func TestPreparedQueriesSurviveAnAddedColumn(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	env.SQL.SetMaxOpenConns(1)
 	ctx := context.Background()

@@ -13,6 +13,7 @@ import (
 )
 
 func TestArchiveRecoverableIdleAndFenceSafeRevival(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	chat := landedFixture(t, env, "idle-retire")
@@ -34,6 +35,7 @@ func TestArchiveRecoverableIdleAndFenceSafeRevival(t *testing.T) {
 	require.Equal(t, fence, again, "all batches deliver pending retirement until acknowledged")
 }
 func TestArchiveRecoverableIdleNeverOverwritesSavedRecoveryProvenance(t *testing.T) {
+	t.Parallel()
 	for _, kind := range []string{"snapshot", "pending-fence", "catalog"} {
 		t.Run(kind, func(t *testing.T) {
 			env := storetest.New(t)
@@ -62,6 +64,7 @@ func TestArchiveRecoverableIdleNeverOverwritesSavedRecoveryProvenance(t *testing
 // was spawned into. Its parent chat's runs do not (bug 94324f76;
 // worktree_thread_scope_test.go).
 func TestArchiveRecoverableIdleExcludesSpawnedThreadAndPausedRuns(t *testing.T) {
+	t.Parallel()
 	for _, status := range []core.WorkflowStatus{core.Pending(), core.Active(), core.Paused()} {
 		t.Run(fmt.Sprint(status), func(t *testing.T) {
 			env := storetest.New(t)

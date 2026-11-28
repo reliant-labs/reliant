@@ -15,6 +15,7 @@ import (
 
 // TestPresetQueries ports presets.sql, interleaved with the Repository.
 func TestPresetQueries(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	user := storetest.SeedUserID

@@ -99,6 +99,7 @@ func (f *credFixture) oauthFlow(id, org string) {
 }
 
 func TestListProviderAccountGrantMembers_PagesDistinctPairsInOrder(t *testing.T) {
+	t.Parallel()
 	f := newCredFixture(t)
 	ctx := context.Background()
 	f.orgKey("k-a1", "org-a")
@@ -127,6 +128,7 @@ func TestListProviderAccountGrantMembers_PagesDistinctPairsInOrder(t *testing.T)
 }
 
 func TestDeleteProviderAccountGrantsBefore_DeletesOnlyThatMembersOlderGrants(t *testing.T) {
+	t.Parallel()
 	f := newCredFixture(t)
 	ctx := context.Background()
 	f.orgKey("k-a1", "org-a")
@@ -150,6 +152,7 @@ func TestDeleteProviderAccountGrantsBefore_DeletesOnlyThatMembersOlderGrants(t *
 // would be asked about forever, and one the purge clears but the list misses
 // would never be purged.
 func TestOrgCredentialHoldersAreWhatThePurgeClears(t *testing.T) {
+	t.Parallel()
 	f := newCredFixture(t)
 	ctx := context.Background()
 	f.orgKey("k-key", "o-key")
@@ -198,6 +201,7 @@ func TestOrgCredentialHoldersAreWhatThePurgeClears(t *testing.T) {
 // The purge removes everything of the gone org and nothing of another org or
 // of a person, and a second run finds nothing.
 func TestPurgeOrgCredentials_RemovesTheOrgsAndOnlyTheOrgs(t *testing.T) {
+	t.Parallel()
 	f := newCredFixture(t)
 	ctx := context.Background()
 	now := credT0

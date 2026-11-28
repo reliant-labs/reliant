@@ -19,6 +19,7 @@ import (
 // a later one, not from a second caller racing it, and not after the user's
 // whole history is deleted.
 func TestClaimUserActivation(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	user, asst := reliantv1.MessageRole_MESSAGE_ROLE_USER, reliantv1.MessageRole_MESSAGE_ROLE_ASSISTANT
@@ -61,7 +62,7 @@ func TestClaimUserActivation(t *testing.T) {
 	}
 	claim := func(userID string, f *msgFixture, messageID string) bool {
 		t.Helper()
-		won, err := env.Repo.ClaimUserActivation(ctx, userID, f.chat, messageID)
+		won, err := store.ClaimUserActivation(ctx, env.ORM, userID, f.chat, messageID)
 		if err != nil {
 			t.Fatalf("ClaimUserActivation(%s, %s): %v", userID, messageID, err)
 		}
@@ -133,7 +134,7 @@ func TestClaimUserActivation(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			won, err := env.Repo.ClaimUserActivation(ctx, "racer", racer.chat, "race-first")
+			won, err := store.ClaimUserActivation(ctx, env.ORM, "racer", racer.chat, "race-first")
 			if err != nil {
 				t.Errorf("racing claim: %v", err)
 			}
@@ -152,7 +153,7 @@ func TestClaimUserActivation(t *testing.T) {
 		t.Fatalf("%d racing claims won, want exactly 1", n)
 	}
 
-	if _, err := env.Repo.ClaimUserActivation(ctx, "", mine.chat, "first"); err == nil {
+	if _, err := store.ClaimUserActivation(ctx, env.ORM, "", mine.chat, "first"); err == nil {
 		t.Fatal("empty user id: want an error")
 	}
 }

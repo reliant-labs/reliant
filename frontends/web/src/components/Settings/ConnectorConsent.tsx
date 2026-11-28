@@ -627,7 +627,7 @@ export function ConnectorConsent({
             {creatingMachine ? (
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Loader2 className="w-4 h-4 animate-spin" />
-                Starting a new cloud machine — this usually takes under a
+                Starting a new sandbox — this usually takes under a
                 minute.
               </div>
             ) : (
@@ -638,8 +638,8 @@ export function ConnectorConsent({
                 leftIcon={<Plus className="w-4 h-4" />}
               >
                 {daemons.length === 0
-                  ? "Create a cloud machine"
-                  : "Create a new cloud machine"}
+                  ? "Create a sandbox"
+                  : "Create a new sandbox"}
               </Button>
             )}
 

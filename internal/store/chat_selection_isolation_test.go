@@ -25,6 +25,7 @@ import (
 // so the read fails with 40001 and the edit lands only on a retry — which the
 // probe sees even though RunTx hides it from the caller.
 func TestMutateChatSelectionLoserReadsTheWinnersWrite(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	if err := store.InsertChat(ctx, env.ORM, convChat("sel-race", time.Now().UTC())); err != nil {
@@ -89,6 +90,7 @@ func TestMutateChatSelectionLoserReadsTheWinnersWrite(t *testing.T) {
 // stored at version N; a lost update drops a key. No writer may hit a
 // serialization failure: the lock queues them, it does not abort them.
 func TestChatSelectionConcurrentWritersLoseNothing(t *testing.T) {
+	t.Parallel()
 	const writers = 16
 	env := storetest.New(t)
 	ctx := context.Background()

@@ -174,6 +174,7 @@ func flat(m core.Message) map[string]any {
 }
 
 func TestMessageWrites_RoundTripAcrossLayers(t *testing.T) {
+	t.Parallel()
 	f := newMsgFixture(t, "chat-msg-write")
 	ctx := context.Background()
 	msgs := f.seedTranscript(t)
@@ -229,6 +230,7 @@ func TestMessageWrites_RoundTripAcrossLayers(t *testing.T) {
 }
 
 func TestMessageReads_AgreeWithRepository(t *testing.T) {
+	t.Parallel()
 	f := newMsgFixture(t, "chat-msg-read")
 	ctx := context.Background()
 	f.seedTranscript(t)
@@ -373,6 +375,7 @@ func TestMessageReads_AgreeWithRepository(t *testing.T) {
 // through the context-window chain. The fork raises its counter to the
 // parent's, which every parent row raised.
 func TestSeedSeqCounterForFork_ClearsInheritedForkHistory(t *testing.T) {
+	t.Parallel()
 	f := newMsgFixture(t, "chat-msg-fork")
 	ctx := context.Background()
 	f.seedTranscript(t)
@@ -409,6 +412,7 @@ func TestSeedSeqCounterForFork_ClearsInheritedForkHistory(t *testing.T) {
 }
 
 func TestMessageUpdates_AcrossLayers(t *testing.T) {
+	t.Parallel()
 	f := newMsgFixture(t, "chat-msg-update")
 	ctx := context.Background()
 	f.seedTranscript(t)

@@ -5,6 +5,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/integrations/catalog"
 	"github.com/reliant-labs/reliant/internal/integrations/manifest"
+	"github.com/reliant-labs/reliant/internal/serveraction"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 )
 
@@ -204,6 +205,11 @@ func poolCoverage(nodes []*reliantv1.Node, cfg *PreflightConfig) (pooled, inheri
 func actionRequiresDaemon(args *reliantv1.ActionArgs) bool {
 	if args == nil || model.CelStringIsExpr(args.GetUses()) {
 		return true
+	}
+	// A Reliant server action is server-placed by definition: it runs on
+	// the worker against Reliant's own state, never on a machine.
+	if serveraction.IsRef(model.CelStringRaw(args.GetUses())) {
+		return false
 	}
 	resolved, err := catalog.MustBuiltin().Resolve(model.CelStringRaw(args.GetUses()))
 	if err != nil {

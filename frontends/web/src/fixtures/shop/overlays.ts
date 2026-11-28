@@ -23,11 +23,13 @@ import { DaemonRegistryService } from "@/gen/reliant/v1/daemon_registry_pb";
 import { ListProjectsWithAppsResponseSchema, ProjectInstallState, ProjectService } from "@/gen/reliant/v1/project_pb";
 import { SettingsService, type ListSettingsResponse } from "@/gen/reliant/v1/settings_pb";
 import { StreamingService, type StreamChatUpdatesRequest } from "@/gen/reliant/v1/streaming_pb";
+import { OrganizationService, type ListMembersResponse } from "@/gen/controlplane/services/organization/v1/organization_pb";
 import { TestsService } from "@/gen/controlplane/services/tests/v1/tests_pb";
 
 import { fail, pending, withEmptyReads } from "../overlay";
 import { defineFixturePack, type FixturePack } from "../transport";
 import catalogJson from "./data/catalog.json?raw";
+import { accountScenarioHandlers } from "./handlers/account";
 import { chatHandlers } from "./handlers/reliant/chats";
 import { serve } from "./handlers/serve";
 import { settingsHandlers } from "./handlers/reliant/settings";
@@ -37,7 +39,7 @@ import { agentsChatHandlers, agentsChatStream } from "./overlays/agents";
 import { chartHoverHandlers, sandboxesHandlers } from "./overlays/dashboards";
 import { SHOP_READ_ONLY_MESSAGE } from "./index";
 import { DEMO_ORG, MINUTE } from "./shopStory";
-import { CHAT_IDS, chats, DAEMON_IDS, DAEMON_NAMES, docsProject, isoAgo, PROJECT_IDS, shopProject } from "./workspace";
+import { APP_USER, CHAT_IDS, chats, DAEMON_IDS, DAEMON_NAMES, docsProject, isoAgo, PROJECT_IDS, shopProject } from "./workspace";
 
 /** An overlay, built when it is selected (after the pack clock is pinned). */
 export type ShopOverlay = () => FixturePack;
@@ -101,6 +103,7 @@ const projectsPageCatalog = catalogWith((catalog) => {
 // ── Settings: two pins in the project selector ──────────────────────────────
 
 const LIST_SETTINGS = `${SettingsService.typeName}/ListSettings`;
+const LIST_MEMBERS = `${OrganizationService.typeName}/ListMembers`;
 
 /** Alex's saved settings plus `sidebar.projects`, pinning shop and the app-only status-page. */
 async function pinnedSettings(req: unknown) {
@@ -118,20 +121,31 @@ const pinsOverlay = (name: string) => defineFixturePack({ name, scenario: serve(
  * Alex's saved settings with the Setup Guide `panel` (collapsed or expanded)
  * and six of its eight items done (a teammate and the tour left). Saved on
  * the server, as the guide reads it: the server's answer wins, so the page has
- * nothing to heal and writes nothing back.
+ * nothing to heal and writes nothing back. A teammate is left because Alex's
+ * org has nobody else in it yet: the roster is Alex alone (the pack's has the
+ * team, which the guide would detect and save).
  */
 function setupGuide(panel: "collapsed" | "expanded"): FixturePack {
   const done = ["connect-machine", "add-api-key", "start-chat", "add-repo", "run-workflow", "deploy-app"];
   const replace: Record<string, string> = { "onboarding.checklist.panel_state": panel, "onboarding.checklist.completed_items": JSON.stringify(done) };
   return defineFixturePack({
     name: `setup-guide-${panel}`,
-    scenario: serve(SettingsService, {
-      listSettings: async (req) => {
-        const saved = (await settingsHandlers()[LIST_SETTINGS]!(req)) as ListSettingsResponse;
-        const settings = saved.settings.map((s) => (s.key in replace ? { ...s, value: replace[s.key] } : s));
-        return { settings, total: settings.length };
-      },
-    }),
+    scenario: {
+      ...serve(SettingsService, {
+        listSettings: async (req) => {
+          const saved = (await settingsHandlers()[LIST_SETTINGS]!(req)) as ListSettingsResponse;
+          const settings = saved.settings.map((s) => (s.key in replace ? { ...s, value: replace[s.key] } : s));
+          return { settings, total: settings.length };
+        },
+      }),
+      ...serve(OrganizationService, {
+        listMembers: async (req) => {
+          const roster = (await accountScenarioHandlers()[LIST_MEMBERS]!(req)) as ListMembersResponse;
+          const members = roster.members.filter((m) => m.userId === APP_USER.id);
+          return { members, nextPageToken: "", seats: { members: members.length, pendingInvitations: 0, limit: roster.seats?.limit ?? 0 } };
+        },
+      }),
+    },
   });
 }
 

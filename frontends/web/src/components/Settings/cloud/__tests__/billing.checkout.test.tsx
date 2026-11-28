@@ -50,6 +50,15 @@ vi.mock("@/hooks/useCloudBillingQueries", async (importOriginal) => {
   };
 });
 
+// The hosting tab's own cards are tested beside them (usage/__tests__); here
+// they only need to render as the tab's content.
+vi.mock("@/components/Settings/cloud/usage/UsageBillingPanel", () => ({
+  UsageBillingPanel: () => <div data-testid="usage-billing-panel" />,
+}));
+vi.mock("@/components/Settings/cloud/usage/useDeployUsage", () => ({
+  useDeployUsage: () => ({ available: false }),
+}));
+
 import { BillingSection } from "@/components/Settings/cloud/billing";
 
 function renderSection() {
@@ -170,6 +179,29 @@ describe("return from Stripe", () => {
     fireEvent.click(screen.getByRole("button", { name: /back to environment/i }));
     expect(routerState.navigate).toHaveBeenCalledWith({ href: "/forge/env/prod?project=proj-1" });
     expect(screen.queryByRole("button", { name: /back to setup/i })).not.toBeInTheDocument();
+  });
+
+  // A hosting checkout returns with the marker too, for the desktop checkout
+  // window (usageBillingReturnUrls). It is not a plan purchase.
+  it.each(["success", "cancelled"] as const)("reads ?tab=hosting&checkout=%s as no plan return, and drops the marker", (outcome) => {
+    routerState.search = { tab: "hosting", checkout: outcome };
+    renderSection();
+
+    expect(screen.getByTestId("usage-billing-panel")).toBeInTheDocument();
+    expect(screen.queryByText(/confirming your payment/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/checkout wasn't completed/i)).not.toBeInTheDocument();
+    const strip = routerState.navigate.mock.calls
+      .map(([call]) => call as { to?: string; replace?: boolean; hash?: unknown; search?: (p: Record<string, unknown>) => Record<string, unknown> })
+      .find((call) => call.search && "checkout" in call.search({ tab: "hosting", checkout: outcome }));
+    expect(strip).toMatchObject({ to: ".", replace: true, hash: true });
+    expect(strip!.search!({ tab: "hosting", checkout: outcome, org: "org-a" })).toEqual({ tab: "hosting", checkout: undefined, org: "org-a" });
+  });
+
+  it("still shows the plan return banner for a machine checkout outside the hosting tab", () => {
+    routerState.search = { tab: "plans", checkout: "success" };
+    renderSection();
+
+    expect(screen.getByText(/confirming your payment/i)).toBeInTheDocument();
   });
 
   it("never follows a returnTo off this origin", () => {

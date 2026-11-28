@@ -40,6 +40,7 @@ func memberChange(target string, role core.ChatMemberRole, at time.Time) core.Ch
 // and the level it leaves; a no-op writes none. A role change keeps when the
 // person became a member and records who set the level they hold now.
 func TestApplyChatMemberChange(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	base := time.Date(2026, 11, 24, 10, 0, 0, 0, time.UTC)
@@ -98,6 +99,7 @@ func TestApplyChatMemberChange(t *testing.T) {
 // A change decided on a stale read (the chat's owner or org moved since)
 // writes nothing.
 func TestApplyChatMemberChangeIsStaleSafe(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	base := time.Date(2026, 11, 24, 10, 0, 0, 0, time.UTC)
 	shareChat(t, env, "c1", "bob", strp("acme"), base)
@@ -122,6 +124,7 @@ func TestApplyChatMemberChangeIsStaleSafe(t *testing.T) {
 // refused and writes nothing, a level change at the cap is not a new member,
 // and a removal makes room.
 func TestChatMembersCap(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	base := time.Date(2026, 11, 24, 10, 0, 0, 0, time.UTC)
 	shareChat(t, env, "c1", "bob", strp("acme"), base)
@@ -153,6 +156,7 @@ func TestChatMembersCap(t *testing.T) {
 // Concurrent grants on one chat serialize on its row lock, so the cap cannot
 // be raced past: of more grants than the cap allows, exactly the cap land.
 func TestChatMembersCapUnderConcurrency(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	base := time.Date(2026, 11, 24, 10, 0, 0, 0, time.UTC)
 	shareChat(t, env, "c1", "bob", strp("acme"), base)

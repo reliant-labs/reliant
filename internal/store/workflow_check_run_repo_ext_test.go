@@ -42,6 +42,7 @@ func seedCheckEvent(t *testing.T, env *storetest.Env, eventID string) *core.Work
 // pending and then a launched firing, the run's two reports (each once), and
 // the syncer's save.
 func TestWorkflowCheckRunLifecycle(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	row := seedCheckEvent(t, env, "ev-1")
@@ -168,6 +169,7 @@ func TestWorkflowCheckRunLifecycle(t *testing.T) {
 // A report for a chat no firing launched, or whose firing has no check, is a
 // no-op.
 func TestWorkflowCheckRunReportsWithoutACheck(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	seedChat(t, env, "chat-none")
@@ -183,6 +185,7 @@ func TestWorkflowCheckRunReportsWithoutACheck(t *testing.T) {
 // one of them, each under generation 1. SKIP LOCKED decides who gets which,
 // so the split varies run to run; that each row is held once does not.
 func TestWorkflowCheckRunLeaseRace(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	const n = 20
@@ -239,6 +242,7 @@ func TestWorkflowCheckRunLeaseRace(t *testing.T) {
 // the renewed lease has expired, and its claim bumps the generation. A's
 // renewal and save are then refused and write nothing, and B's save lands.
 func TestWorkflowCheckRunLeaseFence(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	row := seedCheckEvent(t, env, "ev-fence")

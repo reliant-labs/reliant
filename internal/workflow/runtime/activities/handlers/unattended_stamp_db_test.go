@@ -61,7 +61,7 @@ func TestUnattendedStamp_DeletedTriggerStaysOrgFundedOnly(t *testing.T) {
 		t.Helper()
 		chat, err := store.GetChat(ctx, repo.ORM(), chatID)
 		require.NoError(t, err)
-		who := chatAttendance(ctx, tools.WithChats(repo), chat)
+		who := chatAttendance(ctx, tools.WithChats(repo), NewTriggerReads(repo.ORM()), chat)
 		assert.False(t, who.attended, "%s is unattended", chatID)
 		assert.False(t, who.anySource, "%s spends the org's own sources only", chatID)
 		scope := llmCallSpec{UserID: user, OrgID: org, Attended: who.attended, UnattendedAnySource: who.anySource}.scope()
@@ -76,7 +76,7 @@ func TestUnattendedStamp_DeletedTriggerStaysOrgFundedOnly(t *testing.T) {
 		personalOnly(t, child)
 	})
 
-	require.NoError(t, repo.DeleteTrigger(ctx, triggerID))
+	require.NoError(t, store.RemoveTrigger(ctx, repo.ORM(), triggerID))
 	chat, err := store.GetChat(ctx, repo.ORM(), root)
 	require.NoError(t, err)
 	require.Nil(t, chat.TriggerID, "deleting the trigger cleared the launch's trigger id")

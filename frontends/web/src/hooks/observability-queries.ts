@@ -19,9 +19,10 @@ import { useCallback, useEffect } from "react";
  */
 
 import { Code, ConnectError } from "@connectrpc/connect";
-import { hashKey, useInfiniteQuery, useMutation, useQueries, useQuery, useQueryClient, type QueryClient, type QueryKey } from "@tanstack/react-query";
+import { hashKey, useInfiniteQuery, type InfiniteData, useMutation, useQueries, useQuery, useQueryClient, type QueryClient, type QueryKey } from "@tanstack/react-query";
 
 import { requestKey } from "@reliantlabs/forge-web-runtime/service-hooks";
+import { scopedClient } from "@reliantlabs/forge-web-runtime/transport-scope";
 
 import { QueryScopeSchema, type GetMetricResponse, type GetTraceResponse } from "@/gen/controlplane/services/observability/v1/observability_pb";
 import {
@@ -39,6 +40,14 @@ import {
   useListMetrics,
   useListWorkloads,
 } from "@/hooks/controlplane/observability-service-hooks_gen";
+import { issuesServiceKeys, issuesServiceMutations, issuesServiceQueries } from "@/hooks/controlplane/issues-service-hooks_gen";
+import {
+  IssuesService,
+  type ListIssueEventsResponse,
+  type ListIssuesResponse,
+  type ListIssueTimelineResponse,
+} from "@/gen/controlplane/services/issues/v1/issues_pb";
+import { connectClient } from "@/lib/connect";
 import {
   attributeValuesRequest,
   flamegraphRequest,
@@ -47,6 +56,7 @@ import {
   serviceSignalsRequest,
   toAttributeValues,
   toFlamegraph,
+  toObservabilityUsage,
   toServiceOverview,
   toServiceSignals,
   toTrace,
@@ -54,13 +64,35 @@ import {
   toWorkloads,
   traceRequest,
   wireScope,
+  wireTimeRange,
   workloadRequest,
   workloadsRequest,
 } from "@/services/controlPlane/observability/api";
 import { mapReleaseHealth, releaseHealthRequest } from "@/services/controlPlane/observability/deliveryApi";
+import {
+  getIssueRequest,
+  type IssueTimeRangeInit,
+  type ListIssuesInput,
+  listIssueEventsRequest,
+  listIssuesRequest,
+  listIssueTimelineRequest,
+  mapIssueDetail,
+  toComment,
+  toIssue,
+  toIssueEventList,
+  toIssueList,
+  toIssueTimelineList,
+  toLinkIssueChatResult,
+  wireAssign,
+  wireLinkIssueChat,
+  wireStatusUpdate,
+} from "@/services/controlPlane/observability/issuesApi";
 import { metricCatalogRequest, metricExemplarsRequest, metricRequest, toMetricCatalog, toMetricDetail, toMetricExemplars } from "@/services/controlPlane/observability/metricsApi";
 import { obsCall } from "@/services/controlPlane/observability/obsInterceptors";
+import { alertHistoryOf, alertsOf, listAlertHistoryRequest, listAlertsRequest, listNotificationsRequest, listSilencesRequest, notificationsOf, receiversOf, silencesOf } from "@/services/controlPlane/observability/alertingApi";
+import { alertingServiceKeys, useListAlertHistory, useListAlerts, useListNotifications, useListReceivers, useListSilences } from "@/hooks/controlplane/alerting-service-hooks_gen";
 import { useObservabilityApi, type ObservabilityContextApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
+import { useGetObservabilityUsage } from "@/hooks/controlplane/observability-billing-service-hooks_gen";
 import { useObsQuota } from "@/services/controlPlane/observability/ObsQuotaContext";
 import type { ActivityList } from "@/services/controlPlane/observability/activityApi";
 import type { DeliveryScope, ReleaseHealth } from "@/services/controlPlane/observability/deliveryTypes";
@@ -96,7 +128,7 @@ import type {
 } from "@/services/controlPlane/observability/types";
 import { panelRunsQuery } from "@/services/controlPlane/observability/panelKinds";
 import { rangeMs, readRange, resolveWindow, type RangePreset, type RangeRead } from "@/services/controlPlane/observability/window";
-import { keepPreviousInOrg, useRouteOrgIdOverride } from "@/lib/orgScope";
+import { keepPreviousInOrg, keyNamesOrg, useRouteOrgIdOverride } from "@/lib/orgScope";
 
 // Presentation never changes QueryPanel's computation: two dashboard tiles
 // with different ids/titles/layout but the same query share one in-flight read.
@@ -121,7 +153,6 @@ export const obsKeys = {
   panel: (scope: ObsScope | null, range: RangePreset, panel: Panel, services: string[], groupBy: string[], offset = "") =>
     [...obsKeys.all(scope), "panel", range, panelRequestKey(panel), services, groupBy, offset] as const,
   metrics: (scope: ObsScope | null) => [...obsKeys.all(scope), "metrics"] as const,
-  usage: (orgId: string | null) => ["observability", orgId ?? "", "usage"] as const,
 };
 
 /** What names a scope in a QueryScope's protojson: everything but the window and the services filter. */
@@ -162,6 +193,19 @@ export function invalidateObsScope(client: QueryClient, scope: ObsScope | null):
   return Promise.all([
     client.invalidateQueries({ queryKey: obsKeys.all(scope) }),
     named === undefined ? undefined : client.invalidateQueries({ queryKey: observabilityServiceKeys.all, predicate: (query) => keyScope(query.queryKey) === named }),
+  ]).then(() => undefined);
+}
+
+/**
+ * Every observability read, whatever its scope: the hand-written ones under
+ * `["observability"]` and ObservabilityService's generated ones (workloads, a
+ * workload, the overview, …), which that prefix no longer covers. For a write
+ * that changes what all of them show (a workload restart).
+ */
+export function invalidateAllObservability(client: QueryClient): Promise<void> {
+  return Promise.all([
+    client.invalidateQueries({ queryKey: ["observability"] }),
+    client.invalidateQueries({ queryKey: observabilityServiceKeys.all }),
   ]).then(() => undefined);
 }
 
@@ -556,10 +600,10 @@ export function useServiceSignals(scope: ObsScope | null, range: RangePreset) {
  * hour; polling faster would only re-read the same hour.
  */
 export function useObservabilityUsage(orgId: string | null) {
-  const api = useObservabilityApi();
-  return useQuery({
-    queryKey: obsKeys.usage(orgId),
-    queryFn: () => api.getObservabilityUsage(orgId as string),
+  // ObservabilityBillingService's generated read (the billing panel's own key
+  // and fetch), mapped to the legacy panel's model.
+  return useGetObservabilityUsage({ orgId: orgId ?? "" }, {
+    select: toObservabilityUsage,
     enabled: !!orgId,
     staleTime: 5 * 60_000,
     refetchInterval: 15 * 60_000,
@@ -707,22 +751,16 @@ export function useWorkload(scope: ObsScope | null, range: RangePreset, workload
 // alert reads, so an env page passes its own and the project area filters the
 // org's list to the environments it has selected. Firing alerts and the
 // notification count poll; receivers and silences change only by hand.
-
-export const alertKeys = {
-  all: (orgId: string | null) => ["observability", "alerting", orgId ?? ""] as const,
-  alerts: (orgId: string | null, envId: string) => [...alertKeys.all(orgId), "alerts", envId] as const,
-  history: (orgId: string | null, envId: string, range: RangePreset) => [...alertKeys.all(orgId), "history", envId, range] as const,
-  silences: (orgId: string | null, includeExpired: boolean) => [...alertKeys.all(orgId), "silences", includeExpired] as const,
-  receivers: (orgId: string | null) => [...alertKeys.all(orgId), "receivers"] as const,
-  notifications: (orgId: string | null) => [...alertKeys.all(orgId), "notifications"] as const,
-};
+//
+// Every read and write runs on AlertingService's generated hooks
+// (hooks/controlplane/alerting-service-hooks_gen.ts), on its QueryClient's
+// transport (a TransportScope's: the forge tour's sample app, a preview; else
+// the app's). Each is keyed by its request, which names the org.
 
 /** Pending and firing alerts. One env id narrows server-side; undefined is every env of the org. */
 export function useAlerts(orgId: string | null, envId?: string) {
-  const api = useObservabilityApi();
-  return useQuery({
-    queryKey: alertKeys.alerts(orgId, envId ?? ""),
-    queryFn: () => api.listAlerts(orgId as string, envId),
+  return useListAlerts(listAlertsRequest(orgId ?? "", envId), {
+    select: alertsOf,
     enabled: !!orgId,
     staleTime: 15_000,
     refetchInterval: 30_000,
@@ -730,11 +768,10 @@ export function useAlerts(orgId: string | null, envId?: string) {
   });
 }
 
+/** The history of the last `range`, as of whenever the server answers: the request (and key) stays the same as the window moves. */
 export function useAlertHistory(orgId: string | null, range: RangePreset, envId?: string) {
-  const api = useObservabilityApi();
-  return useQuery({
-    queryKey: alertKeys.history(orgId, envId ?? "", range),
-    queryFn: () => api.listAlertHistory(orgId as string, { envId, sinceMs: resolveWindow(range).startMs, limit: 500 }),
+  return useListAlertHistory(listAlertHistoryRequest(orgId ?? "", { envId, lookbackMs: rangeMs(range), limit: 500 }), {
+    select: alertHistoryOf,
     enabled: !!orgId,
     staleTime: 30_000,
     retry: alertingRetry,
@@ -742,10 +779,8 @@ export function useAlertHistory(orgId: string | null, range: RangePreset, envId?
 }
 
 export function useSilences(orgId: string | null, includeExpired: boolean) {
-  const api = useObservabilityApi();
-  return useQuery({
-    queryKey: alertKeys.silences(orgId, includeExpired),
-    queryFn: () => api.listSilences(orgId as string, includeExpired),
+  return useListSilences(listSilencesRequest(orgId ?? "", includeExpired), {
+    select: silencesOf,
     enabled: !!orgId,
     staleTime: 30_000,
     retry: alertingRetry,
@@ -753,14 +788,15 @@ export function useSilences(orgId: string | null, includeExpired: boolean) {
 }
 
 export function useReceivers(orgId: string | null) {
-  const api = useObservabilityApi();
-  return useQuery({
-    queryKey: alertKeys.receivers(orgId),
-    queryFn: () => api.listReceivers(orgId as string),
-    enabled: !!orgId,
-    staleTime: 60_000,
-    retry: alertingRetry,
-  });
+  return useListReceivers(
+    { orgId: orgId ?? "" },
+    {
+      select: receiversOf,
+      enabled: !!orgId,
+      staleTime: 60_000,
+      retry: alertingRetry,
+    }
+  );
 }
 
 /**
@@ -769,10 +805,8 @@ export function useReceivers(orgId: string | null) {
  * groups and repeats on its own schedule, so faster would show nothing new.
  */
 export function useNotifications(orgId: string | null) {
-  const api = useObservabilityApi();
-  return useQuery({
-    queryKey: alertKeys.notifications(orgId),
-    queryFn: () => api.listNotifications(orgId as string, { limit: 50 }),
+  return useListNotifications(listNotificationsRequest(orgId ?? "", { limit: 50 }), {
+    select: notificationsOf,
     enabled: !!orgId,
     staleTime: 30_000,
     // Stop polling an org whose alerting answered "not configured" or "denied".
@@ -781,17 +815,20 @@ export function useNotifications(orgId: string | null) {
   });
 }
 
+/** Re-reads everything alerting shows for the org: every AlertingService read whose request names it. Another org's are left alone. */
+export function invalidateOrgAlerting(client: QueryClient, orgId: string | null): Promise<void> {
+  return client.invalidateQueries({ queryKey: alertingServiceKeys.all, predicate: (query) => keyNamesOrg(query.queryKey, orgId ?? "") });
+}
+
 /**
- * Every alerting write: it runs, then re-reads everything alerting shows for
- * the org (a silence changes what fires; a receiver changes what routes).
+ * What every alerting write's generated mutation takes: no refresh of the
+ * generated entity scope, and instead everything alerting shows for the org
+ * re-read once the write settles, failed or not (a silence changes what
+ * fires; a receiver changes what routes).
  */
-export function useAlertingMutation<TArgs, TResult>(orgId: string | null, run: (api: ObservabilityContextApi, orgId: string, args: TArgs) => Promise<TResult>) {
-  const api = useObservabilityApi();
+export function useAlertingWriteOptions(orgId: string | null) {
   const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (args: TArgs) => run(api, orgId as string, args),
-    onSettled: () => queryClient.invalidateQueries({ queryKey: alertKeys.all(orgId) }),
-  });
+  return { invalidate: false as const, onSettled: () => invalidateOrgAlerting(queryClient, orgId) };
 }
 
 // ── Delivery (DeliveryInsightsService) ───────────────────────────────────────
@@ -972,20 +1009,53 @@ const ISSUE_PROBED_FILTERS = [
   { key: "serviceVersion", label: "build" },
 ] as const satisfies readonly { key: keyof IssueFilters; label: string }[];
 
+export const ISSUE_EVENTS_PAGE_SIZE = 20;
+export const ISSUE_TIMELINE_PAGE_SIZE = 100;
+
+/** The requests of the reads that name one issue; their generated keys are issueKeys'. */
+const issueDetailRequest = (issueId: string, range: RangePreset) => getIssueRequest({ issueId, window: lastOf(range) });
+const issueEventsRequest = (issueId: string) => listIssueEventsRequest({ issueId, pageSize: ISSUE_EVENTS_PAGE_SIZE });
+const issueTimelineRequest = (issueId: string) => listIssueTimelineRequest({ issueId, pageSize: ISSUE_TIMELINE_PAGE_SIZE });
+
 /**
- * One root for every issue read, so a triage (which can move an issue between
- * lists, change its detail and add to its history) re-reads all of them, and
- * the panel's Refresh does too.
+ * The generated key (issuesServiceKeys) each issue read is cached under, for
+ * code that names one entry. Every issue read is under issuesServiceKeys.all,
+ * so a triage (which can move an issue between lists, change its detail and
+ * add to its history) re-reads all of them, and the panel's Refresh does too.
  */
 export const issueKeys = {
-  root: () => ["observability", "issues"] as const,
-  list: (scope: IssueScope | null, filters: IssueFilters) =>
-    [...issueKeys.root(), "list", scope?.orgId ?? "", scope?.projectId ?? "", scope?.envIds ?? [], filters] as const,
-  detail: (issueId: string, range: RangePreset) => [...issueKeys.root(), "detail", issueId, range] as const,
-  events: (issueId: string) => [...issueKeys.root(), "events", issueId] as const,
-  timelines: () => [...issueKeys.root(), "timeline"] as const,
-  timeline: (issueId: string) => [...issueKeys.timelines(), issueId] as const,
+  root: () => issuesServiceKeys.all,
+  detail: (issueId: string, range: RangePreset) => issuesServiceKeys.getIssue(issueDetailRequest(issueId, range)),
+  events: (issueId: string) => issuesServiceKeys.listIssueEventsInfinite(issueEventsRequest(issueId)),
+  timelines: () => issuesServiceKeys.listIssueTimeline.all,
+  timeline: (issueId: string) => issuesServiceKeys.listIssueTimelineInfinite(issueTimelineRequest(issueId)),
 };
+
+/**
+ * The issue reads that name one issue — its detail, events and timeline — on
+ * their generated keys (issuesServiceKeys), whose request carries the id.
+ */
+const ISSUE_READS: readonly QueryKey[] = [issuesServiceKeys.getIssue.all, issuesServiceKeys.listIssueEvents.all, issuesServiceKeys.listIssueTimeline.all];
+
+/** Whether `key` is one of ISSUE_READS for `issueId`: the request in a generated key is its one object entry. */
+function namesIssue(key: QueryKey, issueId: string): boolean {
+  if (!ISSUE_READS.some((prefix) => prefix.every((part, i) => key[i] === part))) return false;
+  return key.some((part) => !!part && typeof part === "object" && !Array.isArray(part) && (part as { issueId?: unknown }).issueId === issueId);
+}
+
+/** A triage (status or assignee) can move an issue between lists, change its detail and add to its history: every issue read, and the activity feed. */
+function invalidateIssueTriage(client: QueryClient) {
+  void client.invalidateQueries({ queryKey: issueKeys.root() });
+  void client.invalidateQueries({ queryKey: activityKeys.root() });
+}
+
+/** A comment or a chat link changes only the issue's timeline. */
+function invalidateIssueTimelines(client: QueryClient) {
+  void client.invalidateQueries({ queryKey: issueKeys.timelines() });
+}
+
+/** IssuesService on the QueryClient's transport (a TransportScope's, else the app's), as the generated hooks resolve it. */
+const issuesClient = scopedClient(IssuesService, connectClient(IssuesService));
 
 const issueRevocations = new WeakMap<QueryClient, Map<string, { generation: number; error: unknown }>>();
 
@@ -1000,10 +1070,7 @@ async function readIssue<T>(client: QueryClient, issueId: string, key: QueryKey,
   } catch (error) {
     if (error instanceof ConnectError && (error.code === Code.PermissionDenied || error.code === Code.Unauthenticated)) {
       revocations.set(issueId, { generation: (revocations.get(issueId)?.generation ?? 0) + 1, error });
-      const queries = client.getQueryCache().findAll({ predicate: (query) => {
-        const k = query.queryKey;
-        return k[0] === "observability" && k[1] === "issues" && ["detail", "events", "timeline"].includes(String(k[2])) && k[3] === issueId;
-      } });
+      const queries = client.getQueryCache().findAll({ predicate: (query) => namesIssue(query.queryKey, issueId) });
       // Cancel siblings before scrubbing them: an older in-flight response must not restore revoked data.
       await client.cancelQueries({ predicate: (query) => queries.includes(query) && hashKey(query.queryKey) !== hashKey(key) });
       for (const query of queries) query.setState({ data: undefined, dataUpdatedAt: 0, error, status: "error" });
@@ -1016,35 +1083,78 @@ async function readIssue<T>(client: QueryClient, issueId: string, key: QueryKey,
   return result;
 }
 
+/**
+ * A generated read's options with its fetch run through readIssue: the key,
+ * the client call and the call options stay the generated ones.
+ */
+function guardedByIssue<O extends { queryKey: QueryKey; queryFn?: unknown }>(client: QueryClient, issueId: string, options: O): O {
+  const fetch = options.queryFn as (context: never) => Promise<unknown>;
+  return { ...options, queryFn: (context: never) => readIssue(client, issueId, options.queryKey, () => fetch(context)) };
+}
+
 /** People change rarely; the roster and the reader are read once a while, not per issue. */
 export const peopleKeys = {
   members: (orgId: string) => ["observability", "people", "members", orgId] as const,
   me: () => ["observability", "people", "me"] as const,
 };
 
-/** The scope's issues, a page at a time; later pages reuse the first page's window (the token is only valid with the same request). */
+/** The request of a disabled issue read (no scope yet): it is never sent. */
+const NO_ISSUE_SCOPE: IssueScope = { orgId: "", envIds: [] };
+
+/** A page of useIssues: the response, and the absolute range it read (the next page reads the same one). */
+interface IssuePage {
+  response: ListIssuesResponse;
+  range: IssueTimeRangeInit;
+}
+
+interface IssuePageParam {
+  token: string;
+  range: IssuePage["range"];
+}
+
+const toIssuePages = (data: InfiniteData<IssuePage, IssuePageParam | null>): InfiniteData<IssueList, IssuePageParam | null> => ({
+  pages: data.pages.map((page) => toIssueList(page.response)),
+  pageParams: data.pageParams,
+});
+
+/**
+ * The scope's issues, a page at a time. Page one sends the preset as a
+ * relative window, so its request — and its generated key — stay put while
+ * time moves; every later page sends the absolute range page one read
+ * (ListIssuesResponse.effective_time_range) with the cursor, because the
+ * token is only valid with the same request.
+ *
+ * Hand-written on the generated key and the scope's client, not
+ * useListIssuesInfinite: a later page's request differs from page one beyond
+ * its token, and one fetch also asks the probes below.
+ */
 export function useIssues(scope: IssueScope | null, filters: IssueFilters) {
-  const api = useObservabilityApi();
+  const input: ListIssuesInput = {
+    ...(scope ?? NO_ISSUE_SCOPE),
+    services: filters.service ? [filters.service] : [],
+    window: lastOf(filters.range, "issues"),
+    statuses: filters.statuses,
+    platform: filters.platform,
+    assignee: filters.assignee,
+    userId: filters.userId,
+    browser: filters.browser,
+    os: filters.os,
+    serviceVersion: filters.serviceVersion,
+    sort: filters.sort,
+    text: filters.text,
+    pageSize: ISSUE_PAGE_SIZE,
+  };
+  const relative = wireTimeRange(input.window);
   return useInfiniteQuery({
-    queryKey: issueKeys.list(scope, filters),
-    queryFn: async ({ pageParam, signal }): Promise<IssueList & { window: TimeWindow }> => {
-      const window = pageParam?.window ?? resolveWindow(readRange(filters.range, "issues"));
-      const request = {
-        ...(scope as IssueScope),
-        services: filters.service ? [filters.service] : [],
-        window,
-        statuses: filters.statuses,
-        platform: filters.platform,
-        assignee: filters.assignee,
-        userId: filters.userId,
-        browser: filters.browser,
-        os: filters.os,
-        serviceVersion: filters.serviceVersion,
-        sort: filters.sort,
-        text: filters.text,
-        pageSize: ISSUE_PAGE_SIZE,
-        pageToken: pageParam?.cursor,
-      };
+    queryKey: issuesServiceKeys.listIssuesInfinite(listIssuesRequest(input)),
+    queryFn: async (context): Promise<IssuePage> => {
+      const { pageParam } = context;
+      // Marked (poll, prefetch or a person's read) before the first await, where runAsPoll's mark holds.
+      const call = obsCall({ signal: context.signal });
+      const issues = issuesClient(context);
+      const response = await issues.listIssues(listIssuesRequest(input, pageParam ?? undefined), call);
+      // A control plane that does not echo the range it read: the next page asks for page one's range again.
+      const range = response.effectiveTimeRange ?? pageParam?.range ?? relative;
       // An issue row names no user, so whether the server applied user_id is
       // asked, not inferred: the same first page for a user nobody is. A server
       // that knows the filter answers it with nothing; one that ignores it
@@ -1052,19 +1162,21 @@ export function useIssues(scope: IssueScope | null, filters: IssueFilters) {
       // Each probe asks about one filter alone, the other probed filters
       // removed: a server that applies user_id but ignores browser would answer
       // a combined probe with nothing (the random user matches no one) and pass
-      // off a user-filtered list as a browser-filtered one.
+      // off a user-filtered list as a browser-filtered one. A probe reads the
+      // range the list just read (its effective_time_range), not "the last
+      // hour" resolved again: its answer must be about the rows on screen.
       const probed = pageParam ? [] : ISSUE_PROBED_FILTERS.filter(({ key }) => !!filters[key]);
       const unprobed = Object.fromEntries(ISSUE_PROBED_FILTERS.map(({ key }) => [key, undefined]));
-      const [result, ...probes] = await Promise.all([
-        api.listIssues(request, { signal }),
-        ...probed.map(({ key }) => api.listIssues({ ...request, ...unprobed, [key]: issueFilterProbe(), pageSize: 1 }, { signal })),
-      ]);
+      const probes = await Promise.all(
+        probed.map(({ key }) => issues.listIssues(listIssuesRequest({ ...input, ...unprobed, [key]: issueFilterProbe(), pageSize: 1 }, { token: "", range }), call))
+      );
       const ignored = probed.find((_, i) => probes[i].issues.length > 0);
       if (ignored) throw new FilterUnsupportedError(ignored.label, "issues");
-      return { ...result, window };
+      return { response, range };
     },
-    initialPageParam: null as PageParam | null,
-    getNextPageParam: (last) => (last.nextPageToken ? { cursor: last.nextPageToken, window: last.window } : undefined),
+    initialPageParam: null as IssuePageParam | null,
+    getNextPageParam: (last) => (last.response.nextPageToken ? { token: last.response.nextPageToken, range: last.range } : undefined),
+    select: toIssuePages,
     enabled: !!scope,
     staleTime: 30_000,
     retry: issuesRetry, retryDelay: obsRetryDelay,
@@ -1073,73 +1185,69 @@ export function useIssues(scope: IssueScope | null, filters: IssueFilters) {
 
 /** One issue with its latest event, frames, versions and first release; counts over `range`. */
 export function useIssue(issueId: string | undefined, range: RangePreset) {
-  const api = useObservabilityApi();
   const client = useQueryClient();
-  const key = issueKeys.detail(issueId ?? "", range);
-  return useQuery({
-    queryKey: key,
-    queryFn: ({ signal }) => readIssue(client, issueId as string, key, () => api.getIssue({ issueId: issueId as string, window: resolveWindow(range) }, { signal })),
+  const id = issueId ?? "";
+  return useQuery(guardedByIssue(client, id, issuesServiceQueries.getIssue(issueDetailRequest(id, range), {
+    select: mapIssueDetail,
     enabled: !!issueId,
     staleTime: 30_000,
     retry: issuesRetry, retryDelay: obsRetryDelay,
-  });
+    callOptions: obsRead,
+  })));
 }
 
-export const ISSUE_EVENTS_PAGE_SIZE = 20;
+const toIssueEventPages = (data: InfiniteData<ListIssueEventsResponse, string>): InfiniteData<IssueEventList, string> => ({
+  pages: data.pages.map(toIssueEventList),
+  pageParams: data.pageParams,
+});
 
 /** One issue's events, newest first. */
 export function useIssueEvents(issueId: string | undefined) {
-  const api = useObservabilityApi();
   const client = useQueryClient();
-  const key = issueKeys.events(issueId ?? "");
-  return useInfiniteQuery({
-    queryKey: key,
-    queryFn: ({ pageParam, signal }): Promise<IssueEventList> =>
-      readIssue(client, issueId as string, key, () => api.listIssueEvents({ issueId: issueId as string, pageSize: ISSUE_EVENTS_PAGE_SIZE, pageToken: pageParam ?? undefined }, { signal })),
-    initialPageParam: null as string | null,
-    getNextPageParam: (last) => last.nextPageToken || undefined,
+  const id = issueId ?? "";
+  return useInfiniteQuery(guardedByIssue(client, id, issuesServiceQueries.listIssueEventsInfinite(issueEventsRequest(id), {
+    select: toIssueEventPages,
     enabled: !!issueId,
     staleTime: 30_000,
     retry: issuesRetry, retryDelay: obsRetryDelay,
-  });
+    callOptions: obsRead,
+  })));
 }
 
 /**
  * A triage. It never retries and never re-sends: a stale version comes back
  * as an error (conflict) for the view to show, and every issue read is
  * re-fetched either way — on success to show the new state everywhere, on a
- * conflict to show the change the reader had not seen.
+ * conflict to show the change the reader had not seen. The generated write
+ * refreshes only on success, so its refresh is replaced by this one.
  */
 export function useUpdateIssueStatus() {
-  const api = useObservabilityApi();
   const queryClient = useQueryClient();
   return useMutation<Issue, unknown, UpdateIssueStatusRequest>({
-    mutationFn: (req) => api.updateIssueStatus(req),
-    onSettled: () => {
-      void queryClient.invalidateQueries({ queryKey: issueKeys.root() });
-      void queryClient.invalidateQueries({ queryKey: activityKeys.root() });
-    },
+    mutationFn: async (req) => toIssue(await issuesServiceMutations(queryClient).updateIssueStatus(wireStatusUpdate(req), { invalidate: false }), "UpdateIssueStatus"),
+    onSettled: () => invalidateIssueTriage(queryClient),
   });
 }
 
-export const ISSUE_TIMELINE_PAGE_SIZE = 100;
-
 /** An issue's timeline, oldest first, a page at a time. A merged issue answers with the timeline of the issue it was merged into. */
 export function useIssueTimeline(issueId: string | undefined) {
-  // Discussion reads Postgres, not ClickHouse: quota pauses must not block it.
-  const api = useObservabilityApi();
+  // Discussion reads Postgres, not ClickHouse: quota pauses must not block it (it takes no read slot).
   const client = useQueryClient();
-  const key = issueKeys.timeline(issueId ?? "");
-  return useInfiniteQuery({
-    queryKey: key,
-    queryFn: ({ pageParam }): Promise<IssueTimelineList> =>
-      readIssue(client, issueId as string, key, () => api.listIssueTimeline({ issueId: issueId as string, pageSize: ISSUE_TIMELINE_PAGE_SIZE, pageToken: pageParam ?? undefined })),
-    initialPageParam: null as string | null,
-    getNextPageParam: (last) => last.nextPageToken || undefined,
+  const id = issueId ?? "";
+  const select = useCallback(
+    (data: InfiniteData<ListIssueTimelineResponse, string>): InfiniteData<IssueTimelineList, string> => ({
+      pages: data.pages.map((page) => toIssueTimelineList(page, id)),
+      pageParams: data.pageParams,
+    }),
+    [id]
+  );
+  return useInfiniteQuery(guardedByIssue(client, id, issuesServiceQueries.listIssueTimelineInfinite(issueTimelineRequest(id), {
+    select,
     enabled: !!issueId,
     staleTime: 15_000,
     retry: issuesRetry, retryDelay: obsRetryDelay,
-  });
+    callOptions: obsRead,
+  })));
 }
 
 /** The signed-in person: who "me" is, and whose comments are editable. */
@@ -1167,31 +1275,35 @@ export function useOrgMembers(orgId: string) {
   return { ...query, data: query.error ? undefined : query.data };
 }
 
-/** Every write below never retries and never re-sends; a refusal is shown, and the reads are re-fetched either way. */
+/**
+ * Every write below never retries and never re-sends; a refusal is shown, and
+ * the reads are re-fetched either way (onSettled, where the generated write's
+ * own refresh runs on success only).
+ */
 export function useAddIssueComment() {
-  const api = useObservabilityApi();
   const queryClient = useQueryClient();
   return useMutation<IssueComment, unknown, AddIssueCommentRequest>({
-    mutationFn: (req) => api.addIssueComment(req),
-    onSettled: () => void queryClient.invalidateQueries({ queryKey: issueKeys.timelines() }),
+    mutationFn: async (req) => toComment(await issuesServiceMutations(queryClient).addIssueComment({ issueId: req.issueId, body: req.body }, { invalidate: false }), "AddIssueComment"),
+    onSettled: () => invalidateIssueTimelines(queryClient),
   });
 }
 
 export function useUpdateIssueComment() {
-  const api = useObservabilityApi();
   const queryClient = useQueryClient();
   return useMutation<IssueComment, unknown, UpdateIssueCommentRequest>({
-    mutationFn: (req) => api.updateIssueComment(req),
-    onSettled: () => void queryClient.invalidateQueries({ queryKey: issueKeys.timelines() }),
+    mutationFn: async (req) =>
+      toComment(await issuesServiceMutations(queryClient).updateIssueComment({ issueId: req.issueId, commentId: req.commentId, body: req.body }, { invalidate: false }), "UpdateIssueComment"),
+    onSettled: () => invalidateIssueTimelines(queryClient),
   });
 }
 
 export function useDeleteIssueComment() {
-  const api = useObservabilityApi();
   const queryClient = useQueryClient();
   return useMutation<void, unknown, DeleteIssueCommentRequest>({
-    mutationFn: (req) => api.deleteIssueComment(req),
-    onSettled: () => void queryClient.invalidateQueries({ queryKey: issueKeys.timelines() }),
+    mutationFn: async (req) => {
+      await issuesServiceMutations(queryClient).deleteIssueComment({ issueId: req.issueId, commentId: req.commentId }, { invalidate: false });
+    },
+    onSettled: () => invalidateIssueTimelines(queryClient),
   });
 }
 
@@ -1201,25 +1313,25 @@ export function useDeleteIssueComment() {
  * re-sending, so the reader sees what changed.
  */
 export function useAssignIssue() {
-  const api = useObservabilityApi();
   const queryClient = useQueryClient();
   return useMutation<Issue, unknown, AssignIssueRequest>({
-    mutationFn: (req) => api.assignIssue(req),
-    onSettled: () => {
-      void queryClient.invalidateQueries({ queryKey: issueKeys.root() });
-      void queryClient.invalidateQueries({ queryKey: activityKeys.root() });
-    },
+    mutationFn: async (req) => toIssue(await issuesServiceMutations(queryClient).assignIssue(wireAssign(req), { invalidate: false }), "AssignIssue"),
+    onSettled: () => invalidateIssueTriage(queryClient),
   });
 }
 
 /** Record a chat started from an issue. Idempotent per (issue, chat), so a repeat is harmless. */
 export function useLinkIssueChat() {
-  const api = useObservabilityApi();
   const queryClient = useQueryClient();
   return useMutation<LinkIssueChatResult, unknown, LinkIssueChatRequest>({
-    mutationFn: (req) => api.linkIssueChat(req),
-    onSettled: () => void queryClient.invalidateQueries({ queryKey: issueKeys.timelines() }),
+    mutationFn: (req) => linkIssueChat(queryClient, req),
+    onSettled: () => invalidateIssueTimelines(queryClient),
   });
+}
+
+/** LinkIssueChat on `queryClient`'s transport (a TransportScope's, else the app's), with no hook: linkIssueChat.ts calls it after the view unmounted. */
+export async function linkIssueChat(queryClient: QueryClient, req: LinkIssueChatRequest): Promise<LinkIssueChatResult> {
+  return toLinkIssueChatResult(await issuesServiceMutations(queryClient).linkIssueChat(wireLinkIssueChat(req), { invalidate: false }));
 }
 
 // ── Activity (ActivityService) ────────────────────────────────────────────────

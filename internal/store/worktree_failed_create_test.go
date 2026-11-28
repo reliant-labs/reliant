@@ -17,6 +17,7 @@ import (
 // not yet recorded cleaned up. Nothing else — above all no row a live
 // workspace stands on.
 func TestListFailedWorktreesForDaemon(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	now := time.Now().UTC().Truncate(time.Microsecond)

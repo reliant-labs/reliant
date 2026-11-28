@@ -13,7 +13,7 @@
       "oneOf": [{ "$ref": "#/$defs/command" }, { "$ref": "#/$defs/Check" }]
     },
     "gate": {
-      "description": "The full suite every batch candidate must pass before it lands: a command, or {run, runner, pool, timeout, checks, env, infra_patterns, infra_patterns_file}.",
+      "description": "The gate every batch candidate must pass before it lands: the test stage's command (the full suite), or {run, stages, runner, pool, timeout, checks, env, infra_patterns, infra_patterns_file, allow_unisolated}.",
       "oneOf": [{ "$ref": "#/$defs/command" }, { "$ref": "#/$defs/Gate" }]
     },
     "generated": {
@@ -96,7 +96,11 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "run": { "$ref": "#/$defs/command", "description": "The gate command: exit 0 pass, 1 fail, 2 unproven." },
+        "run": {
+          "$ref": "#/$defs/command",
+          "description": "The test stage's command, the full suite: exit 0 pass, 1 fail, 2 unproven. The same as stages.test.run; write one of them."
+        },
+        "stages": { "$ref": "#/$defs/Stages" },
         "runner": {
           "enum": ["machine", "checks"],
           "description": "machine (default when run is set): an isolated gate machine; checks: only wait for GitHub check runs."
@@ -115,22 +119,69 @@
           "description": "Regular expressions over failing step logs that mark a failure as infra.",
           "items": { "type": "string", "minLength": 1 }
         },
-        "infra_patterns_file": { "$ref": "#/$defs/relPath" }
+        "infra_patterns_file": { "$ref": "#/$defs/relPath" },
+        "allow_unisolated": {
+          "type": "boolean",
+          "description": "Let a batch land on a gate that ran outside an isolation boundary (plain runc), until isolated gate machines exist. Default false: such a gate never lands."
+        }
       },
-      "anyOf": [{ "required": ["run"] }, { "required": ["checks"] }],
+      "anyOf": [{ "required": ["run"] }, { "$ref": "#/$defs/testStageWritten" }, { "required": ["checks"] }],
+      "not": { "required": ["run", "stages"], "properties": { "stages": { "required": ["test"] } } },
       "allOf": [
         {
           "if": { "required": ["runner"], "properties": { "runner": { "const": "checks" } } },
           "then": {
             "required": ["checks"],
-            "not": { "anyOf": [{ "required": ["run"] }, { "required": ["pool"] }, { "required": ["env"] }] }
+            "not": {
+              "anyOf": [{ "required": ["run"] }, { "required": ["pool"] }, { "required": ["env"] }, { "required": ["stages"] }]
+            }
           }
         },
         {
-          "if": { "required": ["runner"], "properties": { "runner": { "const": "machine" } } },
-          "then": { "required": ["run"] }
+          "if": {
+            "anyOf": [
+              { "required": ["runner"], "properties": { "runner": { "const": "machine" } } },
+              { "required": ["stages"], "not": { "required": ["runner"] } }
+            ]
+          },
+          "then": { "anyOf": [{ "required": ["run"] }, { "$ref": "#/$defs/testStageWritten" }] }
         }
       ]
+    },
+    "testStageWritten": {
+      "description": "gate.stages.test is written: a command, or off.",
+      "required": ["stages"],
+      "properties": { "stages": { "required": ["test"] } }
+    },
+    "Stages": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "The gate's built-in stages, always run in the order lint, test, build, sbom_scan. A stage not written keeps its detected default (forge: reliant forge lint, task ci:full or task test, reliant forge env build of the release chain's first env without pushing, forge's SBOM and scan under the env's vuln_gate; Go: go vet ./..., go test ./..., go build ./..., an SBOM and scan under forge's default vuln_gate; Node: npm run lint, npm test, npm run build, the same scan). Turning a stage off is a recorded setting change, and the stage shows as off on every report, never as passed. Machine runner only.",
+      "properties": {
+        "lint": { "$ref": "#/$defs/stage" },
+        "test": { "$ref": "#/$defs/stage" },
+        "build": { "$ref": "#/$defs/stage" },
+        "sbom_scan": { "$ref": "#/$defs/stage" }
+      },
+      "not": {
+        "required": ["lint", "test", "build", "sbom_scan"],
+        "properties": {
+          "lint": { "const": "off" },
+          "test": { "const": "off" },
+          "build": { "const": "off" },
+          "sbom_scan": { "const": "off" }
+        }
+      }
+    },
+    "stage": {
+      "description": "{run: <command>} replaces the stage's command (exit 0 pass, 1 fail, 2 unproven); off turns the stage off. No other string: a command goes in run.",
+      "oneOf": [{ "const": "off" }, { "$ref": "#/$defs/Stage" }]
+    },
+    "Stage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["run"],
+      "properties": { "run": { "$ref": "#/$defs/command" } }
     },
     "OwnerApproval": {
       "type": "object",

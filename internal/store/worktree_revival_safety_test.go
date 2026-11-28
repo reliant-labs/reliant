@@ -12,6 +12,7 @@ import (
 )
 
 func TestRevivalAtomicallyRefusesSavedCatalogAndNonLandedArchives(t *testing.T) {
+	t.Parallel()
 	for _, kind := range []string{"not-landed", "legacy-snapshot", "catalog-capturing", "catalog-removed"} {
 		t.Run(kind, func(t *testing.T) {
 			env := storetest.New(t)

@@ -120,6 +120,10 @@ func TestFileSystemProxy_ViewerRefusesCredentialStores(t *testing.T) {
 			_, err := s.GetFilePreview(ctx, connect.NewRequest(&reliantv1.GetFilePreviewRequest{ProjectId: projectID, Path: p}))
 			return err
 		},
+		"DownloadFile": func(ctx context.Context, s *Service, p string) error {
+			_, err := s.DownloadFile(ctx, connect.NewRequest(&reliantv1.DownloadFileRequest{ProjectId: projectID, Path: p}))
+			return err
+		},
 	}
 	for name, call := range viewers {
 		t.Run(name, func(t *testing.T) {

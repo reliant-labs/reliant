@@ -11,6 +11,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/automationpolicy"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
+	"github.com/reliant-labs/reliant/internal/serveraction"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 	runtime "github.com/reliant-labs/reliant/internal/workflow/runtime"
 )
@@ -84,6 +85,11 @@ func nodeCapabilities(node *pb.Node, values map[string]any, identity string, tai
 	if a := node.GetAction(); a != nil {
 		var out []string
 		uses := fixed(model.CelStringRaw(a.GetUses()))
+		if serveraction.IsRef(uses) {
+			// A Reliant server action authenticates with no connection: it
+			// runs as the run itself, on Reliant's own state.
+			return []string{"server_action:" + discloseScope(uses)}
+		}
 		integration, _, _ := strings.Cut(uses, "/")
 		if integration == "" {
 			integration = dynamicCapability

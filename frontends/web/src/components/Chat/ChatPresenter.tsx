@@ -87,6 +87,7 @@ interface ChatPresenterProps {
   chatId: string | null;
   isChatBusy: boolean;
   pendingApprovals: Approval[];
+  /** Connection of the selected chat's detail stream, not the user-wide feed. */
   connectionStatus: string;
 
   // Chat metadata

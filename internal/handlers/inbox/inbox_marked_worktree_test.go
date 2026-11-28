@@ -183,7 +183,7 @@ func TestReclaimMarkedWorktreeNow_StillKeepsAWorktreeWhoseTombstoneIsGone(t *tes
 // org-scoped inbox only under that project's org.
 func TestListInbox_MarkedWorktreeFollowsItsProjectsScope(t *testing.T) {
 	f, _, _, sweeper := markedFixtureSweeper(t)
-	f.inbox = NewTestInbox(t, withDeps(Deps{Repo: f.repo, Recoveries: store.NewWorktreeRecoveryExtStore(f.repo.ORM()), Marks: store.NewWorktreeExtStore(f.repo.ORM()), Sweeper: sweeper, Orgs: orgs.New(acmeAndHome{})}))
+	f.inbox = NewTestInbox(t, withDeps(Deps{Repo: f.repo, Registrations: store.NewTriggerRegistrationExtStore(f.repo.ORM()), Recoveries: store.NewWorktreeRecoveryExtStore(f.repo.ORM()), Marks: store.NewWorktreeExtStore(f.repo.ORM()), Sweeper: sweeper, Orgs: orgs.New(acmeAndHome{})}))
 	ctx := authz.WithMembership(f.ctx, memberOf{"home": true, "acme": true})
 	_, err := f.repo.ORM().Bun().NewRaw(`UPDATE projects SET org_id = 'acme' WHERE id = ?`, f.project()).Exec(ctx)
 	require.NoError(t, err)

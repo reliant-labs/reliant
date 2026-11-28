@@ -53,6 +53,16 @@ nodes:
     type: run
     command: "true"
     daemon: my-mac
+    preflight: true
+  - id: checked
+    type: run
+    command: "true"
+    preflight:
+      tools: [go, task]
+      min_free_disk: 10GiB
+      max_load: 2.5
+      allow_root: true
+      max_machines: 2
   - id: dynamic
     type: run
     command: "true"
@@ -87,6 +97,12 @@ describe("workflow serializer: node base keys", () => {
     expect(node("fail").outcome).toBe("failure");
     expect(node("fail")).not.toHaveProperty("tolerate_failure");
     expect(node("land")).not.toHaveProperty("outcome");
+  });
+
+  it("keeps preflight, true or its overrides", () => {
+    expect(node("named").preflight).toBe(true);
+    expect(node("checked").preflight).toEqual(originalNode("checked").preflight);
+    expect(node("land")).not.toHaveProperty("preflight");
   });
 
   it("keeps every daemon form", () => {
@@ -141,7 +157,7 @@ describe("workflow serializer: node base keys", () => {
 
   it("writes nothing for a node that sets none of them", () => {
     const written = roundTrip("name: bare\nnodes:\n  - id: a\n    type: run\n    command: 'true'\n");
-    for (const key of ["daemon", "outcome", "tolerate_failure", "observe"]) {
+    for (const key of ["daemon", "outcome", "tolerate_failure", "observe", "preflight"]) {
       expect(written.nodes[0]).not.toHaveProperty(key);
     }
   });

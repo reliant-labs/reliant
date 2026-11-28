@@ -18,6 +18,7 @@ import (
 // TestRepoForgeAppQueries: SetRepoForgeApps and ListRepoForgeAppsByProject on
 // Postgres, through the store and the Repository on one database.
 func TestRepoForgeAppQueries(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	now := time.Date(2026, 11, 18, 0, 0, 0, 0, time.UTC) // fixed: read from no clock
@@ -90,6 +91,7 @@ func TestRepoForgeAppQueries(t *testing.T) {
 // forge app of one name, once each however many subpaths declare it, and
 // none of another project's.
 func TestListReposHoldingForgeApp(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	now := time.Date(2026, 11, 21, 0, 0, 0, 0, time.UTC)

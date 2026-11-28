@@ -36,9 +36,9 @@
 # successful re-run of the failed tag closes the issue, and so does a later tag
 # that ships.
 #
-# Known gap: verdicts are not per channel. A successful prerelease tag
-# (alpha channel) closes an issue opened for a failed stable tag. Prerelease
-# tags are rare (the last was v1.6.4-rc1); push a stable tag to fix stable.
+# Verdicts are not per channel, and need not be: release.yml refuses a
+# prerelease v* tag (the alpha channel is retired; the last alpha was
+# v1.6.4-rc1), so every release it judges publishes to `latest`.
 #
 # WHY A SEPARATE WORKFLOW AND NOT A JOB IN gate-health.yml
 # ========================================================

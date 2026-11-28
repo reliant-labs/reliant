@@ -22,6 +22,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/triggers"
 	"github.com/reliant-labs/reliant/internal/vault"
 )
@@ -107,7 +108,7 @@ func TestCreateWebhookTriggerReturnsItsTokenOnceAndStoresOnlyAHash(t *testing.T)
 	assert.NotNil(t, trig.GetWebhook(), "the source arm round-trips")
 	assert.Equal(t, 0, env.backend.syncCount(), "an inbound trigger has no schedule to converge")
 
-	stored, err := env.repo.GetTriggerWebhookCredentials(context.Background(), trig.GetId())
+	stored, err := store.GetTriggerWebhookCredentials(context.Background(), env.repo.ORM(), trig.GetId())
 	require.NoError(t, err)
 	want := sha256.Sum256([]byte(cred.GetToken()))
 	assert.Equal(t, want[:], stored.TokenHash, "only the hash is stored")
@@ -133,7 +134,7 @@ func TestRotateWebhookTokenInvalidatesTheOldOne(t *testing.T) {
 	require.NotEmpty(t, fresh)
 	assert.NotEqual(t, old, fresh)
 
-	stored, err := env.repo.GetTriggerWebhookCredentials(context.Background(), id)
+	stored, err := store.GetTriggerWebhookCredentials(context.Background(), env.repo.ORM(), id)
 	require.NoError(t, err)
 	want := sha256.Sum256([]byte(fresh))
 	assert.Equal(t, want[:], stored.TokenHash)
@@ -175,7 +176,7 @@ func TestWebhookHmacSecretIsSealedForTheOwnerAndRequired(t *testing.T) {
 	}))
 	require.NoError(t, err)
 	id := resp.Msg.GetTrigger().GetId()
-	stored, err := env.repo.GetTriggerWebhookCredentials(context.Background(), id)
+	stored, err := store.GetTriggerWebhookCredentials(context.Background(), env.repo.ORM(), id)
 	require.NoError(t, err)
 	assert.Equal(t, "sealed:"+env.userID+":"+string(triggers.WebhookSecretAAD(id))+":s3cret", string(stored.SecretSealed))
 	assert.NotContains(t, resp.Msg.GetTrigger().String(), "s3cret")
@@ -185,7 +186,7 @@ func TestWebhookHmacSecretIsSealedForTheOwnerAndRequired(t *testing.T) {
 		Id: id, Trigger: webhookDefinition(env, func(d *reliantv1.TriggerDefinition) { d.Source = hmacSource }),
 	}))
 	require.NoError(t, err)
-	kept, err := env.repo.GetTriggerWebhookCredentials(context.Background(), id)
+	kept, err := store.GetTriggerWebhookCredentials(context.Background(), env.repo.ORM(), id)
 	require.NoError(t, err)
 	assert.Equal(t, stored.SecretSealed, kept.SecretSealed)
 }
@@ -375,7 +376,7 @@ func TestWebhookSecretAndTokenSurviveAFundingOnlyUpdate(t *testing.T) {
 	}))
 	require.NoError(t, err)
 	id := resp.Msg.GetTrigger().GetId()
-	before, err := env.repo.GetTriggerWebhookCredentials(context.Background(), id)
+	before, err := store.GetTriggerWebhookCredentials(context.Background(), env.repo.ORM(), id)
 	require.NoError(t, err)
 	require.NotEmpty(t, before.SecretSealed)
 	require.NotEmpty(t, before.TokenHash)
@@ -389,7 +390,7 @@ func TestWebhookSecretAndTokenSurviveAFundingOnlyUpdate(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotNil(t, updated.Msg.GetTrigger().GetWebhook().GetHmac(), "signatures stay on")
 
-	after, err := env.repo.GetTriggerWebhookCredentials(context.Background(), id)
+	after, err := store.GetTriggerWebhookCredentials(context.Background(), env.repo.ORM(), id)
 	require.NoError(t, err)
 	assert.Equal(t, before.SecretSealed, after.SecretSealed, "the secret is kept")
 	assert.Equal(t, before.TokenHash, after.TokenHash, "the token is not re-issued")

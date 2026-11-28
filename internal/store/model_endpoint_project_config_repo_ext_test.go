@@ -18,6 +18,7 @@ import (
 // TestModelEndpointQueries ports the model_endpoints hand SQL, interleaved
 // with the Repository. Every query is scoped to the owner.
 func TestModelEndpointQueries(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	owner, other := storetest.SeedUserID, "someone-else"
@@ -137,6 +138,7 @@ func TestModelEndpointQueries(t *testing.T) {
 // TestProjectConfigQueries ports the project_configs hand SQL, interleaved
 // with the Repository.
 func TestProjectConfigQueries(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	project := storetest.SeedProjectID

@@ -162,7 +162,7 @@ func TestToolCallIDIsolation_StrandedSpawnSweepSeesOnlyItsOwnChatsReport(t *test
 	childThread(t, repo, childB, "chat-iso-b")
 	require.NoError(t, store.EnqueueAgentMessage(ctx, repo.ORM(), spawnReport("chat-iso-b", childB, "chat-iso-b", "chat B's result")))
 
-	stranded, err := repo.ListStrandedBackgroundSpawnToolCalls(ctx)
+	stranded, err := store.ListStrandedBackgroundSpawnToolCalls(ctx, repo.ORM())
 	require.NoError(t, err)
 	var found *StrandedBackgroundSpawn
 	for _, s := range stranded {

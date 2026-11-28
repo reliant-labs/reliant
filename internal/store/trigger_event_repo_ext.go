@@ -121,6 +121,9 @@ func GetTriggerEventByChatID(ctx context.Context, db orm.Context, chatID string)
 // once, and a later row naming it can only be a replay. Served by
 // idx_trigger_events_chat.
 func GetTriggerEventByChat(ctx context.Context, db orm.Context, kind core.TriggerEventKind, chatID string) (*core.TriggerEvent, error) {
+	if chatID == "" {
+		return nil, errors.New("chat ID cannot be empty")
+	}
 	return firstTriggerEvent(ctx, db, "get trigger event by chat",
 		orm.WhereEq(TriggerEventFieldKind, kind),
 		orm.WhereEq(TriggerEventFieldChatID, chatID),
@@ -135,6 +138,9 @@ func GetTriggerEventByChat(ctx context.Context, db orm.Context, kind core.Trigge
 // run still going?") asks for the latest launched event; the detail view for
 // the latest of any outcome.
 func GetLatestTriggerEvent(ctx context.Context, db orm.Context, triggerID string, outcome *core.TriggerEventOutcome) (*core.TriggerEvent, error) {
+	if triggerID == "" {
+		return nil, errors.New("trigger ID cannot be empty")
+	}
 	opts := []orm.QueryOption{orm.WhereEq(TriggerEventFieldTriggerID, triggerID)}
 	if outcome != nil {
 		opts = append(opts, orm.WhereEq(TriggerEventFieldOutcome, *outcome))
@@ -699,6 +705,136 @@ CROSS JOIN LATERAL (
 ORDER BY e.trigger_id, e.occurred_at DESC, e.id DESC`
 }
 
+// inboxEpisodeSQL is triggerEpisodeSQL for the Inbox, returning only the
+// firings the Inbox's derivation can read. The same ?2-capped walk, the same
+// success boundary and the same order: only the rows returned shrink.
+//
+// The Inbox reads an episode in three ways (handlers/inbox failingAutomations),
+// and a skipped firing past the first ?3 (triggers.HealthWindow) skipped ones
+// changes none of them:
+//
+//   - triggers.FailureStreak: a skipped firing neither extends nor ends a
+//     streak (resolveFiring reads it as skipped or unresolved).
+//   - the firings with a run: the attention-managed chats and the newest run
+//     (LastRunChatId). A skipped firing that carries a chat is kept.
+//   - triggers.ComputeHealth over the first ?3 firings, after the Inbox drops
+//     its managed launched ones (unmanagedFirings). It never drops a skipped
+//     firing, so one with ?3 skipped firings ahead of it is never in that
+//     window, and every firing that is in it is still returned, in order.
+//
+// A long failure episode is mostly the skipped firings of an event trigger
+// whose filter declined every event since its last success, so this cuts a
+// trigger from up to ?2 rows, each decoded and probed for its run, to the
+// window plus its failures and launches. Neither read shows a firing's
+// definition, so that is not read either.
+//
+// The success search (ls) and the episode walk (x) are triggerEpisodeSQL's,
+// with the same filters: the boundary, which managed successes the filter
+// passes over, and the ?2 cap are unchanged, so every firing kept is one
+// FiringsSinceLastUnmanagedSuccess (or FiringsSinceLastSuccess) returns.
+//
+// The rank is computed over the capped walk (p), never beside it: a window
+// function at the walk's own level would rank the whole history after the
+// boundary before LIMIT applied.
+func inboxEpisodeSQL(successFilter, firingFilter string) string {
+	return `SELECT ` + triggerEventColumnRefs("e") + `,
+	` + triggerFiringRunColumns + `
+FROM (SELECT DISTINCT unnest(?1::text[]) AS id) t
+LEFT JOIN LATERAL (
+	SELECT w.occurred_at, w.id
+	FROM (
+		SELECT s.occurred_at, s.id, s.outcome, s.run_status, s.run_outcome, s.chat_id, s.user_id
+		FROM trigger_events s
+		WHERE s.trigger_id = t.id AND s.user_id = ?0::text` + successFilter + `
+		ORDER BY s.occurred_at DESC, s.id DESC
+		LIMIT ?2::integer
+	) w
+	WHERE w.outcome = 'launched'
+		AND ((w.run_status = 'completed' AND (w.run_outcome IS NULL OR w.run_outcome <> 'failure_handled'))
+			OR (w.run_status IS NULL AND (
+				SELECT sc.display_state FROM chats_with_activity sc
+				WHERE sc.id = w.chat_id AND sc.user_id = w.user_id) = 5))
+	ORDER BY w.occurred_at DESC, w.id DESC
+	LIMIT 1
+) ls ON true
+CROSS JOIN LATERAL (
+	SELECT ` + triggerEventColumnRefs("k") + ` FROM (
+		SELECT ` + triggerEventColumnRefs("p") + `,
+			count(*) FILTER (WHERE p.outcome = 'skipped')
+				OVER (ORDER BY p.occurred_at DESC, p.id DESC) AS skipped_rank
+		FROM (
+			SELECT ` + inboxEpisodeColumns("x") + ` FROM trigger_events x
+			WHERE x.trigger_id = t.id
+				AND x.user_id = ?0::text
+				AND (x.occurred_at, x.id) > (COALESCE(ls.occurred_at, '-infinity'::timestamptz), COALESCE(ls.id, ''))` + firingFilter + `
+			ORDER BY x.occurred_at DESC, x.id DESC
+			LIMIT ?2::integer
+		) p
+	) k
+	WHERE k.outcome IS DISTINCT FROM 'skipped' OR k.chat_id IS NOT NULL OR k.skipped_rank <= ?3::integer
+) e
+` + triggerFiringRunJoin + `
+ORDER BY e.trigger_id, e.occurred_at DESC, e.id DESC`
+}
+
+var (
+	inboxEpisodesSQL         = inboxEpisodeSQL(unmanagedAttentionFiringSQL("s"), unmanagedAttentionFiringSQL("x"))
+	inboxEpisodeFailuresSQL  = inboxEpisodeSQL("", "")
+	inboxEpisodeOmittedNames = map[string]bool{"definition": true}
+)
+
+// triggerEventColumnRefs is every trigger_events column of alias, by name: an
+// outer query re-selecting what an inner one already projected.
+func triggerEventColumnRefs(alias string) string {
+	var b strings.Builder
+	for i, f := range modelTables.Get(reflect.TypeFor[TriggerEvent]()).Fields {
+		if i > 0 {
+			b.WriteString(", ")
+		}
+		b.WriteString(alias + "." + string(f.SQLName))
+	}
+	return b.String()
+}
+
+// inboxEpisodeColumns is triggerOutcomeColumns without the definition as
+// well: the Inbox counts an episode and never shows which definition a
+// firing ran.
+func inboxEpisodeColumns(alias string) string {
+	var b strings.Builder
+	for i, f := range modelTables.Get(reflect.TypeFor[TriggerEvent]()).Fields {
+		if i > 0 {
+			b.WriteString(", ")
+		}
+		if triggerEventBodyColumns[f.Name] || inboxEpisodeOmittedNames[f.Name] {
+			b.WriteString("NULL::jsonb AS " + string(f.SQLName))
+			continue
+		}
+		b.WriteString(alias + "." + string(f.SQLName))
+	}
+	return b.String()
+}
+
+// InboxEpisodes is FiringsSinceLastUnmanagedSuccess as the Inbox reads it
+// (inboxEpisodeSQL): the same episode, without the skipped firings past the
+// first window that cannot change what the Inbox derives, and without
+// definitions. window is the Inbox's health window (triggers.HealthWindow).
+func InboxEpisodes(ctx context.Context, db orm.Context, userID string, triggerIDs []string, perTrigger, window int) (map[string][]*core.TriggerEventWithRun, error) {
+	if userID == "" {
+		return nil, fmt.Errorf("user ID cannot be empty")
+	}
+	return triggerFiringsByTrigger(ctx, db, "list the inbox's failure episodes", inboxEpisodesSQL, userID, triggerIDs, perTrigger, orm.Arg(window))
+}
+
+// InboxEpisodeFailures is FiringsSinceLastSuccess as the Inbox reads it, for
+// the diagnostic failure count only (triggers.FailureStreak(…).Count), which
+// no skipped firing changes: none is returned unless it carries a chat.
+func InboxEpisodeFailures(ctx context.Context, db orm.Context, userID string, triggerIDs []string, perTrigger int) (map[string][]*core.TriggerEventWithRun, error) {
+	if userID == "" {
+		return nil, fmt.Errorf("user ID cannot be empty")
+	}
+	return triggerFiringsByTrigger(ctx, db, "list the inbox's diagnostic failure episodes", inboxEpisodeFailuresSQL, userID, triggerIDs, perTrigger, orm.Arg(0))
+}
+
 // FiringsSinceLastUnmanagedSuccess returns the legacy inbox episode, excluding
 // registered attention-managed launched chats before both the cutoff and cap.
 // RecentTriggerOutcomes and FiringsSinceLastSuccess remain diagnostic reads.
@@ -715,10 +851,14 @@ func FiringsSinceLastUnmanagedSuccess(ctx context.Context, db orm.Context, userI
 // firings, so the events carry no body: Payload is empty, Sender and Origin
 // nil (triggerOutcomeColumns).
 func FiringsSinceLastSuccess(ctx context.Context, db orm.Context, userID string, triggerIDs []string, perTrigger int) (map[string][]*core.TriggerEventWithRun, error) {
+	if userID == "" {
+		return nil, fmt.Errorf("user ID cannot be empty")
+	}
 	return triggerFiringsByTrigger(ctx, db, "list firings since last success", firingsSinceLastSuccessSQL, userID, triggerIDs, perTrigger)
 }
 
-func triggerFiringsByTrigger(ctx context.Context, db orm.Context, what, query, userID string, triggerIDs []string, perTrigger int) (map[string][]*core.TriggerEventWithRun, error) {
+// extra binds ?3 onward, for a statement that takes more than the three.
+func triggerFiringsByTrigger(ctx context.Context, db orm.Context, what, query, userID string, triggerIDs []string, perTrigger int, extra ...any) (map[string][]*core.TriggerEventWithRun, error) {
 	out := make(map[string][]*core.TriggerEventWithRun, len(triggerIDs))
 	if len(triggerIDs) == 0 || perTrigger <= 0 {
 		return out, nil
@@ -730,7 +870,7 @@ func triggerFiringsByTrigger(ctx context.Context, db orm.Context, what, query, u
 	// which made the text, and so the prepared statement, new for each set
 	// of trigger ids: a Parse and a fresh plan on ListInbox's two slowest
 	// reads (1.06s and 1.03s in prod trace ed2301a0…).
-	if err := db.Bun().NewRaw(query, userID, orm.Arg(triggerIDs), orm.Arg(perTrigger)).Scan(ctx, &rows); err != nil {
+	if err := db.Bun().NewRaw(query, append([]any{userID, orm.Arg(triggerIDs), orm.Arg(perTrigger)}, extra...)...).Scan(ctx, &rows); err != nil {
 		return nil, fmt.Errorf("failed to %s: %w", what, err)
 	}
 	firings, err := triggerFiringsToCore(rows)

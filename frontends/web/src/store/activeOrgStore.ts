@@ -215,10 +215,16 @@ export function forgetChosenOrg(): void {
  */
 export const ORG_SCOPED_QUERY_ROOTS: readonly string[] = [
   "observability",
-  "observability-billing",
+  // Every ObservabilityBillingService read on its generated keys: usage,
+  // limits, storage and daily rows (hooks/observability-billing-queries.ts).
+  "observability_billing.v1.ObservabilityBillingService",
   "forge",
   "forgeService",
+  // hooks/identity-queries.ts: the caller's org outside the org tree, then
+  // every IdentityService read on its generated keys (an environment's
+  // sign-in service, its users).
   "identity",
+  "controlplane.v1.IdentityService",
   "deploy-usage",
   // Generated DeployService reads (hooks/controlplane): usage rows, the collection policy's environments.
   "controlplane.v1.DeployService",
@@ -230,6 +236,9 @@ export const ORG_SCOPED_QUERY_ROOTS: readonly string[] = [
   // Every LLMGatewayService read: the org's managed keys, spend and the
   // models its plan permits.
   "controlplane.v1.LLMGatewayService",
+  // Every AlertingService read on its generated keys: alerts, their history,
+  // silences, receivers and notifications, each scoped by its request's org.
+  "controlplane.v1.AlertingService",
   "cp",
   // Every DaemonService read on its generated keys: a machine's detail,
   // preview template and port-access rules.
@@ -243,6 +252,9 @@ export const ORG_SCOPED_QUERY_ROOTS: readonly string[] = [
   "controlplane.v1.DashboardService",
   // Legacy dashboard keys may still be restored from a persisted cache.
   "dashboards",
+  // IssuesService's reads on generated keys: the inbox (scoped by its
+  // request's org), an issue, its events and its timeline.
+  "controlplane.v1.IssuesService",
   // The machine → org map (services/controlPlane/machineOrgs.ts).
   "controlPlane",
   "orgs-members",
@@ -252,4 +264,7 @@ export const ORG_SCOPED_QUERY_ROOTS: readonly string[] = [
   // hooks/changes-queries.ts: the page's org, then ChangesService's reads.
   "changes",
   "controlplane.v1.ChangesService",
+  // The managed secret store's reads (hooks/forge-queries.ts): an
+  // environment's secrets and their version histories.
+  "controlplane.v1.SecretStoreService",
 ];

@@ -211,8 +211,17 @@ func TestDevSecrets_ProtectedOnlyForValuesTheSourceLacks(t *testing.T) {
 			w := f.worktree("dev", "feat/dev")
 			write(t, filepath.Join(w.Path, "secrets", "dev.yaml"), tc.worktree)
 			got := f.one(w)
+			// Automatic cleanup judges the copy as the classifier does
+			// (sourceCovers): one the source's values cover is retired with
+			// its worktree (owner, 2026-11-25), and any other holds it.
+			if !tc.wantHeld {
+				if got.Outcome != OutcomeRemoved || exists(w.Path) {
+					t.Fatalf("a copy the source covers held the worktree: %+v", got)
+				}
+				return
+			}
 			if got.Outcome != OutcomeHeld || !exists(filepath.Join(w.Path, "secrets", "dev.yaml")) {
-				t.Fatalf("automatic whole-worktree cleanup retains protected secrets regardless of copy equivalence: %+v", got)
+				t.Fatalf("a value only this copy holds did not hold the worktree: %+v", got)
 			}
 		})
 	}

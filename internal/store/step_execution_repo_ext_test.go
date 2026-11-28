@@ -22,6 +22,7 @@ import (
 // Run diagnostics is scoped to the workflow tree, not every root of a chat,
 // and never projects resolved inputs or arbitrary output fields.
 func TestListRunNodeExecutions(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	seedSteps(t, env)
 	rows, err := store.ListRunNodeExecutions(context.Background(), env.ORM, "wf-s1", 20)
@@ -46,6 +47,7 @@ func TestListRunNodeExecutions(t *testing.T) {
 }
 
 func TestRunDiagnosticsBoundsBeforeJSONAndPreservesSkip(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	seedSteps(t, env)
 	ctx := context.Background()
@@ -212,6 +214,7 @@ func fromPtr[T any](p *T) T {
 }
 
 func TestLoadStepExecution(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	seedSteps(t, env)
@@ -273,6 +276,7 @@ func TestLoadStepExecution(t *testing.T) {
 }
 
 func TestStepExecutionLists(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	seedSteps(t, env)
@@ -303,6 +307,7 @@ func TestStepExecutionLists(t *testing.T) {
 }
 
 func TestStepExecutionRecordsForChat(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	seedSteps(t, env)
@@ -369,6 +374,7 @@ func TestStepExecutionRecordsForChat(t *testing.T) {
 }
 
 func TestChatStepExecutionViews(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	seedSteps(t, env)
@@ -469,6 +475,7 @@ var literalNotInList = regexp.MustCompile(`(?s)activity_name\s+NOT\s+IN\s*\(([^)
 // drift the failure is a silent seq scan (or a missing indicator), not an
 // error, so this pins them.
 func TestUserFacingStepIndexPredicateMatchesInternalActivities(t *testing.T) {
+	t.Parallel()
 	want := append([]string(nil), model.InternalActivities...)
 	sort.Strings(want)
 
@@ -515,6 +522,7 @@ func TestUserFacingStepIndexPredicateMatchesInternalActivities(t *testing.T) {
 // of the top-level node once, never a row that already has an error, and
 // reports false for a node with no attempt.
 func TestRunDiagnosticsSaveMessageNodeAndDeclaredFailure(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	seedSteps(t, env)
 	ctx := context.Background()
@@ -566,6 +574,7 @@ VALUES($1,'wf-s1','stopped','SaveMessage',$2,1,now() + $3 * interval '1 second')
 // derived, and an escaped backslash followed by "u0000" (text, not a NUL)
 // survives as written.
 func TestInsertStepExecutionStoresEscapedNUL(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	out, err := json.Marshal(map[string]any{"message_id": "m-nul", "message": map[string]any{"text": "a\x00b"}})

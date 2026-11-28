@@ -100,6 +100,7 @@ func releaseCapacity(t *testing.T, ctx context.Context, env *storetest.Env, id s
 // still supersedes within its key; and with neither field the queue is the
 // plain max_running FIFO it always was.
 func TestTriggerCapacityAdmissionOrder(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	i := 0
@@ -256,6 +257,7 @@ func TestTriggerCapacityAdmissionOrder(t *testing.T) {
 // key's: the per-key cap is about the subject (one run per pull request), so a
 // new firing of the parked run's key still waits.
 func TestTriggerCapacityParkedRunKeepsItsKey(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	scope := capacityScope()
@@ -283,6 +285,7 @@ func TestTriggerCapacityParkedRunKeepsItsKey(t *testing.T) {
 // The redriver's scope head is the scope's first waiting event in admission
 // order, so a waiting high-priority firing is the one it fires again.
 func TestTriggerCapacityRedriveHeadFollowsPriority(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	scope := capacityScope()
@@ -303,6 +306,7 @@ func TestTriggerCapacityRedriveHeadFollowsPriority(t *testing.T) {
 // priority event behind a stream of higher ones still expires after a day
 // rather than launching late.
 func TestTriggerCapacityExpiredEventBehindHigherPriorityHead(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	scope := capacityScope()

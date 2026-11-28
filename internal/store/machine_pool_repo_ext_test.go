@@ -19,6 +19,7 @@ import (
 // Postgres: membership by durable label, phase, install, the synced catalog,
 // and live runs counted from pool-placed chats only.
 func TestMachinePoolQueries(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	now := time.Now().UTC().Truncate(time.Microsecond)
@@ -175,7 +176,7 @@ func TestMachinePoolQueries(t *testing.T) {
 	if err := store.InsertTrigger(ctx, env.ORM, trg); err != nil {
 		t.Fatalf("InsertTrigger: %v", err)
 	}
-	if got, err := env.Repo.GetTrigger(ctx, "trg-pool"); err != nil || got.MachinePoolID != pool.ID || got.MachinePoolName != "cicd" || got.MachineState != "pool" {
+	if got, err := store.GetTrigger(ctx, env.Repo.ORM(), "trg-pool"); err != nil || got.MachinePoolID != pool.ID || got.MachinePoolName != "cicd" || got.MachineState != "pool" {
 		t.Fatalf("pool trigger read back = %+v, %v", got, err)
 	}
 	if err := store.DeleteMachinePoolByName(ctx, env.ORM, storetest.SeedUserID, "cicd"); !errors.Is(err, core.ErrMachinePoolInUse) {
@@ -197,6 +198,7 @@ func TestMachinePoolQueries(t *testing.T) {
 // user's or (for an unbound credential) a reserved one; a no-op when already
 // applied; refused past the label limit.
 func TestMergeDeclaredDaemonLabels(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	for _, d := range []*db.Daemon{

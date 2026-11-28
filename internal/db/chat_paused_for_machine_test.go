@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -21,7 +22,7 @@ func newPausedChat(t *testing.T, repo *Repo, raw *sql.DB, chatID, userID string,
 
 func pausedIDs(t *testing.T, repo *Repo, userID string) []string {
 	t.Helper()
-	chats, err := repo.ListChatsPausedForMachine(context.Background(), userID, 100)
+	chats, err := store.ListChatsPausedForMachine(context.Background(), repo.ORM(), userID, 100)
 	require.NoError(t, err)
 	ids := make([]string, 0, len(chats))
 	for _, c := range chats {
@@ -56,7 +57,7 @@ func TestListChatsPausedForMachine(t *testing.T) {
 	assert.ElementsMatch(t, []string{"pm-breaker", "pm-other-user"}, pausedIDs(t, repo, ""),
 		"an empty user lists every user's (the sweep)")
 
-	chats, err := repo.ListChatsPausedForMachine(ctx, "u1", 100)
+	chats, err := store.ListChatsPausedForMachine(ctx, repo.ORM(), "u1", 100)
 	require.NoError(t, err)
 	require.Len(t, chats, 1)
 	assert.Equal(t, "pm-breaker", chats[0].WorkflowID, "the paused root run, for the resume")

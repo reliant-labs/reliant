@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 
@@ -64,6 +65,8 @@ func FromDefinition(def *reliantv1.TriggerDefinition) (*Source, error) {
 		return fromIntegration(src.Integration)
 	case *reliantv1.TriggerDefinition_WorkflowEvent:
 		return fromWorkflowEvent(src.WorkflowEvent)
+	case *reliantv1.TriggerDefinition_RecordDue:
+		return nil, &ConfigError{Field: "record_due", Reason: "only a workflow's declared trigger can be record_due; declare it in the workflow's triggers: block and enable that"}
 	case *reliantv1.TriggerDefinition_WorkflowTrigger:
 		return nil, &ConfigError{Field: "source", Reason: "workflow_trigger names a declaration; resolve it against the workflow first"}
 	case nil:
@@ -87,8 +90,14 @@ func FromWorkflowTrigger(wt *reliantv1.WorkflowTrigger) (*Source, error) {
 		return fromIntegration(src.Integration)
 	case *reliantv1.WorkflowTrigger_WorkflowEvent:
 		return fromWorkflowEvent(src.WorkflowEvent)
+	case *reliantv1.WorkflowTrigger_RecordDue:
+		cfg, err := RecordDueConfigFromProto(src.RecordDue)
+		if err != nil {
+			return nil, err
+		}
+		return marshalSource(core.TriggerKindRecordDue, cfg, "", false)
 	case nil:
-		return nil, &ConfigError{Field: "source", Reason: "a source is required (schedule, webhook, integration or workflow_event); a trigger with no source can never fire"}
+		return nil, &ConfigError{Field: "source", Reason: "a source is required (schedule, webhook, integration, workflow_event or record_due); a trigger with no source can never fire"}
 	default:
 		return nil, &ConfigError{Field: "source", Reason: fmt.Sprintf("unsupported source %T", src)}
 	}
@@ -301,6 +310,17 @@ func WorkflowEventConfigFromProto(src *reliantv1.WorkflowEventSource) (core.Work
 		}
 	}
 	return cfg, nil
+}
+
+// RecordDueConfigFromProto validates a RecordDueSource: it must name a
+// registered table (core.RecordDueTables).
+func RecordDueConfigFromProto(src *reliantv1.RecordDueSource) (core.RecordDueConfig, error) {
+	table := strings.TrimSpace(src.GetTable())
+	if !slices.Contains(core.RecordDueTables, table) {
+		return core.RecordDueConfig{}, &ConfigError{Field: "record_due.table",
+			Reason: fmt.Sprintf("%q is not a table whose records fall due; name one of %s", table, strings.Join(core.RecordDueTables, ", "))}
+	}
+	return core.RecordDueConfig{Table: table}, nil
 }
 
 func validHeaderName(name string) bool {

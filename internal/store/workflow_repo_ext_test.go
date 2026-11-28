@@ -54,6 +54,7 @@ func familyWorkflows() map[string]*core.Workflow {
 }
 
 func TestWorkflowReads(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	seedWorkflowFamily(t, env)
@@ -142,6 +143,7 @@ func TestWorkflowReads(t *testing.T) {
 // TestRootWorkflowStatusForChats: a chat's effective lifecycle is active if
 // any of its workflows is, else paused if any is, else its newest root's.
 func TestRootWorkflowStatusForChats(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	seedWorkflowFamily(t, env)
@@ -205,6 +207,7 @@ func TestRootWorkflowStatusForChats(t *testing.T) {
 // an id is a no-op that leaves the transaction usable, which a duplicate-key
 // violation (25P02) would not.
 func TestInsertWorkflowIfAbsentKeepsTheFirstRowAndTheTransaction(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	seedChat(t, env, "chat-dup")
@@ -238,6 +241,7 @@ func TestInsertWorkflowIfAbsentKeepsTheFirstRowAndTheTransaction(t *testing.T) {
 // TestInsertWorkflowIfAbsentLeavesRunOnlyColumnsNull: the outcome and worker
 // stamps belong to later writes, so a new row has none whatever the caller set.
 func TestInsertWorkflowIfAbsentLeavesRunOnlyColumnsNull(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	seedChat(t, env, "chat-new")
@@ -257,6 +261,7 @@ func TestInsertWorkflowIfAbsentLeavesRunOnlyColumnsNull(t *testing.T) {
 // starting point, and checks the whole row: the fields it changes, and that
 // the rest, and a bystander workflow in the same chat, stay as they were.
 func TestWorkflowWrites(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	seedChat(t, env, "chat-w")
@@ -394,6 +399,7 @@ func TestWorkflowWrites(t *testing.T) {
 // TestCompareAndSwapWorkflowStatus: the swap is over the (state, stop_reason)
 // PAIR, reports whether it won, and stamps completed_at like any status write.
 func TestCompareAndSwapWorkflowStatus(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	seedChat(t, env, "chat-cas")
@@ -454,6 +460,7 @@ func TestCompareAndSwapWorkflowStatus(t *testing.T) {
 // TestPauseResume covers the chat-wide writes: they reach every workflow of
 // the named chat and no other chat's.
 func TestPauseResume(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	for _, chat := range []string{"chat-pr", "chat-pr-other"} {
@@ -621,6 +628,7 @@ var cascadeBase = map[string]treeRow{
 }
 
 func TestCascadeTerminalStatusToDescendants(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	seedTree(t, env, cascadeNodes(core.Cancelled()), l2Base)
 	root := row(3, 4, 2, true)
@@ -657,6 +665,7 @@ func TestCascadeTerminalStatusToDescendants(t *testing.T) {
 // TestCascadeStartsBelowTheNamedWorkflow: the named workflow itself and its
 // siblings are not touched, and the reason is the caller's.
 func TestCascadeStartsBelowTheNamedWorkflow(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	seedTree(t, env, cascadeNodes(core.Active()), l2Base)
 
@@ -671,6 +680,7 @@ func TestCascadeStartsBelowTheNamedWorkflow(t *testing.T) {
 }
 
 func TestReapOrphanedWorkflowDescendants(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	seedTree(t, env, cascadeNodes(core.Failed()), l2Base)
 
@@ -707,6 +717,7 @@ func TestReapOrphanedWorkflowDescendants(t *testing.T) {
 // reason of the terminal workflow above it; a paused parent has not ended, so
 // its children and a live parent's are left alone.
 func TestReapInheritsItsTerminalAncestorsReason(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	seedTree(t, env, []treeNode{
 		{"root", "", core.Active()},
@@ -739,6 +750,7 @@ func TestReapInheritsItsTerminalAncestorsReason(t *testing.T) {
 // kill and existed, unfinished, at the reset point come back with their
 // threads, and so does the root's own thread.
 func TestReviveSubtreeLiveAt(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	// Nodes are created at l2Base+0..11s and the ended ones finish at l2Base+60s+i.
 	cases := []struct {

@@ -1,7 +1,7 @@
 ---
 title: "When not to use Forge"
 sidebarTitle: "When not to use Forge"
-description: "Where Forge and Reliant hosting are the wrong fit: generated code you don't want, a REST-first API, a database that isn't Postgres, a backend that isn't a container, multi-region or autoscaling needs, and a one-time scaffold."
+description: "Where Forge and Reliant hosting are the wrong fit: generated code you don't want, a REST-first API, a database that isn't Postgres, a backend that isn't a container, and a one-time scaffold."
 keywords: ["forge alternatives", "when not to use forge", "forge limitations", "forge vs vercel", "forge fit"]
 ---
 
@@ -25,15 +25,15 @@ A service deploys as an image, and a frontend as static files. A function-as-a-s
 
 ## You need a managed platform feature Reliant hosting doesn't have
 
-Reliant hosting is deliberately small, and the [Limits page](/hosting/limits) is the whole list. The ones that most often decide the question are no autoscaling (you set the replica count), one region (GCP `us-central1`, with no multi-region failover), no hosted cron-kind workloads (a worker that runs its own schedule does run), no operators or CRDs, and, for a hosted frontend, static export only. Each has a way out: bind that one workload to a cluster you operate and keep the rest hosted, or deploy a [server-rendered Next.js app as a Dockerfile workload](/guides/forge/deploy-nextjs-static). If you need any of them across the board, and don't want to run a cluster, another host is the better choice.
+Reliant hosting is deliberately small, and the [Limits page](/hosting/limits) is the whole list. The ones that most often decide the question are no hosted cron-kind workloads (a worker that runs its own schedule does run) and no operators or CRDs. Each has a way out: bind that one workload to a cluster you operate and keep the rest hosted. If you need any of them across the board, and don't want to run a cluster, another host is the better choice.
 
 ## You want a framework you'll outgrow and replace
 
 Forge holds structure for the life of the project: the layout, the lint rules, the migration discipline and the generated seams are meant to stay. If you want a scaffold you will rip out in a month, a template repository is lighter and will not keep opinions in your way.
 
-## You need a compliance attestation or a choice of region
+## You need a compliance attestation
 
-Hosted workloads run in one region and the docs do not describe a compliance certification for Reliant hosting. If a contract requires data residency elsewhere or an attestation such as SOC 2, settle that before choosing the platform. The Forge framework itself is Apache-2.0 and runs against a cluster you operate, without Reliant hosting.
+The docs do not describe a compliance certification for Reliant hosting. If a contract requires an attestation such as SOC 2, settle that before choosing the platform. The Forge framework itself is Apache-2.0 and runs against a cluster you operate, without Reliant hosting.
 
 ## Related topics
 

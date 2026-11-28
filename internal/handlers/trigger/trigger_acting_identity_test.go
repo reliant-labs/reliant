@@ -14,6 +14,7 @@ import (
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/store/triggertest"
 	"github.com/reliant-labs/reliant/internal/triggers"
 )
@@ -146,7 +147,7 @@ func (e *triggerTestEnv) hosted(t *testing.T) *triggerTestEnv {
 
 func (e *triggerTestEnv) storedIdentity(t *testing.T, id string) core.ActingIdentity {
 	t.Helper()
-	stored, err := e.repo.GetTrigger(context.Background(), id)
+	stored, err := store.GetTrigger(context.Background(), e.repo.ORM(), id)
 	require.NoError(t, err)
 	return stored.ActingIdentity
 }

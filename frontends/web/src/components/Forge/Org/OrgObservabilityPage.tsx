@@ -30,6 +30,7 @@ import { useOrgEnvironments } from "@/hooks/apps-queries";
 import { isChunkLoadError, staleChunkModule } from "@/lib/lazyRoute";
 
 import { carriedOrgSearch, OBS_NAV_LABELS, orgPageOf, orgPath, withSearch, type OrgPage } from "../Console/paths";
+import { useSeveralApps } from "../Console/severalProjects";
 import { orgPlaceOf } from "../Observability/obsPlace";
 import type { ObsNavigate, ObsSearch } from "../Observability/obsSearch";
 import { CloudNotice } from "../SourceNotices";
@@ -64,7 +65,15 @@ export function OrgObservabilityPage() {
   // The same org-wide read the Apps page lists apps from (hooks/apps-queries.ts).
   const orgEnvs = useOrgEnvironments();
   const data = orgEnvs.data;
-  const { environments, apps } = useMemo(() => orgPlaceOf(data?.envs ?? []), [data]);
+  // Several projects chosen in the shell (not All): their apps, the page's whole place, which
+  // the panel's own app filter narrows further (Console/severalProjects.tsx).
+  const several = useSeveralApps();
+  const chosenKey = several?.mode === "many" ? several.apps.map((candidate) => candidate.app).join("\n") : null;
+  const { environments, apps } = useMemo(() => {
+    const envs = data?.envs ?? [];
+    const chosen = chosenKey === null ? null : new Set(chosenKey.split("\n"));
+    return orgPlaceOf(chosen ? envs.filter((env) => chosen.has(env.project)) : envs);
+  }, [data, chosenKey]);
   const place = useMemo(() => ({ kind: "org" as const, environments, apps }), [environments, apps]);
 
   const obsSearch = useMemo<ObsSearch>(

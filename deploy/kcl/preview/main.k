@@ -94,4 +94,12 @@ output = forge.render(dsi.only_in_dev("preview", fg.inert_when_fixtures(forge.Bu
     # Reliant cloud: needed by OnHosted.
     control_plane = forge.ControlPlane {}
     frontends = [_web]
+    # The preview carries the production web build, so it is held to prod's
+    # bar: a KEV or fixable critical finding in its SBOM (from pnpm-lock.yaml)
+    # refuses the cut. The gate needs the SBOM, so provenance_sbom is enforced
+    # too.
+    delivery_policy = forge.DeliveryPolicy {
+        vuln_gate = forge.VulnPolicy {mode = "enforce"}
+        provenance_sbom = forge.Control {mode = "enforce"}
+    }
 })))

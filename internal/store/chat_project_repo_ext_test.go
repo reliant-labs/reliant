@@ -37,6 +37,7 @@ func attachedIDs(t *testing.T, env *storetest.Env, chatID string) []string {
 }
 
 func TestChatProjectsAttachListDetach(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	seedChat(t, env, "chat-a")
@@ -78,6 +79,7 @@ func TestChatProjectsAttachListDetach(t *testing.T) {
 }
 
 func TestChatProjectsCap(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	seedChat(t, env, "chat-cap")
@@ -102,6 +104,7 @@ func TestChatProjectsCap(t *testing.T) {
 }
 
 func TestCopyChatProjectsKeepsMachines(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	seedChat(t, env, "chat-src")

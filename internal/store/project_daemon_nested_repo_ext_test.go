@@ -99,6 +99,7 @@ func (f *nestedFixture) installState(t *testing.T) (core.ProjectInstallState, st
 // a repository still to clone), settled under the claim, read back, and
 // planned again.
 func TestNestedRepoClones(t *testing.T) {
+	t.Parallel()
 	f := newNestedFixture(t)
 	ids, err := store.ListProjectsWithUnsettledDaemonRepos(f.ctx, f.env.ORM, "d1")
 	if err != nil || len(ids) != 1 || ids[0] != f.project.ID {
@@ -161,6 +162,7 @@ func TestNestedRepoClones(t *testing.T) {
 // taken from then records nothing; planning the set-up again drops every
 // claim, so the old plan's pass records nothing either.
 func TestNestedRepoClaimsAreLeasedAndFenced(t *testing.T) {
+	t.Parallel()
 	f := newNestedFixture(t)
 	if got := f.claimedName(t, "gone"); got != "forge" {
 		t.Fatalf("claim = %q", got)
@@ -244,6 +246,7 @@ func (f *nestedFixture) planned(t *testing.T) map[string]bool {
 // and the new plan clones it again. A takeover after the lease ran out clears
 // the mark, and the old claim records nothing.
 func TestNestedRepoReplanDuringAnActiveClone(t *testing.T) {
+	t.Parallel()
 	t.Run("the running claim keeps the target until it settles", func(t *testing.T) {
 		f := newNestedFixture(t)
 		if got := f.claimedName(t, "running"); got != "forge" {
@@ -324,6 +327,7 @@ func TestNestedRepoReplanDuringAnActiveClone(t *testing.T) {
 // it is kept, hidden from the plan, until that clone ends, so a later plan
 // that adds the repository back still cannot start a second clone of it.
 func TestNestedRepoReplanOmittingARunningClone(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		name    string
 		omitted func(f *nestedFixture) []string
@@ -408,6 +412,7 @@ func TestNestedRepoReplanOmittingARunningClone(t *testing.T) {
 // A repository inside one that failed is claimed flagged, for the claimer to
 // settle failed without cloning it.
 func TestNestedRepoClaimInsideAFailedRepository(t *testing.T) {
+	t.Parallel()
 	f := newNestedFixture(t)
 	f.claimedName(t, "p") // forge
 	if !f.settle(t, f.forge.ID, "p", "denied") {
@@ -436,6 +441,7 @@ func TestNestedRepoClaimInsideAFailedRepository(t *testing.T) {
 // gateway settled the root alone), and never from an outcome of a plan made
 // again since.
 func TestSettleProjectDaemonFromNestedRepos(t *testing.T) {
+	t.Parallel()
 	f := newNestedFixture(t)
 	settleAll := func(failWeb bool) {
 		for c := f.claim(t, "p"); c != nil; c = f.claim(t, "p") {
@@ -499,6 +505,7 @@ func TestSettleProjectDaemonFromNestedRepos(t *testing.T) {
 // TestGetProjectBySameRemoteAndUserInScope finds a project by any spelling of
 // its GitHub remote, and only that repository.
 func TestGetProjectBySameRemoteAndUserInScope(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	now := time.Now().UTC()

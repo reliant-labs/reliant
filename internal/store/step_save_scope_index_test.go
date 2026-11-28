@@ -28,6 +28,7 @@ import (
 // visible steps rather than the other way round. Asserted under the generic
 // plan, the one a prepared statement settles on after five runs.
 func TestBasicStepSaveProbeUsesScopeIndex(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	seedSteps(t, env)

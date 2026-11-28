@@ -1,4 +1,5 @@
 // @vitest-environment node
+import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { resolveConfig, type ConfigEnv, type UserConfig } from "vite";
@@ -41,6 +42,15 @@ describe("forge-demo build target (the actual Vite config)", () => {
     ]));
     const output = config.build.rolldownOptions.output as { codeSplitting: { groups: { name: string }[] } };
     expect(output.codeSplitting.groups.map((group) => group.name)).not.toContain("vendor-monaco");
+  });
+
+  it("the demo document is noindex at every URL; the app's document is not", () => {
+    // The demo host serves demo.html (as index.html) for /forge/demo and every
+    // deep state URL, so one static tag in its <head> covers them all.
+    const robots = (file: string) =>
+      [...readFileSync(path.resolve(__dirname, file), "utf8").matchAll(/<meta\s+name="robots"\s+content="([^"]*)"/g)].map((m) => m[1]);
+    expect(robots("demo.html")).toEqual(["noindex"]);
+    expect(robots("index.html")).toEqual([]);
   });
 
   it("an ordinary app build keeps its app document and output", async () => {

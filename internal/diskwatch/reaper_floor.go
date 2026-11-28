@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/reliant-labs/forge/pkg/gocache"
+
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/version"
 )
@@ -22,18 +24,27 @@ import (
 // than the floor may be in use. Deleting one fails that build with "could not
 // import … no such file".
 //
-// forge's trim holds that floor (forge#1231: the 2h floor holds even over
-// budget; #1243: the cutoff is held back to the oldest running build; #1245:
-// an entry's mtime is re-checked before it is unlinked), and the reaper runs
-// THIS binary's forge, which go.mod pins at or above those fixes. As defence
-// in depth every pass that trims the Go cache leaves a durable record, and a
-// cutoff that reached inside the floor is an ERROR whatever forge said it
-// would do.
+// forge's trim holds that floor (forge#1231; #1243: the cutoff is held back
+// to the oldest running build; #1245: an entry's mtime is re-checked before
+// it is unlinked), and the reaper runs THIS binary's forge, which go.mod pins
+// at or above those fixes. The 2h floor binds at rest. When the entries older
+// than it cannot bring the cache under budget, forge's size rule reaches
+// toward its goCacheMinFloor, cmd/go's 1h restamp interval plus 5 minutes,
+// and never past it. As defence in depth every pass that trims the Go cache
+// leaves a durable record. A cutoff inside the 2h floor is a WARN, because
+// forge does that only to stop a disk filling. A cutoff inside the minimum
+// floor is an ERROR whatever forge said it would do. Until #2762 the audit
+// knew only the 2h floor, so every trim under disk pressure logged an ERROR
+// for a cutoff forge's contract allows.
 
 const (
-	// liveBuildFloor is the youngest Go-cache entry a trim may ever delete:
-	// forge's goCacheFloor.
-	liveBuildFloor = 2 * time.Hour
+	// liveBuildFloor is the youngest Go-cache entry a trim deletes at rest:
+	// forge/pkg/gocache's Floor, the one copy forge's trim reads too.
+	liveBuildFloor = gocache.Floor
+
+	// minLiveBuildFloor is the youngest Go-cache entry a trim may delete
+	// under budget pressure: forge/pkg/gocache's MinFloor.
+	minLiveBuildFloor = gocache.MinFloor
 
 	// floorViolationSlack absorbs the clock read between the pass starting
 	// and forge reading its own clock.
@@ -94,9 +105,15 @@ type trimAuditCache struct {
 	FloorViolated bool      `json:"floor_violated,omitempty"`
 }
 
-// floorViolated reports whether a trim's cutoff reached inside the floor of
-// the pass that made it. A zero cutoff says nothing was selected by age.
+// floorViolated reports whether a trim's cutoff reached inside the minimum
+// floor of the pass that made it. A zero cutoff says nothing was selected by age.
 func floorViolated(start, cutoff time.Time) bool {
+	return !cutoff.IsZero() && start.Sub(cutoff) < minLiveBuildFloor-floorViolationSlack
+}
+
+// insideRestFloor reports whether a trim's cutoff reached inside the 2h
+// floor: allowed only under budget pressure, down to minLiveBuildFloor.
+func insideRestFloor(start, cutoff time.Time) bool {
 	return !cutoff.IsZero() && start.Sub(cutoff) < liveBuildFloor-floorViolationSlack
 }
 

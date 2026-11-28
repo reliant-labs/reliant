@@ -119,7 +119,7 @@ func orgUserStream(t *testing.T, repo Repository, hub streaming.UpdateHub[db.Use
 // adjusts the service before it serves.
 func credentialUserStream(t *testing.T, repo Repository, hub streaming.UpdateHub[db.UserUpdate], m authz.Membership, bound string, tune ...func(*Service)) <-chan *reliantv1.UserStreamEvent {
 	t.Helper()
-	svc := NewTestStreaming(t, WithStreamingDeps(withRoles(Deps{Repo: repo, Deltas: noopHub{}, UserUpdates: hub})))
+	svc := NewTestStreaming(t, WithStreamingDeps(withRoles(Deps{TriggerReads: fixtureTriggerReads(repo), Repo: repo, Deltas: noopHub{}, UserUpdates: hub})))
 	for _, f := range tune {
 		f(svc)
 	}

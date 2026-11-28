@@ -116,3 +116,48 @@ func TestWorkflowConcurrencyPerMemberRoundTrip(t *testing.T) {
 		})
 	}
 }
+
+func TestWorkflowConcurrencyCancelRunningRoundTrip(t *testing.T) {
+	for _, tc := range []struct {
+		policy string
+		want   reliantv1.WorkflowConcurrencyCancelRunning
+	}{
+		{"{max_running_per_key: 1, key: '{{ trigger.payload.data.pull_request.number }}', waiting: latest, cancel_running: on_new_head}",
+			reliantv1.WorkflowConcurrencyCancelRunning_WORKFLOW_CONCURRENCY_CANCEL_RUNNING_ON_NEW_HEAD},
+		{"{max_running: 6, max_running_per_key: 1, key: '{{ trigger.payload.data.number }}', cancel_running: on_new_key_event}",
+			reliantv1.WorkflowConcurrencyCancelRunning_WORKFLOW_CONCURRENCY_CANCEL_RUNNING_ON_NEW_KEY_EVENT},
+		// never needs no key: it cancels nothing.
+		{"{max_running: 2, cancel_running: never}", reliantv1.WorkflowConcurrencyCancelRunning_WORKFLOW_CONCURRENCY_CANCEL_RUNNING_NEVER},
+		{"{max_running: 2}", reliantv1.WorkflowConcurrencyCancelRunning_WORKFLOW_CONCURRENCY_CANCEL_RUNNING_UNSPECIFIED},
+	} {
+		t.Run(tc.policy, func(t *testing.T) {
+			wf, err := ParseWorkflow([]byte("name: bounded\nconcurrency: " + tc.policy + "\nentry: [a]\nnodes: [{id: a, type: compact}]\n"))
+			require.NoError(t, err)
+			require.Equal(t, tc.want, wf.GetConcurrency().GetCancelRunning())
+			encoded, err := MarshalWorkflow(wf)
+			require.NoError(t, err)
+			if tc.want == reliantv1.WorkflowConcurrencyCancelRunning_WORKFLOW_CONCURRENCY_CANCEL_RUNNING_UNSPECIFIED {
+				require.NotContains(t, string(encoded), "cancel_running", "unset stays unset")
+			}
+			again, err := ParseWorkflow(encoded)
+			require.NoError(t, err)
+			require.Equal(t, wf, again)
+		})
+	}
+}
+
+func TestWorkflowConcurrencyCancelRunningNeedsOneRunPerKey(t *testing.T) {
+	for _, policy := range []string{
+		"{max_running: 1, cancel_running: on_new_key_event}",                                             // no key
+		"{max_running: 1, waiting: latest, key: '{{ trigger.kind }}', cancel_running: on_new_key_event}", // key, but no per-key cap
+		"{max_running_per_key: 2, key: '{{ trigger.kind }}', cancel_running: on_new_head}",               // more than one run per key
+		"{max_running_per_key: 1, key: '{{ trigger.kind }}', cancel_running: always}",                    // not a value
+		"{max_running_per_key: 1, key: '{{ trigger.kind }}', cancel_running: [on_new_head]}",
+	} {
+		t.Run(policy, func(t *testing.T) {
+			_, err := ParseWorkflow([]byte("name: bounded\nconcurrency: " + policy + "\nentry: [a]\nnodes: [{id: a, type: compact}]\n"))
+			require.Error(t, err)
+			require.Contains(t, err.Error(), "cancel_running")
+		})
+	}
+}

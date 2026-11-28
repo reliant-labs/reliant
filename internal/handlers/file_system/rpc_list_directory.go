@@ -35,7 +35,7 @@ func (s *Service) ListDirectory(
 	if err != nil {
 		return nil, err
 	}
-	if err := s.sendCommand(ctx, userID, target, "fs.list_dir", cmdReq, &cmdResp, 5000); err != nil {
+	if err := s.sendCommand(ctx, userID, target, "fs.list_dir", cmdReq, &cmdResp, pickerTimeoutMs); err != nil {
 		return nil, err
 	}
 

@@ -20,10 +20,16 @@
 #
 # Scopes (Google's classification):
 #   gmail.send       sensitive    messages.send only
+#   gmail.compose    RESTRICTED   drafts.create (it also covers drafts.send and
+#                                 messages.send; only drafts.create is used)
 #   gmail.readonly   RESTRICTED   messages.list/get, history.list, labels.list
 # Reading is unavoidably restricted: beyond 100 test users it needs Google's
 # verification plus a CASA security assessment (an operator step; see
-# research/INTEGRATIONS_V1_PROVIDERS.md §3).
+# research/INTEGRATIONS_V1_PROVIDERS.md §3). gmail.readonly already makes the
+# app restricted, so gmail.compose (for draft.create) does not change the
+# verification class. A connection made before gmail.compose was requested
+# lacks it: draft.create on it gets 403 insufficientPermissions and the user
+# reconnects once. The consent screen in Google Cloud must list the scope too.
 #
 # Identity: users.getProfile -> emailAddress, used as both the external
 # account id and the label. A Gmail mailbox's address is its identity for
@@ -50,10 +56,10 @@
 id: gmail
 version: 1
 display_name: Gmail
-description: Send, search and read email in a Gmail mailbox, as the connected Google account.
+description: Send, draft, search and read email in a Gmail mailbox, as the connected Google account.
 icon: gmail
 category: communication
-keywords: [email, mail, google, inbox, send, messages]
+keywords: [email, mail, google, inbox, send, draft, messages]
 
 connection:
   base_url: https://gmail.googleapis.com/gmail/v1/users/me
@@ -66,6 +72,7 @@ connection:
         pkce: S256
         scopes:
           - https://www.googleapis.com/auth/gmail.send
+          - https://www.googleapis.com/auth/gmail.compose
           - https://www.googleapis.com/auth/gmail.readonly
         authorize_params:
           access_type: offline
@@ -115,49 +122,49 @@ actions:
           title: To
           description: Recipient addresses, each "ann@example.com" or "Ann <ann@example.com>".
           examples: [["ann@example.com", "Bo Chen <bo@example.com>"]]
-        cc:
+        cc: &cc
           type: array
           maxItems: 100
           items: { type: string, minLength: 3, maxLength: 320 }
           title: Cc
           description: Addresses to copy, shown to every recipient.
           examples: [["team@example.com"]]
-        bcc:
+        bcc: &bcc
           type: array
           maxItems: 100
           items: { type: string, minLength: 3, maxLength: 320 }
           title: Bcc
           description: Addresses that receive the email but are never shown to the other recipients.
           examples: [["archive@example.com"]]
-        subject:
+        subject: &subject
           type: string
           maxLength: 998
           title: Subject
           description: The subject line. For a reply, keep the original subject ("Re:" is added if missing).
           examples: ["Your invoice for October"]
-        text:
+        text: &text
           type: string
           title: Plain-text body
           description: The body as plain text. Give text, HTML or both; clients show the HTML when they can.
           examples: ["Hi Ann,\n\nYour invoice for October is attached.\n\nThanks,\nBo"]
-        html:
+        html: &html
           type: string
           title: HTML body
           description: The body as HTML.
           examples: ["<p>Hi Ann,</p><p>Your invoice for October is attached.</p>"]
-        thread_id:
+        thread_id: &thread_id
           type: string
           pattern: "^[0-9a-f]{1,32}$"
           title: Thread ID
           description: To reply in a thread, the thread_id of the message you are replying to (from Get email or Search email).
           examples: ["18c2f4a1b9e3d7f0"]
-        in_reply_to:
+        in_reply_to: &in_reply_to
           type: string
           maxLength: 998
           title: In-Reply-To (Message-ID)
           description: To reply, the Message-ID header of the message you are replying to; Get email returns it as message_id.
           examples: ["<CAF8x3vQ7n2@mail.gmail.com>"]
-        references:
+        references: &references
           type: string
           maxLength: 8000
           title: References
@@ -173,6 +180,64 @@ actions:
           id: { type: string, description: The sent message's id. }
           thread_id: { type: string, description: The thread the message is in. }
           label_ids: { type: array, items: { type: string } }
+
+  - id: draft.create
+    display_name: Create draft
+    summary: Save an email (or a reply) to the mailbox's Drafts folder without sending it.
+    description: >-
+      Save an email to the Drafts folder of the connected Google account. It
+      sends nothing: the person reviews, edits and sends it from Gmail. Takes
+      the same fields as Send email (a subject, a body as plain text, HTML or
+      both, and optionally to, cc and bcc; a draft may have no recipient
+      yet). To draft a reply, pass the original message's thread_id and its
+      Message-ID header as in_reply_to (and references when the thread has
+      several), and keep its subject ("Re: " is added if missing). Returns
+      the draft_id, the message_id and the thread_id. Needs the gmail.compose
+      permission, which connections made before this action existed lack: a
+      permission error means the person must reconnect Gmail and allow every
+      permission it asks for.
+    keywords: [email, draft, drafts, compose, write, prepare, save, review]
+    placement: server
+    mutates: true
+    executor: go:gmail.draft_create
+    tool:
+      expose: true
+    params:
+      type: object
+      additionalProperties: false
+      required: [subject]
+      anyOf:
+        - required: [text]
+          properties:
+            text: { minLength: 1 }
+        - required: [html]
+          properties:
+            html: { minLength: 1 }
+      properties:
+        to:
+          type: array
+          maxItems: 100
+          items: { type: string, minLength: 3, maxLength: 320 }
+          title: To
+          description: 'Recipient addresses, each "ann@example.com" or "Ann <ann@example.com>". Optional: a draft may have no recipient yet.'
+          examples: [["ann@example.com", "Bo Chen <bo@example.com>"]]
+        cc: *cc
+        bcc: *bcc
+        subject: *subject
+        text: *text
+        html: *html
+        thread_id: *thread_id
+        in_reply_to: *in_reply_to
+        references: *references
+        connection: *connection
+    output:
+      schema:
+        type: object
+        properties:
+          draft_id: { type: string, description: The draft's id (not the message's). }
+          message_id: { type: string, description: The id of the message the draft holds. }
+          thread_id: { type: string, description: The thread the draft is in. }
+          label_ids: { type: array, items: { type: string }, description: Labels on the draft, DRAFT among them. }
 
   - id: message.list
     display_name: Search email

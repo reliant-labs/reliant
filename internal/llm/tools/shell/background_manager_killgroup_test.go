@@ -146,16 +146,20 @@ func TestKillProcessNeverSignalsARecycledGroup(t *testing.T) {
 // A zombie runs nothing. A group whose only member left is an unreaped zombie
 // — its reaper never comes, as under a PID 1 that does not reap — is gone,
 // not a survivor that SIGKILL failed to stop. Here this test process is the
-// zombie's parent and does not reap it until the end.
-func TestGroupWatchIgnoresUnreapedZombies(t *testing.T) {
+// zombie's parent and does not reap it until the end. The member runs until
+// the test kills it, so it is still running when the watch first looks,
+// however loaded the host.
+func TestGroupWatchIgnoresAKilledUnreapedMember(t *testing.T) {
 	if _, ok := osutil.GroupMembers(1); !ok {
 		t.Skip("needs a readable process table to tell a group's members apart")
 	}
-	z := exec.Command("sleep", "0.3")
+	z := exec.Command("sleep", "60")
 	z.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	require.NoError(t, z.Start())
+	t.Cleanup(func() { _ = z.Process.Kill(); _ = z.Wait() })
 	w := watchGroup(z.Process.Pid)
 	require.True(t, w.alive(), "a running member is alive")
+	require.NoError(t, z.Process.Kill())
 
 	deadline := time.Now().Add(30 * time.Second)
 	for {
@@ -169,5 +173,4 @@ func TestGroupWatchIgnoresUnreapedZombies(t *testing.T) {
 	require.True(t, processGroupAlive(z.Process.Pid), "precondition: the group id still answers a signal")
 	require.False(t, w.alive(), "a zombie-only group counted as alive")
 	require.True(t, waitProcessGroupGone(w, nil, time.Second), "the wait spent its budget on a zombie")
-	_ = z.Wait()
 }

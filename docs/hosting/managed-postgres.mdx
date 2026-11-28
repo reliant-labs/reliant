@@ -116,8 +116,6 @@ Nothing else ever deletes retained data, so a kept database stays, and keeps bil
 
 ## What it doesn't do
 
-- **No automatic scaling of the database.** You set `instances` and `storageGiB` in the declaration.
-- **One region.** Hosted services and managed databases run in GCP `us-central1`, with no region choice. To run elsewhere, bind a database to a cluster you operate with `forge.OnCluster`.
 - **No restore command.** Restore is the declaration above, and a restore reads only same-environment backups.
 
 ## Bring your own database

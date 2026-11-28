@@ -11,6 +11,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/integrations/catalog"
 	"github.com/reliant-labs/reliant/internal/integrations/manifest"
+	"github.com/reliant-labs/reliant/internal/serveraction"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 )
 
@@ -70,6 +71,12 @@ type machineAnalysis struct {
 func (a *machineAnalysis) workflow(wf *reliantv1.Workflow, inputs map[string]any, path string) {
 	if wf == nil {
 		return
+	}
+	// Analysed as it will run: a review node is the reviewer workflow it is
+	// lowered to. A definition that cannot be lowered fails validation; it
+	// is analysed as written.
+	if lowered, err := LowerForExecution(wf); err == nil {
+		wf = lowered
 	}
 	if wf.GetDaemon() != nil {
 		a.hard = append(a.hard, fmt.Sprintf("%starget a machine with `daemon:`", prefix(path)))
@@ -191,6 +198,11 @@ func (a *machineAnalysis) needsMachine(name string) bool {
 func actionNeedsMachine(args *reliantv1.ActionArgs) bool {
 	if args == nil || model.CelStringIsExpr(args.GetUses()) {
 		return true
+	}
+	// A Reliant server action is server-placed by definition: it runs on
+	// the worker against Reliant's own state, never on a machine.
+	if serveraction.IsRef(model.CelStringRaw(args.GetUses())) {
+		return false
 	}
 	resolved, err := catalog.MustBuiltin().Resolve(model.CelStringRaw(args.GetUses()))
 	if err != nil {

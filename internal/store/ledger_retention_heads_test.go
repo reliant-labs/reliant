@@ -43,6 +43,7 @@ SELECT count(*) FROM chat_update_heads h
 }
 
 func TestCompactChatUpdates_KeepsEveryUpdateHead(t *testing.T) {
+	t.Parallel()
 	env, ctx := storetest.New(t), context.Background()
 	var deleted int64
 	for seed := int64(1); seed <= 3; seed++ {

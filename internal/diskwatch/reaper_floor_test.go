@@ -109,6 +109,28 @@ func TestFloorAudit_ACutoffInsideTheFloorIsAnError(t *testing.T) {
 	}
 }
 
+// Under budget pressure forge's size rule reaches past the 2h floor toward
+// its 65-minute minimum (goCacheMinFloor): that is its contract, a WARN, not
+// the ERROR every such pass logged while the audit knew only the 2h floor
+// (#2762; the 2026-11-25 21:39Z pass, cutoff 1h7m).
+func TestFloorAudit_ACutoffBetweenTheFloorsIsAWarning(t *testing.T) {
+	h := newReaperHarness(t, plentyOfSpace)
+	h.run = func(context.Context, string) (reaperRun, error) {
+		h.trimRecord(autoGCRecordName, time.Hour+7*time.Minute)
+		return reaperRun{}, nil
+	}
+	h.tick()
+	if h.logged("level=ERROR") || h.logged("floor_violated") {
+		t.Fatalf("a cutoff past the minimum floor is not a violation:\n%s", h.logs)
+	}
+	if !h.logged("level=WARN") || !h.logged("inside_rest_floor=true") || !h.logged("min_floor=1h5m0s") {
+		t.Fatalf("want a WARN naming both floors:\n%s", h.logs)
+	}
+	if a := h.audit(); len(a) != 1 || a[0].Caches[0].FloorViolated {
+		t.Fatalf("audit: %+v", a)
+	}
+}
+
 func TestTrimAuditRotatesAndNeverFailsAPass(t *testing.T) {
 	dir := t.TempDir()
 	policy := filepath.Join(dir, "forge", "storage.json")

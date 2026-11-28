@@ -182,13 +182,22 @@ func (v *validator) gate(g *Gate) {
 	}
 	switch runner {
 	case RunnerMachine:
-		if strings.TrimSpace(g.Run) == "" {
-			v.errorf(runPath, "needs a command for runner machine (e.g. `gate: \"npm test\"`); to gate only on GitHub check runs, set runner: checks and list them in checks")
+		// The test stage's command is written in the file, as gate.run
+		// (or the gate string) or as gate.stages.test, unless the test
+		// stage is turned off. v.stages checks the second form.
+		if (g.Stages == nil || g.Stages.Test == nil) && strings.TrimSpace(g.Run) == "" {
+			v.errorf(runPath, "needs a command for runner machine (e.g. `gate: \"npm test\"`): the test stage's command, the full suite; to gate only on GitHub check runs, set runner: checks and list them in checks")
 		}
 		if g.Pool != "" {
 			v.name("gate.pool", g.Pool)
 		}
+		if g.Stages != nil {
+			v.stages(g)
+		}
 	case RunnerChecks:
+		if g.Stages != nil {
+			v.errorf("gate.stages", "applies only to runner machine: runner checks runs no stage, it only waits for the GitHub check runs")
+		}
 		if len(g.Checks) == 0 {
 			v.errorf("gate.checks", "runner checks needs the GitHub check names the gate waits for")
 		}
@@ -224,12 +233,42 @@ func (v *validator) gate(g *Gate) {
 }
 
 // effectiveRunner is the runner an unset gate.runner means: machine when
-// the gate has a command, checks when it names only check runs.
+// the gate has a command or stages, checks when it names only check runs.
 func effectiveRunner(g *Gate) Runner {
-	if g.Run == "" && len(g.Checks) > 0 {
+	if g.Run == "" && g.Stages == nil && len(g.Checks) > 0 {
 		return RunnerChecks
 	}
 	return RunnerMachine
+}
+
+// stages checks gate.stages on a machine gate.
+func (v *validator) stages(g *Gate) {
+	s := g.Stages
+	off := 0
+	for i, st := range s.entries() {
+		if st == nil {
+			continue
+		}
+		path := "gate.stages." + string(StageNames[i])
+		switch {
+		case st.Off:
+			off++
+		case st.Run == "" && !v.present(path+".run"):
+			v.errorf(path, "needs run: write {run: <command>} to replace the stage's command, or off to turn it off")
+		default:
+			v.command(path+".run", st.Run)
+		}
+	}
+	if s.Test != nil && g.Run != "" {
+		where := "gate.run"
+		if pos := v.at("gate.run"); pos.line > 0 && v.present("gate.run") {
+			where = fmt.Sprintf("gate.run (line %d)", pos.line)
+		}
+		v.errorf("gate.stages.test", "and %s both set the test stage: gate.run is the test stage's command, so keep one of them", where)
+	}
+	if off == len(StageNames) {
+		v.errorf("gate.stages", "turns every stage off, so the gate would run nothing: turn a stage on, or set runner: checks to gate only on GitHub check runs")
+	}
 }
 
 func (v *validator) check(c *Check) {

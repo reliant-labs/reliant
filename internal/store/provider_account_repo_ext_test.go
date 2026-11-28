@@ -79,6 +79,7 @@ func l6InTx(t *testing.T, env *storetest.Env, f func(ctx context.Context) error)
 // AccountStore seals, then writes through internal/store) is ciphertext on disk, the store
 // hands back exactly those bytes, and it opens to the plaintext again.
 func TestProviderAccountSecretsRoundTripSealed(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	u := l6Upsert("u1", "alice", "PLAINTEXT-ACCESS", "PLAINTEXT-REFRESH")
@@ -126,6 +127,7 @@ func TestProviderAccountSecretsRoundTripSealed(t *testing.T) {
 
 // TestProviderAccountReads ports the metadata and sealed reads.
 func TestProviderAccountReads(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	a := l6Account(t, env, l6Upsert("u1", "alice", "s1", "r1"))
@@ -212,6 +214,7 @@ func TestProviderAccountReads(t *testing.T) {
 // TestProviderAccountLocks: the row locks and the advisory lock. The advisory key is the one
 // every earlier release takes, so old and new writers still serialize.
 func TestProviderAccountLocks(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	a := l6Account(t, env, l6Upsert("u1", "alice", "s1", "r1"))
@@ -264,6 +267,7 @@ func TestProviderAccountLocks(t *testing.T) {
 
 // TestProviderAccountCredentialWrites ports the insert and the two credential rewrites.
 func TestProviderAccountCredentialWrites(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	at := time.Date(2026, 10, 1, 12, 0, 0, 0, time.UTC)
@@ -345,6 +349,7 @@ func TestProviderAccountCredentialWrites(t *testing.T) {
 
 // TestProviderAccountStandingWrites ports the patch, reorder, merge and delete statements.
 func TestProviderAccountStandingWrites(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	now := time.Date(2026, 10, 2, 9, 0, 0, 0, time.UTC)
@@ -462,6 +467,7 @@ func l6IDs(t *testing.T, env *storetest.Env) string {
 
 // TestProviderAccountLimitQueries ports provider_account_limits.
 func TestProviderAccountLimitQueries(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	a := l6Account(t, env, l6Upsert("u1", "alice", "s1", "r1"))
@@ -626,6 +632,7 @@ func l6RequireLimitsAgree(t *testing.T, env *storetest.Env, user string, ids []s
 
 // TestThreadAssignmentQueries ports thread_provider_accounts and the serving-account read.
 func TestThreadAssignmentQueries(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	now := time.Date(2026, 10, 4, 8, 0, 0, 0, time.UTC)

@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"slices"
 	"strings"
 	"time"
@@ -77,7 +78,16 @@ func (h *helper) Mint(ctx context.Context, req cloudcred.Request) (cloudcred.Tok
 		}
 	}
 
+	// The first session that grants EVERYTHING asked for wins. A session that
+	// answers with a narrower token (the server omits a scope that identity
+	// lacks — a CLI login without vuln:read, say) does not end the search: a
+	// later session on the same machine, typically the daemon, may hold the
+	// whole set, and handing forge the narrow token makes the command it runs
+	// fail with permission denied. The narrow answer is kept as the fallback,
+	// returned only when no session grants the whole set.
 	var attempts []attempt
+	var partial *cloudcred.Token
+	partialGranted := -1
 	for _, s := range sessions {
 		got, err := h.deps.Exchanger.Exchange(ctx, s.Server, s.Token, endpoint, req.Scopes, h.deps.Org)
 		if err != nil {
@@ -97,16 +107,53 @@ func (h *helper) Mint(ctx context.Context, req cloudcred.Request) (cloudcred.Tok
 		if got.ExpiresAt.IsZero() {
 			tok.ExpiresAt = nil
 		}
+		if grantedAll(req.Scopes, got.Scopes) {
+			c.store(endpoint, h.deps.Org, req.Scopes, s, tok, now)
+			return tok, nil
+		}
 		// A token that came back narrower than asked (a grant the user lacks
 		// today, omitted by the server) is not remembered: the grant may be
 		// added any minute, and a cached narrow token would keep refusing for
-		// the rest of its life.
-		if grantedAll(req.Scopes, got.Scopes) {
-			c.store(endpoint, h.deps.Org, req.Scopes, s, tok, now)
+		// the rest of its life. Of several narrow answers the widest is kept;
+		// on a tie, the earlier (more preferred) session's.
+		if n := grantedCount(req.Scopes, got.Scopes); n > partialGranted {
+			partial, partialGranted = &tok, n
 		}
-		return tok, nil
+		if ctx.Err() != nil {
+			break
+		}
+	}
+	if partial != nil {
+		// forge reads the response's scopes to tell a partial grant from a
+		// full one; this line says the same to a human on stderr.
+		slog.WarnContext(ctx, "no Reliant session on this machine grants every scope forge asked for; returning the widest grant",
+			"endpoint", endpoint, "source", partial.Source,
+			"asked", req.Scopes, "granted", partial.Scopes, "missing", missingScopes(req.Scopes, partial.Scopes))
+		return *partial, nil
 	}
 	return cloudcred.Token{}, refusal(endpoint, attempts)
+}
+
+// grantedCount is how many of the asked scopes granted covers.
+func grantedCount(asked, granted []string) int {
+	n := 0
+	for _, want := range asked {
+		if slices.Contains(granted, want) {
+			n++
+		}
+	}
+	return n
+}
+
+// missingScopes is the asked scopes granted does not cover, in asked order.
+func missingScopes(asked, granted []string) []string {
+	var out []string
+	for _, want := range asked {
+		if !slices.Contains(granted, want) {
+			out = append(out, want)
+		}
+	}
+	return out
 }
 
 // grantedAll reports whether granted covers every scope in asked. An empty ask

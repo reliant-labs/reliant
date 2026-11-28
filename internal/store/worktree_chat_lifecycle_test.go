@@ -26,6 +26,7 @@ func boundFixture(t *testing.T, env *storetest.Env, id string, main bool) *core.
 }
 
 func TestGetLiveChatIDForWorktree(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	c := boundFixture(t, env, "bound", false)
@@ -48,6 +49,7 @@ func TestGetLiveChatIDForWorktree(t *testing.T) {
 // Pending, active and paused/resumable executions exclude every chat/thread
 // workspace binding. Completed runs and unbound workspaces are idle.
 func TestListWorktreeIDsWithRunningChat(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	now := time.Now().UTC()
@@ -76,6 +78,7 @@ func TestListWorktreeIDsWithRunningChat(t *testing.T) {
 // workspace (bug 94324f76: an orchestrator chat that always runs held every
 // sub-agent workspace forever).
 func TestRunningChatExcludesSpawnedThreadWorkspaceOverride(t *testing.T) {
+	t.Parallel()
 	for _, status := range []core.WorkflowStatus{core.Pending(), core.Active(), core.Paused()} {
 		t.Run(fmt.Sprint(status), func(t *testing.T) {
 			env := storetest.New(t)
@@ -99,6 +102,7 @@ func TestRunningChatExcludesSpawnedThreadWorkspaceOverride(t *testing.T) {
 }
 
 func TestChatWorktreeArchiveSymmetry(t *testing.T) {
+	t.Parallel()
 	for _, main := range []bool{false, true} {
 		t.Run(fmt.Sprintf("main=%v", main), func(t *testing.T) {
 			env := storetest.New(t)
@@ -121,6 +125,7 @@ func TestChatWorktreeArchiveSymmetry(t *testing.T) {
 }
 
 func TestChatArchiveSharedWorktree(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	a := boundFixture(t, env, "shared", false)
@@ -138,6 +143,7 @@ func TestChatArchiveSharedWorktree(t *testing.T) {
 }
 
 func TestChatWorktreeTransitionFailureRollsBack(t *testing.T) {
+	t.Parallel()
 	for _, archive := range []bool{true, false} {
 		t.Run(fmt.Sprintf("archive=%v", archive), func(t *testing.T) {
 			env := storetest.New(t)
@@ -165,6 +171,7 @@ CREATE TRIGGER reject_worktree_update BEFORE UPDATE ON worktrees FOR EACH ROW EX
 // ListChatsForWorktree lists the owner's bound chats, archived ones too, and
 // never another user's.
 func TestListChatsForWorktree(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	c := boundFixture(t, env, "listed", false)

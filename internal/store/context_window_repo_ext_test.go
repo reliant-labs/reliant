@@ -17,6 +17,7 @@ import (
 
 // The context_win.sql port (P5b L1b), interleaved with the Repository.
 func TestContextWindowQueries(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	at := time.Now().UTC().Truncate(time.Microsecond).Add(-time.Hour)

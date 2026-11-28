@@ -13,6 +13,7 @@ import { securityTxt } from "./vite-plugin-security-txt";
 import { otelProxy } from "./vite-plugin-otel-proxy";
 import { demoBundleGuard, demoSubstitutes } from "./vite-plugin-demo-bundle";
 import { fixtureEntryGuard } from "./vite-plugin-fixture-entry-guard";
+import { timeoutLoadFactor } from "./vitest-load";
 
 // Get worktree name from the checkout root
 // When Vite runs, cwd is frontends/web, so the checkout is two levels up
@@ -44,7 +45,7 @@ function browserTraceExporter(): string {
 //  - timeouts: the 5s default is for an idle machine. At load average 6x the core
 //    count (25 tests hit "timed out in 5000ms" at load 97 on 16 cores) a timeout
 //    says the host is busy, not that the code regressed. Scales 1x..6x with the
-//    1-minute load per core.
+//    load per core, and at least 3x under a gate lane (vitest-load.ts).
 //  - waits: Testing Library's findBy*/waitFor give up after a fixed 1s
 //    (asyncUtilTimeout), whatever the host is doing. That is the same idle-box
 //    assumption, one level down: on a loaded host, rendering a fixture-backed
@@ -72,9 +73,6 @@ const constrained = process.constrainedMemory?.() ?? 0;
 const hostMemory = constrained > 0 ? Math.min(constrained, os.totalmem()) : os.totalmem();
 const memoryWorkers = Math.floor(hostMemory / 2 / WORKER_PEAK_BYTES);
 const maxWorkers = intEnv("VITEST_MAX_WORKERS") ?? Math.max(2, Math.min(8, cores, memoryWorkers));
-const loadFactor = Math.min(6, Math.max(1, Math.ceil(os.loadavg()[0] / cores)));
-const testTimeout = intEnv("VITEST_TIMEOUT_MS") ?? 5_000 * loadFactor;
-const asyncUtilTimeout = intEnv("VITEST_ASYNC_UTIL_TIMEOUT_MS") ?? Math.round(testTimeout / 2);
 
 // The record directory of the `forge test capture` lane running Vitest, if one
 // is: the release gate's `task test:web` (lane frontend) and the merge gate's
@@ -87,6 +85,9 @@ const asyncUtilTimeout = intEnv("VITEST_ASYNC_UTIL_TIMEOUT_MS") ?? Math.round(te
 // (tools/test-affected's webSteps), so only the release gate's full lane
 // measures it.
 const testLaneDir = process.env.FORGE_TEST_LANE_DIR;
+const loadFactor = timeoutLoadFactor(os.loadavg(), cores, Boolean(testLaneDir));
+const testTimeout = intEnv("VITEST_TIMEOUT_MS") ?? 5_000 * loadFactor;
+const asyncUtilTimeout = intEnv("VITEST_ASYNC_UTIL_TIMEOUT_MS") ?? Math.round(testTimeout / 2);
 
 // Vitest pools. Most files run in `vmThreads`: each file gets a fresh VM
 // context in a reused worker instead of a fresh jsdom environment in a fresh
@@ -113,9 +114,11 @@ const FORKS_POOL_FILES = [
   "src/components/Chat/__tests__/draftSurvivesForcedReload.test.tsx",
   "src/components/Settings/__tests__/ConnectorConsent.defaults.test.tsx",
   "src/components/Settings/__tests__/IntegrationsSettings.test.tsx",
+  "src/components/Settings/cloud/github/__tests__/OrgGitHubPage.test.tsx",
   "src/components/__tests__/AppOutOfDateModal.test.tsx",
   "src/components/__tests__/ConnectionOAuthCallback.test.tsx",
   "src/components/__tests__/GitHubOAuthCallback.desktopAndInstall.test.tsx",
+  "src/components/__tests__/GitHubOAuthCallback.forgeAuth.test.tsx",
   "src/components/__tests__/GitHubOAuthCallback.installReturn.test.tsx",
   "src/components/__tests__/NewBuildPrompt.test.tsx",
   "src/components/__tests__/UpgradeAccount.test.tsx",

@@ -1,19 +1,20 @@
 ---
 title: "Gmail"
-description: "Gmail integration for Reliant workflows: send, search and read email as one connected mailbox, and start a run when new mail reaches the inbox."
+description: "Gmail integration for Reliant workflows: send, draft, search and read email as one connected mailbox, and start a run when new mail reaches the inbox."
 ---
 
 The Gmail integration works on one mailbox, as the Google account you connect.
 
 ## Connecting
 
-You sign in with Google and approve two permissions: sending email, and read-only access to the mailbox. The connection is labelled with the mailbox's address. If Google stops accepting the stored sign-in, the connection needs to be reconnected; reconnecting asks for consent again so Google issues a fresh one.
+You sign in with Google and approve three permissions: sending email, creating drafts, and read-only access to the mailbox. The connection is labelled with the mailbox's address. If Google stops accepting the stored sign-in, the connection needs to be reconnected; reconnecting asks for consent again so Google issues a fresh one. A connection made before the draft permission was added lacks it: `gmail/draft.create@1` on it fails with a permission error until you reconnect Gmail once and allow every permission.
 
 ## Actions
 
 | Action | What it does |
 |--------|--------------|
 | `gmail/message.send@1` | Send an email, or a reply in a thread. Takes `to` (and optionally `cc`, `bcc`), `subject`, and a body as `text`, `html` or both. To reply, pass the original's `thread_id` and its Message-ID header as `in_reply_to` (and `references` for a long thread), and keep the subject. Returns the sent message's `id` and `thread_id` |
+| `gmail/draft.create@1` | Save an email, or a reply, to the mailbox's Drafts folder without sending it; you review and send it from Gmail. Takes `subject` and a body as `text`, `html` or both, and optionally `to`, `cc` and `bcc` (a draft may have no recipient yet). To draft a reply, pass the original's `thread_id` and its Message-ID header as `in_reply_to`, and keep the subject. Returns `draft_id`, `message_id` and `thread_id`. Needs the draft permission; connections made before it was added must reconnect once |
 | `gmail/message.list@1` | Search with Gmail's own syntax (`q`, such as `from:ann is:unread newer_than:2d`) and/or `label_ids`. Returns message ids, newest first, up to five pages. Optionally includes Spam and Trash |
 | `gmail/message.get@1` | Read one message by `id`: headers, labels, snippet, attachments' names and sizes, and by default the decoded body. `format: metadata` skips the body; `max_body_chars` (default 20000) cuts it |
 | `gmail/label.list@1` | The mailbox's labels and their ids |

@@ -17,6 +17,7 @@ import (
 
 // TestSettingQueries ports settings.sql, interleaved with the Repository.
 func TestSettingQueries(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	user := storetest.SeedUserID
@@ -134,6 +135,7 @@ func TestSettingQueries(t *testing.T) {
 // default_preset_assignments reads of visibility.sql. Their rows are written
 // by migrations only, so the fixtures go through the generated store.
 func TestItemDefaultAndPresetAssignmentQueries(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	workflow := reliantv1.HiddenItemType_HIDDEN_ITEM_TYPE_WORKFLOW

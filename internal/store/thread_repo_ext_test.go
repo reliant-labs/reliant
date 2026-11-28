@@ -45,6 +45,7 @@ func requireSameThread(t *testing.T, label string, got, want *core.Thread) {
 }
 
 func TestThreadQueries(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	base := time.Now().UTC().Truncate(time.Microsecond).Add(-time.Hour)
@@ -205,6 +206,7 @@ func mustThread(t *testing.T, env *storetest.Env, id string) *core.Thread {
 // TestThreadCascadeAndReap pins the thread half of the terminal cascade and
 // its reaper against a workflow tree.
 func TestThreadCascadeAndReap(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	at := time.Now().UTC().Truncate(time.Microsecond).Add(-time.Hour)
@@ -293,6 +295,7 @@ func TestThreadCascadeAndReap(t *testing.T) {
 // while any ancestor is live (prod 179b8343); once the ancestors have ended,
 // it reaps as before.
 func TestReapOrphanedThreadsWaitsForLiveAncestors(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	at := time.Now().UTC().Truncate(time.Microsecond).Add(-time.Hour)

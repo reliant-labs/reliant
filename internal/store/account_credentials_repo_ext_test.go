@@ -24,6 +24,7 @@ import (
 
 // TestVaultKeyQueries ports internal/vault's statements.
 func TestVaultKeyQueries(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 
@@ -70,6 +71,7 @@ func TestVaultKeyQueries(t *testing.T) {
 
 // TestSealedCredentialsExist ports vault boot's "would a new key orphan anything" probe.
 func TestSealedCredentialsExist(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	previous := func() bool {
@@ -97,6 +99,7 @@ func TestSealedCredentialsExist(t *testing.T) {
 
 // TestAPIKeyQueries ports settingStore's api_keys statements.
 func TestAPIKeyQueries(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	now := time.Date(2026, 10, 5, 8, 0, 0, 0, time.UTC)
@@ -138,6 +141,7 @@ func TestAPIKeyQueries(t *testing.T) {
 
 // TestAccessTokenQueries ports the self-hosted token store's statements.
 func TestAccessTokenQueries(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	past, future := time.Now().Add(-time.Hour).UTC(), time.Now().Add(time.Hour).UTC()
@@ -303,6 +307,7 @@ func TestAccessTokenQueries(t *testing.T) {
 // TestProviderBackoffQueries runs the same backoff sequence through the store and, on another
 // thread, through the previous release's statements, and requires identical rows.
 func TestProviderBackoffQueries(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	seedChatThread(t, env, "chat-bo", "th-port")

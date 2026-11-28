@@ -41,12 +41,20 @@ type Firer struct {
 	wake      *capacityWake
 	pools     Placer
 	pause     *AutoPause
+	runs      RunCanceller
 }
 
 // WithAutoPause lets the firer pause a trigger whose creator left its org
 // (AutoPause). Without it, each such fire is recorded as failed.
 func (f *Firer) WithAutoPause(p *AutoPause) *Firer {
 	f.pause = p
+	return f
+}
+
+// WithRunCanceller lets a firing stop the run it supersedes under
+// concurrency.cancel_running. Without it, such a firing waits for the run.
+func (f *Firer) WithRunCanceller(c RunCanceller) *Firer {
+	f.runs = c
 	return f
 }
 
@@ -306,7 +314,7 @@ func (f *Firer) fire(ctx context.Context, req FireRequest) (*FireOutput, error) 
 				OccurredAt: req.ScheduledAt, Payload: ev.Payload, Sender: ev.Sender,
 			}.Root())
 		})
-		if err := prepareCapacity(ctx, f.repo, f.repo, f.capacity, trigger, row, limits, &spec); err != nil {
+		if err := prepareCapacity(ctx, f.repo, f.repo, f.capacity, trigger, row, limits, newCapacityCancel(policy, f.runs), &spec); err != nil {
 			if capacitySettled(err) {
 				return f.recordSkip(ctx, rec, err.Error())
 			}

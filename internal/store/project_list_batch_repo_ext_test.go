@@ -16,6 +16,7 @@ import (
 // TestProjectListBatchedReads: a project list's repos, forge apps and
 // checkouts read in one query each, for exactly the projects named.
 func TestProjectListBatchedReads(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	now := time.Date(2026, 11, 19, 0, 0, 0, 0, time.UTC) // fixed: read from no clock

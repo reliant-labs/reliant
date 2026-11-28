@@ -19,6 +19,7 @@ import (
 // themselves as every row was before orgs. The scoped lookups pick each
 // org's own.
 func TestProjectKeys_ArePerOrg(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	at := time.Date(2026, 11, 17, 12, 0, 0, 0, time.UTC)
@@ -83,6 +84,7 @@ func TestProjectKeys_ArePerOrg(t *testing.T) {
 // default org already holds, rather than stamp it into a collision (which
 // would fail the whole batch), and still stamps the rest.
 func TestAssignUnassignedOrg_SkipsAProjectTheDefaultOrgAlreadyHolds(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	at := time.Date(2026, 11, 17, 12, 0, 0, 0, time.UTC)

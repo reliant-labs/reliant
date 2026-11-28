@@ -15,6 +15,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/store/triggertest"
 )
 
@@ -193,7 +194,7 @@ func TestFiringAgainstABrokenDefinitionIsRefused(t *testing.T) {
 			assert.Empty(t, launcher.snapshot(), "nothing launched: no older version runs in its place")
 
 			failed := core.TriggerEventFailed
-			ev, err := p.repo.GetLatestTriggerEvent(p.ctx, p.schedule.ID, &failed)
+			ev, err := store.GetLatestTriggerEvent(p.ctx, p.repo.ORM(), p.schedule.ID, &failed)
 			require.NoError(t, err)
 			assert.True(t, strings.HasPrefix(ev.OutcomeDetail, "refused: "), ev.OutcomeDetail)
 			assert.Contains(t, ev.OutcomeDetail, provenancePath)

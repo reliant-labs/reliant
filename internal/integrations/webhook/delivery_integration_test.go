@@ -68,7 +68,7 @@ func newReceiptFixture(t *testing.T) *receiptFixture {
 	events := NewEventsReceiver(EventsOptions{Store: NewStores(f.Repo), Inbox: NewStores(f.Repo), Intake: f.intake, Registry: registry, PublicURL: "https://reliant.example.com"})
 	events.now = f.relay.now
 	events.Register(f.mux.Handle)
-	hooks := NewHooksReceiver(HooksOptions{Store: f.Repo, Inbox: NewStores(f.Repo), Intake: f.intake})
+	hooks := NewHooksReceiver(HooksOptions{Store: NewStores(f.Repo), Inbox: NewStores(f.Repo), Intake: f.intake})
 	hooks.now = f.relay.now
 	hooks.Register(f.mux.Handle)
 	require.NoError(t, f.Repo.CreateProject(t.Context(), &db.Project{ID: "receipt-project", UserID: "alice", Name: "Receipt project", Path: t.TempDir(), CreatedAt: f.now, UpdatedAt: f.now, LastActive: f.now}))
@@ -84,7 +84,7 @@ func (f *receiptFixture) trigger(t *testing.T, id string, kind core.TriggerKind,
 	require.NoError(t, triggertest.Create(t.Context(), f.Repo, &core.Trigger{ID: id, Name: id, UserID: "alice", ProjectID: "receipt-project", Kind: kind, Enabled: enabled,
 		Workflow: "builtin://agent", Config: cfg, NoMachine: true, CreatedAt: at, UpdatedAt: at}))
 	if kind == core.TriggerKindWebhook {
-		require.NoError(t, f.Repo.SetTriggerWebhookTokenHash(t.Context(), id, triggers.HashWebhookToken(hookToken)))
+		require.NoError(t, store.SetTriggerWebhookTokenHash(t.Context(), f.Repo.ORM(), id, triggers.HashWebhookToken(hookToken)))
 	}
 }
 

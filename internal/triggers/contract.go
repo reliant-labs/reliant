@@ -180,6 +180,27 @@ type CapacityStore interface {
 	// recorded before recordedBefore, independently of the queue heads, and
 	// returns them as settled.
 	ExpirePendingTriggerCapacityEvents(ctx context.Context, recordedBefore time.Time, detail string, limit int) ([]*core.TriggerEvent, error)
+	// The three below are concurrency.cancel_running's: the running runs of a
+	// key a newer firing supersedes, the record of which firing did, and the
+	// cancelled status of one whose run wrote none.
+	ListTriggerCapacityKeyRuns(ctx context.Context, scope store.TriggerCapacityScope, key string, order int64) ([]store.TriggerCapacityKeyRun, error)
+	MarkTriggerCapacityRunSuperseded(ctx context.Context, eventID, byEventID string) (bool, error)
+	SettleSupersededTriggerCapacityRun(ctx context.Context, eventID string) error
+}
+
+// RunCanceller stops one exact execution of a chat's run through the run
+// lifecycle's own cancel, the one a user's stop takes
+// (runs.Service.TerminateExecution, Terminate addressed to one execution): it
+// cancels the run cooperatively, so the run's finally: runs and it records its
+// own cancelled status, and hard-terminates only a run that does not
+// acknowledge in time. concurrency.cancel_running stops a superseded run with
+// it, so there is one way a run is stopped, not a second one for triggers.
+//
+// It stops runID and nothing else: when the chat's current execution is no
+// longer runID (it closed, or a person's later turn replaced it), it refuses
+// with an error and stops nothing.
+type RunCanceller interface {
+	TerminateExecution(ctx context.Context, chatID, workflowID, runID string) error
 }
 
 // CapacityDescriber is the Temporal read that reconciles occupied slots: the

@@ -18,6 +18,7 @@ import {
   resolveAuthStorageMode,
   sessionNearExpiry,
 } from './auth/sharedSession'
+import { withTokenRefreshTimeout } from './auth/refreshFetch'
 import { loadConfig } from './config_gen'
 import { getIsDev } from './constants'
 import { isDemoShell } from './shell'
@@ -408,6 +409,9 @@ const getClient = (): SupabaseClient => {
       // this origin's Web Lock (createSharedLock).
       ...(shared ? { lock: shared.lock } : {}),
     },
+    // A token refresh gets a deadline and one retry (lib/auth/refreshFetch.ts):
+    // every RPC waits behind it. Resolved per call, so a test's stub is seen.
+    global: { fetch: withTokenRefreshTimeout((input, init) => fetch(input, init)) },
   })
   // Another host's sign-in, refresh or sign-out becomes this client's event.
   if (shared) {

@@ -29,7 +29,7 @@ func TestInlineEventPreviewIsOwnedReadOnlyAndWorksWhilePaused(t *testing.T) {
 	}}
 	// Unconfigured repository writes, intake or launcher would panic: only the
 	// owned read is installed, proving a preview never starts or enables a run.
-	svc := NewTestTrigger(t, WithTriggerDeps(Deps{Repo: &MockRepository{}, Triggers: rows, Projects: projectaccesstest.For(&MockRepository{})}), WithPlaceholderDeps())
+	svc := NewTestTrigger(t, WithTriggerDeps(Deps{FiringReads: &MockFiringReads{}, Registrations: &MockRegistrationReads{}, Repo: &MockRepository{}, Triggers: rows, Projects: projectaccesstest.For(&MockRepository{})}), WithPlaceholderDeps())
 	payload, err := structpb.NewStruct(map[string]any{"body": map[string]any{"ref": "release", "user_id": "attacker"}})
 	require.NoError(t, err)
 	id := "mine"

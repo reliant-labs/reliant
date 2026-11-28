@@ -7,15 +7,17 @@
  * one app with no code here, app chips of every link kind (SOURCE, NAME,
  * NOT_HOSTED), a static site, a shared project, machines with and without the
  * code. shop records where it was deployed from (DEMO_REPO at v1.8.4's
- * commit), so the app console's Code card has a source to show.
+ * commit), so the app console's Code card has a source to show. Both of
+ * Alex's projects are checked out on the cloud machine, where their chats run.
  */
 import { Code, ConnectError } from "@connectrpc/connect";
 
-import { ListProjectsWithAppsResponseSchema, ProjectService, type ListProjectsWithAppsResponse } from "@/gen/reliant/v1/project_pb";
+import { ListProjectsWithAppsResponseSchema, ProjectInstallState, ProjectService, type ListProjectsWithAppsResponse } from "@/gen/reliant/v1/project_pb";
 
 import catalogJson from "../../data/catalog.json?raw";
 import { packJson } from "../../packJson";
-import { projects } from "../../workspace";
+import { DAY, HOUR } from "../../shopStory";
+import { DAEMON_IDS, DAEMON_NAMES, isoAgo, projects } from "../../workspace";
 import { serve } from "../serve";
 
 /** The org's catalog, on the pack clock. */
@@ -34,5 +36,11 @@ export function projectHandlers() {
       return { project };
     },
     listProjectsWithApps: () => projectCatalog(),
+    listProjectDaemons: () => ({
+      projectDaemons: projects().map((p) => ({
+        projectId: p.id, daemonId: DAEMON_IDS.cloud, path: p.path, defaultBranch: p.defaultBranch, clonedAt: isoAgo(12 * DAY),
+        installState: ProjectInstallState.INSTALLED, installError: "", verifiedAt: isoAgo(3 * HOUR), daemonName: DAEMON_NAMES.cloud, nestedRepos: [],
+      })),
+    }),
   });
 }

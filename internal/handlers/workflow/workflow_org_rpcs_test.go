@@ -153,7 +153,7 @@ func TestEveryWorkflowMutationActsInItsOrg(t *testing.T) {
 		},
 	}
 	for who, caller := range callers {
-		svc = NewTestWorkflow(t, WithWorkflowDeps(Deps{Repo: repo, Drafts: workflowdraftstest.New(t, repo), Projects: projectaccesstest.For(repo), Orgs: caller.resolver}))
+		svc = NewTestWorkflow(t, WithWorkflowDeps(Deps{Repo: repo, Triggers: &MockTriggers{}, Drafts: workflowdraftstest.New(t, repo), Projects: projectaccesstest.For(repo), Orgs: caller.resolver}))
 		for name, call := range calls {
 			before := snapshot()
 			err := call(caller.ctx)

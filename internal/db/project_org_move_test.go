@@ -49,7 +49,7 @@ func newMoveFixture(t *testing.T) *moveFixture {
 func (f *moveFixture) commit(ctx context.Context, c core.ProjectOrgMoveCommit) (*core.ProjectOrgMoveResult, error) {
 	return store.CommitProjectOrgMove(ctx, f.repo.ORM(), c, func(ctx context.Context, res *core.ProjectOrgMoveResult) error {
 		projectID := res.Move.ProjectID
-		return f.repo.EmitUserRefetch(ctx, res.Move.OwnerUserID, RefetchProjectOrgMoved, RefetchOpts{ProjectID: &projectID})
+		return f.repo.UpdateWriter().EmitUserRefetch(ctx, res.Move.OwnerUserID, RefetchProjectOrgMoved, RefetchOpts{ProjectID: &projectID})
 	})
 }
 
@@ -231,7 +231,7 @@ func TestMoveProjectOrg_RestampsWhatMovesAndLeavesWhatStays(t *testing.T) {
 
 	triggers := map[string]*core.Trigger{}
 	for _, id := range []string{"t-org-bound", "t-personal", "t-person-paused", "t-system-paused"} {
-		tr, err := f.repo.GetTrigger(ctx, id)
+		tr, err := store.GetTrigger(ctx, f.repo.ORM(), id)
 		require.NoError(t, err)
 		assert.Equal(t, strp(moveDst), tr.OrgID, "trigger %s", id)
 		assert.False(t, tr.Enabled, "trigger %s", id)
@@ -280,7 +280,7 @@ func TestMoveProjectOrg_RestampsWhatMovesAndLeavesWhatStays(t *testing.T) {
 	assert.Equal(t, strp(string(core.VisibilityOrg)), f.visibility("chats", "c-stay"))
 	assert.Equal(t, 1, f.count(`SELECT count(*) FROM chat_members WHERE chat_id = 'c-stay'`), "a grant on a chat that stays stays")
 	assert.Equal(t, src, f.org("workflows", "r-stay"))
-	stay, err := f.repo.GetTrigger(ctx, "t-stay")
+	stay, err := store.GetTrigger(ctx, f.repo.ORM(), "t-stay")
 	require.NoError(t, err)
 	assert.Equal(t, src, stay.OrgID)
 	assert.True(t, stay.Enabled)
@@ -411,7 +411,7 @@ func TestMoveProjectOrg_RefusesUnlessQuiescent(t *testing.T) {
 
 			assert.Equal(t, strp(moveSrc), f.org("projects", "p-busy"))
 			assert.Equal(t, strp(moveSrc), f.org("chats", "c-1"))
-			tr, err := f.repo.GetTrigger(ctx, "t-1")
+			tr, err := store.GetTrigger(ctx, f.repo.ORM(), "t-1")
 			require.NoError(t, err)
 			assert.True(t, tr.Enabled, "a refused move pauses nothing")
 			got, err := store.GetProjectOrgMove(ctx, f.repo.ORM(), move.ID)
@@ -638,7 +638,7 @@ func TestMoveProjectOrg_KeepsAPauseCommittedWhileItWaits(t *testing.T) {
 	require.NoError(t, <-pauseDone)
 	require.NoError(t, <-moveDone)
 
-	tr, err := f.repo.GetTrigger(ctx, "t-pause")
+	tr, err := store.GetTrigger(ctx, f.repo.ORM(), "t-pause")
 	require.NoError(t, err)
 	assert.Equal(t, strp(moveDst), tr.OrgID)
 	assert.False(t, tr.Enabled)
@@ -752,7 +752,7 @@ func TestResumeTriggerPausedBy(t *testing.T) {
 	resumed, err := store.ResumePausedTrigger(ctx, f.repo.ORM(), "t-moved", core.TriggerPausedOrgMove, paused[0].UpdatedAt)
 	require.NoError(t, err)
 	assert.True(t, resumed)
-	tr, err := f.repo.GetTrigger(ctx, "t-moved")
+	tr, err := store.GetTrigger(ctx, f.repo.ORM(), "t-moved")
 	require.NoError(t, err)
 	assert.True(t, tr.Enabled)
 	assert.Empty(t, tr.PausedReason)
@@ -762,7 +762,7 @@ func TestResumeTriggerPausedBy(t *testing.T) {
 	require.Len(t, back, 1, "what the move resumed, from the history")
 	assert.Equal(t, "t-moved", back[0].ID)
 
-	person, err := f.repo.GetTrigger(ctx, "t-person")
+	person, err := store.GetTrigger(ctx, f.repo.ORM(), "t-person")
 	require.NoError(t, err)
 	resumed, err = store.ResumePausedTrigger(ctx, f.repo.ORM(), "t-person", core.TriggerPausedOrgMove, person.UpdatedAt)
 	require.NoError(t, err)
@@ -792,14 +792,14 @@ func TestResumeTriggerPausedBy_AnEditSinceTheCheckWins(t *testing.T) {
 	edited := *checked
 	edited.Name = "edited while the move ran"
 	require.NoError(t, triggertest.Update(ctx, f.repo, &edited))
-	now, err := f.repo.GetTrigger(ctx, "t-edit")
+	now, err := store.GetTrigger(ctx, f.repo.ORM(), "t-edit")
 	require.NoError(t, err)
 	require.Equal(t, core.TriggerPausedOrgMove, now.PausedReason, "an edit that keeps it disabled keeps the move's pause")
 
 	resumed, err := store.ResumePausedTrigger(ctx, f.repo.ORM(), "t-edit", core.TriggerPausedOrgMove, checked.UpdatedAt)
 	require.ErrorIs(t, err, core.ErrTriggerChangedSinceRead)
 	assert.False(t, resumed)
-	now, err = f.repo.GetTrigger(ctx, "t-edit")
+	now, err = store.GetTrigger(ctx, f.repo.ORM(), "t-edit")
 	require.NoError(t, err)
 	assert.False(t, now.Enabled, "the edited definition is not turned on unchecked")
 	assert.Zero(t, f.count(`SELECT count(*) FROM trigger_changes WHERE trigger_id = 't-edit' AND operation = $1`, core.TriggerChangeOrgMoveResumed))

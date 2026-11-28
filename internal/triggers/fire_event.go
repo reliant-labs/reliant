@@ -86,6 +86,7 @@ type EventFirer struct {
 	pools     Placer
 	pause     *AutoPause
 	checks    CheckOpener
+	runs      RunCanceller
 	// now is the clock capacity expiry is judged by.
 	now func() time.Time
 }
@@ -94,6 +95,13 @@ type EventFirer struct {
 // block declares (workflowcheck). Without it, no firing opens one.
 func (f *EventFirer) WithChecks(c CheckOpener) *EventFirer {
 	f.checks = c
+	return f
+}
+
+// WithRunCanceller lets a firing stop the run it supersedes under
+// concurrency.cancel_running. Without it, such a firing waits for the run.
+func (f *EventFirer) WithRunCanceller(c RunCanceller) *EventFirer {
+	f.runs = c
 	return f
 }
 
@@ -293,7 +301,7 @@ func (f *EventFirer) fire(ctx context.Context, in EventFireInput) (*FireOutput, 
 		capacityAdmission(ctx, policy, ev, func() triggerspec.Scope {
 			return ActivationScope(ctx, f.repo, trigger, decl, FilterInput{Kind: string(ev.Kind), TriggerID: trigger.ID, EventID: ev.ID, OccurredAt: ev.OccurredAt, Payload: ev.Payload, Sender: ev.Sender, Origin: ev.Origin}.Root())
 		})
-		if err := prepareCapacity(ctx, f.repo, f.repo, f.capacity, trigger, ev, limits, &spec); err != nil {
+		if err := prepareCapacity(ctx, f.repo, f.repo, f.capacity, trigger, ev, limits, newCapacityCancel(policy, f.runs), &spec); err != nil {
 			if capacitySettled(err) {
 				return f.settle(ctx, ev, def, core.TriggerEventSkipped, err.Error(), nil)
 			}
@@ -549,6 +557,8 @@ func kindLabel(kind core.TriggerEventKind) string {
 	switch kind {
 	case core.TriggerEventKindWorkflowEvent:
 		return "workflow-event"
+	case core.TriggerEventKindRecordDue:
+		return "record-due"
 	default:
 		return string(kind)
 	}

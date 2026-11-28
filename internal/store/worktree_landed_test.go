@@ -30,6 +30,7 @@ func landedFixture(t *testing.T, env *storetest.Env, id string) *core.Chat {
 }
 
 func TestWorktreeRunActivities(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	quiet := landedFixture(t, env, "quiet")
@@ -63,6 +64,7 @@ func TestWorktreeRunActivities(t *testing.T) {
 }
 
 func TestArchiveLandedWorktree_OnlyWhenQuietAndNotRunning(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	c := landedFixture(t, env, "landed")
@@ -98,6 +100,7 @@ func TestArchiveLandedWorktree_OnlyWhenQuietAndNotRunning(t *testing.T) {
 }
 
 func TestArchiveLandedWorktree_NeverMain(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	c := boundFixture(t, env, "main", true)
 	ok, err := store.ArchiveLandedWorktree(context.Background(), env.ORM, *c.WorktreeID, time.Now().Add(time.Hour))
@@ -106,6 +109,7 @@ func TestArchiveLandedWorktree_NeverMain(t *testing.T) {
 }
 
 func TestReviveArchivedWorktree(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	c := landedFixture(t, env, "revive")
@@ -144,6 +148,7 @@ func TestReviveArchivedWorktree(t *testing.T) {
 }
 
 func TestReviveArchivedWorktree_NameTaken(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	c := landedFixture(t, env, "taken")

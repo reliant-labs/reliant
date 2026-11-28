@@ -28,12 +28,13 @@ func callerDraft(t *testing.T, slug string) *db.WorkflowDraft {
 // against: both are mocks, and deps() wires them as one Deps.
 type draftsStore struct {
 	*workflow.MockRepository
+	Triggers *workflow.MockTriggers
 	Projects projectaccess.Service
 	Drafts   *workflow.MockDrafts
 }
 
 func (s *draftsStore) deps() workflow.Deps {
-	return workflow.Deps{Repo: s.MockRepository, Projects: s.Projects, Drafts: s.Drafts}
+	return workflow.Deps{Repo: s.MockRepository, Triggers: s.Triggers, Projects: s.Projects, Drafts: s.Drafts}
 }
 
 // draftsRepo is a store holding these drafts of the harness caller, in a
@@ -52,6 +53,7 @@ func draftsRepo(drafts ...*db.WorkflowDraft) *draftsStore {
 	}
 	return &draftsStore{
 		MockRepository: &workflow.MockRepository{},
+		Triggers:       &workflow.MockTriggers{},
 		Projects:       projectaccesstest.Func(owned),
 		Drafts: &workflow.MockDrafts{
 			GetWorkflowDraftBySlugFunc: func(_ context.Context, userID, slug string) (*db.WorkflowDraft, error) {

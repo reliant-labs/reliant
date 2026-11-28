@@ -14,6 +14,7 @@ import (
 )
 
 func TestCapacityLongKeysEnrollWithoutPrefixCollisions(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	// Deterministic, incompressible content also exceeds the B-tree entry
@@ -60,6 +61,7 @@ func outcomeOf(t *testing.T, env *storetest.Env, id string) (core.TriggerEventOu
 // and key, and nothing else: not other keys, not FIFO (unkeyed) events, not a
 // launched event, not another scope; and a retried enrollment changes nothing.
 func TestTriggerCapacityLatestSupersedesOnlyOlderWaitingOfItsKey(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	scope := capacityScope()

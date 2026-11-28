@@ -1,8 +1,8 @@
 ---
 title: "Limits: what Reliant hosting does and does not do"
 sidebarTitle: "Limits"
-description: "Every limit in one place: the no-account claimable deploy (72 hours, one service, 125m CPU), free static hosting (any number of sites in one organization per person, 1 GiB each, 10 GiB in total), what needs billing, no autoscaling, no hosted cron, one region (us-central1), Next.js static export only, and telemetry retention."
-keywords: ["reliant hosting limits", "forge claimable limits", "free static site limits", "reliant hosting region", "autoscaling", "telemetry retention", "next.js static export"]
+description: "Every limit in one place: the no-account claimable deploy (72 hours, one service, 125m CPU), free static hosting (any number of sites in one organization per person, 1 GiB each, 10 GiB in total), what needs billing, no hosted cron, deploying a Next.js app, and telemetry retention."
+keywords: ["reliant hosting limits", "forge claimable limits", "free static site limits", "telemetry retention", "next.js static export"]
 ---
 
 This page gathers the limits of [Reliant hosting](/hosting/overview) and of a no-account `--claimable` deploy in one place, so you can decide before you build whether your app fits. Each section points at the page that explains the behavior in depth. If a number here disagrees with what a deploy prints, trust the deploy: the numbers come from the platform's own plan definitions, and `forge env deploy <env> --plan-only` and `forge env shape <env>` print the ones that apply to your environment.
@@ -60,9 +60,7 @@ Observability has its own allowance: 10 GiB of ingestion per organization per mo
 
 | Not available | What to do instead |
 |---|---|
-| **Autoscaling.** A workload runs the `replicas` you declare and a database the `instances` you declare. Nothing scales on load | Set the replica count for your peak, or bind that workload to a cluster you operate |
 | **Hosted cron-kind workloads.** A `kind = "cron"` workload fails the render on hosted, because scheduled pods are not metered yet | A worker that runs its own schedule (`forge scaffold worker <name> --kind cron`) is an ordinary worker and does run hosted |
-| **More than one region.** Every hosted workload, database and site origin runs in GCP `us-central1`, with no region choice and no multi-region failover. Only the static CDN edge is global | Expect added latency for users far from the central US on anything the CDN cannot cache. To run elsewhere, bind a workload or database to a cluster you operate |
 | **Operators, CRDs and RBAC.** There is no Kubernetes API access on shared machines | Bind that workload to your own cluster and keep the rest hosted |
 | **Sidecars, volumes and pod-level overrides.** The platform builds the pod itself | Same |
 | **Outbound traffic other than TCP 80 and 443** to public addresses. SMTP, an external Postgres or Redis and any other port are unreachable from a hosted workload | Use a provider's HTTPS API, or run that workload on your own cluster |
@@ -71,7 +69,7 @@ Observability has its own allowance: 10 GiB of ingestion per organization per mo
 
 The full list, with the reason for each, is in [What hosting does not run](/hosting/overview#what-hosting-does-not-run) and [Inside Reliant hosting](/deep-dives/inside-reliant-hosting#limits-and-what-it-does-not-do).
 
-## Next.js: static export only
+## Deploying a Next.js app
 
 A hosted frontend is served as plain files from a CDN, so a Next.js app must build as a **static export** (`output: "export"`, into `out/`). That rules out anything that needs a server at request time: a dynamic `[slug]` route without `generateStaticParams()`, server actions, middleware, `cookies()` and `headers()`, a route handler that answers dynamically, and `next/image` without `unoptimized`. `forge lint --static-export` names each one with its file and line, and `npm run build` is the authority.
 

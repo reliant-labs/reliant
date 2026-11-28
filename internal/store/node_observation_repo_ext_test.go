@@ -38,6 +38,7 @@ func countObservations(t *testing.T, env *storetest.Env, where string, args ...i
 // converges on the row already there instead of failing or writing a second.
 // Another attempt, another loop iteration and another source are other rows.
 func TestInsertNodeObservation_OneRowPerNodeAttempt(t *testing.T) {
+	t.Parallel()
 	env, ctx := storetest.New(t), context.Background()
 	seedChat(t, env, "chat-obs")
 
@@ -80,6 +81,7 @@ func TestInsertNodeObservation_OneRowPerNodeAttempt(t *testing.T) {
 // A run stores at most its cap of observations; a run is counted by its id,
 // or by its workflow when the activity named no run.
 func TestInsertNodeObservation_PerRunCap(t *testing.T) {
+	t.Parallel()
 	env, ctx := storetest.New(t), context.Background()
 	seedChat(t, env, "chat-cap")
 	for _, run := range []string{"run-cap", ""} {
@@ -106,6 +108,7 @@ func TestInsertNodeObservation_PerRunCap(t *testing.T) {
 // A chat DeleteUserProject purged refuses a late write, as every run-scoped
 // table without a foreign key does (chat_write_admission).
 func TestInsertNodeObservation_RefusedForAPurgedChat(t *testing.T) {
+	t.Parallel()
 	env, ctx := storetest.New(t), context.Background()
 	mustExec(t, env, `INSERT INTO purged_chats (chat_id) VALUES ('chat-gone')`)
 	if _, err := store.InsertNodeObservation(ctx, env.ORM, observation("o-gone", "chat-gone", "wf-gone", "", "plan", 1), 10); err == nil {
@@ -118,6 +121,7 @@ func TestInsertNodeObservation_RefusedForAPurgedChat(t *testing.T) {
 // of a workflow still running, failed or recently finished; it revisits a
 // deferred root, and keeps its own cursor apart from the step prune's.
 func TestPruneNodeObservations(t *testing.T) {
+	t.Parallel()
 	env, ctx := storetest.New(t), context.Background()
 	seedChat(t, env, "chat-obs-prune")
 	old, recent := retentionAged, retentionRecent

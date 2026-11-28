@@ -36,6 +36,7 @@ func previousReleaseLock(ctx context.Context, env *storetest.Env, chatID string)
 // a taker on the hand path, and the other way round, and the Repository's
 // method is the port.
 func TestRunControlLockExcludesAcrossLayers(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 
@@ -90,6 +91,7 @@ func TestRunControlLockExcludesAcrossLayers(t *testing.T) {
 // TestRunControlLockReleasedWhenCtxEnds: database/sql rolls the owning
 // transaction back when ctx is done, so an abandoned request frees the lock.
 func TestRunControlLockReleasedWhenCtxEnds(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	reqCtx, cancel := context.WithCancel(context.Background())
 	if _, err := store.LockChatRunControl(reqCtx, env.ORM, "chat-rc-ctx"); err != nil {
@@ -109,6 +111,7 @@ func TestRunControlLockReleasedWhenCtxEnds(t *testing.T) {
 // TestRunControlLockRefusedInsideTx: taken inside a transaction of either
 // layer, the lock would be released at that transaction's commit.
 func TestRunControlLockRefusedInsideTx(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	err := env.ORM.RunTx(ctx, orm.Serializable, func(txCtx context.Context) error {

@@ -42,6 +42,7 @@ func orchestrator(t *testing.T, env *storetest.Env) *core.Chat {
 }
 
 func TestWorktreeRunActivities_ParentChatRunsDoNotHoldASubAgentWorktree(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	chat := orchestrator(t, env)
@@ -68,6 +69,7 @@ func TestWorktreeRunActivities_ParentChatRunsDoNotHoldASubAgentWorktree(t *testi
 }
 
 func TestWorktreeRunActivities_ASubAgentsOwnWorkHoldsItsWorktree(t *testing.T) {
+	t.Parallel()
 	for name, tc := range map[string]struct {
 		setup   []string
 		running bool
@@ -114,6 +116,7 @@ func TestWorktreeRunActivities_ASubAgentsOwnWorkHoldsItsWorktree(t *testing.T) {
 // A nested sub-agent spawned into a workspace of its own is judged there, not
 // in its ancestor's: its live run holds "nested" and leaves "sub" retirable.
 func TestWorktreeRunActivities_ANestedSubAgentInItsOwnWorktreeDoesNotHoldTheAncestors(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	chat := orchestrator(t, env)
@@ -138,6 +141,7 @@ func TestWorktreeRunActivities_ANestedSubAgentInItsOwnWorktreeDoesNotHoldTheAnce
 // A worktree bound to the chat itself keeps the chat's whole scope: every run
 // of a chat works in the chat's workspace.
 func TestWorktreeRunActivities_AChatBoundWorktreeKeepsTheChatsScope(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	chat := landedFixture(t, env, "plain")

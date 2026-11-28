@@ -135,6 +135,7 @@ func (w *headsWorkload) next() (reliantv1.ChatUpdateType, string, string) {
 // SaveMessageAtomic for messages and for a head type), checked
 // against SnapshotHeadsSQL after every few writes.
 func TestChatUpdateHeads_MatchTheLog(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	for seed := int64(1); seed <= 4; seed++ {
@@ -178,6 +179,7 @@ func TestChatUpdateHeads_MatchTheLog(t *testing.T) {
 // chat (the counter row serializes them) leave
 // the same heads the log does.
 func TestChatUpdateHeads_ConcurrentWritersMatchTheLog(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	const chatID = "chat-heads-race"
@@ -209,6 +211,7 @@ func TestChatUpdateHeads_ConcurrentWritersMatchTheLog(t *testing.T) {
 // a higher sequence. The backfill and a live writer can apply rows in either
 // order; an older row arriving second must not replace the newer.
 func TestChatUpdateHeads_KeepTheNewestWhateverTheOrder(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	const chatID = "chat-heads-order"
@@ -281,6 +284,7 @@ VALUES ($1, $2, $3, $4, $5, $6, $7)`,
 // chat, for good — even though this release's later writes maintain the
 // heads again — because the head that write carried is missing from it.
 func TestChatUpdateHeads_PreviousReleaseWritesFallBackToTheLog(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	ap := reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_APPROVAL
@@ -326,6 +330,7 @@ func TestChatUpdateHeads_PreviousReleaseWritesFallBackToTheLog(t *testing.T) {
 // TestChatUpdateHeads_RolledBackWritesLeaveNoHead: the head is written in the
 // log row's transaction, so a write that rolls back leaves neither.
 func TestChatUpdateHeads_RolledBackWritesLeaveNoHead(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	const chatID = "chat-heads-rollback"
@@ -354,6 +359,7 @@ func TestChatUpdateHeads_RolledBackWritesLeaveNoHead(t *testing.T) {
 // backfilled, and is then served from the table with exactly the log's heads.
 // A second backfill has nothing to do.
 func TestChatUpdateHeads_BackfillCatchesUpTheLog(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	for seed := int64(1); seed <= 3; seed++ {
@@ -400,6 +406,7 @@ func TestChatUpdateHeads_BackfillCatchesUpTheLog(t *testing.T) {
 // racing writer applied, or that the backfill applied around it, is lost or
 // left stale.
 func TestChatUpdateHeads_BackfillBesideLiveWriters(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	const chatID = "chat-heads-backfill-race"
@@ -456,6 +463,7 @@ func TestChatUpdateHeads_BackfillBesideLiveWriters(t *testing.T) {
 // TestChatsWithIncompleteHeads: the backfill's work list is every chat whose
 // counter does not vouch for its heads, in id order, resumable from an id.
 func TestChatsWithIncompleteHeads(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	ap := reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_APPROVAL

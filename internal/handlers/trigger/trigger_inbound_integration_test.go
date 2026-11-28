@@ -73,7 +73,7 @@ func TestInboundTriggersFireEndToEnd(t *testing.T) {
 	server := httptest.NewServer(mux)
 	defer server.Close()
 
-	svc := NewTestTrigger(t, WithTriggerDeps(realStores(repo, Deps{Repo: repo, Projects: projectaccesstest.For(repo),
+	svc := NewTestTrigger(t, WithTriggerDeps(realStores(repo, Deps{Repo: repo, Triggers: store.NewTriggerExtStore(repo.ORM()), FiringReads: store.NewTriggerEventExtStore(repo.ORM()), Registrations: store.NewTriggerRegistrationExtStore(repo.ORM()), Projects: projectaccesstest.For(repo),
 		Integrations: &configv1.IntegrationsConfig{PublicUrl: publicURL}, Catalog: registry, Intake: intake,
 	})))
 
@@ -186,7 +186,7 @@ func waitForLaunched(t *testing.T, repo *db.Repo, userID, triggerID string) *cor
 	launched := core.TriggerEventLaunched
 	deadline := time.Now().Add(60 * time.Second)
 	for time.Now().Before(deadline) {
-		ev, err := repo.GetLatestTriggerEvent(context.Background(), triggerID, &launched)
+		ev, err := store.GetLatestTriggerEvent(context.Background(), repo.ORM(), triggerID, &launched)
 		if err == nil && ev != nil && ev.ChatID != nil {
 			return ev
 		}

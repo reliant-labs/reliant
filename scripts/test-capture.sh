@@ -31,7 +31,9 @@
 #           coverage (coverage-final.json) into the lane directory.
 #
 # FORGE_TEST_COVERAGE=off records results only (no cover flags; Vitest's
-# coverage off). FORGE_TESTS=off, or a forge that cannot begin a run (a
+# coverage off); the merge gate's lanes (tools/test-affected run -capture)
+# set it, so their builds and results are the plain ones task test:short
+# shares. FORGE_TESTS=off, or a forge that cannot begin a run (a
 # `go run` of the pin with no module proxy, an unwritable checkout), runs the
 # command exactly as it would run unrecorded (plain `go test`, with -json
 # under --raw, or the vitest command): recording never breaks a lane.

@@ -236,7 +236,7 @@ func TestAutomationPrecedenceSurvivesTriggerDeletion(t *testing.T) {
 	chat, err := store.GetChat(ctx, repo.ORM(), result.Chat.ID)
 	require.NoError(t, err)
 	assert.True(t, AutomationPrecedence(chat))
-	require.NoError(t, repo.DeleteTrigger(ctx, triggerID))
+	require.NoError(t, store.RemoveTrigger(ctx, repo.ORM(), triggerID))
 	chat, err = store.GetChat(ctx, repo.ORM(), result.Chat.ID)
 	require.NoError(t, err)
 	require.Nil(t, chat.TriggerID, "deleting the trigger clears the chat's trigger id")

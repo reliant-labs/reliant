@@ -37,14 +37,20 @@ type OrgResolver interface {
 	ListScope(ctx context.Context, userID, requested string, stamp orgs.Backfill) (*core.OrgScope, error)
 }
 
+// Triggers removes the automations that ran a deleted workflow.
+// store.TriggerExtStore satisfies it.
+type Triggers interface {
+	RemoveTrigger(ctx context.Context, id string) error
+	// ListTriggersForUser is the caller's own triggers (UserID is required).
+	ListTriggersForUser(ctx context.Context, f core.TriggerFilters) ([]*core.Trigger, error)
+}
+
 type Repository interface {
 	// AssignUnassignedOrg stamps the caller's rows that have no org with
 	// their default org (the lazy backfill, orgs.ListScope).
 	AssignUnassignedOrg(ctx context.Context, userID, orgID string) error
 
 	// What deleting a workflow does to the automations that run it.
-	ListTriggers(ctx context.Context, f core.TriggerFilters) ([]*core.Trigger, error)
-	DeleteTrigger(ctx context.Context, id string) error
 	RunTx(ctx context.Context, policy orm.TxPolicy, f func(ctx context.Context) error) error
 
 	ListVisibilityOverrides(ctx context.Context, userID string, itemType int32) (map[string]bool, error)

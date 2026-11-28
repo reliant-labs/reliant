@@ -7,7 +7,6 @@ import (
 	"sync"
 
 	"connectrpc.com/connect"
-	"golang.org/x/sync/singleflight"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	reliantv1connect "github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
@@ -39,6 +38,8 @@ type Deps struct {
 	Items   Items
 	Firings Firings
 	Notices Notices
+	// Registrations reads the registrations of the triggers the Inbox judges.
+	Registrations Registrations
 	// Recoveries lists the caller's worktree recoveries.
 	Recoveries Recoveries
 	// Marks lists the caller's worktrees marked for reclaim and records keep /
@@ -91,8 +92,8 @@ func (d Deps) validateDeps() error {
 	if d.OrgKeys == nil {
 		return fmt.Errorf("inbox: Deps.OrgKeys is required")
 	}
-	if d.Items == nil || d.Firings == nil || d.Notices == nil {
-		return fmt.Errorf("inbox: Deps.Items, Firings and Notices are required")
+	if d.Items == nil || d.Firings == nil || d.Notices == nil || d.Registrations == nil {
+		return fmt.Errorf("inbox: Deps.Items, Firings, Notices and Registrations are required")
 	}
 	if d.Recoveries == nil {
 		return fmt.Errorf("inbox: Deps.Recoveries is required")
@@ -113,7 +114,7 @@ type Service struct {
 	// storageCache holds each user's storage view for storageViewTTL.
 	storageCache sync.Map
 	// inboxReads shares one user's concurrent ListInbox reads (sharedRead).
-	inboxReads singleflight.Group
+	inboxReads freshFlight[*inboxReads]
 	// adminOrgs holds each user's administered orgs (adminOrgIDs) for adminOrgsTTL.
 	adminOrgs sync.Map
 	// teamOrgs holds whether an org is a team (two or more live members) for

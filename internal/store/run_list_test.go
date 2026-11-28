@@ -131,6 +131,7 @@ func ended(item *core.RunListItem) {
 }
 
 func TestListRunsRows(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	seedRuns(t, env, seededRuns)
@@ -194,6 +195,7 @@ func TestListRunsRows(t *testing.T) {
 }
 
 func TestListRunsFilters(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	seedRuns(t, env, seededRuns)
@@ -257,6 +259,7 @@ func TestListRunsFilters(t *testing.T) {
 // TestListRunsPagesThroughTies: runs created at the same instant list by chat
 // id, newest id first, and a cursor on a tied run continues after it.
 func TestListRunsPagesThroughTies(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	tied := l2Base.Add(time.Hour)
@@ -296,6 +299,7 @@ func TestListRunsPagesThroughTies(t *testing.T) {
 }
 
 func TestListRunsRefusals(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	user := storetest.SeedUserID
 	for _, bad := range []struct {
@@ -319,6 +323,7 @@ func TestListRunsRefusals(t *testing.T) {
 }
 
 func TestLastRunPerWorkflow(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	seedRuns(t, env, seededRuns)

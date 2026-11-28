@@ -194,6 +194,9 @@ type reaperState struct {
 	run reaperRunner
 	// goCache runs the Go-cache pass (`forge machine storage gocache --apply`).
 	goCache reaperRunner
+	// scanGoCaches lists the Go build caches running builds use
+	// (gocaches.go); nil sees none (tests, a watcher not on the system env).
+	scanGoCaches func() []string
 	// budget overrides reaperPassBudget (tests).
 	budget time.Duration
 
@@ -250,6 +253,8 @@ func (w *Watcher) RunReaper(ctx context.Context) {
 	defer ticker.Stop()
 	for {
 		w.reaperTick(ctx)
+		// The caches the daemon alone creates, in both modes (owncaches.go).
+		w.ownCachesTick(ctx)
 		select {
 		case <-ctx.Done():
 			return
@@ -271,6 +276,9 @@ func (w *Watcher) reaperTick(ctx context.Context) (ran bool) {
 		trigger, interval = "pressure", cfg.PressureInterval
 	}
 	policy := w.reaperPolicyPath(cfg)
+	// Every poll, so a build's own GOCACHE is seen while it runs and is
+	// trimmed from then on (gocaches.go).
+	w.observeGoCaches(ctx, policy)
 	last := w.lastReaperRun(policy)
 	fullDue := last.IsZero() || now.Sub(last) >= interval
 	// Between full passes, the Go-cache pass on its own, shorter cadence: the
@@ -308,8 +316,9 @@ func (w *Watcher) reaperTick(ctx context.Context) (ran bool) {
 // runReaperOff is RunReaper with the storage reaper off: on the reaper's
 // poll, the in-process worktree sweep when it runs alone (worktreereap.go)
 // and the pass over the daemon's own per-command GOTMPDIR roots
-// (ownGoTmpTick), in the same single-flight, until ctx is done. Nothing else:
-// no cache pass, no forge subprocess.
+// (ownGoTmpTick) and the caches the daemon alone creates (ownCachesTick), in
+// the same single-flight, until ctx is done. Nothing else: no pass over a
+// cache of the person's, no forge subprocess.
 func (w *Watcher) runReaperOff(ctx context.Context) {
 	ticker := time.NewTicker(reaperPollInterval)
 	defer ticker.Stop()
@@ -332,6 +341,9 @@ func (w *Watcher) reaperOffTick(ctx context.Context) (ran bool) {
 		ran = w.worktreeTick(ctx, false)
 	}
 	if ctx.Err() == nil && w.ownGoTmpTick(ctx) {
+		ran = true
+	}
+	if w.ownCachesTick(ctx) {
 		ran = true
 	}
 	return ran
@@ -649,13 +661,19 @@ func logGoCacheTrims(ctx context.Context, trigger string, start time.Time, forge
 			"size", FormatBytes(t.EstimatedBytes), "budget", FormatBytes(t.BudgetBytes),
 			"inside_floor", FormatBytes(t.YoungBytes), "removed", t.Removed, "freed", FormatBytes(t.FreedBytes),
 			"shards", fmt.Sprintf("%d/%d", t.ShardsCovered, t.ShardsTotal),
-			"floor", liveBuildFloor, "forge", forge,
+			"floor", liveBuildFloor, "min_floor", minLiveBuildFloor, "forge", forge,
 		}
 		if !t.Cutoff.IsZero() {
 			fields = append(fields, "cutoff", t.Cutoff.UTC().Format(time.RFC3339), "cutoff_age", start.Sub(t.Cutoff).Round(time.Second))
 		}
 		if floorViolated(start, t.Cutoff) {
 			logging.ErrorContext(ctx, "[diskwatch] Go cache trim reached inside the live-build floor; running builds may fail with \"could not import … no such file\"", append(fields, "floor_violated", true)...)
+			continue
+		}
+		if insideRestFloor(start, t.Cutoff) {
+			// forge's size rule, past the 2h floor toward its minimum: the
+			// disk was filling faster than the at-rest floor could free.
+			logging.WarnContext(ctx, "[diskwatch] Go cache trim reached past the 2h floor toward the minimum floor to keep the cache within budget; slow the fill or raise go_cache_gib", append(fields, "inside_rest_floor", true)...)
 			continue
 		}
 		if t.Finished {

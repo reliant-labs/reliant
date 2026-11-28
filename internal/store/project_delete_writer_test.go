@@ -84,6 +84,7 @@ func assertNothingOfChat(t *testing.T, env *storetest.Env, chat string) {
 // chat_update_heads and the stream counter have no foreign key to cascade
 // them, so a purge that did not wait left them behind for good.
 func TestDeleteUserProjectWaitsForAnInFlightChatWriter(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	const project, chat = "proj-inflight-writer", "chat-inflight-writer"
@@ -117,6 +118,7 @@ func TestDeleteUserProjectWaitsForAnInFlightChatWriter(t *testing.T) {
 // still running, of this release or the previous one — is refused, and
 // recreates neither the chat's updates nor its stream counter.
 func TestDeleteUserProjectRefusesALateChatWriter(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	const project, chat = "proj-late-writer", "chat-late-writer"
@@ -142,6 +144,7 @@ func TestDeleteUserProjectRefusesALateChatWriter(t *testing.T) {
 // A chat that never existed is not refused: the three tables have no foreign
 // key on purpose, and only a purged chat is tombstoned.
 func TestChatWriteAdmissionAdmitsAChatThatWasNeverPurged(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	tx, err := env.SQL.BeginTx(ctx, nil)
@@ -255,6 +258,7 @@ func waitForLockWait(t *testing.T, env *storetest.Env, done <-chan error) {
 // chat is waited for, and what it wrote goes with the chat, for each table
 // the purge cleans that has no foreign key to cascade it.
 func TestDeleteUserProjectWaitsForAnInFlightWorkflowWriter(t *testing.T) {
+	t.Parallel()
 	for _, w := range workflowContentWrites {
 		t.Run(w.name, func(t *testing.T) {
 			env := storetest.New(t)
@@ -293,6 +297,7 @@ func TestDeleteUserProjectWaitsForAnInFlightWorkflowWriter(t *testing.T) {
 // leaves nothing behind. step_executions is refused through the purged
 // workflow it names.
 func TestDeleteUserProjectRefusesALateWorkflowWriter(t *testing.T) {
+	t.Parallel()
 	for _, w := range workflowContentWrites {
 		t.Run(w.name, func(t *testing.T) {
 			env := storetest.New(t)
@@ -323,6 +328,7 @@ func TestDeleteUserProjectRefusesALateWorkflowWriter(t *testing.T) {
 // A chat or workflow that never existed is not refused: only purged ones are
 // tombstoned.
 func TestWorkflowWriteAdmissionAdmitsWhatWasNeverPurged(t *testing.T) {
+	t.Parallel()
 	for _, w := range workflowContentWrites {
 		t.Run(w.name, func(t *testing.T) {
 			env := storetest.New(t)

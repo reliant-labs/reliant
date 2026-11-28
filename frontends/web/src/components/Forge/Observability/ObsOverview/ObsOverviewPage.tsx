@@ -37,6 +37,7 @@ import { RANGE_LABELS, RANGE_PRESETS, resolveWindow, type RangePreset } from "@/
 import { useForgeConsole } from "../../Console/consoleContext";
 import { NothingDeployed } from "../../Console/consolePageFrame";
 import { ENV_ALL } from "../../Console/envScope";
+import { ToOrgObservability, useSeveralApps } from "../../Console/severalProjects";
 import { useAppLiveState } from "../../LiveState/useAppLiveState";
 import { OVERVIEW_RANGE } from "../../Workloads/workloadModel";
 import { VariableSelect } from "../Dashboards/parts";
@@ -89,6 +90,13 @@ function Rows({ count = 3 }: { count?: number }) {
 }
 
 export function ObsOverviewPage() {
+  // Several projects in the shell: Observability's Overview is the org console's, over all of them.
+  const several = useSeveralApps();
+  if (several) return <ToOrgObservability />;
+  return <ProjectObsOverviewPage />;
+}
+
+function ProjectObsOverviewPage() {
   const { forgeProject, env, roster, href } = useForgeConsole();
   const search = useSearch({ strict: false }) as { range?: RangePreset };
   const navigate = useNavigate();

@@ -34,6 +34,13 @@ type PlaceRunInput struct {
 	// per-call meaning and are never placed; an explicit durable-label
 	// selector can add a field here later.)
 	Pool string `json:"pool,omitempty"`
+	// Exclude names members the placement must not use: machines that
+	// failed a node's preflight (Node.preflight). A placement recorded on an
+	// excluded member moves to another member, keeping its identity and its
+	// slot; one on any other member stands. A worker older than Exclude
+	// ignores it and answers the recorded member, which the caller's bound
+	// on machines tried ends.
+	Exclude []string `json:"exclude,omitempty"`
 }
 
 // PlaceRunOutput is one placement answer. Exactly one of DaemonID and
@@ -50,6 +57,10 @@ type PlaceRunOutput struct {
 	// Waiting: no member can take it now (Decision Queue, or Wake, whose
 	// wake was asked for). The runtime waits and asks again.
 	Waiting bool `json:"waiting,omitempty"`
-	// Reason says why it waits (Decision.Reason: WaitingPrefix…).
+	// Reason says why it waits (Decision.Reason: WaitingPrefix…), or why
+	// the pool is Exhausted.
 	Reason string `json:"reason,omitempty"`
+	// Exhausted: the pool has members, and every one is in Exclude. No
+	// wait helps; the caller fails with Reason.
+	Exhausted bool `json:"exhausted,omitempty"`
 }
