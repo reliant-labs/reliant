@@ -98,6 +98,7 @@ export function useSessions(scope: RumScope | null, filters: SessionFilters) {
       services: filters.service ? [filters.service] : [],
       window: relativeWindow(rangeMs(filters.range)),
       hasError: filters.hasError,
+      hasReplay: true,
       userId: filters.userId,
       pathContains: filters.pathContains,
       browser: filters.browser,
