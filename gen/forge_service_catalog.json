@@ -39027,7 +39027,7 @@
           "output": "reliant.v1.ListSharedWorkflowDraftsResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -39199,7 +39199,8 @@
             "AuthRequired": true,
             "Errors": null,
             "Custom": true,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.ListSharedWorkflowDraftsRequest",
             "OutputTypeFQ": "reliant.v1.ListSharedWorkflowDraftsResponse",
             "InputProtoFile": "reliant/v1/sharing.proto",

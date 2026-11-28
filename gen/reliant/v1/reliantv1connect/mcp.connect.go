@@ -74,14 +74,17 @@ type MCPServiceClient interface {
 	// config.headers and config.env come back as the user stored them, API keys
 	// and bearer tokens included, and NO_SIDE_EFFECTS lets Connect serve the rpc
 	// over HTTP GET, whose responses a cache or proxy may store and replay.
+	// forge:lint-disable-next-line forge-idempotency-secret-response-marked-read: deliberately NOT NO_SIDE_EFFECTS (see above), so Connect never sends it as a GET; the stored env and headers are the caller's own, not a per-call value
 	ListServers(context.Context, *connect.Request[v1.ListServersRequest]) (*connect.Response[v1.ListServersResponse], error)
 	// GetServer returns detailed information about a specific MCP server
 	// forge:custom — resolves one server across the project's config scopes and the daemon's live status
 	//
 	// Not NO_SIDE_EFFECTS, for the reason ListServers is not: its config carries
 	// the server's stored headers and env, secrets included.
+	// forge:lint-disable-next-line forge-idempotency-secret-response-marked-read: deliberately NOT NO_SIDE_EFFECTS (see above), so Connect never sends it as a GET; the stored env and headers are the caller's own, not a per-call value
 	GetServer(context.Context, *connect.Request[v1.GetServerRequest]) (*connect.Response[v1.GetServerResponse], error)
 	// GetServerTools returns the list of tools exposed by a specific MCP server
+	// forge:lint-disable-next-line forge-idempotency-read-undeclared: calls out: it asks the live MCP server, through the user's daemon, to list its tools
 	GetServerTools(context.Context, *connect.Request[v1.GetServerToolsRequest]) (*connect.Response[v1.GetServerToolsResponse], error)
 	// InstallServer installs a new MCP server
 	InstallServer(context.Context, *connect.Request[v1.InstallServerRequest]) (*connect.Response[v1.InstallServerResponse], error)
@@ -90,6 +93,7 @@ type MCPServiceClient interface {
 	// RestartServer restarts an MCP server
 	RestartServer(context.Context, *connect.Request[v1.RestartServerRequest]) (*connect.Response[v1.RestartServerResponse], error)
 	// ListRecommended returns a list of recommended MCP servers
+	// forge:lint-disable-next-line forge-idempotency-secret-response-marked-read: the embedded catalog's env values are empty placeholders (recommended-mcps.yaml), the same for every caller: no secret and no per-call value; debug_redact is on the shared MCPServerConfig message
 	ListRecommended(context.Context, *connect.Request[v1.ListRecommendedRequest]) (*connect.Response[v1.ListRecommendedResponse], error)
 	// UpdateServerConfig updates the configuration of an MCP server
 	UpdateServerConfig(context.Context, *connect.Request[v1.UpdateServerConfigRequest]) (*connect.Response[v1.UpdateServerConfigResponse], error)
@@ -247,14 +251,17 @@ type MCPServiceHandler interface {
 	// config.headers and config.env come back as the user stored them, API keys
 	// and bearer tokens included, and NO_SIDE_EFFECTS lets Connect serve the rpc
 	// over HTTP GET, whose responses a cache or proxy may store and replay.
+	// forge:lint-disable-next-line forge-idempotency-secret-response-marked-read: deliberately NOT NO_SIDE_EFFECTS (see above), so Connect never sends it as a GET; the stored env and headers are the caller's own, not a per-call value
 	ListServers(context.Context, *connect.Request[v1.ListServersRequest]) (*connect.Response[v1.ListServersResponse], error)
 	// GetServer returns detailed information about a specific MCP server
 	// forge:custom — resolves one server across the project's config scopes and the daemon's live status
 	//
 	// Not NO_SIDE_EFFECTS, for the reason ListServers is not: its config carries
 	// the server's stored headers and env, secrets included.
+	// forge:lint-disable-next-line forge-idempotency-secret-response-marked-read: deliberately NOT NO_SIDE_EFFECTS (see above), so Connect never sends it as a GET; the stored env and headers are the caller's own, not a per-call value
 	GetServer(context.Context, *connect.Request[v1.GetServerRequest]) (*connect.Response[v1.GetServerResponse], error)
 	// GetServerTools returns the list of tools exposed by a specific MCP server
+	// forge:lint-disable-next-line forge-idempotency-read-undeclared: calls out: it asks the live MCP server, through the user's daemon, to list its tools
 	GetServerTools(context.Context, *connect.Request[v1.GetServerToolsRequest]) (*connect.Response[v1.GetServerToolsResponse], error)
 	// InstallServer installs a new MCP server
 	InstallServer(context.Context, *connect.Request[v1.InstallServerRequest]) (*connect.Response[v1.InstallServerResponse], error)
@@ -263,6 +270,7 @@ type MCPServiceHandler interface {
 	// RestartServer restarts an MCP server
 	RestartServer(context.Context, *connect.Request[v1.RestartServerRequest]) (*connect.Response[v1.RestartServerResponse], error)
 	// ListRecommended returns a list of recommended MCP servers
+	// forge:lint-disable-next-line forge-idempotency-secret-response-marked-read: the embedded catalog's env values are empty placeholders (recommended-mcps.yaml), the same for every caller: no secret and no per-call value; debug_redact is on the shared MCPServerConfig message
 	ListRecommended(context.Context, *connect.Request[v1.ListRecommendedRequest]) (*connect.Response[v1.ListRecommendedResponse], error)
 	// UpdateServerConfig updates the configuration of an MCP server
 	UpdateServerConfig(context.Context, *connect.Request[v1.UpdateServerConfigRequest]) (*connect.Response[v1.UpdateServerConfigResponse], error)

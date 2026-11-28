@@ -62,6 +62,10 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant forge app teardown`](#reliant-forge-app-teardown) | Delete every hosted environment of this app, keeping the app (destructive) |
 | [`reliant forge build`](#reliant-forge-build) | Compile the project's binaries and frontends locally (never publishes) |
 | [`reliant forge build receipt`](#reliant-forge-build-receipt) | Emit a typed receipt for actual exported build inputs |
+| [`reliant forge cache`](#reliant-forge-cache) | Share one Go build cache per machine: a trusted tier main seeds, an overlay per untrusted build |
+| [`reliant forge cache env`](#reliant-forge-cache-env) | Print the environment an untrusted build needs to read the trusted tier |
+| [`reliant forge cache prog`](#reliant-forge-cache-prog) | Serve go's GOCACHEPROG protocol: read the trusted tier, then the overlay; write only the overlay |
+| [`reliant forge cache seed`](#reliant-forge-cache-seed) | Compile one commit of a repository into the machine's trusted Go cache tier |
 | [`reliant forge ci`](#reliant-forge-ci) | CI helper commands — verify, scan, and validate in CI pipelines |
 | [`reliant forge ci gate`](#reliant-forge-ci-gate) | Run the local CI gate: every check, one summary table, non-zero if any failed or was skipped |
 | [`reliant forge ci migration-safety`](#reliant-forge-ci-migration-safety) | Run SQL migration safety checks based on forge.yaml config |
@@ -1496,6 +1500,7 @@ reliant forge
 | [`api`](#reliant-forge-api) | Inspect and exercise Connect RPC endpoints over plain HTTP+JSON |
 | [`app`](#reliant-forge-app) | Stop, tear down or delete a HOSTED app: every environment the control plane runs for this project |
 | [`build`](#reliant-forge-build) | Compile the project's binaries and frontends locally (never publishes) |
+| [`cache`](#reliant-forge-cache) | Share one Go build cache per machine: a trusted tier main seeds, an overlay per untrusted build |
 | [`ci`](#reliant-forge-ci) | CI helper commands — verify, scan, and validate in CI pipelines |
 | [`cloud`](#reliant-forge-cloud) | Talk to the hosted control plane an environment declares |
 | [`cluster`](#reliant-forge-cluster) | Manage the local k3d cluster and inspect dev state |
@@ -2108,6 +2113,126 @@ reliant forge build receipt [flags]
 | `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 | `--inputs` | `string` | - | Typed BuildInputs JSON from the actual builder's exported source/recipe/tools (no secrets) |
 | `--output` | `stringArray` | `[]` | Resolved output NAME=sha256:DIGEST (repeatable; exactly covers inputs.outputs) |
+
+---
+
+### reliant forge cache
+
+Share one Go build cache per machine: a trusted tier main seeds, an overlay per untrusted build
+
+One Go build cache per machine, shared by every agent, worktree, CI runner and gate on it,
+without letting an untrusted build poison what main's builds read.
+
+The TRUSTED tier (/var/cache/workspace/go-build-trusted, or $FORGE_GO_TRUSTED_CACHE)
+is written only by trusted builds: `forge cache seed` on every merge to main, and the gate on
+main, running plain go with GOCACHE set to it. Every other build runs go with
+GOCACHEPROG="forge cache prog" and GOCACHE set to its own OVERLAY: lookups read the trusted
+tier first, then the overlay; writes go only to the overlay. `forge cache env` prints the
+settings. Both tiers are plain Go cache directories, trimmed by `forge storage`.
+
+Nothing is shared between machines.
+
+```
+reliant forge cache
+```
+
+**Subcommands:**
+
+| Command | Description |
+|---------|-------------|
+| [`env`](#reliant-forge-cache-env) | Print the environment an untrusted build needs to read the trusted tier |
+| [`prog`](#reliant-forge-cache-prog) | Serve go's GOCACHEPROG protocol: read the trusted tier, then the overlay; write only the overlay |
+| [`seed`](#reliant-forge-cache-seed) | Compile one commit of a repository into the machine's trusted Go cache tier |
+
+---
+
+#### reliant forge cache env
+
+Print the environment an untrusted build needs to read the trusted tier
+
+Prints, as KEY=value lines, what an untrusted context (an agent, a worktree, a CI runner,
+a merge-queue gate) sets to read the machine's trusted Go cache and write its own overlay.
+GOCACHE stays the context's own cache: it becomes the overlay. The go env -w form is printed
+as a comment, for setting it once per user instead.
+
+```
+reliant forge cache env [--trusted DIR] [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--trusted` | `string` | - | the trusted tier as this context sees it (default $FORGE_GO_TRUSTED_CACHE, else /var/cache/workspace/go-build-trusted) |
+
+---
+
+#### reliant forge cache prog
+
+Serve go's GOCACHEPROG protocol: read the trusted tier, then the overlay; write only the overlay
+
+The GOCACHEPROG helper. go starts it once per command and speaks JSON on its stdin and
+stdout; it is not meant to be run by hand.
+
+--overlay defaults to $GOCACHE (go sets it for the helper). --trusted defaults to $FORGE_GO_TRUSTED_CACHE,
+else /var/cache/workspace/go-build-trusted when it exists. A trusted tier that is missing or unreadable
+is not an error: the build runs on the overlay alone. An overlay that is the trusted tier is refused.
+
+$FORGE_CACHE_PROG_STATS=<file> appends one JSON line of counters per go command at exit.
+
+```
+reliant forge cache prog [--trusted DIR] [--overlay DIR] [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--overlay` | `string` | - | the tier this build writes (default $GOCACHE) |
+| `--trusted` | `string` | - | the trusted tier, read-only (default $FORGE_GO_TRUSTED_CACHE, else /var/cache/workspace/go-build-trusted if it exists) |
+
+---
+
+#### reliant forge cache seed
+
+Compile one commit of a repository into the machine's trusted Go cache tier
+
+Fills the trusted tier with every package and test variant of one commit, as a trusted build:
+run it on each merge to main, as the user that owns the trusted directory.
+
+It exports exactly that commit's tree (git archive, never the working tree: an untracked .go
+file would land in the trusted tier) into a temp directory, then, in each Go module of the
+export (go.mod files outside testdata, vendor and node_modules), runs
+`go list -e -export -deps -test ./...`: it compiles every package and test variant without
+linking or running anything (a test binary would run TestMain). --vet adds `go vet ./...`,
+--race the same compile under -race.
+
+The go commands run with GOCACHE=<trusted>, GOFLAGS=-trimpath (the flags every untrusted build
+uses, so the keys match), GOENV=off (a GOCACHEPROG in go's env file must not route the seed
+through the helper) and no GOCACHEPROG; module settings (GOMODCACHE, GOPROXY, GOPRIVATE, ...)
+are kept, whether set in the environment or in go's env file.
+
+Seeds of one trusted tier queue on <trusted>/.forge-seed.lock (30 minutes, then this one is
+skipped). --rev is resolved after the lock is taken, so a queued seed builds the newest commit.
+A commit already seeded with the same flags is skipped (--force rebuilds it).
+The trusted directory is refused if it is group- or world-writable or owned by another user.
+
+```
+reliant forge cache seed [--repo DIR] [--rev REV] [--trusted DIR] [--race] [--vet] [--tags T] [--fetch] [--force] [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--fetch` | `bool` | - | run git fetch origin main before resolving --rev |
+| `--force` | `bool` | - | seed even when this commit is already recorded as seeded with these flags |
+| `--race` | `bool` | - | also compile everything under -race |
+| `--repo` | `string` | - | the git repository (default: the current directory's git toplevel) |
+| `--rev` | `string` | `origin/main` | the commit to seed, resolved after the seed lock is taken |
+| `--tags` | `string` | - | build tags, passed as -tags to every go command |
+| `--trusted` | `string` | - | the trusted tier (default $FORGE_GO_TRUSTED_CACHE, else /var/cache/workspace/go-build-trusted) |
+| `--vet` | `bool` | - | also run go vet ./... (caches its analysis facts) |
 
 ---
 

@@ -134,6 +134,7 @@ service SharingService {
   // hid. Each carries its definition, to read and fork.
   // forge:custom — SharedWorkflowDraft is a read of workflow_drafts shaped for viewers, not a table
   rpc ListSharedWorkflowDrafts(ListSharedWorkflowDraftsRequest) returns (ListSharedWorkflowDraftsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {
       activity: {none: "reads only: lists what others shared"}
     };
