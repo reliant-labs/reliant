@@ -11,7 +11,7 @@
 import { create } from "@bufbuild/protobuf";
 import { Code, ConnectError } from "@connectrpc/connect";
 import { fireEvent, screen, within } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { GetSiteAuditRequestSchema, GetSiteAuditResponseSchema, SiteAuditSchema, SiteAuditStatus, SiteAuditTrigger } from "@/gen/controlplane/services/siteaudit/v1/siteaudit_pb";
 import { SHOP_WEB_OG_THUMBNAIL, shopSiteAudit } from "@/fixtures/shop/handlers/siteAudit";
@@ -22,6 +22,13 @@ import { SeoInsightsBody } from "../SeoInsightsView";
 import { ObsReadOnlyProvider } from "../../Observability/obsReadOnly";
 import { AuditEmpty, AuditTargetNotice, RERUN_READ_ONLY_WORDS, rerunErrorWords } from "../siteAuditParts";
 import { siteAuditOf } from "../siteAuditModel";
+
+// Re-run needs the org it bills (siteAuditRegression.test.tsx holds that);
+// these views are drawn in one.
+vi.mock("@/hooks/observability-queries", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/hooks/observability-queries")>()),
+  useObservabilityOrg: () => ({ orgId: "org-shop", isLoading: false, error: null, refetch: () => undefined }),
+}));
 
 const NOW = Date.UTC(2026, 10, 26, 12, 0);
 beforeEach(() => resetDemoNowForTests(NOW));
