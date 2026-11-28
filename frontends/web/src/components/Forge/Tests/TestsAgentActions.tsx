@@ -22,7 +22,7 @@
  */
 
 import { useCallback, useId, useState, type ReactNode } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, type QueryFunctionContext } from "@tanstack/react-query";
 import { Bot, Sparkles } from "lucide-react";
 
 import Button from "@/components/forge-ui/button";
@@ -30,7 +30,7 @@ import Tooltip from "@/components/forge-ui/tooltip";
 import { testsServiceQueries } from "@/hooks/controlplane/tests-service-hooks_gen";
 import { onControlPlane, refuseWithoutControlPlane } from "@/hooks/test-queries";
 import { useProject } from "@/hooks/project-queries";
-import { getOrgScope, useOrgScope, whenOrgScopeReady, withOrgFailure } from "@/lib/orgScope";
+import { getOrgScope, useOrgScope, whenOrgScopeReady } from "@/lib/orgScope";
 import { toast } from "@/lib/toast-manager";
 import type { CoverageTarget, FileCoverage, TestFlake } from "@/services/controlPlane/tests/types";
 import { coverageRequest, coverageTreeOf, fileCoverageOf, fileCoverageRequest, summaryRequest, testDetailOf, testRequest } from "@/services/controlPlane/tests/wire";
@@ -43,6 +43,23 @@ import { agentAvailability, coverageSubject, defaultCoverageTarget, filesToRead,
 /** Reads stay fresh this long, as the pages' own (test-queries LIVE / SETTLED). */
 const LIVE_MS = 30_000;
 const SETTLED_MS = 5 * 60_000;
+
+/** Imperative reads must check scope on every execution, including retries. */
+function withCurrentOrgFailure<O extends { queryFn?: unknown }>(options: O): O {
+  const queryFn = options.queryFn as ((context: QueryFunctionContext) => unknown) | undefined;
+  if (typeof queryFn !== "function") return options;
+  return {
+    ...options,
+    queryFn: (context: QueryFunctionContext) => {
+      const org = getOrgScope();
+      if (org.error) {
+        org.retry();
+        throw org.error;
+      }
+      return queryFn(context);
+    },
+  };
+}
 
 /** Whether an agent can start for this console project. */
 export function useTestsAgentAvailability(projectId: string | null | undefined): AgentAvailability {
@@ -102,12 +119,12 @@ export function useFixFlakyTest({ project, projectId, flake, defaultBranch }: { 
     // Refused without a control plane, as the pages' reads are (onControlPlane).
     refuseWithoutControlPlane(client);
     // The same generated reads (and so cache entries) as the pages' hooks; fetchQuery answers the message, mapped here.
-    const detail = testDetailOf(await client.fetchQuery(withOrgFailure(onControlPlane(testsServiceQueries.getTest(testRequest({ orgId, project, testId }), { staleTime: LIVE_MS })), getOrgScope())));
+    const detail = testDetailOf(await client.fetchQuery(withCurrentOrgFailure(onControlPlane(testsServiceQueries.getTest(testRequest({ orgId, project, testId }), { staleTime: LIVE_MS })))));
     // The default branch the flake gate measures from: the summary's (cached when Flaky tests read it). Without it, the prompt says "<default branch>".
     const branch =
       defaultBranch ??
       (await client
-        .fetchQuery(withOrgFailure(onControlPlane(testsServiceQueries.getTestSummary(summaryRequest({ orgId, project }), { staleTime: LIVE_MS })), getOrgScope()))
+        .fetchQuery(withCurrentOrgFailure(onControlPlane(testsServiceQueries.getTestSummary(summaryRequest({ orgId, project }), { staleTime: LIVE_MS }))))
         .then((summary) => summary.branch || undefined)
         .catch(() => undefined));
     return flakyTestSubject(detail.flake ?? flake, detail, branch);
@@ -219,13 +236,13 @@ export function RaiseCoverageButton({
     const query = { target, path: pkg };
     // Refused without a control plane, as the pages' reads are (onControlPlane).
     refuseWithoutControlPlane(client);
-    const tree = coverageTreeOf(await client.fetchQuery(withOrgFailure(onControlPlane(testsServiceQueries.getCoverage(coverageRequest({ orgId, project, ...query }), { staleTime: SETTLED_MS })), getOrgScope())));
+    const tree = coverageTreeOf(await client.fetchQuery(withCurrentOrgFailure(onControlPlane(testsServiceQueries.getCoverage(coverageRequest({ orgId, project, ...query }), { staleTime: SETTLED_MS })))));
     const paths = filesToRead(tree).slice(0, MAX_UNCOVERED_FILES);
     // Read in parallel, each started here, after the org is known (not in a callback of its own).
     const reads: Promise<FileCoverage>[] = [];
     for (const path of paths) {
       reads.push(
-        client.fetchQuery(withOrgFailure(onControlPlane(testsServiceQueries.getFileCoverage(fileCoverageRequest({ orgId, project, target, path }), { staleTime: SETTLED_MS })), getOrgScope())).then(fileCoverageOf)
+        client.fetchQuery(withCurrentOrgFailure(onControlPlane(testsServiceQueries.getFileCoverage(fileCoverageRequest({ orgId, project, target, path }), { staleTime: SETTLED_MS })))).then(fileCoverageOf)
       );
     }
     const files = await Promise.all(reads);
