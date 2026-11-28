@@ -7,14 +7,16 @@
  * for so "Open as SQL panel" can turn that window back into `{from}`/`{to}`.
  */
 
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { keepPreviousInOrgSegment } from "@/lib/orgScope";
 
-import { metricKeys, obsKeys } from "@/hooks/observability-queries";
+import { panelWindow, queryPanelRead, type PanelOffset } from "@/hooks/observability-queries";
+import { useQueryPanel } from "@/hooks/controlplane/observability-service-hooks_gen";
 import { useDebounce } from "@/hooks/useDebounce";
+import { keepPreviousInOrg } from "@/lib/orgScope";
+import { queryPanelRequest, toPanelResult } from "@/services/controlPlane/observability/api";
 import { obsRetry, obsRetryDelay } from "@/services/controlPlane/observability/errors";
-import { useObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
+import { obsCall } from "@/services/controlPlane/observability/obsInterceptors";
 import type { ObsScope, Panel, PanelResult, TimeWindow } from "@/services/controlPlane/observability/types";
 import { resolveWindow, type RangePreset } from "@/services/controlPlane/observability/window";
 
@@ -36,32 +38,31 @@ export function useDebouncedPanel(panel: Panel | null): Panel | null {
 
 export interface ExplorerPanelOptions {
   enabled: boolean;
-  /** A comparison: how far back the window is shifted, resolved at fetch time, and its cache key. */
-  offsetKey?: string;
-  offsetMs?: () => number;
+  /** A comparison: where the window sits back in time. */
+  offset?: PanelOffset;
 }
 
+/** No scope yet: the request of a read that is never sent. */
+const NO_SCOPE: ObsScope = { orgId: "", envIds: [], filters: [] };
+
+/** Marks each read, as it starts, for the control-plane transport's read stage (obsInterceptors.ts). */
+const obsRead = () => obsCall();
+
 /**
- * The explorer's panel, run (QueryPanel). The key is the dashboards' own
- * (`obsKeys.panel`: scope + range + canonical panel), so a saved panel and the
- * explorer share answers. Unlike a dashboard tile, the previous answer stays on
- * screen while an edited query runs — the chart does not blink on every edit —
- * and `isPlaceholderData` says it is stale.
+ * The explorer's panel, run (QueryPanel's generated read). Keyed by its
+ * request, as the dashboards' panels are, so a saved panel and the explorer
+ * share answers. Unlike a dashboard tile, the previous answer stays on screen
+ * while an edited query runs — the chart does not blink on every edit — and
+ * `isPlaceholderData` says it is stale.
  */
 export function useExplorerPanelQuery(scope: ObsScope | null, range: RangePreset, panel: Panel | null, options: ExplorerPanelOptions) {
-  const api = useObservabilityApi();
+  const window = panelWindow(range, undefined, options.offset);
+  const request = queryPanelRequest({ ...(scope ?? NO_SCOPE), window, panel: panel ?? EMPTY_PANEL, services: [], stepSeconds: 0, groupBy: [] });
   return useQuery({
-    queryKey: obsKeys.panel(scope, range, panel ?? EMPTY_PANEL, [], [], options.offsetKey ?? ""),
-    queryFn: ({ signal }) => {
-      const offset = options.offsetMs?.() ?? 0;
-      return api.queryPanel({ ...(scope as ObsScope), window: resolveWindow(range, Date.now() - offset), panel: panel as Panel, services: [], stepSeconds: 0, groupBy: [] }, { signal });
-    },
+    ...queryPanelRead(request, window),
     enabled: options.enabled && !!scope && !!panel,
-    // Every range is relative ("the last hour"), so an answer is stale once time has moved on.
-    staleTime: 30_000,
     // The previous answer, but never another org's (lib/orgScope).
-    placeholderData: keepPreviousInOrgSegment(scope?.orgId ?? null),
-    retry: obsRetry, retryDelay: obsRetryDelay,
+    placeholderData: keepPreviousInOrg(scope?.orgId ?? null),
   });
 }
 
@@ -73,18 +74,21 @@ export interface Explained {
   window: TimeWindow;
 }
 
-/** QueryPanel with `explain`: the statements the panel compiles to, run nowhere (it costs no ClickHouse). */
+/**
+ * QueryPanel with `explain`: the statements the panel compiles to, run nowhere
+ * (it costs no ClickHouse). Asked over absolute bounds, resolved when the
+ * panel or range changes: "Open as SQL panel" turns the compiled window back
+ * into `{from}`/`{to}`, so it must know the exact window the server compiled for.
+ */
 export function useExplainPanel(scope: ObsScope | null, range: RangePreset, panel: Panel | null, enabled: boolean) {
-  const api = useObservabilityApi();
-  return useQuery({
-    queryKey: [...metricKeys.all(scope), "explain", range, panel] as const,
-    queryFn: async ({ signal }): Promise<Explained> => {
-      const window = resolveWindow(range);
-      const result = await api.queryPanel({ ...(scope as ObsScope), window, panel: panel as Panel, services: [], stepSeconds: 0, explain: true }, { signal });
-      return { result, window };
-    },
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- a new panel is a new read, over the window as of now
+  const window = useMemo(() => resolveWindow(range), [range, panel]);
+  const select = useCallback((res: Parameters<typeof toPanelResult>[0]): Explained => ({ result: toPanelResult(res, window), window }), [window]);
+  return useQueryPanel(queryPanelRequest({ ...(scope ?? NO_SCOPE), window, panel: panel ?? EMPTY_PANEL, services: [], stepSeconds: 0, explain: true }), {
+    select,
     enabled: enabled && !!scope && !!panel,
     staleTime: 30_000,
     retry: obsRetry, retryDelay: obsRetryDelay,
+    callOptions: obsRead,
   });
 }

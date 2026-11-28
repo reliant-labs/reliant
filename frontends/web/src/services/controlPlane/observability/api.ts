@@ -42,6 +42,12 @@ import {
   type ListAttributeValuesResponse,
   type ListWorkloadsRequestSchema,
   type ListWorkloadsResponse,
+  type ListTracesRequestSchema,
+  type ListTracesResponse,
+  type QueryPanelRequestSchema,
+  type QueryPanelResponse,
+  type SearchLogsRequestSchema,
+  type SearchLogsResponse,
   AttributeOp as WireAttributeOp,
   MetricType as WireMetricType,
   ObservabilityService,
@@ -269,21 +275,39 @@ function mapLog(record: WireLogRecord, key: string): LogRecord {
   };
 }
 
-export async function searchLogs(req: SearchLogsRequest, options: { signal?: AbortSignal } = {}, transport?: Transport): Promise<SearchLogsResult> {
-  const res = await client(transport).searchLogs({
+export function searchLogsRequest(req: WithObsWindow<SearchLogsRequest>): MessageInitShape<typeof SearchLogsRequestSchema> {
+  return {
     scope: scope(req, req.window, req.services),
     query: composeLogQuery(req.query, req.traceId, req.spanId),
     severities: req.severities.filter((s) => s !== "unknown").map((s) => s.toUpperCase()),
     order: SortOrder.NEWEST_FIRST,
     pageSize: req.limit,
     pageToken: req.cursor ?? "",
-  }, obsCall(options));
+  };
+}
+
+export async function searchLogs(req: SearchLogsRequest, options: { signal?: AbortSignal } = {}, transport?: Transport): Promise<SearchLogsResult> {
+  return toSearchLogs(await client(transport).searchLogs(searchLogsRequest(req), obsCall(options)), req.cursor);
+}
+
+/** One SearchLogs page; `cursor` is the token it was asked with (none for the first page). */
+export function toSearchLogs(res: SearchLogsResponse, cursor?: string): SearchLogsResult {
   // The cursor is the page's identity; a record's index within it makes the key.
-  const page = req.cursor ?? "first";
+  const page = cursor || "first";
   return {
     records: res.logs.map((record, index) => mapLog(record, `${page}:${index}`)),
     nextCursor: res.nextPageToken,
   };
+}
+
+/**
+ * The window a paged read's server resolved for its first page
+ * (`effective_time_range`), which every later page is asked with, beside the
+ * cursor. A server that does not echo one leaves it to the caller.
+ */
+export function effectiveWindowOf(res: { effectiveTimeRange?: { start?: Timestamp; end?: Timestamp } }): TimeWindow | undefined {
+  const range = res.effectiveTimeRange;
+  return range?.start && range.end ? { startMs: msOf(range.start), endMs: msOf(range.end) } : undefined;
 }
 
 // ── Traces ───────────────────────────────────────────────────────────────────
@@ -312,8 +336,8 @@ function mapTraceSummary(t: WireTraceSummary): TraceSummary {
   };
 }
 
-export async function listTraces(req: ListTracesRequest, options: { signal?: AbortSignal } = {}, transport?: Transport): Promise<ListTracesResult> {
-  const res = await client(transport).listTraces({
+export function listTracesRequest(req: WithObsWindow<ListTracesRequest>): MessageInitShape<typeof ListTracesRequestSchema> {
+  return {
     scope: scope(req, req.window, req.services),
     errorsOnly: req.errorsOnly || undefined,
     minDurationMs: req.minDurationMs > 0 ? req.minDurationMs : undefined,
@@ -327,7 +351,14 @@ export async function listTraces(req: ListTracesRequest, options: { signal?: Abo
     pageSize: req.limit,
     pageToken: req.cursor ?? "",
     groupBy: req.groupBy ?? [],
-  }, obsCall(options));
+  };
+}
+
+export async function listTraces(req: ListTracesRequest, options: { signal?: AbortSignal } = {}, transport?: Transport): Promise<ListTracesResult> {
+  return toListTraces(await client(transport).listTraces(listTracesRequest(req), obsCall(options)));
+}
+
+export function toListTraces(res: ListTracesResponse): ListTracesResult {
   return {
     traces: res.traces.map(mapTraceSummary),
     nextCursor: res.nextPageToken,
@@ -481,22 +512,42 @@ export const PANEL_HEADER = "Forge-Panel";
  * browser tables. Search panels are not run here.
  */
 export async function queryPanel(req: QueryPanelRequest, options: { signal?: AbortSignal } = {}, transport?: Transport): Promise<PanelResult> {
-  const headers = req.dashboardId ? { [PANEL_HEADER]: `${req.dashboardId}/${req.panel.id}` } : undefined;
+  const headers = panelHeaders(req.dashboardId, req.panel.id);
   const res = await client(transport).queryPanel(
-    {
-      scope: scope(req, req.window, req.services),
-      panel: panelInit(req.panel),
-      stepSeconds: req.stepSeconds,
-      groupBy: req.groupBy ?? [],
-      explain: req.explain ?? false,
-    },
+    queryPanelRequest(req),
     obsCall({ ...(options.signal ? { signal: options.signal } : {}), ...(headers ? { headers } : {}) })
   );
+  return toPanelResult(res, req.window);
+}
+
+/** The Forge-Panel header of a dashboard's panel read; none for a read no dashboard owns. */
+export function panelHeaders(dashboardId: string | undefined, panelId: string): Record<string, string> | undefined {
+  return dashboardId ? { [PANEL_HEADER]: `${dashboardId}/${panelId}` } : undefined;
+}
+
+/**
+ * QueryPanel's request. A panel's presentation (title, description, layout) is
+ * not sent: it never changes the computation, so two tiles that draw the same
+ * query with different titles ask the same request and share one read. Its id
+ * is sent; it names the panel, and its Forge-Panel label is per panel too.
+ */
+export function queryPanelRequest(req: WithObsWindow<Omit<QueryPanelRequest, "dashboardId">>): MessageInitShape<typeof QueryPanelRequestSchema> {
+  return {
+    scope: scope(req, req.window, req.services),
+    panel: { ...panelInit(req.panel), title: "", description: "", width: 0, height: 0 },
+    stepSeconds: req.stepSeconds,
+    groupBy: req.groupBy ?? [],
+    explain: req.explain ?? false,
+  };
+}
+
+/** QueryPanel's answer; `window` is the one it was read over (resolved by the caller, the response names none). */
+export function toPanelResult(res: QueryPanelResponse, window: TimeWindow): PanelResult {
   return {
     kind: res.kind,
     unit: res.unit,
     stepSeconds: res.stepSeconds,
-    window: req.window,
+    window,
     bucketSeconds: res.bucketSeconds,
     bucketTimezone: res.bucketTimezone || undefined,
     truncated: res.truncated,

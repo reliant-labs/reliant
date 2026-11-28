@@ -253,12 +253,13 @@ describe("variables, compare, refresh, share, full screen", () => {
     await waitFor(() => expect(calls(onCall, "QueryPanel").length).toBeGreaterThan(0));
     const requests = calls(onCall, "QueryPanel");
     const rpc = requests.find((request) => request.panel.id === "latency-by-route");
+    // Decoded off the wire: a predicate carries its empty `values`.
     expect(rpc.panel).toMatchObject({ groupBy: [], where: expect.arrayContaining([
-      { field: "span.attr.rpc.service", op: "eq", value: "pkg.Service" },
-      { field: "span.attr.rpc.method", op: "eq", value: "Get" },
+      { field: "span.attr.rpc.service", op: "eq", value: "pkg.Service", values: [] },
+      { field: "span.attr.rpc.method", op: "eq", value: "Get", values: [] },
     ]) });
     const experience = requests.find((request) => request.panel.id === "conversion");
-    expect(experience.panel.where).toBeUndefined();
+    expect(experience.panel.where).toEqual([]);
     expect(calls(onCall, "SaveDashboard")).toHaveLength(0);
   });
 

@@ -51,7 +51,7 @@ export function HealthStrip({ scope, range, environments, envId, alertsHref }: H
   const numberPanel = useMemo(() => redPanel("number"), []);
   const linePanel = useMemo(() => redPanel("line"), []);
   const totals = usePanelQuery(scope, range, numberPanel, []);
-  const previous = usePanelQuery(scope, range, numberPanel, [], [], { offsetKey: `period:${range}`, offsetMs: () => rangeMs(range) });
+  const previous = usePanelQuery(scope, range, numberPanel, [], [], { offset: { endsAgoMs: rangeMs(range) } });
   const trend = usePanelQuery(scope, range, linePanel, []);
 
   const scopeEnvIds = useMemo(() => (envId ? [envId] : environments.map((candidate) => candidate.id)), [envId, environments]);

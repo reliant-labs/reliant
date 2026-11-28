@@ -1,12 +1,14 @@
 // Copyright (c) 2026 Reliant Labs
 import type { Transport } from "@connectrpc/connect";
+import type { MessageInitShape } from "@bufbuild/protobuf";
 import {
   GraphNodeKind, GraphEdgeKind, GraphEvidenceKind, ObservabilityService,
+  type GetServiceGraphCatalogRequestSchema, type GetServiceGraphCatalogResponse, type GetServiceGraphRequestSchema, type GetServiceGraphResponse,
   type GraphCompleteness, type GraphHistogram,
 } from "@/gen/controlplane/services/observability/v1/observability_pb";
 import { getControlPlaneClient } from "../client";
 import { obsCall } from "./obsInterceptors";
-import { msOf, wireScope } from "./api";
+import { effectiveWindowOf, msOf, wireScope, type WithObsWindow } from "./api";
 import type { CatalogRequest, GraphEdge, GraphNode, GraphQuality, GraphRequest, RPCCatalog, ServiceGraph } from "./graphTypes";
 
 const NODE_KIND: Partial<Record<GraphNodeKind, GraphNode["kind"]>> = {
@@ -36,12 +38,20 @@ function quality(q?: GraphCompleteness): GraphQuality | null {
   } : null;
 }
 
-export async function getServiceGraph(req: GraphRequest, options: { signal?: AbortSignal } = {}, transport?: Transport): Promise<ServiceGraph> {
-  const res = await getControlPlaneClient(ObservabilityService, transport).getServiceGraph({
+export function serviceGraphRequest(req: WithObsWindow<GraphRequest>): MessageInitShape<typeof GetServiceGraphRequestSchema> {
+  return {
     scope: wireScope(req, req.window, req.services), rpcIds: req.rpcIds, rpcService: req.rpcService ?? "", includeInternal: req.includeInternal, maxEdges: 500,
     edgeKinds: [GraphEdgeKind.SYNC, GraphEdgeKind.DATABASE, GraphEdgeKind.EXTERNAL, GraphEdgeKind.ASYNC_SEND,
       GraphEdgeKind.ASYNC_CONSUME, ...(req.includeInternal ? [GraphEdgeKind.INTERNAL] : []), ...(req.includeDeclared ? [GraphEdgeKind.DECLARED] : [])],
-  }, obsCall(options));
+  };
+}
+
+export async function getServiceGraph(req: GraphRequest, options: { signal?: AbortSignal } = {}, transport?: Transport): Promise<ServiceGraph> {
+  return toServiceGraph(await getControlPlaneClient(ObservabilityService, transport).getServiceGraph(serviceGraphRequest(req), obsCall(options)));
+}
+
+/** GetServiceGraph's answer; its window is the one the server resolved (effective_time_range). */
+export function toServiceGraph(res: GetServiceGraphResponse): ServiceGraph {
   return {
     nodes: res.nodes.map((n) => ({ id: n.id, envId: n.envId, kind: NODE_KIND[n.kind] ?? "unknown", label: n.label,
       parentId: n.parentNodeId, rpcId: n.rpcId, sourceUnavailableReason: n.sourceUnavailableReason })),
@@ -55,14 +65,19 @@ export async function getServiceGraph(req: GraphRequest, options: { signal?: Abo
       firstSeenMs: msOf(e.firstSeen), lastSeenMs: msOf(e.lastSeen),
     })),
     quality: quality(res.completeness),
-    window: res.effectiveTimeRange ? { startMs: msOf(res.effectiveTimeRange.start), endMs: msOf(res.effectiveTimeRange.end) } : null,
+    window: effectiveWindowOf(res) ?? null,
   };
 }
 
+export function serviceGraphCatalogRequest(req: WithObsWindow<CatalogRequest>): MessageInitShape<typeof GetServiceGraphCatalogRequestSchema> {
+  return { scope: wireScope(req, req.window, req.services), rpcService: req.rpcService ?? "", rpcIds: req.rpcIds ?? [], maxMethods: 500 };
+}
+
 export async function getServiceGraphCatalog(req: CatalogRequest, options: { signal?: AbortSignal } = {}, transport?: Transport): Promise<RPCCatalog> {
-  const res = await getControlPlaneClient(ObservabilityService, transport).getServiceGraphCatalog({
-    scope: wireScope(req, req.window, req.services), rpcService: req.rpcService ?? "", rpcIds: req.rpcIds ?? [], maxMethods: 500,
-  }, obsCall(options));
+  return toServiceGraphCatalog(await getControlPlaneClient(ObservabilityService, transport).getServiceGraphCatalog(serviceGraphCatalogRequest(req), obsCall(options)));
+}
+
+export function toServiceGraphCatalog(res: GetServiceGraphCatalogResponse): RPCCatalog {
   return {
     methods: res.methods.map((m) => ({ id: m.rpcId, service: m.rpcService, method: m.method,
       processIds: m.processNodeIds, evidence: graphEvidence(m.evidence), observedCount: m.observedCount,

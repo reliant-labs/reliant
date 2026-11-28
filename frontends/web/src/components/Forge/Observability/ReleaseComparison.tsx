@@ -28,7 +28,7 @@ import Card from "@/components/forge-ui/card";
 import Link from "@/components/forge-ui/link";
 import Button from "@/components/forge-ui/button";
 import DataTable, { type DataTableColumn } from "@/components/forge-ui/data_table";
-import { obsKeys, useReleaseHealth } from "@/hooks/observability-queries";
+import { queryPanelRead, useReleaseHealth } from "@/hooks/observability-queries";
 import {
   HEALTH_WINDOW_MS,
   HEALTH_WINDOWS,
@@ -39,10 +39,10 @@ import {
   type ReleaseVerdict,
   type ServiceHealthDelta,
 } from "@/services/controlPlane/observability/deliveryTypes";
-import { obsRetry, obsRetryDelay, releaseHealthErrorKind } from "@/services/controlPlane/observability/errors";
+import { releaseHealthErrorKind } from "@/services/controlPlane/observability/errors";
 import { keepsLastResult } from "@/services/controlPlane/observability/quota";
 import type { Issue } from "@/services/controlPlane/observability/issuesTypes";
-import { useObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
+import { queryPanelRequest } from "@/services/controlPlane/observability/api";
 import type { ObsScope, Panel, PanelResult, TimeWindow } from "@/services/controlPlane/observability/types";
 import { cn } from "@/lib/utils";
 
@@ -91,17 +91,14 @@ export function compareWorkloads(before: PanelResult | undefined, after: PanelRe
   }));
 }
 
+const NO_WINDOW: TimeWindow = { startMs: 0, endMs: 0 };
+
+/** One side's resource use (QueryPanel's generated read) over its absolute window: a release's moment does not move. */
 function useResources(scope: ObsScope, side: "before" | "after", window: TimeWindow | null) {
-  const api = useObservabilityApi();
   const usable = !!window && window.endMs > window.startMs;
-  return useQuery({
-    queryKey: [...obsKeys.all(scope), "compare", RESOURCES_PANEL.id, side, window?.startMs ?? 0, window?.endMs ?? 0] as const,
-    queryFn: ({ signal }) =>
-      api.queryPanel({ ...scope, window: window!, panel: { ...RESOURCES_PANEL, id: `${RESOURCES_PANEL.id}-${side}` }, services: [], stepSeconds: 0, groupBy: RESOURCES_PANEL.groupBy }, { signal }),
-    enabled: usable,
-    staleTime: 5 * 60_000,
-    retry: obsRetry, retryDelay: obsRetryDelay,
-  });
+  const bounds = window ?? NO_WINDOW;
+  const request = queryPanelRequest({ ...scope, window: bounds, panel: { ...RESOURCES_PANEL, id: `${RESOURCES_PANEL.id}-${side}` }, services: [], stepSeconds: 0, groupBy: RESOURCES_PANEL.groupBy });
+  return useQuery({ ...queryPanelRead(request, bounds), enabled: usable, staleTime: 5 * 60_000 });
 }
 
 export interface ReleaseComparisonProps {

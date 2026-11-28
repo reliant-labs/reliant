@@ -142,6 +142,9 @@ export function modelScope(scope: QueryScope | undefined, clock: PackClock = dem
   };
 }
 
+/** The window a paged read was answered over, echoed as control-plane echoes it, for the next page to ask again. */
+const effectiveRange = (window: TimeWindow) => ({ start: ts(window.startMs), end: ts(window.endMs) });
+
 /** SearchLogs' query back into what the reader typed and the trace/span it is scoped to (api.ts composeLogQuery). */
 export function splitLogQuery(query: string): { query: string; traceId?: string; spanId?: string } {
   let traceId: string | undefined;
@@ -279,6 +282,7 @@ function observabilityServiceHandlers(fixtures: ObservabilityApi, clock: PackClo
         nextPageToken: res.nextCursor,
         red: res.red ? wireRed(res.red) : undefined,
         redGroups: res.redGroups.map((g) => ({ group: { ...g.group }, red: wireRed(g.red) })),
+        effectiveTimeRange: effectiveRange(scope.window),
       });
     },
     [TELEMETRY_RPCS.getTrace]: async (req: GetTraceRequest) => {
@@ -304,7 +308,7 @@ function observabilityServiceHandlers(fixtures: ObservabilityApi, clock: PackClo
         limit: req.pageSize,
         cursor: req.pageToken || undefined,
       });
-      return create(SearchLogsResponseSchema, { logs: res.records.map(wireLog), nextPageToken: res.nextCursor });
+      return create(SearchLogsResponseSchema, { logs: res.records.map(wireLog), nextPageToken: res.nextCursor, effectiveTimeRange: effectiveRange(scope.window) });
     },
     [TELEMETRY_RPCS.getServiceOverview]: async (req: GetServiceOverviewRequest) => {
       const scope = modelScope(req.scope, clock);

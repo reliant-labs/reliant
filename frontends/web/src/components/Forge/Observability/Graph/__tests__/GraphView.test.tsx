@@ -5,21 +5,22 @@ import { Code, ConnectError } from "@connectrpc/connect";
 import { describe, expect, it, vi } from "vitest";
 import { fixtureCatalog, fixtureGraph } from "../../__fixtures__/fixtureGraph";
 import { GraphView } from "../GraphView";
+import { ObservabilityFixtures } from "@/test/observabilityFixtures";
+import type { ObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
+// The model-level fake: the generated graph reads reach it through the shop pack's wire handlers.
 const api = { getServiceGraph: vi.fn(), getServiceGraphCatalog: vi.fn() };
-vi.mock("@/hooks/observability-queries", () => ({ obsKeys: { all: (s: unknown) => ["observability", s] } }));
-vi.mock("@/services/controlPlane/observability/ObservabilityApiContext", () => ({ useObservabilityApi: () => api }));
 vi.mock("../GraphPanel", () => ({ GraphPanel: () => <div>Graph populated</div> }));
 const scope = { orgId: "org", projectId: "shop", envIds: ["env-prod"], filters: [] };
 function show(search = {}, client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })) {
   const navigate = vi.fn();
-  render(<QueryClientProvider client={client}><GraphView scope={scope} range="15m" search={{ view: "graph", ...search }} navigate={navigate} subject="shop" /></QueryClientProvider>);
+  render(<QueryClientProvider client={client}><ObservabilityFixtures api={api as unknown as ObservabilityApi}><GraphView scope={scope} range="15m" search={{ view: "graph", ...search }} navigate={navigate} subject="shop" /></ObservabilityFixtures></QueryClientProvider>);
   return navigate;
 }
 describe("scoped graph boundary", () => {
   it("sends the service filter and toggles the declared overlay", async () => {
     api.getServiceGraph.mockResolvedValue(fixtureGraph()); api.getServiceGraphCatalog.mockResolvedValue(fixtureCatalog());
     const navigate = show({ rpcService: "shop.v1.OrdersService" });
-    await waitFor(() => expect(api.getServiceGraph).toHaveBeenCalledWith(expect.objectContaining({ ...scope, rpcIds: [], rpcService: "shop.v1.OrdersService" }), expect.objectContaining({ signal: expect.anything() })));
+    await waitFor(() => expect(api.getServiceGraph).toHaveBeenCalledWith(expect.objectContaining({ ...scope, rpcIds: [], rpcService: "shop.v1.OrdersService" })));
     expect(await screen.findByText("Graph populated")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("switch", { name: "Declared" }));
     expect(navigate).toHaveBeenCalledWith({ declared: true });
@@ -27,7 +28,7 @@ describe("scoped graph boundary", () => {
   it("populates the service and method dropdowns from observed traffic", async () => {
     api.getServiceGraph.mockResolvedValue(fixtureGraph()); api.getServiceGraphCatalog.mockResolvedValue(fixtureCatalog());
     const navigate = show();
-    await waitFor(() => expect(api.getServiceGraphCatalog).toHaveBeenCalledWith(expect.objectContaining({ rpcService: "" }), expect.objectContaining({ signal: expect.anything() })));
+    await waitFor(() => expect(api.getServiceGraphCatalog).toHaveBeenCalledWith(expect.objectContaining({ rpcService: "" })));
     await waitFor(() => expect(screen.getByLabelText("Service")).not.toHaveTextContent(/loading/i));
     fireEvent.click(screen.getByLabelText("Service"));
     fireEvent.click(await screen.findByRole("option", { name: /OrdersService/ }));
@@ -53,7 +54,7 @@ describe("scoped graph boundary", () => {
   it("does not request a declared overlay under an unmapped process restriction", async () => {
     api.getServiceGraph.mockClear().mockResolvedValue(fixtureGraph());
     show({ service: "api", declared: true });
-    await waitFor(() => expect(api.getServiceGraph).toHaveBeenCalledWith(expect.objectContaining({ services: ["api"], includeDeclared: false }), expect.objectContaining({ signal: expect.anything() })));
+    await waitFor(() => expect(api.getServiceGraph).toHaveBeenCalledWith(expect.objectContaining({ services: ["api"], includeDeclared: false })));
     expect(screen.getByRole("switch", { name: "Declared" })).toBeDisabled();
   });
   it("offers a chosen service's methods from its own catalog, not the bounded global one", async () => {
@@ -62,7 +63,7 @@ describe("scoped graph boundary", () => {
     api.getServiceGraph.mockResolvedValue(fixtureGraph());
     api.getServiceGraphCatalog.mockImplementation((req) => Promise.resolve(req.rpcService ? { ...base, methods: [...base.methods, scopedOnly] } : base));
     const navigate = show({ rpcService: "shop.v1.OrdersService" });
-    await waitFor(() => expect(api.getServiceGraphCatalog).toHaveBeenCalledWith(expect.objectContaining({ rpcService: "shop.v1.OrdersService" }), expect.objectContaining({ signal: expect.anything() })));
+    await waitFor(() => expect(api.getServiceGraphCatalog).toHaveBeenCalledWith(expect.objectContaining({ rpcService: "shop.v1.OrdersService" })));
     await waitFor(() => expect(screen.getByLabelText("Method")).not.toHaveTextContent(/loading/i));
     fireEvent.click(screen.getByLabelText("Method"));
     fireEvent.click(await screen.findByRole("option", { name: /ZZMethod501/ }));
@@ -96,7 +97,7 @@ describe("scoped graph boundary", () => {
     api.getServiceGraphCatalog.mockImplementation((req) => Promise.resolve(req.rpcIds?.length ? exact : { ...base, methods: [] }));
     show({ view: "rpc", rpcId: selectedId, rpcService: "shop.v1.OrdersService" });
     expect(await screen.findByRole("region", { name: "RPC method detail" })).toHaveTextContent("ZZMethod201");
-    expect(api.getServiceGraphCatalog).toHaveBeenCalledWith(expect.objectContaining({ rpcIds: [selectedId] }), expect.objectContaining({ signal: expect.anything() }));
+    expect(api.getServiceGraphCatalog).toHaveBeenCalledWith(expect.objectContaining({ rpcIds: [selectedId] }));
   });
   it("recovers the exact selected method after a retained-data authorization failure", async () => {
     const base = fixtureCatalog(); const id = "shop.v1.OrdersService/ZZMethod600";

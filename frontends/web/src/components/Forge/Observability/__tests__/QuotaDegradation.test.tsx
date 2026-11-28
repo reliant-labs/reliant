@@ -22,7 +22,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { createTestQueryClient } from "@/test/renderWithQuery";
 import { resolveBillingTab, settingsSearchSchema } from "@/routeSchemas";
-import { obsKeys, useServiceOverview } from "@/hooks/observability-queries";
+import { panelQueryKey, useServiceOverview } from "@/hooks/observability-queries";
 import { ObservabilityApiProvider, type ObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
 import { ObsQuotaProvider, RESUME_JITTER_MS, useObsQuota } from "@/services/controlPlane/observability/ObsQuotaContext";
 import { formatClock, quotaPausedError } from "@/services/controlPlane/observability/quota";
@@ -133,9 +133,11 @@ describe("polling", () => {
     const panel = { id: "first", title: "Requests", kind: "line", signal: "traces", series: [{ label: "requests", agg: "count" }] } as const;
     // The request is the same computation; presentation isn't part of its identity.
     const a = { ...panel, series: [...panel.series] };
-    const b = { ...a, id: "second", title: "Another title", description: "Different layout", width: 12, height: 4 };
-    expect(obsKeys.panel(SCOPE, "1h", a, [], [])).toEqual(obsKeys.panel(SCOPE, "1h", b, [], []));
-    expect(obsKeys.panel(SCOPE, "1h", a, [], [])).not.toEqual(obsKeys.panel(SCOPE, "6h", b, [], []));
+    const b = { ...a, title: "Another title", description: "Different layout", width: 12, height: 4 };
+    expect(panelQueryKey(SCOPE, "1h", a, [])).toEqual(panelQueryKey(SCOPE, "1h", b, []));
+    expect(panelQueryKey(SCOPE, "1h", a, [])).not.toEqual(panelQueryKey(SCOPE, "6h", b, []));
+    // The id names the panel (and its Forge-Panel label), so another panel is another read.
+    expect(panelQueryKey(SCOPE, "1h", a, [])).not.toEqual(panelQueryKey(SCOPE, "1h", { ...b, id: "second" }, []));
   });
 
   it("polls on the interval, and marks only the polls as polls", async () => {

@@ -7,16 +7,15 @@
  * share one React Query cache entry, and both judge the same numbers.
  */
 
-import { panelRead } from "@/hooks/observability-queries";
+import { panelRead, type PanelOffset } from "@/hooks/observability-queries";
 import type { Panel } from "@/services/controlPlane/observability/types";
 import { rangeForBucket, rangeMs, readRange, type RangePreset } from "@/services/controlPlane/observability/window";
 
 import type { CompareTarget } from "./dashboardModel";
 
 export interface CardCompare {
-  /** The comparison read's cache key: a release, or the previous period of the range read. */
-  offsetKey: string;
-  offsetMs: () => number;
+  /** Where the comparison read's window sits: ending when the release was promoted, or the previous period of the range read. */
+  offset: PanelOffset;
   /**
    * How far a chart shifts the comparison series forward to lay it on the
    * current axis: the period the read went back by, so the plot matches the
@@ -51,11 +50,10 @@ export function cardRead(rangeOfCard: RangePreset, panel: Panel, target: Compare
   const range = widening?.range ?? rangeOfCard;
   let compare: CardCompare | null = null;
   if (target.mode === "release") {
-    const promotedAtMs = target.promotion.promotedAtMs;
-    compare = { offsetKey: `release:${target.promotion.promotionId}`, offsetMs: () => Math.max(0, Date.now() - promotedAtMs), shiftMs: target.offsetMs };
+    compare = { offset: { endsAtMs: target.promotion.promotedAtMs }, shiftMs: target.offsetMs };
   } else if (target.mode === "period") {
     const periodMs = rangeMs(readRange(range, panelRead(panel)));
-    compare = { offsetKey: `period:${range}`, offsetMs: () => periodMs, shiftMs: periodMs };
+    compare = { offset: { endsAgoMs: periodMs }, shiftMs: periodMs };
   }
   return { range, widened: widening?.widened ?? false, compare };
 }

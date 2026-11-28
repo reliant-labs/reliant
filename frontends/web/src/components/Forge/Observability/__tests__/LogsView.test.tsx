@@ -77,15 +77,34 @@ describe("LogsView", () => {
     await waitFor(() => expect(screen.getAllByTestId("obs-log-row").at(-1)).toHaveFocus());
   });
 
-  it("tails live, and stops offering older pages while it does", async () => {
+  it("keeps the open log visible while starting live tail, without offering older pages", async () => {
     const user = userEvent.setup();
-    const harness = renderPanel(createFixtureApi(), { view: "logs" });
-    await screen.findAllByTestId("obs-log-row");
-    expect(screen.getByTestId("obs-logs-more")).toBeInTheDocument();
-    await user.click(screen.getByTestId("obs-live-tail"));
-    expect(harness.current().live).toBe(true);
-    expect(screen.getByTestId("obs-live-tail")).toHaveAttribute("aria-pressed", "true");
-    expect(screen.queryByTestId("obs-logs-more")).not.toBeInTheDocument();
+    const api = createFixtureApi();
+    const searchLogs = api.searchLogs;
+    let release = () => {};
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    const onSearch = vi.fn();
+    api.searchLogs = async (...args) => {
+      onSearch();
+      if (onSearch.mock.calls.length > 1) await gate;
+      return searchLogs(...args);
+    };
+    try {
+      const harness = renderPanel(api, { view: "logs" });
+      const [first] = await screen.findAllByTestId("obs-log-row");
+      await user.click(first);
+      expect(screen.getByTestId("obs-log-details")).toBeInTheDocument();
+      expect(screen.getByTestId("obs-logs-more")).toBeInTheDocument();
+      await user.click(screen.getByTestId("obs-live-tail"));
+      expect(harness.current().live).toBe(true);
+      expect(screen.getByTestId("obs-live-tail")).toHaveAttribute("aria-pressed", "true");
+      expect(screen.queryByTestId("obs-logs-more")).not.toBeInTheDocument();
+      await waitFor(() => expect(onSearch).toHaveBeenCalledTimes(2));
+      expect(screen.getByTestId("obs-log-details")).toBeInTheDocument();
+      expect(screen.queryByTestId("obs-logs-loading")).not.toBeInTheDocument();
+    } finally {
+      release();
+    }
   });
 
   it("scopes to one trace from a trace link, and says so", async () => {

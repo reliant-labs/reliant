@@ -21,18 +21,16 @@
 
 import { useMemo, type ReactNode } from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
 import { ArrowRight, BellRing, Bug, Network, Timer } from "lucide-react";
 
 import Link from "@/components/forge-ui/link";
 import PageHeader from "@/components/forge-ui/page_header";
 import Status from "@/components/forge-ui/status";
-import { useAlerts, useIssues, useObservabilityOrg, obsKeys } from "@/hooks/observability-queries";
-import { useObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
+import { useAlerts, useIssues, useObservabilityOrg, useServiceGraph, useServiceGraphCatalog } from "@/hooks/observability-queries";
 import { cn } from "@/lib/utils";
-import { obsRetry, obsRetryDelay } from "@/services/controlPlane/observability/errors";
+import { relativeWindow } from "@/services/controlPlane/observability/api";
 import type { ObsScope } from "@/services/controlPlane/observability/types";
-import { RANGE_LABELS, RANGE_PRESETS, resolveWindow, type RangePreset } from "@/services/controlPlane/observability/window";
+import { RANGE_LABELS, RANGE_PRESETS, rangeMs, type RangePreset } from "@/services/controlPlane/observability/window";
 
 import { useForgeConsole } from "../../Console/consoleContext";
 import { NothingDeployed } from "../../Console/consolePageFrame";
@@ -262,23 +260,12 @@ function TopErrors({ scope, range }: { scope: ObsScope | null; range: RangePrese
 
 // ── Slowest endpoints ───────────────────────────────────────────────────────
 
-function useWindow(range: RangePreset) {
-  // Fixed for the page's life at a given range: the reads that take a window are keyed by it.
-  return useMemo(() => resolveWindow(range), [range]);
-}
+/** The last `range`, as of whenever the server answers: a Refresh re-reads it as of now. */
+const windowOf = (range: RangePreset) => relativeWindow(rangeMs(range));
 
 function SlowestEndpoints({ scope, range }: { scope: ObsScope | null; range: RangePreset }) {
   const { href, forgeProject } = useForgeConsole();
-  const api = useObservabilityApi();
-  const window = useWindow(range);
-  const catalog = useQuery({
-    queryKey: [...obsKeys.all(scope), "obs-overview-catalog", window],
-    queryFn: ({ signal }) => api.getServiceGraphCatalog({ ...(scope as ObsScope), window, rpcService: "" }, { signal }),
-    enabled: !!scope,
-    staleTime: 60_000,
-    retry: obsRetry,
-    retryDelay: obsRetryDelay,
-  });
+  const catalog = useServiceGraphCatalog(scope, windowOf(range), { rpcService: "" }, { staleTime: 60_000 });
   const slowest = useMemo(() => slowestEndpoints(catalog.data, TOP), [catalog.data]);
   return (
     <Block title="Slowest endpoints" icon={<Timer className="size-4" />} href={href({ kind: "obs-view", view: "rpc" })} linkLabel="RPC explorer" testId="obs-overview-slowest">
@@ -362,16 +349,7 @@ function FiringAlerts({ orgId, envIds, envName }: { orgId: string | null; envIds
 
 function GraphThumbnail({ scope, range }: { scope: ObsScope | null; range: RangePreset }) {
   const { href, forgeProject } = useForgeConsole();
-  const api = useObservabilityApi();
-  const window = useWindow(range);
-  const graph = useQuery({
-    queryKey: [...obsKeys.all(scope), "obs-overview-graph", window],
-    queryFn: ({ signal }) => api.getServiceGraph({ ...(scope as ObsScope), window, rpcIds: [], rpcService: "", services: [], includeInternal: false, includeDeclared: false }, { signal }),
-    enabled: !!scope,
-    staleTime: 60_000,
-    retry: obsRetry,
-    retryDelay: obsRetryDelay,
-  });
+  const graph = useServiceGraph(scope, windowOf(range), { rpcIds: [], rpcService: "", services: [], includeInternal: false, includeDeclared: false }, { staleTime: 60_000 });
   const thumb = useMemo(() => graphThumbnail(graph.data), [graph.data]);
   const graphHref = href({ kind: "obs-view", view: "graph" });
   return (

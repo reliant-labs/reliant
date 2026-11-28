@@ -43,8 +43,7 @@ describe("trace list", () => {
     expect(harness.current()).toMatchObject({ q: "GetOrder", errors: true, minDuration: "500ms" });
     await waitFor(() =>
       expect(listTraces).toHaveBeenLastCalledWith(
-        expect.objectContaining({ rootSpanName: "GetOrder", errorsOnly: true, minDurationMs: 500 }),
-        expect.objectContaining({ signal: expect.anything() })
+        expect.objectContaining({ rootSpanName: "GetOrder", errorsOnly: true, minDurationMs: 500 })
       )
     );
   });
@@ -60,7 +59,7 @@ describe("trace list", () => {
     await user.click(within(first).getByTestId("obs-trace-user"));
     expect(harness.current()).toMatchObject({ user: "u_8812" });
     await waitFor(() =>
-      expect(listTraces).toHaveBeenLastCalledWith(expect.objectContaining({ userId: "u_8812" }), expect.objectContaining({ signal: expect.anything() }))
+      expect(listTraces).toHaveBeenLastCalledWith(expect.objectContaining({ userId: "u_8812" }))
     );
     await user.click(screen.getByTestId("obs-traces-user-clear"));
     expect(harness.current().user).toBeUndefined();
@@ -90,8 +89,7 @@ describe("trace list", () => {
     expect(harness.current()).toMatchObject({ fe: "1.8.16", be: "v1.7.92" });
     await waitFor(() =>
       expect(listTraces).toHaveBeenLastCalledWith(
-        expect.objectContaining({ frontendVersion: "1.8.16", backendVersion: "v1.7.92" }),
-        expect.objectContaining({ signal: expect.anything() })
+        expect.objectContaining({ frontendVersion: "1.8.16", backendVersion: "v1.7.92" })
       )
     );
     await waitFor(() => expect(screen.getAllByTestId("obs-trace-versions").every((c) => c.textContent?.includes("1.8.16"))).toBe(true));
@@ -132,8 +130,7 @@ describe("trace list", () => {
     expect(harness.current()).toMatchObject({ q: "ChatService.SendMessage" });
     await waitFor(() =>
       expect(listTraces).toHaveBeenLastCalledWith(
-        expect.objectContaining({ rootSpanName: "ChatService/SendMessage" }),
-        expect.objectContaining({ signal: expect.anything() })
+        expect.objectContaining({ rootSpanName: "ChatService/SendMessage" })
       )
     );
   });
@@ -145,7 +142,7 @@ describe("trace list", () => {
     const harness = renderPanel(api, { view: "traces", rsession: "sess-001003" });
     const bar = await screen.findByTestId("obs-traces-session");
     await waitFor(() =>
-      expect(listTraces).toHaveBeenLastCalledWith(expect.objectContaining({ sessionId: "sess-001003" }), expect.objectContaining({ signal: expect.anything() }))
+      expect(listTraces).toHaveBeenLastCalledWith(expect.objectContaining({ sessionId: "sess-001003" }))
     );
     await user.click(within(bar).getByTestId("obs-traces-session-open"));
     expect(harness.current()).toMatchObject({ view: "sessions", session: "sess-001003" });
@@ -207,7 +204,7 @@ describe("trace list", () => {
     renderPanel(api, { view: "traces", lat: "100-200" });
     const rows = await screen.findAllByTestId("obs-trace-row");
     expect(rows).toHaveLength(5);
-    expect(listTraces).toHaveBeenCalledWith(expect.objectContaining({ minDurationMs: 100, cursor: "page-2" }), expect.anything());
+    expect(listTraces).toHaveBeenCalledWith(expect.objectContaining({ minDurationMs: 100, cursor: "page-2" }));
     expect(screen.queryByTestId("obs-trace-region-empty")).not.toBeInTheDocument();
     expect(screen.getByTestId("obs-trace-region")).toHaveTextContent("5 of 10");
   });

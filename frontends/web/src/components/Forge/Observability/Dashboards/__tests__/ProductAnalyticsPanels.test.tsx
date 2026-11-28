@@ -22,17 +22,17 @@ vi.mock("@/components/forge-ui/link", () => ({ default: ({ href, children, ...re
 const figuresById: Record<string, [number | null, number | null] | "failed"> = {};
 // The services each read was made with, by panel id.
 const servicesRead: Record<string, unknown> = {};
-// The range and comparison key each read was made with, by panel id: "<range>" now, "<range> <key>" before.
+// The range and comparison offset each read was made with, by panel id: "<range>" now, "<range> -<ms>" before.
 const readsMade: Record<string, string[]> = {};
 vi.mock("@/hooks/observability-queries", () => ({
-  usePanelQuery: (_scope: unknown, range: string, panel: Panel, services: unknown, _g: unknown, options: { offsetKey?: string } = {}) => {
+  usePanelQuery: (_scope: unknown, range: string, panel: Panel, services: unknown, _g: unknown, options: { offset?: { endsAgoMs?: number } } = {}) => {
     servicesRead[panel.id] = services;
-    const made = options.offsetKey ? `${range} ${options.offsetKey}` : range;
+    const made = options.offset ? `${range} -${options.offset.endsAgoMs}` : range;
     readsMade[panel.id] = [...new Set([...(readsMade[panel.id] ?? []), made])];
     const pair = figuresById[panel.id];
     if (!pair) return { data: undefined, isLoading: true, error: null };
     if (pair === "failed") return { data: undefined, isLoading: false, error: new Error("quota") };
-    const value = options.offsetKey ? pair[1] : pair[0];
+    const value = options.offset ? pair[1] : pair[0];
     return { data: result({ columns: [panel.title], rows: value === null ? [] : [{ group: {}, values: [value] }] }), isLoading: false, error: null };
   },
 }));
@@ -190,7 +190,7 @@ describe("Needs attention (kind: attention)", () => {
     for (const key of Object.keys(figuresById)) delete figuresById[key];
   };
   const attention: Panel = { id: "attention", title: "Needs attention", kind: "attention", signal: "", series: [], attention: { threshold: 0.05 } };
-  const compare: AttentionCompare = { label: "previous period", readOf: () => ({ range: "30d", compare: { offsetKey: "period:30d", offsetMs: () => 0 } }) };
+  const compare: AttentionCompare = { label: "previous period", readOf: () => ({ range: "30d", compare: { offset: { endsAgoMs: 0 } } }) };
   const draw = (c: AttentionCompare | null = compare) =>
     render(<AttentionPanel panel={attention} watched={watched} scope={null} dashboardId="product-overview" compare={c} enabled drillHref={(p) => `/to/${p.id}`} />);
 
@@ -217,10 +217,10 @@ describe("Needs attention (kind: attention)", () => {
     Object.assign(figuresById, { visitors: [100, 100], bounce: [0.5, 0.5], signups: [100, 100], active: [100, 100] });
     // A traces figure compares with the 7 days it reads; a daily figure on a short range is widened.
     const readOf: AttentionCompare["readOf"] = (p) =>
-      p.id === "visitors" ? { range: "30d", compare: { offsetKey: "period:30d", offsetMs: () => 7 } } : { range: "7d", compare: { offsetKey: "period:7d", offsetMs: () => 7 } };
+      p.id === "visitors" ? { range: "30d", compare: { offset: { endsAgoMs: 30 } } } : { range: "7d", compare: { offset: { endsAgoMs: 7 } } };
     draw({ label: "previous period", readOf });
-    expect(readsMade.visitors).toEqual(["30d", "30d period:30d"]);
-    expect(readsMade.bounce).toEqual(["7d", "7d period:7d"]);
+    expect(readsMade.visitors).toEqual(["30d", "30d -30"]);
+    expect(readsMade.bounce).toEqual(["7d", "7d -7"]);
   });
 
   it("says so when nothing moved", () => {

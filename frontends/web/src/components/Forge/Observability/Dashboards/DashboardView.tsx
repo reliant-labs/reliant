@@ -1281,8 +1281,7 @@ function DashboardPanelCard({
     (panel.kind === "line" || panel.kind === "number" || (panel.kind === "sql" && drawsSqlFigures(queryPanel, rawQuery.data))) &&
     (target.mode === "period" || target.mode === "release");
   const compareQuery = usePanelQuery(scope, range, queryPanel, services, [], {
-    offsetKey: read.compare?.offsetKey ?? "",
-    offsetMs: read.compare?.offsetMs,
+    offset: read.compare?.offset,
     refetchInterval: refreshEvery,
     enabled: comparable && near,
     dashboardId,

@@ -20,7 +20,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { ArrowDownRight, ArrowUpRight, CheckCircle2 } from "lucide-react";
 
 import Link from "@/components/forge-ui/link";
-import { usePanelQuery } from "@/hooks/observability-queries";
+import { usePanelQuery, type PanelOffset } from "@/hooks/observability-queries";
 import { DEFAULT_ATTENTION_THRESHOLD, type ObsScope, type Panel, type PanelResult, type Unit } from "@/services/controlPlane/observability/types";
 import type { RangePreset } from "@/services/controlPlane/observability/window";
 import { cn } from "@/lib/utils";
@@ -30,7 +30,7 @@ import { formatPercent, formatValue } from "../format";
 /** How a watched figure's card reads it (cardRead): its range, and its comparison read. */
 export interface FigureRead {
   range: RangePreset;
-  compare: { offsetKey: string; offsetMs: () => number } | null;
+  compare: { offset: PanelOffset } | null;
 }
 
 export interface AttentionCompare {
@@ -89,7 +89,7 @@ function Watch({ figure, scope, dashboardId, compare, enabled, href, onVerdict }
   const { panel, services } = figure;
   const read = compare.readOf(panel);
   const now = usePanelQuery(scope, read.range, panel, services, [], { enabled, dashboardId });
-  const before = usePanelQuery(scope, read.range, panel, services, [], { offsetKey: read.compare?.offsetKey ?? "", offsetMs: read.compare?.offsetMs, enabled: enabled && !!read.compare, dashboardId });
+  const before = usePanelQuery(scope, read.range, panel, services, [], { offset: read.compare?.offset, enabled: enabled && !!read.compare, dashboardId });
   const loading = now.isLoading || before.isLoading;
   const failed = !!now.error || !!before.error;
   const a = figureOf(now.data);

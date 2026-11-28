@@ -304,8 +304,7 @@ export function MetricsExplorer({ project, org: orgPlace, env, environments, sea
   const comparing = target.mode === "period" || target.mode === "release";
   const compareQuery = useExplorerPanelQuery(scope, range, debounced, {
     enabled: comparing && !sqlTab,
-    offsetKey: target.mode === "period" ? "period" : target.mode === "release" ? `release:${target.promotion.promotionId}` : "",
-    offsetMs: () => (comparing ? target.offsetMs : 0),
+    offset: target.mode === "period" ? { endsAgoMs: target.offsetMs } : target.mode === "release" ? { endsAtMs: target.promotion.promotedAtMs } : undefined,
   });
 
   // ── Exemplars (a histogram's first query, on a line chart) ──
