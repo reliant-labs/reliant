@@ -5,7 +5,7 @@
  * way the app reads it: through ObservabilityApiProvider for the reads that
  * still go through the context, AND on the wire for ObservabilityService's
  * reads on generated hooks (useServiceOverview, useWorkloads, useTrace, …)
- * and AlertingService's reads and writes (useAlerts, useSilences, …), which
+ * and DashboardService's and AlertingService's reads and writes, which
  * call their QueryClient's transport and never the context.
  *
  * The wire half is the shop fixture pack's handlers (fixtures/shop/handlers/
