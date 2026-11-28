@@ -3,12 +3,28 @@
 import { useCallback, useContext, useMemo } from "react";
 import { QueryClientContext, useQuery } from "@tanstack/react-query";
 
+import { acrossAllOrgs } from "@/api/orgInterceptor";
+import type { ListDaemonsResponse } from "@/gen/controlplane/services/daemon/v1/daemon_pb";
 import { queryClient as appQueryClient } from "@/lib/query-client";
 
 import { hasControlPlane } from "@/services/controlPlane/config";
-import { listMachineOrgs, machineOrgKeys } from "@/services/controlPlane/machineOrgs";
 import type { MyOrg } from "@/services/controlPlane/orgs";
+import { daemonServiceQueries } from "./controlplane/daemon-service-hooks_gen";
 import { useActiveOrg } from "./useOrgs";
+
+/**
+ * Which org owns each machine (controlplane.v1.Daemon.org_id, control-plane
+ * #2424). The machine list the UI reads is reliant's registry (one list:
+ * docs/design/one-daemon-list.md), which knows whether a machine is attached
+ * but not who pays for it; the control plane does. This reads only that
+ * label, keyed by machine id, to join onto the registry's rows: machine id →
+ * the org that owns it, "" for a machine recorded before machines had an
+ * owning org (the control plane bills it to its operator's default org, and
+ * lists it there).
+ */
+function orgByMachineOf(res: ListDaemonsResponse): ReadonlyMap<string, string> {
+  return new Map(res.daemons.map((d) => [d.id, d.orgId]));
+}
 
 /**
  * The org that owns machine `daemonId`, given the control plane's machine →
@@ -72,12 +88,18 @@ export function useMachineOrgs(): MachineOrgs {
   const client = useContext(QueryClientContext) ?? appQueryClient;
   const { orgs, activeOrgId, defaultOrgId, canSwitch } = useActiveOrg(client);
   const multiOrg = hasControlPlane && canSwitch;
-  const { data: orgByMachine } = useQuery({
-    queryKey: machineOrgKeys.all,
-    queryFn: listMachineOrgs,
-    enabled: multiOrg,
-    staleTime: 60_000,
-  }, client);
+  // An unset org_id lists the caller's machines across orgs so we can tell a
+  // machine belonging to another org from one with no recorded org. Per-call
+  // options are not part of the key: a scoped reader must name its org instead.
+  const { data: orgByMachine } = useQuery(
+    daemonServiceQueries.listDaemons({}, {
+      select: orgByMachineOf,
+      enabled: multiOrg,
+      staleTime: 60_000,
+      callOptions: () => ({ contextValues: acrossAllOrgs() }),
+    }),
+    client,
+  );
   const known = multiOrg ? orgByMachine : undefined;
 
   const orgOf = useCallback(

@@ -23,10 +23,11 @@ function write(path: string, text: string) {
 }
 
 write("gen/fake_pb.ts", "export const FakeService = {};\n");
+write("api/orgInterceptor.ts", "export function acrossAllOrgs() { return {}; }\n");
 write(
   "hooks/fake-service-hooks_gen.ts",
   `import { FakeService } from "@/gen/fake_pb";
-const client = connectClient(FakeService);
+const clientOf = scopedClient(FakeService, connectClient(FakeService));
 export const fakeServiceQueries = { listThings: 1, getThing: 2 };
 export const useListThings = createQueryHook(fakeServiceQueries.listThings);
 export const useGetThing = createQueryHook(fakeServiceQueries.getThing);
@@ -43,8 +44,12 @@ export async function listAnyThings() { return client().listThings({}); }
 write(
   "reads.ts",
   `import { useGetThing, useListThings, fakeServiceQueries } from "./hooks/fake-service-hooks_gen";
+import { acrossAllOrgs } from "./api/orgInterceptor";
 import { listAnyThings, listThings } from "./api";
 export function useUnscoped() { return useListThings({}); }
+export function useAcrossOrgs() { return fakeServiceQueries.listThings({}, { callOptions: () => ({ contextValues: acrossAllOrgs() }) }); }
+export function useMisplacedContext() { return useListThings({}, { select: () => acrossAllOrgs() }); }
+export function useShadowedContext(acrossAllOrgs: () => unknown) { return useListThings({}, { callOptions: () => ({ contextValues: acrossAllOrgs() }) }); }
 export function useScoped() { const org = useOrgScope(); return useListThings(orgRequest({}, org.orgId), { enabled: orgQueryEnabled(org) }); }
 export function useNotOrgScoped() { return useGetThing({ id: "x" }); }
 export function useKeeps() { const org = useOrgScope(); return useListThings(orgRequest({}, org.orgId), { enabled: orgQueryEnabled(org), placeholderData: keepPreviousData }); }
@@ -78,6 +83,13 @@ describe("OrgScopeAnalysis", () => {
   it("flags a generated read whose request names no org, and one that does not wait", () => {
     expect(site("generated", "useUnscoped")).toMatchObject({ namesOrg: false, gated: false });
     expect(site("generated", "useScoped")).toMatchObject({ namesOrg: true, gated: true, keepsAcrossOrgs: false });
+  });
+
+  it("recognizes the interceptor opt-out only when the generated call options pass its context", () => {
+    expect(site("generated", "useAcrossOrgs")).toMatchObject({ namesOrg: false, gated: false, acrossAllOrgs: true });
+    expect(site("generated", "useMisplacedContext")?.acrossAllOrgs).toBe(false);
+    expect(site("generated", "useShadowedContext")?.acrossAllOrgs).toBe(false);
+    expect(site("generated", "useUnscoped")?.acrossAllOrgs).toBe(false);
   });
 
   it("ignores a read of an rpc that is not org-scoped, and a key derived without reading", () => {
