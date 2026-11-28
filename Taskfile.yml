@@ -469,6 +469,19 @@ tasks:
       - '{{.SLOT}} go test {{.GO_TEST_VET}} -race -coverprofile=coverage.out -covermode=atomic ./...'
       - go tool cover -html=coverage.out -o coverage.html
 
+  coverage:raise-floor:
+    # The release gate's coverage step holds total Go coverage to the floor in
+    # coverage-floor.txt (scripts/release-gate.sh, scripts/coverage-floor.sh).
+    # This moves the floor up to the newest release-gate record's measured
+    # number on origin/main, minus 0.5 points of headroom, and never down:
+    # lowering takes `-- --lower --reason "<why>"`. `-- --to <percent>` sets
+    # the measured number by hand. Commit the file it changes.
+    desc: "Raise coverage-floor.txt to the newest release-gate record's Go coverage minus 0.5 (never lowers it without -- --lower --reason)"
+    cmds:
+      - |
+        pct=$(./scripts/release-gate.sh coverage) || { echo "coverage:raise-floor: no release-gate record measured coverage yet; pass -- --to <percent>"; pct=""; }
+        ./scripts/coverage-floor.sh raise ${pct:+--to "$pct"} {{.CLI_ARGS}}
+
   bench:
     desc: Run Go benchmarks (go test -bench=. across the module)
     cmds:

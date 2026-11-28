@@ -21,6 +21,10 @@
 #   release-gate.sh latest [<ref>]
 #       Print the newest green-recorded sha on <ref>'s first-parent history
 #       (default origin/main); exit 3 when there is none in the last 200.
+#   release-gate.sh coverage [<ref>]
+#       Print the Go coverage percentage of the newest record on <ref>'s
+#       first-parent history (default origin/main) that measured one; exit 3
+#       when none of the last 200 did. `task coverage:raise-floor` reads it.
 #   release-gate.sh show <rev>
 #       Print <rev>'s record.
 #   release-gate.sh hotfix --base <base> <rev>
@@ -82,6 +86,15 @@
 #   integration  task test:integration  (packages with integration-tagged
 #                tests: none today, so it runs nothing and passes)
 #   e2e          task test:e2e  (e2e/stories, ephemeral Temporal dev server)
+#   coverage     total Go statement coverage of the run, held to the floor in
+#                coverage-floor.txt (scripts/coverage-floor.sh check): the union
+#                of every Go lane's cover profile (test-go's unit, integration,
+#                e2e), a block covered when any lane hit it, generated code
+#                excluded. A parted run computes it at assemble, from the
+#                profile each part leaves beside its part record
+#                (<sha>.part-<part>[-<I>of<N>].cover.out); a go part without
+#                one fails it closed. `task coverage:raise-floor` moves the
+#                floor up to the newest record's number.
 #
 # Parts (run --part; CI runs each as its own job, so the gate's wall time is
 # the slowest part, not the sum: ~70 min serial on one runner, 2026-10-30):
@@ -115,7 +128,7 @@
 #   FORGE_BIN          a prebuilt forge (must be the pin; check-forge-generate.sh refuses otherwise)
 set -uo pipefail
 
-STEPS=(npm generate docs lint build webbuild demo-size typecheck vet test-go test-web test-electron integration e2e)
+STEPS=(npm generate docs lint build webbuild demo-size typecheck vet test-go test-web test-electron integration e2e coverage)
 PARTS=(static lint go web)
 declare -A PART_STEPS=(
   [static]="npm generate docs build webbuild demo-size typecheck vet"
@@ -284,6 +297,24 @@ cmd_latest() {
   return 3
 }
 
+# cmd_coverage [<ref>]: the newest measured coverage on <ref>'s first parents.
+cmd_coverage() {
+  local ref sha p
+  ref=${1:-origin/main}
+  [ "$ref" = origin/main ] && { git fetch -q origin main 2>/dev/null || true; }
+  fetch_notes
+  local -A have; local x; while read -r x; do have[$x]=1; done < <(recorded)
+  for sha in $(git rev-list --first-parent -n 200 "$(resolve "$ref")"); do
+    [ -n "${have[$sha]:-}" ] || continue
+    p=$(record_of "$sha" | jq -r '.coverage.percent // empty' 2>/dev/null | tail -1)
+    [ -n "$p" ] || continue
+    echo "release-gate: $(git rev-parse --short "$sha")'s record measured ${p}% Go coverage" >&2
+    echo "$p"; return 0
+  done
+  echo "release-gate: no record in the last 200 commits of $ref measured Go coverage" >&2
+  return 3
+}
+
 cmd_run() {
   local force=0 rev sha snap t0 rc fail=0 s e step json steps_json md slot_wait part="" shard="" steps hbase=""
   while [ $# -gt 0 ]; do
@@ -376,6 +407,10 @@ cmd_run() {
   if [ -f "$L/test-go.log" ]; then
     go_extra=$(go_package_seconds <"$L/test-go.log" | jq -c --arg split "$(cat "$L/go-split" 2>/dev/null)" '{go_seconds: .} + (if $split != "" then {go_split: $split} else {} end)')
   fi
+  # The coverage step's measurement (run_step coverage), for `release-gate.sh coverage`.
+  if [ -s "$L/coverage.json" ]; then
+    go_extra=$(jq -c --slurpfile c "$L/coverage.json" '. + {coverage: $c[0]}' <<<"$go_extra")
+  fi
   json=$(jq -cn --arg sha "$sha" --arg r "$([ "$fail" = 0 ] && echo PASS || echo FAIL)" --argjson steps "$steps_json" --argjson go "$go_extra" \
     --arg started "$(date -u -d "@$t0" +%Y-%m-%dT%H:%M:%SZ)" --arg finished "$(date -u -d "@$e" +%Y-%m-%dT%H:%M:%SZ)" \
     --argjson seconds $((e - t0)) --argjson slot_wait "$slot_wait" --arg forge "$(sed -n 's/^forge_version:[[:space:]]*//p' "$snap/forge.yaml" | head -1)" \
@@ -390,6 +425,7 @@ cmd_run() {
     echo "|---|---|---|"
     jq -r '.steps[] | "| \(.name) | \(.result) | \(.seconds) |"' <<<"$json"
     echo
+    jq -r 'select(.coverage) | "coverage: \(.coverage.percent)% of Go statements (floor \(.coverage.floor)%)\n"' <<<"$json"
     echo "wall: $((e - t0))s after ${slot_wait}s queued for a heavy slot; forge $(jq -r .forge <<<"$json")"
   } )
   echo; echo "$md"
@@ -398,6 +434,19 @@ cmd_run() {
     local pf="$records/$sha.part-$part${shard:+-${shard%/*}of${shard#*/}}.json"
     jq -c --arg part "$part" --arg shard "$shard" '. + {part: $part, shard: $shard}' <<<"$json" >"$pf"
     echo "release-gate: part record $pf (not a release record: \`$0 assemble\` composes the parts)"
+    # The part's Go cover profiles, unioned into one file beside the part
+    # record, for assemble's coverage step. Never a stale one: an earlier run
+    # of this part's file goes first, so a part that recorded none leaves none.
+    rm -f "${pf%.json}.cover.out"
+    local -a profiles=()
+    [ -z "$test_run" ] || mapfile -t profiles < <(ls "$test_run"/*/cover.out 2>/dev/null)
+    if [ "${#profiles[@]}" -gt 0 ]; then
+      if (cd "$snap" && bash scripts/coverage-floor.sh merge "${profiles[@]}") >"${pf%.json}.cover.out"; then
+        echo "release-gate: Go cover profile ${pf%.json}.cover.out (${#profiles[@]} lane(s))"
+      else
+        rm -f "${pf%.json}.cover.out"; echo "release-gate: WARNING: could not merge this part's cover profiles" >&2
+      fi
+    fi
     return "$fail"
   fi
   echo "$json" >"$records/$sha.json"; echo "$md" >"$records/$sha.md"
@@ -436,16 +485,46 @@ cmd_assemble() {
   # some package may have run in no shard. Fail closed rather than record it.
   [ "$(jq '[.[] | select(.part == "go") | .go_split // ""] | unique | length <= 1' <<<"$parts")" = true ] \
     || die "the go shards split the packages on different timings ($(jq -r '[.[] | select(.part == "go") | "\(.shard): \(.go_split // "none")"] | join(", ")' <<<"$parts")); nothing recorded"
+  # The coverage step (header): the union of the Go cover profiles the parts
+  # left beside their records, judged against <sha>'s own floor. Fails closed:
+  # a go part or shard with no profile measured nothing for its packages.
+  local f c cov_result=FAIL cov_json=null cov_s cov_missing="" cov_tmp
+  local -a profiles=()
+  cov_s=$(date +%s)
+  for f in "$@"; do
+    c="${f%.json}.cover.out"
+    if [ -s "$c" ]; then
+      profiles+=("$c")
+    elif [ "$(jq -r .part "$f")" = go ]; then
+      cov_missing+=" go$(jq -r 'if .shard != "" then " " + .shard else "" end' "$f")"
+    fi
+  done
+  cov_tmp=$(mktemp -d)
+  echo "release-gate: coverage (${#profiles[@]} part profile(s))"
+  if [ -n "$cov_missing" ]; then
+    echo "coverage: FAIL: no Go cover profile beside the part record of:$cov_missing (a part leaves <part record>.cover.out when its test lanes recorded; FORGE_TESTS=off or a failed \`forge test begin\` records none)"
+  elif [ "${#profiles[@]}" -eq 0 ]; then
+    echo "coverage: FAIL: no part left a Go cover profile"
+  elif ! git show "$sha:coverage-floor.txt" >"$cov_tmp/floor" 2>/dev/null; then
+    echo "coverage: FAIL: $(git rev-parse --short "$sha") has no coverage-floor.txt"
+  elif COVERAGE_FLOOR_FILE="$cov_tmp/floor" COVERAGE_FLOOR_NAME=coverage-floor.txt \
+    bash scripts/coverage-floor.sh check --json-out "$cov_tmp/coverage.json" "${profiles[@]}"; then
+    cov_result=PASS
+  fi
+  [ -s "$cov_tmp/coverage.json" ] && cov_json=$(cat "$cov_tmp/coverage.json")
+  rm -rf "$cov_tmp"
   json=$(jq -c --argjson steps "$(printf '%s\n' "${STEPS[@]}" | jq -R . | jq -s .)" \
     --arg forge "$(git show "$sha:forge.yaml" 2>/dev/null | sed -n 's/^forge_version:[[:space:]]*//p' | head -1)" \
-    --arg by "$(git config user.email || whoami)" '
+    --arg by "$(git config user.email || whoami)" \
+    --argjson covstep "$(jq -cn --arg r "$cov_result" --argjson s $(($(date +%s) - cov_s)) '{name: "coverage", result: $r, seconds: $s}')" \
+    --argjson coverage "$cov_json" '
     . as $parts
-    | ([$parts[].steps[]] | group_by(.name) | map({key: .[0].name, value: .}) | from_entries) as $ran
+    | ([$parts[].steps[], $covstep] | group_by(.name) | map({key: .[0].name, value: .}) | from_entries) as $ran
     | ($steps - ($ran | keys)) as $missing
     | if ($missing | length) > 0 then error("steps no part ran: \($missing | join(", "))") else . end
     | ([$parts[].started] | min) as $started | ([$parts[].finished] | max) as $finished
     | {sha: $parts[0].sha,
-       result: (if all($parts[].steps[]; .result == "PASS") then "PASS" else "FAIL" end),
+       result: (if all($parts[].steps[], $covstep; .result == "PASS") then "PASS" else "FAIL" end),
        started: $started, finished: $finished,
        seconds: (($finished | fromdate) - ($started | fromdate)),
        slot_wait_seconds: ([$parts[].slot_wait_seconds] | max),
@@ -454,7 +533,8 @@ cmd_assemble() {
        go_seconds: ([$parts[].go_seconds // {}] | add),
        steps: [$steps[] as $n | $ran[$n] | {name: $n,
          result: (if all(.[]; .result == "PASS") then "PASS" else "FAIL" end),
-         seconds: ([.[].seconds] | max)}]}' <<<"$parts") || die "cannot assemble the parts (above)"
+         seconds: ([.[].seconds] | max)}]}
+      + (if $coverage then {coverage: $coverage} else {} end)' <<<"$parts") || die "cannot assemble the parts (above)"
   md=$( {
     echo "### release-gate: $(git rev-parse --short "$sha") $([ "$(jq -r .result <<<"$json")" = PASS ] && echo PASSED || echo FAILED) (assembled from $(jq '.parts | length' <<<"$json") parallel parts)"
     echo
@@ -466,6 +546,7 @@ cmd_assemble() {
     echo "|---|---|---|"
     jq -r '.steps[] | "| \(.name) | \(.result) | \(.seconds) |"' <<<"$json"
     echo
+    jq -r 'select(.coverage) | "coverage: \(.coverage.percent)% of Go statements (floor \(.coverage.floor)%)\n"' <<<"$json"
     echo "wall: $(jq -r .seconds <<<"$json")s from the first part's start to the last's finish; forge $(jq -r .forge <<<"$json")"
   } )
   echo "$md"
@@ -517,23 +598,25 @@ go_timings() {
   cat scripts/release-gate-go-timings.json 2>/dev/null || echo '{}'
 }
 
-# go_shard_packages: with RG_GO_SHARD=I/N, this shard's packages (1-based I)
-# of those with test files, longest-processing-time first on go_timings'
-# `go test -race` package seconds (a package with no entry weighs the
-# median); ties break on the path, so every shard given the same timings
-# computes the same split. It writes the timings' digest to $L/go-split for
-# assemble to compare across shards. Without RG_GO_SHARD, ./... .
+# go_shard_packages: with RG_GO_SHARD=I/N, this shard's packages (1-based I),
+# longest-processing-time first on go_timings' `go test -race` package
+# seconds (a package with no entry weighs the median); ties break on the path,
+# so every shard given the same timings computes the same split. Packages with
+# no test files are split too, at weight 1 (their compile): `go test -cover`
+# reports them at 0%, as ./... does, so a sharded run's coverage counts the
+# same statements as an unsharded one. It writes the timings' digest to $L/go-split
+# for assemble to compare across shards. Without RG_GO_SHARD, ./... .
 go_shard_packages() {
   [ -n "${RG_GO_SHARD:-}" ] || { echo ./...; return; }
   local i=${RG_GO_SHARD%/*} n=${RG_GO_SHARD#*/} timings
   timings=$(go_timings)
   [ -z "${L:-}" ] || jq -cS . <<<"$timings" | sha256sum | cut -c1-16 >"$L/go-split"
-  go list -f '{{if or .TestGoFiles .XTestGoFiles}}{{.ImportPath}}{{end}}' ./... \
+  go list -f '{{.ImportPath}} {{if or .TestGoFiles .XTestGoFiles}}1{{else}}0{{end}}' ./... \
     | jq -rRn --argjson w "$timings" --argjson i "$((i - 1))" --argjson n "$n" '
-      [inputs | select(length > 0)] as $pkgs
+      [inputs | select(length > 0) | split(" ") | {p: .[0], t: (.[1] == "1")}] as $pkgs
       | ([$w[]] | sort) as $known
       | (if ($known | length) > 0 then $known[($known | length) / 2 | floor] else 1 end) as $median
-      | [$pkgs[] | {p: ., s: ($w[.] // $median)}]
+      | [$pkgs[] | {p: .p, s: (if .t then ($w[.p] // $median) else 1 end)}]
       | sort_by(-.s, .p)
       | reduce .[] as $x ({load: [range($n) | 0], of: {}};
           (.load | to_entries | min_by(.value) | .key) as $k
@@ -619,6 +702,16 @@ run_step() {
     test-electron) task test:electron ;;
     integration) task test:integration ;;
     e2e) task test:e2e ;;
+    coverage)
+      # Every Go lane this run recorded (scripts/test-capture.sh: test-go's
+      # unit, integration, e2e), unioned and held to the floor (header).
+      local -a profiles=()
+      [ -z "${test_run:-}" ] || mapfile -t profiles < <(ls "$test_run"/*/cover.out 2>/dev/null)
+      if [ "${#profiles[@]}" -eq 0 ]; then
+        echo "coverage: no Go cover profile in this run's test record${test_run:+ ($test_run)}: the test lanes ran unrecorded (FORGE_TESTS=off, or \`forge test begin\` failed), so nothing was measured"
+        return 1
+      fi
+      bash scripts/coverage-floor.sh check --json-out "$L/coverage.json" "${profiles[@]}" ;;
     *) echo "unknown step $1"; return 2 ;;
   esac
 }
@@ -642,6 +735,7 @@ case "$sub" in
   run) cmd_run "$@" ;;
   check) cmd_check "$@" ;;
   latest) cmd_latest "$@" ;;
+  coverage) cmd_coverage "$@" ;;
   show) record_of "$(resolve "${1:-HEAD}")" | jq . ;;
   assemble) cmd_assemble "$@" ;;
   hotfix)
@@ -650,5 +744,5 @@ case "$sub" in
   go-timings-source) cmd_go_timings_source "$@" ;;
   go-timings) cmd_go_timings "$@" ;;
   -h|--help|"") sed -n '2,/^set -uo pipefail$/p' "$0" | sed '$d' ;;
-  *) die "unknown command '$sub' (run, check, latest, show, assemble, go-timings-source, go-timings, hotfix)" ;;
+  *) die "unknown command '$sub' (run, check, latest, coverage, show, assemble, go-timings-source, go-timings, hotfix)" ;;
 esac

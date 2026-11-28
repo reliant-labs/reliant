@@ -39,7 +39,7 @@ Neither gate keeps a second copy of it.
 | Tier | Command | What it runs | When |
 |---|---|---|---|
 | **merge** | `task ci:merge` (`scripts/merge-gate.sh`) | the affected tests (`-short`, cached, no `-race`, a per-test time budget) of the changed packages and their **direct** importers, plus every **transitive** dependent when there are at most 20 more (`MG_REACH_CAP`), and the vitest files within two imports of a changed module; a compile (no link) of every package whose build contains a change, and of **every test package** (`testbuild`); golangci-lint over the packages with a changed `.go` file, findings in the changed files, plus staticcheck's SA1019 over the packages that use what the diff deprecates (`scripts/golangci-changed.sh`, the merge queue's `golangci (changed)` job, outside the queue); forge lint's whole-project `--graph --closed-sets --proto-format` lanes on every diff (`projectlint`); the web `tsc -b` (incremental on state this checkout wrote; `--force` on a first run or copied state) when a web lane is selected or a web file changed; forge lint's own lanes over the changed directories (no golangci-lint, no buf lint), in the merge queue too; the forge demo bundle's build when the diff reaches its import graph; migration-safety when a migration or forge.yaml changed, and migration order against main's newest (in the queue, also against the entries queued ahead); electron's tests when electron reads a changed file; the whole lane when the rules cannot scope a change; and the forge-generate and docs-generate no-op checks only when one of their inputs changed (`internal/app` included) | before **every merge**. The merge queue runs it on the squash it is about to land |
-| **release** | `task release:gate` (`scripts/release-gate.sh run`) | everything: unscoped `forge lint` (golangci over the whole module, buf, the whole-project lanes, the frontends), `task generate:check`, `task generate:docs:check`, `go build`, the web `tsc -b`, the forge demo bundle's size budget (`task demo:bundle-size`), `go vet ./...`, `task test` as three steps (Go `-race -count=1` without `-short`, so every slow test runs, then web and electron in full), `task test:integration` and `task test:e2e`. CI runs them as parallel parts (below) | on a commit of **main**, before a release. `task release:tag` refuses a commit without a green record |
+| **release** | `task release:gate` (`scripts/release-gate.sh run`) | everything: unscoped `forge lint` (golangci over the whole module, buf, the whole-project lanes, the frontends), `task generate:check`, `task generate:docs:check`, `go build`, the web `tsc -b`, the forge demo bundle's size budget (`task demo:bundle-size`), `go vet ./...`, `task test` as three steps (Go `-race -count=1` without `-short`, so every slow test runs, then web and electron in full), `task test:integration`, `task test:e2e`, and the Go coverage floor over their union (`coverage`, below). CI runs them as parallel parts (below) | on a commit of **main**, before a release. `task release:tag` refuses a commit without a green record |
 
 ## The merge gate
 
@@ -429,6 +429,27 @@ slow tests and the race detector (`task test`), golangci-lint and buf lint
 (the unscoped `forge lint`), link errors (`go build ./...`), deferred Go
 packages and vitest files (`task test` runs every one), and the whole
 `forge generate` where the merge gate ran only the generate hooks.
+
+### The Go coverage floor (owner, 2026-11-26)
+
+The release gate's `coverage` step holds total Go statement coverage to the floor
+in `coverage-floor.txt`, which only goes up. There is no push to write tests: the
+floor stops coverage from sliding. It **gates releases only**, never the merge
+gate. The step unions every Go cover profile of the run: the unit lane of each go
+shard, plus integration and e2e. A block counts as covered when any `go test`
+invocation hit it. Packages with no test files count at 0%, because the go shards
+split them too. Generated code (`gen/`, `testdata/`, `*_gen.go`, `*.pb.go`) is left
+out, as forge's coverage report leaves it out (`scripts/coverage-floor.sh`, the
+same file as control-plane's). In CI each part leaves its unioned profile beside
+its part record (`<part record>.cover.out`), and `assemble` judges the union. A go
+part with no profile fails the step: an unmeasured shard cannot pass. The record
+carries the number (`.coverage`). To raise the floor, run
+`task coverage:raise-floor`. It reads the newest record's number
+(`release-gate.sh coverage`), subtracts 0.5 points of headroom for noise, and
+writes the result only if it is higher than the current floor. To lower the
+floor, run `scripts/coverage-floor.sh raise --to <percent> --lower --reason
+"<why>"`, which records the reason in the file. Give the same reason in the
+commit.
 
 ### The demo bundle's size budget (owner, 2026-11-24)
 

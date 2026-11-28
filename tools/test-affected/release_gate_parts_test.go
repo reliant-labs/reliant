@@ -19,11 +19,17 @@ import (
 // shards balance on the go package seconds an earlier record carries. assemble
 // must accept either partition, refuse one that leaves a step out, and refuse
 // shards that split the packages on different timings, since some package
-// would then have run in no shard.
+// would then have run in no shard. Its coverage step unions the go parts'
+// cover profiles against the commit's coverage-floor.txt: a go part with no
+// profile, or a union below the floor, is a red record.
 func TestReleaseGateAssemblesEitherPartition(t *testing.T) {
 	testkit.Slow(t, "runs release-gate.sh assemble in bash against a scratch git repository",
-		testkit.Inputs("scripts/release-gate.sh"))
+		testkit.Inputs("scripts/release-gate.sh", "scripts/coverage-floor.sh"))
 	script, err := os.ReadFile(filepath.Join(repoRoot, "scripts", "release-gate.sh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	coverageFloor, err := os.ReadFile(filepath.Join(repoRoot, "scripts", "coverage-floor.sh"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -43,15 +49,18 @@ func TestReleaseGateAssemblesEitherPartition(t *testing.T) {
 	for _, tc := range []struct {
 		name   string
 		parts  []part
+		cover  string // "": every go part leaves a 75% profile; "missing": the last go part none; "low": 0%
 		wantOK bool
 		want   string
 	}{
-		{"the RC train's four parts", []part{{"static", "", "", "PASS"}, {"lint", "", "", "PASS"}, {"go", "", "", "PASS"}, {"web", "", "", "PASS"}}, true, "PASSED"},
-		{"CI's parts, the go suite in shards", ci("aaaa"), true, "PASSED"},
-		{"a red part is a red record", append(ci("aaaa")[:2], part{"compile", "", "", "FAIL"}, part{"lint", "", "", "PASS"}, part{"go", "1/2", "aaaa", "PASS"}, part{"go", "2/2", "aaaa", "PASS"}, part{"web", "", "", "PASS"}), false, "FAILED"},
-		{"a step no part ran", append(ci("aaaa")[:2], ci("aaaa")[3:]...), false, "steps no part ran: build, typecheck, vet"},
-		{"a missing shard", append(ci("aaaa")[:5], ci("aaaa")[6]), false, "part go: ran [1/2]"},
-		{"shards that split on different timings", ci("bbbb"), false, "different timings"},
+		{"the RC train's four parts", []part{{"static", "", "", "PASS"}, {"lint", "", "", "PASS"}, {"go", "", "", "PASS"}, {"web", "", "", "PASS"}}, "", true, "PASSED"},
+		{"CI's parts, the go suite in shards", ci("aaaa"), "", true, "PASSED"},
+		{"a red part is a red record", append(ci("aaaa")[:2], part{"compile", "", "", "FAIL"}, part{"lint", "", "", "PASS"}, part{"go", "1/2", "aaaa", "PASS"}, part{"go", "2/2", "aaaa", "PASS"}, part{"web", "", "", "PASS"}), "", false, "FAILED"},
+		{"a step no part ran", append(ci("aaaa")[:2], ci("aaaa")[3:]...), "", false, "steps no part ran: build, typecheck, vet"},
+		{"a missing shard", append(ci("aaaa")[:5], ci("aaaa")[6]), "", false, "part go: ran [1/2]"},
+		{"shards that split on different timings", ci("bbbb"), "", false, "different timings"},
+		{"a go shard with no cover profile", ci("aaaa"), "missing", false, "no Go cover profile beside the part record of: go 2/2"},
+		{"coverage below the floor", ci("aaaa"), "low", false, "points below the floor"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			dir := t.TempDir()
@@ -73,10 +82,22 @@ func TestReleaseGateAssemblesEitherPartition(t *testing.T) {
 			if err := os.WriteFile(filepath.Join(dir, "scripts", "release-gate.sh"), script, 0o755); err != nil {
 				t.Fatal(err)
 			}
+			if err := os.WriteFile(filepath.Join(dir, "scripts", "coverage-floor.sh"), coverageFloor, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(dir, "coverage-floor.txt"), []byte("# floor\n50\n"), 0o644); err != nil {
+				t.Fatal(err)
+			}
 			git("add", ".")
 			git("commit", "-qm", "c")
 			sha := git("rev-parse", "HEAD")
 			var files []string
+			lastGo := -1
+			for i, p := range tc.parts {
+				if p.name == "go" {
+					lastGo = i
+				}
+			}
 			for i, p := range tc.parts {
 				var ss []map[string]any
 				for _, s := range steps[p.name] {
@@ -95,6 +116,18 @@ func TestReleaseGateAssemblesEitherPartition(t *testing.T) {
 				if err := os.WriteFile(f, b, 0o644); err != nil {
 					t.Fatal(err)
 				}
+				// The part's cover profile, beside its record: 3 of each go
+				// part's 4 statements covered, or none of them.
+				if p.name == "go" && (tc.cover != "missing" || i != lastGo) {
+					hit := 1
+					if tc.cover == "low" {
+						hit = 0
+					}
+					prof := fmt.Sprintf("mode: atomic\nexample.com/m/p%d.go:1.1,2.2 3 %d\nexample.com/m/p%d.go:3.1,4.2 1 0\n", i, hit, i)
+					if err := os.WriteFile(strings.TrimSuffix(f, ".json")+".cover.out", []byte(prof), 0o644); err != nil {
+						t.Fatal(err)
+					}
+				}
 				files = append(files, f)
 			}
 			run := func(args ...string) (string, error) {
@@ -107,6 +140,9 @@ func TestReleaseGateAssemblesEitherPartition(t *testing.T) {
 			out, err := run(append([]string{"assemble", sha}, files...)...)
 			if (err == nil) != tc.wantOK || !strings.Contains(out, tc.want) {
 				t.Fatalf("assemble: err=%v, want ok=%v and %q in:\n%s", err, tc.wantOK, tc.want, out)
+			}
+			if tc.wantOK && !strings.Contains(out, "coverage: 75.00% of Go statements (floor 50%)") {
+				t.Fatalf("assemble: a green record names its coverage and floor:\n%s", out)
 			}
 			if !strings.Contains(tc.want, "PASSED") && !strings.Contains(tc.want, "FAILED") {
 				return // refused: nothing recorded
