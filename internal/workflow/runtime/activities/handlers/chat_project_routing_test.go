@@ -73,6 +73,7 @@ func (f *multiProjectChat) call(t *testing.T, name, input string) (*reliantv1.To
 }
 
 func TestRouteCallProject_OmittedProjectIsTheSingleProjectRequestExactly(t *testing.T) {
+	t.Parallel()
 	f := newMultiProjectChat(t)
 	input := `{"command": "pwd"}`
 	result, _, req := f.call(t, tools.ShellToolName, input)
@@ -85,6 +86,7 @@ func TestRouteCallProject_OmittedProjectIsTheSingleProjectRequestExactly(t *test
 }
 
 func TestRouteCallProject_NamingThePrimaryRunsThereWithoutTheKey(t *testing.T) {
+	t.Parallel()
 	f := newMultiProjectChat(t)
 	result, _, req := f.call(t, tools.ShellToolName, `{"command":"pwd","project":"Test Project"}`)
 	require.False(t, result.GetIsError(), result.GetContent())
@@ -98,6 +100,7 @@ func TestRouteCallProject_NamingThePrimaryRunsThereWithoutTheKey(t *testing.T) {
 // with its repos, and reaches the executor without `project`; the recorded
 // call keeps it, so the UI can say where it ran.
 func TestRouteCallProject_AnAttachedProjectRunsInItsMainCheckoutOnTheChatsMachine(t *testing.T) {
+	t.Parallel()
 	f := newMultiProjectChat(t)
 	ctx := context.Background()
 	require.NoError(t, f.h.Repo().CreateRepo(ctx, &core.Repo{ID: uuid.NewString(), ProjectID: f.api.ID, Name: "svc", RelativePath: "svc"}))
@@ -127,6 +130,7 @@ func TestRouteCallProject_AnAttachedProjectRunsInItsMainCheckoutOnTheChatsMachin
 }
 
 func TestRouteCallProject_AnUnknownProjectIsRefusedWithTheAcceptedValues(t *testing.T) {
+	t.Parallel()
 	f := newMultiProjectChat(t)
 	result, _, req := f.call(t, tools.ShellToolName, `{"command":"pwd","project":"web"}`)
 	assert.Nil(t, req, "nothing ran")
@@ -140,6 +144,7 @@ func TestRouteCallProject_AnUnknownProjectIsRefusedWithTheAcceptedValues(t *test
 // machine has no checkout of refuses the call with the way out, and only
 // that project's calls stop.
 func TestRouteCallProject_AnAttachedProjectNotOnTheMachineIsRefused(t *testing.T) {
+	t.Parallel()
 	f := newMultiProjectChat(t)
 	f.attach(t, "docs", "cloud-box", "")
 
@@ -159,6 +164,7 @@ func TestRouteCallProject_AnAttachedProjectNotOnTheMachineIsRefused(t *testing.T
 // call to an attached project still runs, and one to the primary — named or
 // not — is refused with the reason.
 func TestRouteCallProject_TheBatchWorkspaceBlockIsThePrimarysAlone(t *testing.T) {
+	t.Parallel()
 	f := newMultiProjectChat(t)
 	const blocked = "This workspace is archived with preserved work."
 	run := func(input string) (message.ToolResult, *daemonLikeExecutor) {
@@ -193,6 +199,7 @@ func TestRouteCallProject_TheBatchWorkspaceBlockIsThePrimarysAlone(t *testing.T)
 // Projects with the same name are named by id; a name two share is accepted
 // for neither.
 func TestChatProjects_CollidingNamesAreNamedByID(t *testing.T) {
+	t.Parallel()
 	f := newMultiProjectChat(t)
 	twin := f.attach(t, "Test Project", "cloud-box", t.TempDir())
 

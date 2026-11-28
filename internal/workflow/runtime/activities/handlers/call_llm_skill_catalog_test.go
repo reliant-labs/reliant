@@ -26,6 +26,7 @@ const forgeSkillBodyCanary = "PRIVATE_FORGE_SKILL_BODY_40e5b620"
 // Both exclusions are necessary: neither tools:[] nor skills:[] hides the
 // catalog by itself. These synthetic canaries never leave the process.
 func TestCallLLM_ExcludeSkillCatalogProviderBoundary(t *testing.T) {
+	t.Parallel()
 	cfg := &cfgpkg.Config{
 		GlobalMemoryMD: ambientGlobalCanary, ProjectMemoryMD: ambientProjectCanary,
 		RepoMemories: map[string]string{"private": ambientRepoCanary},
@@ -114,6 +115,7 @@ func TestCallLLM_ExcludeSkillCatalogProviderBoundary(t *testing.T) {
 }
 
 func TestCallLLM_ExcludeSkillCatalogRejectsExplicitPreload(t *testing.T) {
+	t.Parallel()
 	h := NewIdempotencyTestHelper(t)
 	defer h.Cleanup()
 	ctx := context.Background()

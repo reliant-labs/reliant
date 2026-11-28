@@ -22,6 +22,7 @@ import (
 // workspace's, on a machine that does not hold it. Success keeps its output
 // untouched, and a work_dir outside the workspace is no conflict.
 func TestRunStep_SelectorAwayFromTheBranchWorkspaceExplainsTheFailure(t *testing.T) {
+	t.Parallel()
 	f := newChatCheckoutFixture(t)
 	f.machine(t, "owner-box", t.TempDir())
 	f.machine(t, "other-box", t.TempDir())
