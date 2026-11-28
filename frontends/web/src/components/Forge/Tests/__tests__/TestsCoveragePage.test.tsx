@@ -9,8 +9,7 @@
 
 import type { ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 
 import { createRouterTransport } from "@connectrpc/connect";
 
@@ -21,7 +20,6 @@ import { CoverageSourceProvider } from "@/services/coverageSource/CoverageSource
 import type { AskCoverageSubject } from "../../Observability/AskReliant/askReliantPrompt";
 import { AGENT_REASON } from "../testsAgent";
 import { fetchCoverageSource, type FetchCoverageSource } from "@/services/coverageSource/coverageSource";
-import { TestApiProvider, type TestApi } from "@/services/controlPlane/tests/TestApiContext";
 
 import {
   FIXTURE_BASE,
@@ -34,8 +32,9 @@ import {
   type CoverageSourceScenario,
 } from "../coverageFixtures";
 import type { CoverageSearch } from "../coverageModel";
-import { FIXTURE_COMMIT, FIXTURE_PROJECT, fixtureSummaryResponse, fixtureTestApi } from "../fixtures";
+import { FIXTURE_COMMIT, FIXTURE_PROJECT, fixtureSummaryResponse, fixtureTests, type FixtureTests } from "../fixtures";
 import { TestsCoverageView } from "../TestsCoveragePage";
+import { renderWithTests } from "./testsTestUtils";
 
 vi.mock("@/components/forge-ui/link", () => ({
   default: ({ href, children, ...rest }: { href: string; children: ReactNode }) => (
@@ -61,18 +60,14 @@ function hrefFor(search: CoverageSearch): string {
 
 function renderCoverage(
   search: CoverageSearch,
-  { api = fixtureTestApi(), source = fixtureCoverageSource(), environmentId, projectId }: { api?: TestApi; source?: FetchCoverageSource; environmentId?: string; projectId?: string } = {}
+  { api = fixtureTests(), source = fixtureCoverageSource(), environmentId, projectId }: { api?: FixtureTests; source?: FetchCoverageSource; environmentId?: string; projectId?: string } = {}
 ) {
   const onSelect = vi.fn();
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  render(
-    <QueryClientProvider client={client}>
-      <TestApiProvider api={api}>
-        <CoverageSourceProvider fetch={source}>
-          <TestsCoverageView scope={{ project: FIXTURE_PROJECT, environmentId }} search={search} projectId={projectId} hrefFor={hrefFor} onSelect={onSelect} />
-        </CoverageSourceProvider>
-      </TestApiProvider>
-    </QueryClientProvider>
+  renderWithTests(
+    api,
+    <CoverageSourceProvider fetch={source}>
+      <TestsCoverageView scope={{ project: FIXTURE_PROJECT, environmentId }} search={search} projectId={projectId} hrefFor={hrefFor} onSelect={onSelect} />
+    </CoverageSourceProvider>
   );
   return { onSelect };
 }
@@ -164,7 +159,7 @@ describe("Coverage: the tree", () => {
   });
 
   it("one lane's lens shows that lane alone", async () => {
-    const api = fixtureTestApi();
+    const api = fixtureTests();
     renderCoverage({ lane: "e2e" }, { api });
     await screen.findAllByTestId("tests-coverage-row");
     expect(screen.getAllByRole("columnheader").map((th) => th.textContent)).toEqual(["Name", "Statements", "e2e only"]);
@@ -307,7 +302,7 @@ describe("Coverage: the URL", () => {
   });
 
   it("reads the commit, lane and base the URL names", async () => {
-    const api = fixtureTestApi();
+    const api = fixtureTests();
     renderCoverage({ path: "internal/billing", commit: FIXTURE_COMMIT, lane: "unit", base: FIXTURE_BASE }, { api });
     await screen.findAllByTestId("tests-coverage-row");
     const asked = api.calls.filter((call) => call.method === "getCoverage").map((call) => call.req);
@@ -318,12 +313,12 @@ describe("Coverage: the URL", () => {
   });
 
   it("with no commit, reads the default branch's newest report; with an environment explicitly chosen, its current release", async () => {
-    const api = fixtureTestApi();
+    const api = fixtureTests();
     renderCoverage({}, { api });
     await screen.findAllByTestId("tests-coverage-row");
     expect(api.calls.find((call) => call.method === "getCoverage")?.req).toMatchObject({ target: { gitCommit: FIXTURE_COMMIT } });
 
-    const scoped = fixtureTestApi();
+    const scoped = fixtureTests();
     renderCoverage({ environment: "prod" }, { api: scoped, environmentId: "env-shop-prod" });
     await vi.waitFor(() => expect(scoped.calls.some((call) => call.method === "getCoverage")).toBe(true));
     expect(await screen.findByRole("option", { name: "Current release of prod" })).toBeInTheDocument();
@@ -348,12 +343,12 @@ describe("Coverage: the URL", () => {
   });
 
   it("a control plane without the service is a state, not an error", async () => {
-    renderCoverage({}, { api: fixtureTestApi("not-configured") });
+    renderCoverage({}, { api: fixtureTests("not-configured") });
     expect(await screen.findByTestId("tests-error")).toHaveAttribute("data-kind", "not-configured");
   });
 
   it("an empty record names the commands that fill it", async () => {
-    renderCoverage({}, { api: fixtureTestApi("no-runs") });
+    renderCoverage({}, { api: fixtureTests("no-runs") });
     expect(await screen.findByTestId("tests-no-runs")).toHaveTextContent("No test runs yet");
   });
 });

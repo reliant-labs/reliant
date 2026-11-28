@@ -13,11 +13,11 @@ import { fireEvent, screen, within } from "@testing-library/react";
 
 import { AskAgentModeProvider } from "../../Observability/AskReliant/askAgentMode";
 import { fixtureCoverageSource } from "../coverageFixtures";
-import { FIXTURE_NOW, FIXTURE_PROJECT, fixtureTestApi } from "../fixtures";
+import { FIXTURE_NOW, FIXTURE_PROJECT, fixtureTests } from "../fixtures";
 import { TestsCoverageView } from "../TestsCoveragePage";
 import { TestsFlakyTestView } from "../TestsFlakyTestPage";
 import { CoverageSourceProvider } from "@/services/coverageSource/CoverageSourceContext";
-import { renderWithApi } from "./testsTestUtils";
+import { renderWithTests } from "./testsTestUtils";
 
 vi.mock("@/components/forge-ui/link", () => ({
   default: ({ href, children, ...rest }: { href: string; children: ReactNode }) => (
@@ -38,7 +38,7 @@ const handoff = (children: ReactNode) => (
 
 describe("Tests agent buttons in handoff mode", () => {
   it("Fix this flaky test is Ask an agent, opening the sheet with the test's prompt and commands, with no Reliant project", async () => {
-    renderWithApi(fixtureTestApi("report"), handoff(<TestsFlakyTestView project={FIXTURE_PROJECT} projectId={null} testId={SYNC_JOB} runHref={(id) => `/runs/${id}`} now={FIXTURE_NOW} />));
+    renderWithTests(fixtureTests("report"), handoff(<TestsFlakyTestView project={FIXTURE_PROJECT} projectId={null} testId={SYNC_JOB} runHref={(id) => `/runs/${id}`} now={FIXTURE_NOW} />));
     const button = await screen.findByTestId("tests-fix-with-agent");
     expect(button).toBeEnabled();
     expect(button).toHaveTextContent("Ask an agent");
@@ -56,8 +56,8 @@ describe("Tests agent buttons in handoff mode", () => {
   });
 
   it("Raise coverage is Ask an agent too, its sheet carrying the package's figures and the coverage command", async () => {
-    renderWithApi(
-      fixtureTestApi(),
+    renderWithTests(
+      fixtureTests(),
       handoff(
         <CoverageSourceProvider fetch={fixtureCoverageSource()}>
           <TestsCoverageView scope={{ project: FIXTURE_PROJECT, environmentId: undefined }} search={{ path: "internal/billing" }} hrefFor={() => "#"} onSelect={() => {}} />
