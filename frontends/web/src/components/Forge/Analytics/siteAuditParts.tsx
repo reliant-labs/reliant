@@ -65,6 +65,9 @@ export function ScoreCell({ score }: { score: number | null }) {
   return <span className={cn("inline-flex min-w-9 justify-center text-ui font-semibold tabular-nums", rating ? SCORE_INK[rating] : "text-ink-muted")}>{score ?? "—"}</span>;
 }
 
+/** What a score summary says before the site's first audit has reported. */
+export const FIRST_AUDIT_PENDING = "Your first audit runs after the next release";
+
 /**
  * One site's audit score as a summary card shows it (the static site's page,
  * Services/SiteDetail): the figure, coloured, with its delta against the
@@ -82,7 +85,7 @@ export function SiteAuditScoreSummary({ envId, frontend, category }: { envId: st
         {score === null
           ? scores.audit?.audit
             ? "Not scored in the newest audit"
-            : "Your first audit runs after the next release"
+            : FIRST_AUDIT_PENDING
           : delta !== null && scores.audit?.previous
             ? `${formatDelta(delta)} since ${scores.audit.previous.release || "the previous audit"}`
             : `Release ${scores[category].release || "audited"}`}
