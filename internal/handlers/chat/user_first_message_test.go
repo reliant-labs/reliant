@@ -21,6 +21,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/chataccess/chataccesstest"
 	"github.com/reliant-labs/reliant/internal/chatselection"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 )
 
 type optedIn struct{}
@@ -205,6 +206,47 @@ func TestUserFirstMessageNotEmittedWhenTheClaimFails(t *testing.T) {
 	perChat := eventsNamed(recs, "product.first_message_sent")
 	require.Len(t, perChat, 1)
 	assert.Equal(t, false, perChat[0]["product.first_for_user"])
+}
+
+// message_sent and first_message_sent carry the chat's origin, read off the
+// chat the send already loaded, so the dashboards can tell a person's message
+// from one a run delivered. A chat whose origin was not read says unknown.
+func TestTrackMessageSentCarriesTheChatsOrigin(t *testing.T) {
+	out := installAnalytics(t)
+	repo := &MockRepository{
+		CountMessagesInThreadFunc: func(context.Context, string) (int, error) { return 1, nil },
+	}
+	messages := &MockMessages{
+		ClaimUserActivationFunc: func(context.Context, string, string, string) (bool, error) { return false, nil },
+	}
+	svc := &Service{deps: Deps{Repo: repo, Chats: chataccesstest.For(repo), Questions: &MockQuestions{}, Spawns: &MockSpawns{}, Selections: &chatselection.MockStore{}, Mailbox: &MockMailbox{}, AgentMessages: &MockAgentMessages{}, Messages: messages, ToolBlocks: &MockToolBlocks{}, Senders: &MockSenders{}}}
+
+	chats := map[string]core.ChatOrigin{
+		"origin-user":       core.ChatOriginUser,
+		"origin-automation": core.ChatOriginAutomation,
+		"origin-agent":      core.ChatOriginAgent,
+		"origin-cli":        core.ChatOriginCLI,
+		"origin-unread":     core.ChatOriginUnspecified,
+	}
+	for id, origin := range chats {
+		svc.trackMessageSent(context.Background(), "user-1", &db.Chat{ID: id, ProjectID: "proj-1", Origin: origin}, "msg-"+id, "thread-"+id, "hi", 0)
+	}
+
+	want := map[string]string{
+		"origin-user":       "user",
+		"origin-automation": "automation",
+		"origin-agent":      "agent",
+		"origin-cli":        "cli",
+		"origin-unread":     analytics.OriginUnknown,
+	}
+	recs := out.records(t)
+	for id, origin := range want {
+		for _, event := range []string{"product.message_sent", "product.first_message_sent"} {
+			got := eventsForChat(recs, event, id)
+			require.Len(t, got, 1, "%s for %s", event, id)
+			assert.Equal(t, origin, got[0]["product.origin"], "%s for %s", event, id)
+		}
+	}
 }
 
 // eventsForChat narrows events to one chat: earlier tests' detached tracking

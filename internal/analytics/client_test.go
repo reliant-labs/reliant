@@ -81,6 +81,36 @@ func TestEmitsProductRecordWithUserAndTypedFields(t *testing.T) {
 	assert.NotContains(t, rec, "product.workflow_id", "an unset optional field is omitted, not written empty")
 }
 
+// The usage dashboards tell a person's chat from a run by origin = 'user', so
+// every chat-scoped event carries origin, and one whose origin was not read
+// says unknown rather than leaving the prop out.
+func TestChatEventsAlwaysCarryOrigin(t *testing.T) {
+	c, buf := jsonClient(t, consent{"user-1": true})
+	tr := c.ForUser(context.Background(), "user-1")
+
+	tr.TrackMessageSent(MessageSentMetrics{MessageID: "msg-1", ChatID: "chat-1", Origin: "user"})
+	tr.TrackFirstMessageSent(FirstMessageSentMetrics{ChatID: "chat-1", Origin: "automation"})
+	tr.TrackWorkflowStarted(WorkflowMetrics{WorkflowID: "wf-1", Origin: "agent"})
+	tr.TrackWorkflowEnded(WorkflowMetrics{WorkflowID: "wf-2"})
+	tr.TrackMessageSent(MessageSentMetrics{MessageID: "msg-2", ChatID: "chat-2"})
+
+	got := map[string]any{}
+	for _, rec := range records(t, buf) {
+		key := rec[AttrEventName].(string)
+		if id, ok := rec["product.message_id"]; ok {
+			key += "/" + id.(string)
+		}
+		got[key] = rec["product.origin"]
+	}
+	assert.Equal(t, map[string]any{
+		"product.message_sent/msg-1": "user",
+		"product.first_message_sent": "automation",
+		"product.workflow_started":   "agent",
+		"product.workflow_ended":     OriginUnknown,
+		"product.message_sent/msg-2": OriginUnknown,
+	}, got)
+}
+
 func TestListFieldsAreJSONArrays(t *testing.T) {
 	c, buf := jsonClient(t, consent{"user-1": true})
 
