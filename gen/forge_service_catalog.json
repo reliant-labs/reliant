@@ -58010,6 +58010,43 @@
       "implementation_candidates": []
     },
     {
+      "id": "Messagewrite",
+      "name": "Messagewrite",
+      "kind": "component",
+      "type": "github.com/reliant-labs/reliant/internal/messagewrite.Service",
+      "source": {
+        "path": "internal/messagewrite/service.go",
+        "symbol": "New"
+      },
+      "methods": [],
+      "implementation_candidates": [
+        {
+          "type": "*github.com/reliant-labs/reliant/internal/messagewrite.MockService",
+          "source": {
+            "path": "internal/messagewrite/mock_gen.go",
+            "symbol": "MockService"
+          },
+          "methods": []
+        },
+        {
+          "type": "*github.com/reliant-labs/reliant/internal/messagewrite.forgeMiddlewareService",
+          "source": {
+            "path": "internal/messagewrite/middleware_gen.go",
+            "symbol": "forgeMiddlewareService"
+          },
+          "methods": []
+        },
+        {
+          "type": "*github.com/reliant-labs/reliant/internal/messagewrite.service",
+          "source": {
+            "path": "internal/messagewrite/service.go",
+            "symbol": "service"
+          },
+          "methods": []
+        }
+      ]
+    },
+    {
       "id": "ModelEndpoint",
       "name": "ModelEndpoint",
       "kind": "component",
@@ -60990,6 +61027,100 @@
         "Database"
       ],
       "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Messagewrite",
+      "field": "Attachments",
+      "interface": "github.com/reliant-labs/reliant/internal/messagewrite.Attachments",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "Messagewrite",
+      "field": "Blocks",
+      "interface": "github.com/reliant-labs/reliant/internal/messagewrite.Blocks",
+      "methods": [],
+      "candidates": [],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "Messagewrite",
+      "field": "Messages",
+      "interface": "github.com/reliant-labs/reliant/internal/messagewrite.Messages",
+      "methods": [],
+      "candidates": [],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "Messagewrite",
+      "field": "Order",
+      "interface": "github.com/reliant-labs/reliant/internal/messagewrite.Order",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "Messagewrite",
+      "field": "Threads",
+      "interface": "github.com/reliant-labs/reliant/internal/messagewrite.Threads",
+      "methods": [],
+      "candidates": [],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "Messagewrite",
+      "field": "Tx",
+      "interface": "github.com/reliant-labs/reliant/internal/messagewrite.Tx",
+      "methods": [],
+      "candidates": [
+        "Database",
+        "ORM"
+      ],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Messagewrite",
+      "field": "Updates",
+      "interface": "github.com/reliant-labs/reliant/internal/messagewrite.Updates",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Messagewrite",
+      "field": "Windows",
+      "interface": "github.com/reliant-labs/reliant/internal/messagewrite.Windows",
+      "methods": [],
+      "candidates": [],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "Messagewrite",
+      "field": "Workflows",
+      "interface": "github.com/reliant-labs/reliant/internal/messagewrite.Workflows",
+      "methods": [],
+      "candidates": [],
+      "providers": [],
+      "resolution": "unresolved"
     },
     {
       "consumer": "ModelEndpoint",
@@ -64136,6 +64267,62 @@
       "component": "MCP.Refetch",
       "source": {
         "path": "internal/handlers/mcp/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "Messagewrite.Attachments",
+      "source": {
+        "path": "internal/messagewrite/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "Messagewrite.Blocks",
+      "source": {
+        "path": "internal/messagewrite/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "Messagewrite.Messages",
+      "source": {
+        "path": "internal/messagewrite/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "Messagewrite.Order",
+      "source": {
+        "path": "internal/messagewrite/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "Messagewrite.Threads",
+      "source": {
+        "path": "internal/messagewrite/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "Messagewrite.Windows",
+      "source": {
+        "path": "internal/messagewrite/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "Messagewrite.Workflows",
+      "source": {
+        "path": "internal/messagewrite/service.go",
         "symbol": "New"
       }
     },

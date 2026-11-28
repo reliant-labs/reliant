@@ -29,6 +29,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/credentials/orgaccounts"
 	"github.com/reliant-labs/reliant/internal/credentials/provideraccounts"
 	"github.com/reliant-labs/reliant/internal/daemonmirror"
+	"github.com/reliant-labs/reliant/internal/messagewrite"
 	"github.com/reliant-labs/reliant/internal/questions"
 
 	"github.com/nats-io/nats.go/jetstream"
@@ -2136,6 +2137,29 @@ func (g *Graph) newChatprlinks() (chatprlinks.Service, error) {
 		return nil, err
 	}
 	return chatprlinks.NewServiceWithForgeMiddleware(svc), nil
+}
+
+// newMessagewrite constructs the transactional message writer
+// (internal/messagewrite) over the generated stores. Tx and Updates are the
+// repository: its RunTx keeps the retry classification, and its
+// CreateChatUpdate publishes after the commit of the context it is handed.
+func (g *Graph) newMessagewrite() (messagewrite.Service, error) {
+	o := g.Database().ORM()
+	svc, err := messagewrite.New(messagewrite.Deps{
+		Tx:          g.Database(),
+		Order:       store.NewMessageOrderCounterExtStore(o),
+		Messages:    store.NewMessageExtStore(o),
+		Windows:     store.NewContextWindowExtStore(o),
+		Threads:     store.NewThreadExtStore(o),
+		Workflows:   store.NewWorkflowExtStore(o),
+		Blocks:      store.NewMessageContentBlockExtStore(o),
+		Attachments: store.NewAttachmentExtStore(o),
+		Updates:     g.Database(),
+	})
+	if err != nil {
+		return nil, err
+	}
+	return messagewrite.NewServiceWithForgeMiddleware(svc), nil
 }
 
 func (g *Graph) newCallerControlPlane() (*CallerControlPlane, error) {
