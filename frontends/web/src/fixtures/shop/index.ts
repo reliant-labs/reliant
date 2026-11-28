@@ -51,6 +51,7 @@ import { DEMO_PROJECT, DEMO_SCOPE, scopedToDemo, type PackScope } from "./handle
 import { securityHandlers } from "./handlers/security";
 import { siteAuditScenarioHandlers } from "./handlers/siteAudit";
 import { withSpeedInsights } from "./handlers/speedInsights";
+import { staticSiteScenarioHandlers } from "./handlers/staticSite";
 import { storageScenarioHandlers } from "./handlers/storage";
 import { testsHandlers } from "./handlers/tests";
 import { createShopApi } from "./model/shopApi";
@@ -89,12 +90,13 @@ export function shopScenario(fixtures?: ObservabilityApi, { scope = DEMO_SCOPE, 
   const story = fixtures ?? createShopApi(undefined, scope.app);
   // Dispatch, most specific first: the tour's encoded observability reads, the console's story
   // (handlers/console.ts: Releases, Environments, Secrets, Domains, Activity; config, inventory,
-  // storage; handlers/siteAudit.ts: Site insights' audits), then forge's generated defaults for
-  // every other read of the console's services (handlers/defaults.ts). A read naming another project or environment is answered empty
+  // storage; handlers/siteAudit.ts: Site insights' audits; handlers/staticSite.ts: the static
+  // site's hosting), then forge's generated defaults for every other read of the console's services
+  // (handlers/defaults.ts). A read naming another project or environment is answered empty
   // first (handlers/scope.ts), defaults included, which is why the pack composes its own
   // defaults rather than declaring them as the pack's `defaults`.
   // The id prefix is the outermost layer: a request loses it before the scope check reads it, and an answer gains it last.
-  const handlers = withSpeedInsights({ ...defaultHandlers(), ...consoleScenarioHandlers(scope), ...configScenarioHandlers(), ...inventoryScenarioHandlers(), ...storageScenarioHandlers(), ...organizationScenarioHandlers(), ...observabilityHandlers(story), ...siteAuditScenarioHandlers(scope), ...securityHandlers(undefined, scope), ...testsHandlers(undefined, scope), ...coverageSourceHandlers(scope), ...changesHandlers(undefined, scope) });
+  const handlers = withSpeedInsights({ ...defaultHandlers(), ...consoleScenarioHandlers(scope), ...configScenarioHandlers(), ...inventoryScenarioHandlers(), ...storageScenarioHandlers(), ...organizationScenarioHandlers(), ...observabilityHandlers(story), ...siteAuditScenarioHandlers(scope), ...staticSiteScenarioHandlers(scope), ...securityHandlers(undefined, scope), ...testsHandlers(undefined, scope), ...coverageSourceHandlers(scope), ...changesHandlers(undefined, scope) });
   const scoped = withMessageRequests(scopedToDemo(handlers, DEMO_DEFAULT_SERVICES, scope));
   return { name: "shop", handlers: withIdPrefix(scoped, SHOP_PACK_SERVICES, idPrefix, new Set([scope.app])) as unknown as MockScenario["handlers"] };
 }
