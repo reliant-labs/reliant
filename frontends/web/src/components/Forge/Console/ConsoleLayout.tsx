@@ -54,6 +54,7 @@ import { rememberEnv } from "./envScope";
 import { consolePath, isTestsPage, pinnedEnvOf, withSearch, type ConsolePage } from "./paths";
 import { severalModeOf, useSeveralApps } from "./severalProjects";
 import { SeveralProjectSections } from "./severalProjectSections";
+import { AggregateHost } from "./aggregate/AggregateHost";
 import { AppScopeProvider } from "@/fixtures/scope";
 
 /** Where switching to the forge app `app` lands: the same page there. */
@@ -169,6 +170,9 @@ function ConsoleLayoutInScope() {
           {/* Tests need no deploy: a CI lane records runs before any release (TestsService RecordTestRun), so they keep their pages. */}
           {undeployed && !across && page.kind !== "overview" && !isTestsPage(page) ? (
             <AppSectionEmptyState page={page} projectId={deployProjectId} />
+          ) : several && severalMode === "aggregate" ? (
+            // A dedicated aggregate page (aggregate/registry.ts) stands in for the route's page: it is about every project in scope, not the focused one.
+            <AggregateHost page={page} apps={several.apps} mode={several.mode} />
           ) : several && severalMode === "sections" ? (
             <SeveralProjectSections apps={several.apps}>
               <Outlet />

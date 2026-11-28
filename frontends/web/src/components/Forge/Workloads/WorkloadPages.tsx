@@ -42,8 +42,7 @@ import { OverviewHome, type HostedByEnv, type OverviewHrefs, type OverviewRollba
 import { WorkloadDetail, type HostedObservation, type WorkloadActions, type WorkloadDetailSearch, type WorkloadRollback } from "./WorkloadDetail";
 import type { StripEnv } from "./workloadModel";
 import { useObsReadOnly } from "../Observability/obsReadOnly";
-import { ProjectsOverview } from "../Console/ProjectsOverview";
-import { rowForRef, useShellSeveral } from "../../Layout/sidebar/shellProject";
+import { rowForRef } from "../../Layout/sidebar/shellProject";
 import { ProjectChats } from "../../Projects/ProjectChats";
 import { NoAppLanding } from "../../Projects/NoAppLanding";
 import { useSelectorCatalog } from "../../Projects/ProjectSelector";
@@ -174,16 +173,15 @@ export function useHostedByEnv(envs: StripEnv[]): { hosted: HostedByEnv; loading
 
 /**
  * The project's landing page (U6c: Home and Overview merged into ONE
- * "Overview"). Several projects in the shell: one row per project
- * (ProjectsOverview). Nothing deployed: the project's chats and the way to
+ * "Overview"). Several projects in the shell: the console shows the
+ * Overview's aggregate page instead (Console/aggregate/registry.ts:
+ * ProjectsOverview). Nothing deployed: the project's chats and the way to
  * deploy it (NoAppLanding). Otherwise the summary — health, what needs
  * attention, the live state, recent releases — with the project's chats.
  */
 export function OverviewPage() {
-  const { mode: several } = useShellSeveral();
   const { roster, projectId, forgeProject } = useForgeConsole();
   const { catalog } = useSelectorCatalog(undefined);
-  if (several) return <ProjectsOverview />;
   if (!roster.isLoading && !roster.resolvingName && roster.envs.length === 0 && !rosterReadFailed(roster)) {
     const row = projectId ? rowForRef(catalog, { kind: "project", id: projectId }) : undefined;
     return <NoAppLanding projectId={projectId} name={row?.name ?? forgeProject} app={forgeProject} />;

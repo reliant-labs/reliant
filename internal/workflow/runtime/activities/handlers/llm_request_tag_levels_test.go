@@ -3,6 +3,7 @@ package handlers
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/google/uuid"
@@ -25,6 +26,7 @@ import (
 // This exercises the real registry path (no injected resolver, which skips
 // registry resolution entirely).
 func TestResolveLLMCall_AppliesTagThinkingLevel(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name string
 		// selector picks the model; thinkingLevel is the explicit per-call
@@ -107,22 +109,22 @@ func TestResolveLLMCall_AppliesTagThinkingLevel(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			userID := "user-" + uuid.NewString()
 			ctx := context.Background()
-			provisionProviderKeys(t, ctx, userID, tt.providers)
+			providers := provisionProviderKeys(t, ctx, userID, tt.providers)
 
 			// Stub driver construction: this test is about the settings
 			// resolveLLMCall computes, not about reaching a provider.
 			captured := &capturedDriverOptions{}
-			original := drivers.GetDriver
-			drivers.GetDriver = captureDriverOptionsResolver(captured)
-			t.Cleanup(func() { drivers.GetDriver = original })
+			providers.getDriver = captureDriverOptionsResolver(captured)
 
 			resolved, err := resolveLLMCall(ctx, nil, llmCallSpec{
 				UserID:        userID,
 				SessionID:     "session-" + uuid.NewString(),
 				Selector:      tt.selector,
 				ThinkingLevel: tt.thinkingLevel,
+				providers:     providers,
 			})
 			require.NoError(t, err)
 
@@ -141,6 +143,7 @@ func TestResolveLLMCall_AppliesTagThinkingLevel(t *testing.T) {
 // backstop and every max_tokens default read) must be Copilot's, or a request
 // asks for more output than Copilot allows.
 func TestResolveLLMCall_DriverGetsTheProvidersLimits(t *testing.T) {
+	t.Parallel()
 	for _, tt := range []struct {
 		modelID           string
 		provider          string
@@ -154,19 +157,19 @@ func TestResolveLLMCall_DriverGetsTheProvidersLimits(t *testing.T) {
 		{"claude-4.5-haiku", "copilot", 144_000, 32_000, 112_000},
 	} {
 		t.Run(tt.modelID+"@"+tt.provider, func(t *testing.T) {
+			t.Parallel()
 			userID := "user-" + uuid.NewString()
 			ctx := context.Background()
-			provisionProviderKeys(t, ctx, userID, []string{tt.provider})
+			providers := provisionProviderKeys(t, ctx, userID, []string{tt.provider})
 
 			captured := &capturedDriverOptions{}
-			original := drivers.GetDriver
-			drivers.GetDriver = captureDriverOptionsResolver(captured)
-			t.Cleanup(func() { drivers.GetDriver = original })
+			providers.getDriver = captureDriverOptionsResolver(captured)
 
 			resolved, err := resolveLLMCall(ctx, nil, llmCallSpec{
 				UserID:    userID,
 				SessionID: "session-" + uuid.NewString(),
 				Selector:  models.ModelSelector{ID: tt.modelID + "@" + tt.provider},
+				providers: providers,
 			})
 			require.NoError(t, err)
 
@@ -216,25 +219,25 @@ func TestResolveLLMCall_TagEntryLevelBeatsCapabilityDefault(t *testing.T) {
 	require.Equal(t, "medium", models.ThinkingLevelFor(fixtureModel),
 		"fixture precondition: the capability default must differ from the tag entry's level")
 
-	// The global registry is process-wide; no test in this package runs in
-	// parallel, so swap it for the duration and put the default back after.
+	// The global registry is process-wide, so this test is not parallel (Go
+	// starts the parallel tests only after every serial one has finished):
+	// swap it for the duration and put the default back after.
 	previous := models.MustGetRegistry()
 	models.SetGlobalRegistry(fixtureReg)
 	t.Cleanup(func() { models.SetGlobalRegistry(previous) })
 
 	userID := "user-" + uuid.NewString()
 	ctx := context.Background()
-	provisionProviderKeys(t, ctx, userID, []string{"anthropic"})
+	providers := provisionProviderKeys(t, ctx, userID, []string{"anthropic"})
 
 	captured := &capturedDriverOptions{}
-	original := drivers.GetDriver
-	drivers.GetDriver = captureDriverOptionsResolver(captured)
-	t.Cleanup(func() { drivers.GetDriver = original })
+	providers.getDriver = captureDriverOptionsResolver(captured)
 
 	resolved, err := resolveLLMCall(ctx, nil, llmCallSpec{
 		UserID:    userID,
 		SessionID: "session-" + uuid.NewString(),
 		Selector:  models.ModelSelector{Tags: []string{models.TagPowerful}},
+		providers: providers,
 	})
 	require.NoError(t, err)
 
@@ -249,29 +252,43 @@ func TestResolveLLMCall_TagEntryLevelBeatsCapabilityDefault(t *testing.T) {
 		UserID:    userID,
 		SessionID: "session-" + uuid.NewString(),
 		Selector:  models.ModelSelector{ID: "fixture-powerful"},
+		providers: providers,
 	})
 	require.NoError(t, err)
 	assert.Equal(t, "medium", byID.ThinkingLevel)
 }
 
 // provisionProviderKeys gives userID a configured API key for each driver, so
-// registry resolution sees exactly those providers as available.
-func provisionProviderKeys(t *testing.T, ctx context.Context, userID string, providers []string) {
+// registry resolution sees exactly those providers as available. The returned
+// source reads them; a call resolved without it reads the process's providers.
+func provisionProviderKeys(t *testing.T, ctx context.Context, userID string, providers []string) providerSource {
 	t.Helper()
-
-	repo, cleanup := db.SetupTestDB(t)
-	t.Cleanup(cleanup)
-
-	drivers.InitializeAPIKeyProvider(db.TestAccounts(t, repo), repo)
 	// No real provider catalog: a fake key would be refused (Copilot answers
 	// 401), and a refused credential is now — correctly — unavailable. These
 	// tests are about the settings resolveLLMCall computes, so every provider
 	// reports no account availability (all its models servable).
-	original := drivers.AccountAvailabilityClient
-	drivers.AccountAvailabilityClient = func(_ context.Context, id models.DriverID, _ models.DriverConfig) (registry.Client, error) {
+	return provisionProviderKeysWith(t, ctx, userID, providers, func(_ context.Context, id models.DriverID, _ models.DriverConfig) (registry.Client, error) {
 		return staticCatalogClient{name: string(id)}, nil
+	})
+}
+
+// provisionProviderKeysWith is provisionProviderKeys whose accounts report
+// their availability through client. Its source builds no real driver: a
+// test that resolves through it sets getDriver.
+func provisionProviderKeysWith(t *testing.T, ctx context.Context, userID string, providers []string, client func(context.Context, models.DriverID, models.DriverConfig) (registry.Client, error)) providerSource {
+	t.Helper()
+
+	repo, cleanup := db.SetupTestDB(t)
+	t.Cleanup(cleanup)
+	accounts := db.TestAccounts(t, repo)
+	source := providerSource{
+		lookup: func(ctx context.Context, scope drivers.Scope) (models.AvailableDrivers, error) {
+			return drivers.LookupAvailableDriversIn(ctx, accounts, scope, client)
+		},
+		getDriver: func(context.Context, drivers.Scope, models.Preferences, ...llm.DriverOption) (llm.Driver, error) {
+			return nil, errors.New("provisionProviderKeys: the test sets getDriver")
+		},
 	}
-	t.Cleanup(func() { drivers.AccountAvailabilityClient = original })
 
 	for _, provider := range providers {
 		switch provider {
@@ -283,6 +300,7 @@ func provisionProviderKeys(t *testing.T, ctx context.Context, userID string, pro
 			db.SeedProviderAccount(t, repo, userID, provider, "test-key-"+provider)
 		}
 	}
+	return source
 }
 
 // staticCatalogClient is a provider with no account catalog: it implements

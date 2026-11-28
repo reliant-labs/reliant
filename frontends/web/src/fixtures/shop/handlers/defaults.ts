@@ -35,6 +35,7 @@ import { ObservabilityService } from "@/gen/controlplane/services/observability/
 import { ObservabilityBillingService } from "@/gen/controlplane/services/observability_billing/v1/observability_billing_pb";
 import { RumService } from "@/gen/controlplane/services/rum/v1/rum_pb";
 import { SecretStoreService } from "@/gen/controlplane/services/secret_store/v1/secret_store_pb";
+import { SiteAuditService } from "@/gen/controlplane/services/siteaudit/v1/siteaudit_pb";
 import { StaticSiteService } from "@/gen/controlplane/services/static_site/v1/static_site_pb";
 
 import { serviceDefaults, type AnyServiceDefaults, type MockHandlers } from "@reliantlabs/forge-web-runtime/mock-transport";
@@ -55,6 +56,7 @@ export const DEMO_DEFAULT_SERVICES: readonly DescService[] = [
   ObservabilityBillingService,
   RumService,
   SecretStoreService,
+  SiteAuditService,
   StaticSiteService,
 ];
 

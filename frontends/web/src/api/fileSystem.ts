@@ -421,6 +421,60 @@ export async function downloadFile(path: string, worktreeId?: string): Promise<D
   };
 }
 
+/** One entry of a machine-wide listing: every path is absolute on the machine. */
+export interface MachineDirectoryEntry {
+  name: string;
+  path: string;
+  isDirectory: boolean;
+  isSymlink: boolean;
+  size: number;
+  modified: string;
+}
+
+export interface MachineDirectoryListing {
+  /** The directory listed, absolute. */
+  path: string;
+  entries: MachineDirectoryEntry[];
+  /** The machine's home directory, absolute. */
+  homeDir: string;
+  /** The workspace (project or worktree) root on that machine, absolute. */
+  workspaceRoot: string;
+  /** More entries than one listing returns; `entries` is the first of them. */
+  truncated: boolean;
+}
+
+/**
+ * Lists a directory anywhere on the machine that holds the current workspace
+ * (the Files tab's Machine and Chat scratch views). `path` is absolute, "~" or
+ * "~/…", relative to the workspace root ("..": the folder it is in), or empty
+ * for the home directory. Read-only: files it lists open through the viewer by
+ * their absolute path. Errors keep their server reasons (`not_a_directory`,
+ * `machine_browse_unsupported`); see lib/errorReasons.
+ */
+export async function listMachineDirectory(path: string, worktreeId?: string): Promise<MachineDirectoryListing> {
+  const projectId = requireProjectId();
+  const response = await client.listMachineDirectory({
+    projectId,
+    path,
+    worktreeId,
+    chatId: await activeChatIdForAPI(),
+  });
+  return {
+    path: response.path,
+    homeDir: response.homeDir,
+    workspaceRoot: response.workspaceRoot,
+    truncated: response.truncated,
+    entries: response.entries.map((e) => ({
+      name: e.name,
+      path: e.path,
+      isDirectory: e.isDirectory,
+      isSymlink: e.isSymlink,
+      size: Number(e.size),
+      modified: e.modified,
+    })),
+  };
+}
+
 export function isBinaryFileError(error: unknown): boolean {
   return error instanceof ConnectError && error.code === Code.FailedPrecondition;
 }

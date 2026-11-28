@@ -16,7 +16,6 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/llm"
-	"github.com/reliant-labs/reliant/internal/llm/drivers"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/local"
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/models/message"
@@ -201,6 +200,7 @@ func TestTagSelectorNeverResolvesToLocalModel(t *testing.T) {
 }
 
 func TestResolveLLMCall_PinnedLocalTagPref(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.NotFoundHandler())
 	defer server.Close()
 	moderate := models.ModelSelector{Tags: []string{models.TagModerate}}
@@ -224,17 +224,15 @@ func TestResolveLLMCall_PinnedLocalTagPref(t *testing.T) {
 	t.Run("offline machine falls back to the tier", func(t *testing.T) {
 		userID := "user-" + uuid.NewString()
 		ctx := context.Background()
-		provisionProviderKeys(t, ctx, userID, []string{"anthropic"})
+		providers := provisionProviderKeys(t, ctx, userID, []string{"anthropic"})
 		captured := &capturedDriverOptions{}
-		original := drivers.GetDriver
-		drivers.GetDriver = captureDriverOptionsResolver(captured)
-		t.Cleanup(func() { drivers.GetDriver = original })
+		providers.getDriver = captureDriverOptionsResolver(captured)
 
 		var calls []relayCall
 		daemons := []local.DaemonInventory{{DaemonID: "gpu", Machine: "GPU box", Online: false, Inventory: ollamaInventory(testQwen)}}
 		res, err := resolveLLMCall(ctx, nil, llmCallSpec{
 			UserID: userID, SessionID: "s", Selector: moderate, TagPrefsReader: reader,
-			Local: localSpecFor(t, daemons, "", &calls, server),
+			Local: localSpecFor(t, daemons, "", &calls, server), providers: providers,
 		})
 		require.NoError(t, err)
 		assert.Equal(t, "claude-5.5-sonnet@anthropic", res.ModelID)
@@ -255,6 +253,7 @@ func (d endpointDirectory) ConfiguredEndpoints(context.Context, string) ([]local
 }
 
 func TestResolveLLMCall_PinnedCustomEndpointTagPref(t *testing.T) {
+	t.Parallel()
 	var gotBody string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		b, _ := io.ReadAll(r.Body)
@@ -321,12 +320,10 @@ func TestResolveLLMCall_PinnedCustomEndpointTagPref(t *testing.T) {
 	fallsBackToTier := func(t *testing.T, ls *LocalModelSpec, reader fakeSettingsReader) {
 		userID := "user-" + uuid.NewString()
 		ctx := context.Background()
-		provisionProviderKeys(t, ctx, userID, []string{"anthropic"})
+		providers := provisionProviderKeys(t, ctx, userID, []string{"anthropic"})
 		captured := &capturedDriverOptions{}
-		original := drivers.GetDriver
-		drivers.GetDriver = captureDriverOptionsResolver(captured)
-		t.Cleanup(func() { drivers.GetDriver = original })
-		res, err := resolveLLMCall(ctx, nil, llmCallSpec{UserID: userID, SessionID: "s", Selector: moderate, TagPrefsReader: reader, Local: ls})
+		providers.getDriver = captureDriverOptionsResolver(captured)
+		res, err := resolveLLMCall(ctx, nil, llmCallSpec{UserID: userID, SessionID: "s", Selector: moderate, TagPrefsReader: reader, Local: ls, providers: providers})
 		require.NoError(t, err)
 		assert.Equal(t, "claude-5.5-sonnet@anthropic", res.ModelID, "the tier runs instead")
 	}

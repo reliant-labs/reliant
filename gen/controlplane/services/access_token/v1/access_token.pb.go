@@ -601,7 +601,8 @@ func (x *UpdateOrgMemberGrantsResponse) GetMember() *OrgMemberGrants {
 }
 
 // ResourceBinding confines a token to one resource. kind is one of
-// "daemon" | "port" | "connector" (forge/pkg/accesstoken.AllResourceKinds).
+// "daemon" | "port" | "connector" | "environment"
+// (forge/pkg/accesstoken.AllResourceKinds).
 type ResourceBinding struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Kind          string                 `protobuf:"bytes,1,opt,name=kind,proto3" json:"kind,omitempty"`
@@ -822,7 +823,16 @@ type CreateTokenRequest struct {
 	// The org this request acts in (docs/orgs.md). Unset: the caller's default
 	// org. A person must be a member of it; a machine credential may name only
 	// its own org.
-	OrgId         *string `protobuf:"bytes,4,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
+	OrgId *string `protobuf:"bytes,4,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
+	// resource, when set, confines the token to one resource. An org token
+	// may be bound only to an ENVIRONMENT of the org (kind "environment", id a
+	// live deploy environment of the org; any other is NotFound, so the mint is
+	// no existence oracle), and then every scope it carries must be one that
+	// binds to an environment (forge/pkg/accesstoken: obs:read, db:query,
+	// changes:read, ...). The app credential of a deploy not on Reliant
+	// hosting is the case: changes:read bound to the one environment whose
+	// Changes snapshot it fetches. Unset: an org-wide token, as before.
+	Resource      *ResourceBinding `protobuf:"bytes,5,opt,name=resource,proto3" json:"resource,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -883,6 +893,13 @@ func (x *CreateTokenRequest) GetOrgId() string {
 		return *x.OrgId
 	}
 	return ""
+}
+
+func (x *CreateTokenRequest) GetResource() *ResourceBinding {
+	if x != nil {
+		return x.Resource
+	}
+	return nil
 }
 
 type CreateTokenResponse struct {
@@ -2301,13 +2318,14 @@ const file_services_access_token_v1_access_token_proto_rawDesc = "" +
 	"\bresource\x18\f \x01(\v2 .controlplane.v1.ResourceBindingR\bresource\x12\x1c\n" +
 	"\tephemeral\x18\r \x01(\bR\tephemeral\x12\x1d\n" +
 	"\n" +
-	"all_scopes\x18\x0e \x01(\bR\tallScopes\"\xa2\x01\n" +
+	"all_scopes\x18\x0e \x01(\bR\tallScopes\"\xe0\x01\n" +
 	"\x12CreateTokenRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x16\n" +
 	"\x06scopes\x18\x02 \x03(\tR\x06scopes\x129\n" +
 	"\n" +
 	"expires_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\texpiresAt\x12\x1a\n" +
-	"\x06org_id\x18\x04 \x01(\tH\x00R\x05orgId\x88\x01\x01B\t\n" +
+	"\x06org_id\x18\x04 \x01(\tH\x00R\x05orgId\x88\x01\x01\x12<\n" +
+	"\bresource\x18\x05 \x01(\v2 .controlplane.v1.ResourceBindingR\bresourceB\t\n" +
 	"\a_org_id\"a\n" +
 	"\x13CreateTokenResponse\x122\n" +
 	"\x05token\x18\x01 \x01(\v2\x1c.controlplane.v1.AccessTokenR\x05token\x12\x16\n" +
@@ -2492,55 +2510,56 @@ var file_services_access_token_v1_access_token_proto_depIdxs = []int32{
 	36, // 9: controlplane.v1.AccessToken.revoked_at:type_name -> google.protobuf.Timestamp
 	9,  // 10: controlplane.v1.AccessToken.resource:type_name -> controlplane.v1.ResourceBinding
 	36, // 11: controlplane.v1.CreateTokenRequest.expires_at:type_name -> google.protobuf.Timestamp
-	10, // 12: controlplane.v1.CreateTokenResponse.token:type_name -> controlplane.v1.AccessToken
-	10, // 13: controlplane.v1.ListTokensResponse.tokens:type_name -> controlplane.v1.AccessToken
-	10, // 14: controlplane.v1.RevokeTokenResponse.token:type_name -> controlplane.v1.AccessToken
-	36, // 15: controlplane.v1.CreateMyTokenRequest.expires_at:type_name -> google.protobuf.Timestamp
-	9,  // 16: controlplane.v1.CreateMyTokenRequest.resource:type_name -> controlplane.v1.ResourceBinding
-	10, // 17: controlplane.v1.CreateMyTokenResponse.token:type_name -> controlplane.v1.AccessToken
-	10, // 18: controlplane.v1.ListMyTokensResponse.tokens:type_name -> controlplane.v1.AccessToken
-	36, // 19: controlplane.v1.CLILogin.created_at:type_name -> google.protobuf.Timestamp
-	36, // 20: controlplane.v1.CLILogin.expires_at:type_name -> google.protobuf.Timestamp
-	36, // 21: controlplane.v1.CLILogin.last_used_at:type_name -> google.protobuf.Timestamp
-	36, // 22: controlplane.v1.CLILogin.revoked_at:type_name -> google.protobuf.Timestamp
-	25, // 23: controlplane.v1.ListMyCLILoginsResponse.logins:type_name -> controlplane.v1.CLILogin
-	10, // 24: controlplane.v1.UpdateMyTokenResponse.token:type_name -> controlplane.v1.AccessToken
-	10, // 25: controlplane.v1.ExchangeTokenResponse.token:type_name -> controlplane.v1.AccessToken
-	0,  // 26: controlplane.v1.ExchangeFederatedTokenRequest.provider:type_name -> controlplane.v1.FederationProvider
-	36, // 27: controlplane.v1.ExchangeFederatedTokenResponse.expires_at:type_name -> google.protobuf.Timestamp
-	11, // 28: controlplane.v1.AccessTokenService.CreateToken:input_type -> controlplane.v1.CreateTokenRequest
-	13, // 29: controlplane.v1.AccessTokenService.ListTokens:input_type -> controlplane.v1.ListTokensRequest
-	15, // 30: controlplane.v1.AccessTokenService.RevokeToken:input_type -> controlplane.v1.RevokeTokenRequest
-	17, // 31: controlplane.v1.AccessTokenService.CreateMyToken:input_type -> controlplane.v1.CreateMyTokenRequest
-	19, // 32: controlplane.v1.AccessTokenService.ListMyTokens:input_type -> controlplane.v1.ListMyTokensRequest
-	21, // 33: controlplane.v1.AccessTokenService.RevokeMyToken:input_type -> controlplane.v1.RevokeMyTokenRequest
-	30, // 34: controlplane.v1.AccessTokenService.UpdateMyToken:input_type -> controlplane.v1.UpdateMyTokenRequest
-	23, // 35: controlplane.v1.AccessTokenService.ResetDaemonScopePolicy:input_type -> controlplane.v1.ResetDaemonScopePolicyRequest
-	26, // 36: controlplane.v1.AccessTokenService.ListMyCLILogins:input_type -> controlplane.v1.ListMyCLILoginsRequest
-	28, // 37: controlplane.v1.AccessTokenService.RevokeMyCLILogin:input_type -> controlplane.v1.RevokeMyCLILoginRequest
-	32, // 38: controlplane.v1.AccessTokenService.ExchangeToken:input_type -> controlplane.v1.ExchangeTokenRequest
-	34, // 39: controlplane.v1.AccessTokenService.ExchangeFederatedToken:input_type -> controlplane.v1.ExchangeFederatedTokenRequest
-	5,  // 40: controlplane.v1.AccessTokenService.ListOrgMemberGrants:input_type -> controlplane.v1.ListOrgMemberGrantsRequest
-	7,  // 41: controlplane.v1.AccessTokenService.UpdateOrgMemberGrants:input_type -> controlplane.v1.UpdateOrgMemberGrantsRequest
-	12, // 42: controlplane.v1.AccessTokenService.CreateToken:output_type -> controlplane.v1.CreateTokenResponse
-	14, // 43: controlplane.v1.AccessTokenService.ListTokens:output_type -> controlplane.v1.ListTokensResponse
-	16, // 44: controlplane.v1.AccessTokenService.RevokeToken:output_type -> controlplane.v1.RevokeTokenResponse
-	18, // 45: controlplane.v1.AccessTokenService.CreateMyToken:output_type -> controlplane.v1.CreateMyTokenResponse
-	20, // 46: controlplane.v1.AccessTokenService.ListMyTokens:output_type -> controlplane.v1.ListMyTokensResponse
-	22, // 47: controlplane.v1.AccessTokenService.RevokeMyToken:output_type -> controlplane.v1.RevokeMyTokenResponse
-	31, // 48: controlplane.v1.AccessTokenService.UpdateMyToken:output_type -> controlplane.v1.UpdateMyTokenResponse
-	24, // 49: controlplane.v1.AccessTokenService.ResetDaemonScopePolicy:output_type -> controlplane.v1.ResetDaemonScopePolicyResponse
-	27, // 50: controlplane.v1.AccessTokenService.ListMyCLILogins:output_type -> controlplane.v1.ListMyCLILoginsResponse
-	29, // 51: controlplane.v1.AccessTokenService.RevokeMyCLILogin:output_type -> controlplane.v1.RevokeMyCLILoginResponse
-	33, // 52: controlplane.v1.AccessTokenService.ExchangeToken:output_type -> controlplane.v1.ExchangeTokenResponse
-	35, // 53: controlplane.v1.AccessTokenService.ExchangeFederatedToken:output_type -> controlplane.v1.ExchangeFederatedTokenResponse
-	6,  // 54: controlplane.v1.AccessTokenService.ListOrgMemberGrants:output_type -> controlplane.v1.ListOrgMemberGrantsResponse
-	8,  // 55: controlplane.v1.AccessTokenService.UpdateOrgMemberGrants:output_type -> controlplane.v1.UpdateOrgMemberGrantsResponse
-	42, // [42:56] is the sub-list for method output_type
-	28, // [28:42] is the sub-list for method input_type
-	28, // [28:28] is the sub-list for extension type_name
-	28, // [28:28] is the sub-list for extension extendee
-	0,  // [0:28] is the sub-list for field type_name
+	9,  // 12: controlplane.v1.CreateTokenRequest.resource:type_name -> controlplane.v1.ResourceBinding
+	10, // 13: controlplane.v1.CreateTokenResponse.token:type_name -> controlplane.v1.AccessToken
+	10, // 14: controlplane.v1.ListTokensResponse.tokens:type_name -> controlplane.v1.AccessToken
+	10, // 15: controlplane.v1.RevokeTokenResponse.token:type_name -> controlplane.v1.AccessToken
+	36, // 16: controlplane.v1.CreateMyTokenRequest.expires_at:type_name -> google.protobuf.Timestamp
+	9,  // 17: controlplane.v1.CreateMyTokenRequest.resource:type_name -> controlplane.v1.ResourceBinding
+	10, // 18: controlplane.v1.CreateMyTokenResponse.token:type_name -> controlplane.v1.AccessToken
+	10, // 19: controlplane.v1.ListMyTokensResponse.tokens:type_name -> controlplane.v1.AccessToken
+	36, // 20: controlplane.v1.CLILogin.created_at:type_name -> google.protobuf.Timestamp
+	36, // 21: controlplane.v1.CLILogin.expires_at:type_name -> google.protobuf.Timestamp
+	36, // 22: controlplane.v1.CLILogin.last_used_at:type_name -> google.protobuf.Timestamp
+	36, // 23: controlplane.v1.CLILogin.revoked_at:type_name -> google.protobuf.Timestamp
+	25, // 24: controlplane.v1.ListMyCLILoginsResponse.logins:type_name -> controlplane.v1.CLILogin
+	10, // 25: controlplane.v1.UpdateMyTokenResponse.token:type_name -> controlplane.v1.AccessToken
+	10, // 26: controlplane.v1.ExchangeTokenResponse.token:type_name -> controlplane.v1.AccessToken
+	0,  // 27: controlplane.v1.ExchangeFederatedTokenRequest.provider:type_name -> controlplane.v1.FederationProvider
+	36, // 28: controlplane.v1.ExchangeFederatedTokenResponse.expires_at:type_name -> google.protobuf.Timestamp
+	11, // 29: controlplane.v1.AccessTokenService.CreateToken:input_type -> controlplane.v1.CreateTokenRequest
+	13, // 30: controlplane.v1.AccessTokenService.ListTokens:input_type -> controlplane.v1.ListTokensRequest
+	15, // 31: controlplane.v1.AccessTokenService.RevokeToken:input_type -> controlplane.v1.RevokeTokenRequest
+	17, // 32: controlplane.v1.AccessTokenService.CreateMyToken:input_type -> controlplane.v1.CreateMyTokenRequest
+	19, // 33: controlplane.v1.AccessTokenService.ListMyTokens:input_type -> controlplane.v1.ListMyTokensRequest
+	21, // 34: controlplane.v1.AccessTokenService.RevokeMyToken:input_type -> controlplane.v1.RevokeMyTokenRequest
+	30, // 35: controlplane.v1.AccessTokenService.UpdateMyToken:input_type -> controlplane.v1.UpdateMyTokenRequest
+	23, // 36: controlplane.v1.AccessTokenService.ResetDaemonScopePolicy:input_type -> controlplane.v1.ResetDaemonScopePolicyRequest
+	26, // 37: controlplane.v1.AccessTokenService.ListMyCLILogins:input_type -> controlplane.v1.ListMyCLILoginsRequest
+	28, // 38: controlplane.v1.AccessTokenService.RevokeMyCLILogin:input_type -> controlplane.v1.RevokeMyCLILoginRequest
+	32, // 39: controlplane.v1.AccessTokenService.ExchangeToken:input_type -> controlplane.v1.ExchangeTokenRequest
+	34, // 40: controlplane.v1.AccessTokenService.ExchangeFederatedToken:input_type -> controlplane.v1.ExchangeFederatedTokenRequest
+	5,  // 41: controlplane.v1.AccessTokenService.ListOrgMemberGrants:input_type -> controlplane.v1.ListOrgMemberGrantsRequest
+	7,  // 42: controlplane.v1.AccessTokenService.UpdateOrgMemberGrants:input_type -> controlplane.v1.UpdateOrgMemberGrantsRequest
+	12, // 43: controlplane.v1.AccessTokenService.CreateToken:output_type -> controlplane.v1.CreateTokenResponse
+	14, // 44: controlplane.v1.AccessTokenService.ListTokens:output_type -> controlplane.v1.ListTokensResponse
+	16, // 45: controlplane.v1.AccessTokenService.RevokeToken:output_type -> controlplane.v1.RevokeTokenResponse
+	18, // 46: controlplane.v1.AccessTokenService.CreateMyToken:output_type -> controlplane.v1.CreateMyTokenResponse
+	20, // 47: controlplane.v1.AccessTokenService.ListMyTokens:output_type -> controlplane.v1.ListMyTokensResponse
+	22, // 48: controlplane.v1.AccessTokenService.RevokeMyToken:output_type -> controlplane.v1.RevokeMyTokenResponse
+	31, // 49: controlplane.v1.AccessTokenService.UpdateMyToken:output_type -> controlplane.v1.UpdateMyTokenResponse
+	24, // 50: controlplane.v1.AccessTokenService.ResetDaemonScopePolicy:output_type -> controlplane.v1.ResetDaemonScopePolicyResponse
+	27, // 51: controlplane.v1.AccessTokenService.ListMyCLILogins:output_type -> controlplane.v1.ListMyCLILoginsResponse
+	29, // 52: controlplane.v1.AccessTokenService.RevokeMyCLILogin:output_type -> controlplane.v1.RevokeMyCLILoginResponse
+	33, // 53: controlplane.v1.AccessTokenService.ExchangeToken:output_type -> controlplane.v1.ExchangeTokenResponse
+	35, // 54: controlplane.v1.AccessTokenService.ExchangeFederatedToken:output_type -> controlplane.v1.ExchangeFederatedTokenResponse
+	6,  // 55: controlplane.v1.AccessTokenService.ListOrgMemberGrants:output_type -> controlplane.v1.ListOrgMemberGrantsResponse
+	8,  // 56: controlplane.v1.AccessTokenService.UpdateOrgMemberGrants:output_type -> controlplane.v1.UpdateOrgMemberGrantsResponse
+	43, // [43:57] is the sub-list for method output_type
+	29, // [29:43] is the sub-list for method input_type
+	29, // [29:29] is the sub-list for extension type_name
+	29, // [29:29] is the sub-list for extension extendee
+	0,  // [0:29] is the sub-list for field type_name
 }
 
 func init() { file_services_access_token_v1_access_token_proto_init() }

@@ -302,6 +302,11 @@ const PROCEDURE_TIMEOUTS: Record<string, number> = {
   // (2026-11-01), and the roster then read as "no environments".
   "controlplane.v1.DeployService/GetLiveView": 30_000,
   "controlplane.v1.DeployService/ListEnvironments": 30_000,
+  // The Files tab's Machine view (MachineBrowser): one directory read plus a
+  // stat of each entry, anywhere on the machine (a network mount, a 5000-entry
+  // folder). The server allows 20s (file_system.FileSystemRPCDeadlines); this
+  // is that plus 5s, so the server's classified answer arrives first.
+  "reliant.v1.FileSystemService/ListMachineDirectory": 25_000,
 };
 
 /**

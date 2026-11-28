@@ -27,8 +27,6 @@
  */
 
 import { timestampDate, type Timestamp } from "@bufbuild/protobuf/wkt";
-import { Code, ConnectError, type Transport } from "@connectrpc/connect";
-
 import {
   DeployObservedState,
   DeployRolloutPhase,
@@ -47,12 +45,14 @@ import {
   DeployChangeKind,
   DeployCommitComparisonState,
   DeployObjectComparisonState,
-  DeployService,
   type CompareDeployReleasesResponse,
   type DeployObjectDelta,
+  type GetDeployBundleResponse,
+  type GetDeployReleaseResponse,
+  type GetDeployRolloutResponse,
+  type ListDeployPromotionsResponse,
+  type ListDeployReleasesResponse,
 } from "@/gen/controlplane/services/deploy/v1/deploy_pb";
-import { orgRequest } from "@/lib/orgScope";
-import { getControlPlaneClient } from "@/services/controlPlane/client";
 
 // ── Shapes ──────────────────────────────────────────────────────────────────
 
@@ -561,16 +561,11 @@ export function toReleaseBundle(msg: DeployBundle): ReleaseBundle {
   };
 }
 
-// ── RPCs ────────────────────────────────────────────────────────────────────
+// ── Responses ───────────────────────────────────────────────────────────────
 //
-// Each read takes the org it is read in (`orgId`; null names none and the
-// active org is filled on the wire) and names it in the request, so a cached
-// answer is the org its key says (lib/orgScope). The Releases pages pass it
-// through ReleasesApiContext's org-bound api.
-
-function client(transport: Transport) {
-  return getControlPlaneClient(DeployService, transport);
-}
+// The Releases pages read these rpcs on DeployService's generated hooks
+// (hooks/release-queries.ts), each request naming the org it is read in
+// (lib/orgScope); these map each response into what the pages show.
 
 /** How many releases the list asks for. The ledger is newest first. */
 export const RELEASE_LIST_LIMIT = 50;
@@ -581,78 +576,37 @@ export const RELEASE_LIST_LIMIT = 50;
  * server that ignored the field would otherwise put another project's
  * releases, with this project's Promote button, on this screen.
  */
-export async function listProjectReleases(transport: Transport, project: string, limit = RELEASE_LIST_LIMIT, orgId: string | null = null): Promise<ReleaseRecord[]> {
-  const res = await client(transport).listReleases(orgRequest({ project, limit }, orgId));
+export function toProjectReleases(res: ListDeployReleasesResponse, project: string): ReleaseRecord[] {
   return (res.releases ?? [])
     .map(toReleaseRecord)
     .filter((release) => release.version !== "" && (release.project === "" || release.project === project))
     .sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""));
 }
 
-/** One release, with the environments whose CURRENT promotion is it. Null when there is no such release. */
-export async function getProjectRelease(
-  transport: Transport,
-  project: string,
-  version: string,
-  orgId: string | null = null
-): Promise<{ release: ReleaseRecord; currentEnvironmentIds: string[] } | null> {
-  try {
-    const res = await client(transport).getRelease(orgRequest({ project, version }, orgId));
-    if (!res.release) return null;
-    return { release: toReleaseRecord(res.release), currentEnvironmentIds: [...(res.currentEnvironmentIds ?? [])] };
-  } catch (err) {
-    if (err instanceof ConnectError && err.code === Code.NotFound) return null;
-    throw err;
-  }
-}
-
 /**
- * What changed from `from` to `to`; objects are compared in `environmentId`
- * when given, and only `workload`'s objects when that is given too.
+ * One release, with the environments whose CURRENT promotion is it. Null when
+ * there is no such release: an empty response, which is also how the hook
+ * caches GetRelease's NotFound.
  */
-export async function compareProjectReleases(
-  transport: Transport,
-  req: {
-    project: string;
-    from: string;
-    to: string;
-    environmentId?: string;
-    workload?: string;
-  },
-  orgId: string | null = null,
-): Promise<ReleaseComparison> {
-  const res = await client(transport).compareReleases(
-    orgRequest(
-      {
-        project: req.project,
-        fromVersion: req.from,
-        toVersion: req.to,
-        environmentId: req.environmentId ?? "",
-        ...(req.workload ? { workload: req.workload } : {}),
-      },
-      orgId,
-    ),
-  );
-  return toReleaseComparison(res);
+export function toProjectRelease(res: GetDeployReleaseResponse): { release: ReleaseRecord; currentEnvironmentIds: string[] } | null {
+  if (!res.release) return null;
+  return { release: toReleaseRecord(res.release), currentEnvironmentIds: [...(res.currentEnvironmentIds ?? [])] };
 }
 
 /** How many promotions one ledger read loads: a ledger this long may hold older ones. */
 export const PROMOTIONS_PAGE = 100;
 
 /** One environment's promotion ledger, newest first. */
-export async function listReleasePromotions(transport: Transport, environmentId: string, limit = PROMOTIONS_PAGE, orgId: string | null = null): Promise<ReleasePromotion[]> {
-  const res = await client(transport).listPromotions(orgRequest({ environmentId, limit }, orgId));
+export function toReleasePromotions(res: ListDeployPromotionsResponse): ReleasePromotion[] {
   return (res.promotions ?? []).map(toReleasePromotion);
 }
 
 /** How far one promotion has rolled out, judged against its own pins. */
-export async function getPromotionRollout(transport: Transport, environmentId: string, promotionId: string, orgId: string | null = null): Promise<ReleaseRollout | null> {
-  const res = await client(transport).getRollout(orgRequest({ environmentId, promotionId }, orgId));
+export function toPromotionRollout(res: GetDeployRolloutResponse): ReleaseRollout | null {
   return res.rollout ? toReleaseRollout(res.rollout) : null;
 }
 
 /** The bundle one promotion applied. */
-export async function getPromotionBundle(transport: Transport, environmentId: string, bundleId: string, digest: string, orgId: string | null = null): Promise<ReleaseBundle | null> {
-  const res = await client(transport).getBundle(orgRequest({ environmentId, bundleId, digest }, orgId));
+export function toPromotionBundle(res: GetDeployBundleResponse): ReleaseBundle | null {
   return res.bundle ? toReleaseBundle(res.bundle) : null;
 }

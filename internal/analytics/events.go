@@ -3,6 +3,11 @@ package analytics
 
 import "time"
 
+// OriginUnknown is the origin prop when the chat's origin could not be read
+// (the chat failed to load, or its origin is unspecified). It equals
+// core.ChatOriginUnknownLabel; analytics does not import the store.
+const OriginUnknown = "unknown"
+
 // EventType is a product event's name without its "product." prefix.
 type EventType string
 
@@ -86,6 +91,9 @@ type FirstMessageSentMetrics struct {
 	WorkflowName string `json:"workflowName"`
 	WorkflowType string `json:"workflowType"` // builtin, custom
 	Provider     string `json:"provider,omitempty"`
+	// Origin is who started the chat (core.ChatOriginLabel); empty is sent
+	// as OriginUnknown.
+	Origin string `json:"origin"`
 	// FirstForUser is true on the one chat whose first message is also the
 	// user's first message ever (the same message user_first_message is for).
 	FirstForUser bool `json:"firstForUser"`
@@ -126,6 +134,9 @@ type WorkflowMetrics struct {
 	Iterations   int           `json:"iterations,omitempty"`  // For loop workflows
 	IsChild      bool          `json:"isChild"`               // Is this a child workflow
 	PresetTypes  []string      `json:"presetTypes,omitempty"` // "builtin" or "custom" for each preset
+	// Origin is who started the run's chat (core.ChatOriginLabel); empty is
+	// sent as OriginUnknown.
+	Origin string `json:"origin"`
 }
 
 // WorkflowDraftCreatedMetrics tracks when a workflow draft is initially created.
@@ -162,6 +173,10 @@ type MessageSentMetrics struct {
 	WorkflowName   string `json:"workflowName,omitempty"`
 	WorkflowType   string `json:"workflowType,omitempty"` // builtin, custom
 	IsFirstInChat  bool   `json:"isFirstInChat"`          // first message in this chat
+	// Origin is who started the chat (core.ChatOriginLabel): user for a
+	// person's chat, automation/agent/manual_run/cli/... for a run. Empty is
+	// sent as OriginUnknown.
+	Origin string `json:"origin"`
 }
 
 // ProjectOpenedMetrics tracks when a user opens/views a project.

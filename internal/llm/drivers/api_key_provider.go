@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/reliant-labs/reliant/internal/llm/drivers/registry"
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/logging"
 )
@@ -55,7 +56,15 @@ func LookupAvailableDrivers(ctx context.Context, scope Scope) (models.AvailableD
 	if globalAPIKeyProvider == nil {
 		return models.AvailableDrivers{}, fmt.Errorf("%w: API key provider not initialized", ErrDriverLookupFailed)
 	}
-	availableDrivers, err := BuildAvailableDrivers(ctx, globalAPIKeyProvider.repo, scope)
+	return LookupAvailableDriversIn(ctx, globalAPIKeyProvider.repo, scope, AccountAvailabilityClient)
+}
+
+// LookupAvailableDriversIn is LookupAvailableDrivers over the accounts in repo,
+// with each account's availability client built by client, rather than the
+// process's API key provider and AccountAvailabilityClient: for a caller (a
+// test) that holds its own store and must not swap package state.
+func LookupAvailableDriversIn(ctx context.Context, repo AvailabilityStore, scope Scope, client func(ctx context.Context, driverID models.DriverID, cfg models.DriverConfig) (registry.Client, error)) (models.AvailableDrivers, error) {
+	availableDrivers, err := buildAvailableDrivers(ctx, repo, scope, client)
 	if err != nil {
 		return models.AvailableDrivers{}, fmt.Errorf("%w: %w", ErrDriverLookupFailed, err)
 	}

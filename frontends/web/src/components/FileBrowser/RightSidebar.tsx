@@ -2,6 +2,9 @@ import { useState, useEffect, useCallback, useRef, type KeyboardEvent, type Reac
 import { Files, GitBranch, ListTodo, Check, Terminal, Globe, PanelBottom } from "lucide-react";
 import { FileTree, type FileTreeHandle } from "./FileTree";
 import { FileTreeToolbar } from "./FileTreeToolbar";
+import { FileScopeSwitcher } from "./FileScopeSwitcher";
+import { MachineBrowser } from "./MachineBrowser";
+import { useFileBrowserScopeStore } from "../../store/fileBrowserScopeStore";
 import { useProjectStore } from "../../store/projectStore";
 import { useShortcutLabel, withShortcut } from "../../store/shortcutsStore";
 import { useViewerStore } from "../../store/viewerStore";
@@ -101,6 +104,21 @@ export function RightSidebar() {
     : [];
 
   const activeChatId = useActiveChatId();
+
+  // What the Files tab shows: the project tree, the chat's scratch directory
+  // or the whole machine (fileBrowserScopeStore). Back to the project tree
+  // when the project changes: a machine-wide path is the previous project's
+  // machine's.
+  const fileScope = useFileBrowserScopeStore((state) => state.scope);
+  const resetFileScope = useFileBrowserScopeStore((state) => state.reset);
+  useEffect(() => {
+    resetFileScope();
+  }, [currentProject?.id, resetFileScope]);
+  // A chat's scratch directory is that chat's: back to its root on a switch.
+  const navigateFileScope = useFileBrowserScopeStore((state) => state.navigate);
+  useEffect(() => {
+    navigateFileScope("scratch", null);
+  }, [activeChatId, navigateFileScope]);
 
   // Task stats from React Query
   const taskStats = useTaskStats(activeChatId);
@@ -639,7 +657,8 @@ export function RightSidebar() {
       </div>
 
       {/* Header and search bar - only show for files tab */}
-      {activeSidebarTab === "files" && (
+      {activeSidebarTab === "files" && currentProject && <FileScopeSwitcher hasChat={!!activeChatId} />}
+      {activeSidebarTab === "files" && fileScope === "project" && (
         <FileTreeToolbar
           projectName={currentProject?.name}
           onNewFile={handleToolbarNewFile}
@@ -657,7 +676,7 @@ export function RightSidebar() {
         aria-labelledby={`right-sidebar-tab-${activeSidebarTab}`}
       >
         {/* Keep FileTree mounted but hidden to preserve state and scroll position */}
-        <div className={cn("flex-1 overflow-y-auto", activeSidebarTab !== "files" && "hidden")}>
+        <div className={cn("flex-1 overflow-y-auto", (activeSidebarTab !== "files" || fileScope !== "project") && "hidden")}>
           <FileTree
             ref={fileTreeRef}
             key={treeKey}
@@ -678,6 +697,17 @@ export function RightSidebar() {
             autoFocus={shouldAutoFocus}
           />
         </div>
+        {activeSidebarTab === "files" && fileScope !== "project" && currentProject && (
+          <div className="flex-1 min-h-0">
+            <MachineBrowser
+              key={fileScope}
+              scope={fileScope}
+              worktreeId={activeWorktreeId}
+              chatId={activeChatId}
+              showHidden={showHidden}
+            />
+          </div>
+        )}
         {activeSidebarTab === "changes" && (
           <div className="flex-1 overflow-y-auto">
             {currentProject ? (

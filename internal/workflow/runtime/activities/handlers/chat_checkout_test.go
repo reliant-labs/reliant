@@ -78,6 +78,7 @@ func (f *chatCheckoutFixture) run(t *testing.T, executor *daemonLikeExecutor) *r
 // run's path, computed where the project was created, is rebased onto it, and
 // the call is pinned to the machine whose path it carries.
 func TestExecuteTools_AChatThatMovedMachinesRunsAtTheNewMachinesCheckout(t *testing.T) {
+	t.Parallel()
 	f := newChatCheckoutFixture(t)
 	cloudDir := t.TempDir()
 	f.machine(t, "cloud-box", cloudDir)
@@ -102,6 +103,7 @@ func TestExecuteTools_AChatThatMovedMachinesRunsAtTheNewMachinesCheckout(t *test
 // worktree, and it runs there on the worktree's owner — never rebased into the
 // owner's main checkout, which would run the branch chat on the main checkout.
 func TestExecuteTools_ABranchWorktreeUnderTheCreationPathIsNeverRebased(t *testing.T) {
+	t.Parallel()
 	f := newChatCheckoutFixture(t)
 	cloudDir := t.TempDir()
 	f.machine(t, "cloud-box", cloudDir)
@@ -142,6 +144,7 @@ func TestExecuteTools_ABranchWorktreeUnderTheCreationPathIsNeverRebased(t *testi
 // the other machine, and no ensure (which could recreate the worktree there)
 // is sent (#2085).
 func TestExecuteTools_ASelectorNamingAnotherMachineThanTheBranchOwnerIsRefused(t *testing.T) {
+	t.Parallel()
 	f := newChatCheckoutFixture(t)
 	f.machine(t, "owner-box", t.TempDir())
 	f.machine(t, "other-box", t.TempDir())
@@ -181,6 +184,7 @@ func TestExecuteTools_ASelectorNamingAnotherMachineThanTheBranchOwnerIsRefused(t
 // answers with the reason and the way out, nothing runs, and putting the
 // project there unblocks the very next call with no restart.
 func TestExecuteTools_NoCheckoutOnTheChatsMachineRefusesWithTheWayOutThenRecovers(t *testing.T) {
+	t.Parallel()
 	f := newChatCheckoutFixture(t)
 	f.machine(t, "bare-box", "")
 	f.pin(t, "bare-box")
@@ -208,6 +212,7 @@ func TestExecuteTools_NoCheckoutOnTheChatsMachineRefusesWithTheWayOutThenRecover
 // A run step on a machine with no checkout fails as a command with the reason
 // (exit -1), never a stuck or retried step, and never runs anywhere.
 func TestRunStep_NoCheckoutOnTheRunsMachineFailsTheCommandWithTheWayOut(t *testing.T) {
+	t.Parallel()
 	f := newChatCheckoutFixture(t)
 	f.machine(t, "bare-box", "")
 	f.pin(t, "bare-box")
@@ -229,6 +234,7 @@ func TestRunStep_NoCheckoutOnTheRunsMachineFailsTheCommandWithTheWayOut(t *testi
 
 // A run step runs in its machine's own checkout, pinned to that machine.
 func TestRunStep_RunsInTheMachinesOwnCheckout(t *testing.T) {
+	t.Parallel()
 	f := newChatCheckoutFixture(t)
 	cloudDir := t.TempDir()
 	f.machine(t, "cloud-box", cloudDir)

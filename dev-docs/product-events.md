@@ -103,6 +103,26 @@ stopped on 2026-10-24.)
 sub-agent, or a node of a parent graph) and false for one a user, trigger or API
 call started, so a panel counting runs filters `is_child != 'true'`.
 
+The chat and run events, and their props:
+
+| event | emitted by | props |
+| --- | --- | --- |
+| `message_sent` | API server; worker (agent and trigger delivery through `agentruns`) | `message_id`, `chat_id`, `project_id`, `workflow_id`, `thread_id`, `has_attachments`, `content_length`, `is_first_in_chat`, `workflow_name`, `workflow_type`, `origin` |
+| `first_message_sent` | same as `message_sent` | `chat_id`, `project_id`, `workflow_name`, `workflow_type`, `first_for_user`, `provider`, `origin` |
+| `workflow_started` | worker | `workflow_id`, `workflow_name`, `workflow_type`, `chat_id`, `project_id`, `is_workspace`, `is_child`, `model_id`, `presets`, `preset_types`, `providers`, `origin` |
+| `workflow_ended` | worker | `workflow_started`'s, plus `duration_ms`, `success`, `error_message`, `iterations` |
+
+**`origin` is who started the chat** (`chats.origin`, `core.ChatOriginLabel`):
+`user` for a chat a person started, `automation` (a schedule, webhook,
+integration or workflow event), `agent` (an agent started it through the API),
+`manual_run`, `builder_test` or `cli`; `unknown` when the chat could not be read.
+It is always present. It is read off the chat the emitter already loaded, so it
+costs no extra query, and a failed read sends `unknown` rather than failing the
+request. `workflow_name IN ('builtin://agent', '')` does not tell a person from a
+run (a CLI run or an agent-started chat is a plain agent chat too): count a
+person's activity with `origin = 'user'`. Events from releases before `origin`
+shipped have no `origin` prop at all.
+
 `session_start` is the API server's: the first authenticated request after a
 user was idle for 30 minutes (the auth interceptor's session tracker, in memory
 and per replica). `app_first_session` rides on it: the first `session_start` of a

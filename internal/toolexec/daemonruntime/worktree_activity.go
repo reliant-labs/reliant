@@ -417,7 +417,7 @@ func beginRecoveryCommand(name string, payload []byte) (func(), error) {
 		}
 		if json.Unmarshal(payload, &req) == nil {
 			switch name {
-			case "fs.read_file", "fs.read_binary_file", "fs.pdf_page_count", "fs.read_pdf_pages", "fs.write_file", "fs.write_binary_file", "fs.create_binary_file", "fs.patch_file", "fs.stat", "fs.list_dir", "fs.mkdir", "fs.delete", "fs.get_tree":
+			case "fs.read_file", "fs.read_binary_file", "fs.pdf_page_count", "fs.read_pdf_pages", "fs.write_file", "fs.write_binary_file", "fs.create_binary_file", "fs.patch_file", "fs.stat", "fs.list_dir", fsListMachineDirCommand, "fs.mkdir", "fs.delete", "fs.get_tree":
 				if req.Path != "" {
 					paths = []string{req.Path}
 				}

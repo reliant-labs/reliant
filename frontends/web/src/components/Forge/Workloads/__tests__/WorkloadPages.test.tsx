@@ -8,11 +8,15 @@
  * a local dev and a kind this build does not know.
  */
 
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
+import { setTransport } from "@/lib/connect";
+import { mockTransport } from "@/lib/test-utils";
+import type { CloudEnvStatus } from "@/services/forge/cloudEnvs";
 import type { LiveEnv, LiveEnvKind } from "@/services/forge/live";
+import { environmentStatusHandlers } from "@/test/deployReads";
 
 import { FIXTURE_HOSTED, createWorkloadsFixtureApi } from "../__fixtures__/workloadFixtures";
 import { WorkloadsProviders } from "./workloadsTestUtils";
@@ -21,7 +25,8 @@ const route = vi.hoisted(() => ({ params: { env: "prod", name: "admin-server" } 
 const cloud = vi.hoisted(() => ({
   restartWorkload: vi.fn(),
   setWorkloadRunState: vi.fn(),
-  getEnvironmentStatus: vi.fn(),
+  // GetStatus, as its handler sees it: the environment id and the org it was read in.
+  getEnvironmentStatus: vi.fn<(environmentId: string, orgId: string | null) => Promise<CloudEnvStatus>>(),
 }));
 
 vi.mock("uplot", async () => (await import("../../Observability/__tests__/obsMocks")).obsMocks.uplot());
@@ -35,7 +40,6 @@ vi.mock("@/services/forge/cloudEnvs", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/services/forge/cloudEnvs")>()),
   restartWorkload: (_transport: unknown, ...args: unknown[]) => cloud.restartWorkload(...args),
   setWorkloadRunState: (_transport: unknown, ...args: unknown[]) => cloud.setWorkloadRunState(...args),
-  getEnvironmentStatus: (_transport: unknown, ...args: unknown[]) => cloud.getEnvironmentStatus(...args),
 }));
 
 // The roster: env names resolve to the control plane's ids, which differ from
@@ -101,7 +105,10 @@ function open(env: string, name = "admin-server", obs = everywhere()) {
 
 const ready = async () => waitFor(() => expect(screen.getByTestId("workload-detail")).toHaveAttribute("data-state", "ready"));
 
+afterEach(() => setTransport(null));
+
 beforeEach(() => {
+  setTransport(mockTransport(environmentStatusHandlers((req) => cloud.getEnvironmentStatus(req.environmentId, req.orgId || null))));
   cloud.restartWorkload.mockReset().mockResolvedValue({ environmentId: "env-prod", environmentName: "prod", workload: "admin-server", requestedAt: null });
   cloud.setWorkloadRunState.mockReset().mockResolvedValue(undefined);
   cloud.getEnvironmentStatus.mockReset().mockResolvedValue({

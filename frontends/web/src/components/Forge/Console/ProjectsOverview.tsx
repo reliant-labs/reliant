@@ -1,28 +1,28 @@
 // Copyright (c) 2026 Reliant Labs
 
 /**
- * Home while the shell shows several projects (U6b, owner 2026-11-20), at
- * the top of the Projects page: one compact row per project — its health, errors and p95 in prod over the
- * last 24 hours, its last release — and a way into that project alone.
+ * The Overview of several projects (U6b, owner 2026-11-20): one compact row
+ * per project — its health, errors and p95 in prod over the last 24 hours,
+ * its last release, its cost this month — and a way into that project alone.
+ * It is the console's aggregate page for the Overview (aggregate/registry.ts)
+ * and the Home at the top of the Projects page (ProjectsOverview).
  */
 
 import { useMemo } from "react";
-import { ChevronRight } from "lucide-react";
 
 import Status from "@/components/forge-ui/status";
 import { useApps } from "@/hooks/apps-queries";
 import { useProjectCost } from "@/hooks/organization-usage-queries";
 import { useObservabilityOrg, usePanelQuery } from "@/hooks/observability-queries";
 import type { HostedVerdict } from "@/services/forge/topology";
-import type { ProjectCatalogRow } from "@/services/projects/catalog";
 
 import { verdictBusy, verdictTone } from "../../Apps/appParts";
-import { ProjectMark } from "../../Layout/ProjectMark";
-import { navigateWithShellScope } from "../../Layout/shellScopeNav";
-import { deployedAppOf, sectionsAppOf, useShellLastPick, useShellSeveral } from "../../Layout/sidebar/shellProject";
 import { formatAgo, formatCount, formatDuration } from "../Observability/format";
 import { redPanel } from "../Observability/Home/homeModel";
-import { consolePath } from "./paths";
+import { AggregatePage, ProjectBreakdown, type AggregateTotal, type BreakdownColumn } from "./aggregate/AggregatePage";
+import { DrillDownHint } from "./aggregate/DrillDownHint";
+import type { AggregatePageProps } from "./aggregate/registry";
+import { useSeveralApps, type SeveralApp } from "./severalProjects";
 
 const VERDICT_LABEL: Partial<Record<HostedVerdict, string>> = {
   converged: "Healthy",
@@ -31,30 +31,47 @@ const VERDICT_LABEL: Partial<Record<HostedVerdict, string>> = {
   degraded: "Degraded",
 };
 
+const OVERVIEW_PAGE = { kind: "overview" } as const;
+
+/** The Overview of the projects the shell shows, outside the console (the Projects page's Home). */
 export function ProjectsOverview() {
-  const { mode, rows } = useShellSeveral();
-  if (!mode) return null;
+  const several = useSeveralApps();
+  if (!several) return null;
+  return <ProjectsOverviewPage page={OVERVIEW_PAGE} apps={several.apps} mode={several.mode} />;
+}
+
+const COLUMNS: readonly BreakdownColumn[] = [
+  { header: "Health" },
+  { header: "Errors", align: "end" },
+  { header: "p95", align: "end" },
+  { header: "Last release", track: "minmax(0,1.5fr)" },
+  { header: "Cost", align: "end" },
+];
+
+/**
+ * The totals strip's figures over every project in scope. They come from the
+ * backend's portfolio read, never from summing the rows here; until that read
+ * exists the page shows no strip.
+ */
+function useOverviewTotals(_apps: readonly SeveralApp[]): readonly AggregateTotal[] | undefined {
+  return undefined;
+}
+
+/** The Overview's aggregate page: a row per project in scope. */
+export function ProjectsOverviewPage({ page, apps, mode }: AggregatePageProps) {
+  const totals = useOverviewTotals(apps);
   return (
-    <div className="mx-auto max-w-[var(--page-max)]" data-testid="projects-overview">
-      <h1 className="text-section text-ink">Overview</h1>
-      <p className="mt-1 text-ui text-ink-muted">
-        {mode === "all" ? "Every project" : `${rows.length} projects`}, in prod over the last 24 hours; cost is this month to date.
-      </p>
-      <div className="mt-5 overflow-hidden rounded-xl border border-border">
-        <div className="grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.5fr)_minmax(0,1fr)_2rem] items-center gap-4 border-b border-border px-4 py-2 text-meta text-ink-muted">
-          <span>Project</span>
-          <span>Health</span>
-          <span className="text-right">Errors</span>
-          <span className="text-right">p95</span>
-          <span>Last release</span>
-          <span className="text-right">Cost</span>
-          <span />
-        </div>
-        {rows.map((row) => (
-          <ProjectRow key={row.key} row={row} />
-        ))}
-      </div>
-    </div>
+    <AggregatePage
+      title="Overview"
+      mode={mode}
+      count={apps.length}
+      coverage="in prod over the last 24 hours; cost is this month to date"
+      totals={totals}
+      hint={<DrillDownHint purpose="see its workloads, what needs attention and its recent releases" projects={apps} page={page} />}
+      testId="projects-overview"
+    >
+      <ProjectBreakdown projects={apps} page={page} columns={COLUMNS} Cells={OverviewCells} rowTestId={(project) => `projects-overview-row-${project.key}`} />
+    </AggregatePage>
   );
 }
 
@@ -82,12 +99,11 @@ export function useAppHealth(app: string, deployed: boolean) {
 
 export const VERDICT_WORDS = VERDICT_LABEL;
 
-function ProjectRow({ row }: { row: ProjectCatalogRow }) {
-  const setLastPick = useShellLastPick((state) => state.set);
-  const deployed = deployedAppOf(row);
-  const app = sectionsAppOf(row) ?? row.name;
-  const { prod, errors, p95 } = useAppHealth(app, !!deployed);
-  const href = consolePath(app, { kind: "overview" });
+/** A project's cells: health, errors, p95, last release, cost. */
+function OverviewCells({ project }: { project: SeveralApp }) {
+  const deployed = !!project.deployed;
+  const app = project.app;
+  const { prod, errors, p95 } = useAppHealth(app, deployed);
   const deployedAt = prod?.deployedAt ? Date.parse(prod.deployedAt) : NaN;
   // GetProjectCost (U6c): hosted compute, database storage and CDN, month to date.
   const org = useObservabilityOrg();
@@ -96,23 +112,7 @@ function ProjectRow({ row }: { row: ProjectCatalogRow }) {
   const costText = mtd === undefined ? "—" : `$${(Number(mtd) / 1e9).toFixed(2)}`;
 
   return (
-    <a
-      href={href}
-      onClick={(event) => {
-        if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return;
-        event.preventDefault();
-        // Into this project alone: the shell's one project, on its app's Overview.
-        setLastPick(row.key);
-        navigateWithShellScope(undefined, { to: href });
-      }}
-      data-testid={`projects-overview-row-${row.key}`}
-      className="no-color grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.5fr)_minmax(0,1fr)_2rem] items-center gap-4 border-b border-border-subtle px-4 py-3 text-ui text-ink transition-colors last:border-b-0 hover:bg-ink/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
-    >
-      <span className="flex min-w-0 items-center gap-2">
-        <ProjectMark name={row.name} />
-        <span className="min-w-0 truncate font-medium">{row.name}</span>
-        {app !== row.name && <span className="min-w-0 truncate text-meta text-ink-muted">{app}</span>}
-      </span>
+    <>
       <span className="min-w-0">
         {!deployed ? (
           <span className="text-ink-muted">Not deployed</span>
@@ -135,7 +135,6 @@ function ProjectRow({ row }: { row: ProjectCatalogRow }) {
         )}
       </span>
       <span className="text-right tabular-nums">{costText}</span>
-      <ChevronRight className="size-4 justify-self-end text-ink-muted" aria-hidden="true" />
-    </a>
+    </>
   );
 }

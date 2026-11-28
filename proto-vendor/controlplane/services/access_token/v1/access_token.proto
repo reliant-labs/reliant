@@ -189,8 +189,10 @@ service AccessTokenService {
   // organization (Organization settings → GitHub). That link names the org
   // the token is minted into; nothing in the request does.
   //
-  // The token carries only federatable scopes (today tests:write), acts as
-  // no one, lives at most the configured TTL (15 minutes), and each ID token
+  // The token carries only federatable scopes: tests:write for any admitted
+  // run, and sbom:write only for a job on a protected ref (ref_protected),
+  // never one run by workflow_run. It acts as no one, lives at most the
+  // configured TTL (15 minutes), and each ID token
   // is exchanged at most once (oidc_token_replayed). Unlinking the
   // installation revokes the live tokens it authorized.
   //
@@ -335,7 +337,8 @@ message UpdateOrgMemberGrantsResponse {
 }
 
 // ResourceBinding confines a token to one resource. kind is one of
-// "daemon" | "port" | "connector" (forge/pkg/accesstoken.AllResourceKinds).
+// "daemon" | "port" | "connector" | "environment"
+// (forge/pkg/accesstoken.AllResourceKinds).
 message ResourceBinding {
   string kind = 1;
   string id = 2;
@@ -378,6 +381,15 @@ message CreateTokenRequest {
   // org. A person must be a member of it; a machine credential may name only
   // its own org.
   optional string org_id = 4;
+  // resource, when set, confines the token to one resource. An org token
+  // may be bound only to an ENVIRONMENT of the org (kind "environment", id a
+  // live deploy environment of the org; any other is NotFound, so the mint is
+  // no existence oracle), and then every scope it carries must be one that
+  // binds to an environment (forge/pkg/accesstoken: obs:read, db:query,
+  // changes:read, ...). The app credential of a deploy not on Reliant
+  // hosting is the case: changes:read bound to the one environment whose
+  // Changes snapshot it fetches. Unset: an org-wide token, as before.
+  ResourceBinding resource = 5;
 }
 
 message CreateTokenResponse {

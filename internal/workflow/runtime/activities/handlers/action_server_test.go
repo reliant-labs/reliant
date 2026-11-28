@@ -220,6 +220,7 @@ func (f fakeRunRows) LoadWorkflow(_ context.Context, id string) (*core.Workflow,
 // recorded none; a definition that cannot be placed is unknown, never
 // guessed; a builtin:// ref needs no lookup at all.
 func TestServerActionResolverPrincipalAndBuiltinProvenance(t *testing.T) {
+	t.Parallel()
 	repo := db.NewTestRepo(t)
 	defer repo.Close()
 	ctx := context.Background()
@@ -254,6 +255,7 @@ func TestServerActionResolverPrincipalAndBuiltinProvenance(t *testing.T) {
 // A project workflow is placed through the catalog the run pinned: its file,
 // and the branch and commit its repo was synced from.
 func TestServerActionResolverPlacesAPinnedProjectWorkflow(t *testing.T) {
+	t.Parallel()
 	repo := db.NewTestRepo(t)
 	defer repo.Close()
 	ctx := context.Background()

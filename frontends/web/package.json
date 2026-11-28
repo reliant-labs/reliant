@@ -71,6 +71,7 @@
           "controlplane.v1.OrganizationService",
           "controlplane.v1.RumService",
           "controlplane.v1.SecretStoreService",
+          "controlplane.v1.SiteAuditService",
           "controlplane.v1.StaticSiteService",
           "controlplane.v1.StorageBrowserService",
           "controlplane.v1.TestsService",

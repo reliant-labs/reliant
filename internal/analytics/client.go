@@ -219,6 +219,7 @@ func (t Tracker) TrackMessageSent(m MessageSentMetrics) {
 		slog.Bool("has_attachments", m.HasAttachments),
 		slog.Int("content_length", m.ContentLength),
 		slog.Bool("is_first_in_chat", m.IsFirstInChat),
+		originField(m.Origin),
 	}
 	fields = appendNonEmpty(fields, "workflow_id", m.WorkflowID)
 	fields = appendNonEmpty(fields, "thread_id", m.ThreadID)
@@ -259,6 +260,7 @@ func workflowFields(m WorkflowMetrics) []slog.Attr {
 		slog.String("chat_id", m.ChatID),
 		slog.Bool("is_workspace", m.IsWorkspace),
 		slog.Bool("is_child", m.IsChild),
+		originField(m.Origin),
 	}
 	fields = appendNonEmpty(fields, "project_id", m.ProjectID)
 	fields = appendNonEmpty(fields, "model_id", m.ModelID)
@@ -355,6 +357,7 @@ func (t Tracker) TrackFirstMessageSent(m FirstMessageSentMetrics) {
 		slog.String("workflow_name", m.WorkflowName),
 		slog.String("workflow_type", m.WorkflowType),
 		slog.Bool("first_for_user", m.FirstForUser),
+		originField(m.Origin),
 	}
 	fields = appendNonEmpty(fields, "provider", m.Provider)
 	t.emit(EventFirstMessageSent, "", fields...)
@@ -382,6 +385,15 @@ func (t Tracker) TrackOnboardingEvent(eventType EventType, m OnboardingMetrics) 
 	fields = appendNonEmpty(fields, "step_id", m.StepID)
 	fields = appendNonEmpty(fields, "step_name", m.StepName)
 	t.emit(eventType, "", fields...)
+}
+
+// originField is the origin prop, always present: a consumer filters on
+// origin = 'user', so a missing origin reads as OriginUnknown, never absent.
+func originField(origin string) slog.Attr {
+	if origin == "" {
+		origin = OriginUnknown
+	}
+	return slog.String("origin", origin)
 }
 
 func appendNonEmpty(fields []slog.Attr, key, value string) []slog.Attr {

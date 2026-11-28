@@ -97,6 +97,7 @@ func emptyAmbientTools() *reliantv1.ToolsConfig {
 // This additionally runs the real OpenAI adapter and captures its HTTP body,
 // proving the policy survives provider message conversion, not only assembly.
 func TestCallLLM_ExcludeAmbientMemoryOutgoingHTTP(t *testing.T) {
+	t.Parallel()
 	for _, excluded := range []bool{false, true} {
 		t.Run(fmt.Sprintf("excluded=%t", excluded), func(t *testing.T) {
 			h := NewIdempotencyTestHelper(t)
@@ -154,6 +155,7 @@ func TestCallLLM_ExcludeAmbientMemoryOutgoingHTTP(t *testing.T) {
 }
 
 func TestCallLLM_ExcludeAmbientMemoryProviderBoundary(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		name                    string
 		local, inherited, retry bool
@@ -220,6 +222,7 @@ func TestCallLLM_ExcludeAmbientMemoryProviderBoundary(t *testing.T) {
 // input and constructing a fresh activity handler. The durable thread and its
 // lineage, not a surviving in-memory tracker, must keep memories out.
 func TestCallLLM_ExcludeAmbientMemoryDurableRecovery(t *testing.T) {
+	t.Parallel()
 	h := NewIdempotencyTestHelper(t)
 	defer h.Cleanup()
 	ctx := context.Background()
@@ -279,6 +282,7 @@ func (f failingAmbientPolicyStore) ResolveThreadAmbientMemoryExclusion(context.C
 }
 
 func TestCallLLM_ExcludeAmbientMemoryFailsClosed(t *testing.T) {
+	t.Parallel()
 	h := NewIdempotencyTestHelper(t)
 	defer h.Cleanup()
 	ctx := context.Background()
@@ -298,6 +302,7 @@ func TestCallLLM_ExcludeAmbientMemoryFailsClosed(t *testing.T) {
 // Real storage plus real CallLLM assembly: incomplete lineage must stop before
 // the driver sees any request, including when surviving nodes default to false.
 func TestCallLLM_ExcludeAmbientMemoryIncompleteLineageNoProviderRequest(t *testing.T) {
+	t.Parallel()
 	for _, kind := range []string{"missing parent", "missing grandparent", "self cycle", "two node cycle", "depth limit"} {
 		t.Run(kind, func(t *testing.T) {
 			h := NewIdempotencyTestHelper(t)
@@ -363,6 +368,7 @@ func TestCallLLM_ExcludeAmbientMemoryIncompleteLineageNoProviderRequest(t *testi
 // Machine-less runs still see the configured skill catalog and generic harness
 // instructions; an empty config removes the catalog, not the harness.
 func TestCallLLM_ExcludeAmbientMemoryMinimalMachineLessContext(t *testing.T) {
+	t.Parallel()
 	for _, catalog := range []bool{false, true} {
 		name := "empty project config"
 		if catalog {

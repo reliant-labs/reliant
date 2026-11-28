@@ -27,6 +27,7 @@ import (
 var offProviderPreset = models.ModelSelector{ID: "gpt-6.1-sol", Providers: []string{"codex"}}
 
 func TestProviderSwitch_OffProviderPresetDescendantRunsOnTheChatModel(t *testing.T) {
+	t.Parallel()
 	resolve := switchResolver(t, switchDrivers...)
 	require.False(t, defServedBy(mustDef(t, "gpt-6.1-sol"), "anthropic"), "fixture: the bound provider must not serve the preset's model")
 
@@ -98,6 +99,7 @@ func TestProviderSwitch_OffProviderPresetDescendantRunsOnTheChatModel(t *testing
 // The hold keeps its legitimate use: the user's own model choice for a thread
 // (a thread-scoped model edit) waits for the user, as does a root's pick.
 func TestProviderSwitch_UserChoicesStillHold(t *testing.T) {
+	t.Parallel()
 	resolve := switchResolver(t, switchDrivers...)
 	chatModel := models.ModelSelector{ID: "claude-4.5-haiku@anthropic"}
 

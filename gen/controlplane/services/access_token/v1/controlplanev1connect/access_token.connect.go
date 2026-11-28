@@ -153,8 +153,10 @@ type AccessTokenServiceClient interface {
 	// organization (Organization settings → GitHub). That link names the org
 	// the token is minted into; nothing in the request does.
 	//
-	// The token carries only federatable scopes (today tests:write), acts as
-	// no one, lives at most the configured TTL (15 minutes), and each ID token
+	// The token carries only federatable scopes: tests:write for any admitted
+	// run, and sbom:write only for a job on a protected ref (ref_protected),
+	// never one run by workflow_run. It acts as no one, lives at most the
+	// configured TTL (15 minutes), and each ID token
 	// is exchanged at most once (oidc_token_replayed). Unlinking the
 	// installation revokes the live tokens it authorized.
 	//
@@ -422,8 +424,10 @@ type AccessTokenServiceHandler interface {
 	// organization (Organization settings → GitHub). That link names the org
 	// the token is minted into; nothing in the request does.
 	//
-	// The token carries only federatable scopes (today tests:write), acts as
-	// no one, lives at most the configured TTL (15 minutes), and each ID token
+	// The token carries only federatable scopes: tests:write for any admitted
+	// run, and sbom:write only for a job on a protected ref (ref_protected),
+	// never one run by workflow_run. It acts as no one, lives at most the
+	// configured TTL (15 minutes), and each ID token
 	// is exchanged at most once (oidc_token_replayed). Unlinking the
 	// installation revokes the live tokens it authorized.
 	//

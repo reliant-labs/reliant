@@ -2,6 +2,7 @@ package core
 
 import (
 	"encoding/json"
+	"strings"
 	"time"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
@@ -39,6 +40,25 @@ const (
 	ChatOriginBuilderTest ChatOrigin = reliantv1.ChatOrigin_CHAT_ORIGIN_BUILDER_TEST
 	ChatOriginCLI         ChatOrigin = reliantv1.ChatOrigin_CHAT_ORIGIN_CLI
 )
+
+// ChatOriginUnknownLabel is ChatOriginLabel's value for an origin it cannot
+// name: unspecified, or a number this build does not know.
+const ChatOriginUnknownLabel = "unknown"
+
+// ChatOriginLabel is an origin's stable lowercase name — user, automation,
+// agent, manual_run, builder_test, cli — the enum value's name without its
+// CHAT_ORIGIN_ prefix. Product events carry it (the origin prop), so a value
+// never changes once shipped.
+func ChatOriginLabel(o ChatOrigin) string {
+	if o == ChatOriginUnspecified {
+		return ChatOriginUnknownLabel
+	}
+	name, ok := reliantv1.ChatOrigin_name[int32(o)]
+	if !ok {
+		return ChatOriginUnknownLabel
+	}
+	return strings.ToLower(strings.TrimPrefix(name, "CHAT_ORIGIN_"))
+}
 
 // WorkflowState is where a run IS; WorkflowStopReason is why a stopped run
 // stopped. They are always read together — see WorkflowStatus below, which is

@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/reliant-labs/forge/pkg/observe"
+	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/netguard"
 )
@@ -104,6 +105,11 @@ func (r *Refresher) Refresh(ctx context.Context, userID string) error {
 		}
 		return err
 	}
+	// Only the successful provider snapshot commits independently of activation.
+	// Token renewal and failure cleanup must join their caller's transaction.
+	// Snapshot rows are not read by activation and remain valid on rollback;
+	// joining their writes would make concurrent activations conflict.
+	ctx = orm.Detached(ctx)
 	if err := r.grants.ReplaceIntegrationAccess(ctx, userID, IntegrationID, subject, at, grants); err != nil {
 		return fmt.Errorf("ghaccess: record access: %w", err)
 	}

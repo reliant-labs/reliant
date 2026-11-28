@@ -13,7 +13,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/sdk/temporal"
 
-	"github.com/reliant-labs/reliant/internal/llm/drivers"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/registry"
 	"github.com/reliant-labs/reliant/internal/llm/models"
 )
@@ -30,13 +29,17 @@ func switchResolver(t *testing.T, connected ...string) func(llmCallSpec) (*resol
 	t.Helper()
 	ctx := context.Background()
 	userID := "user-" + uuid.NewString()
-	provisionProviderKeys(t, ctx, userID, connected)
-	original := drivers.GetDriver
-	drivers.GetDriver = captureDriverOptionsResolver(&capturedDriverOptions{})
-	t.Cleanup(func() { drivers.GetDriver = original })
+	return switchResolverOver(t, provisionProviderKeys(t, ctx, userID, connected), userID)
+}
+
+// switchResolverOver resolves userID's calls through providers, building no
+// real driver.
+func switchResolverOver(t *testing.T, providers providerSource, userID string) func(llmCallSpec) (*resolvedLLMCall, error) {
+	t.Helper()
+	providers.getDriver = captureDriverOptionsResolver(&capturedDriverOptions{})
 	return func(spec llmCallSpec) (*resolvedLLMCall, error) {
-		spec.UserID, spec.SessionID = userID, "s"
-		return resolveLLMCall(ctx, nil, spec)
+		spec.UserID, spec.SessionID, spec.providers = userID, "s", providers
+		return resolveLLMCall(context.Background(), nil, spec)
 	}
 }
 
@@ -89,16 +92,14 @@ func (disabledProviderClient) ReportAvailability(context.Context) (registry.Prov
 // would silently succeed.
 func switchResolverWithDisabled(t *testing.T, disabled string, connected ...string) func(llmCallSpec) (*resolvedLLMCall, error) {
 	t.Helper()
-	resolve := switchResolver(t, connected...)
-	previous := drivers.AccountAvailabilityClient
-	drivers.AccountAvailabilityClient = func(ctx context.Context, id models.DriverID, cfg models.DriverConfig) (registry.Client, error) {
+	userID := "user-" + uuid.NewString()
+	providers := provisionProviderKeysWith(t, context.Background(), userID, connected, func(_ context.Context, id models.DriverID, _ models.DriverConfig) (registry.Client, error) {
 		if string(id) == disabled {
 			return disabledProviderClient{staticCatalogClient{name: string(id)}}, nil
 		}
-		return previous(ctx, id, cfg)
-	}
-	t.Cleanup(func() { drivers.AccountAvailabilityClient = previous })
-	return resolve
+		return staticCatalogClient{name: string(id)}, nil
+	})
+	return switchResolverOver(t, providers, userID)
 }
 
 // requireOn is the strict final guard: whatever resolved, it resolved on the
@@ -122,6 +123,7 @@ func requireProviderSwitchHold(t *testing.T, res *resolvedLLMCall, err error) {
 }
 
 func TestProviderSwitch_RootKeepsExactModel(t *testing.T) {
+	t.Parallel()
 	resolve := switchResolver(t, switchDrivers...)
 
 	for _, tc := range []struct{ id, selected string }{
@@ -140,6 +142,7 @@ func TestProviderSwitch_RootKeepsExactModel(t *testing.T) {
 // The root is the user's explicit picker selection. When it names a model the
 // selected provider cannot run it is rejected visibly, never substituted.
 func TestProviderSwitch_RootUnavailableExactSelectionIsRejectedNotSubstituted(t *testing.T) {
+	t.Parallel()
 	resolve := switchResolver(t, switchDrivers...)
 
 	for _, tc := range []struct{ name, id, selected string }{
@@ -170,6 +173,7 @@ func TestProviderSwitch_RootUnavailableExactSelectionIsRejectedNotSubstituted(t 
 }
 
 func TestProviderSwitch_DescendantTagsResolveOnSelectedProvider(t *testing.T) {
+	t.Parallel()
 	resolve := switchResolver(t, switchDrivers...)
 
 	for _, selected := range []string{"codex", "anthropic"} {
@@ -191,6 +195,7 @@ func TestProviderSwitch_DescendantTagsResolveOnSelectedProvider(t *testing.T) {
 }
 
 func TestProviderSwitch_DescendantExplicitTagsBeatPresetTags(t *testing.T) {
+	t.Parallel()
 	resolve := switchResolver(t, switchDrivers...)
 
 	want := firstOn(t, models.TagFast, "codex")
@@ -221,6 +226,7 @@ func TestProviderSwitch_DescendantExplicitTagsBeatPresetTags(t *testing.T) {
 }
 
 func TestProviderSwitch_DescendantRecoversPresetTagsFromStaleConcreteModel(t *testing.T) {
+	t.Parallel()
 	resolve := switchResolver(t, switchDrivers...)
 
 	for _, tag := range []string{models.TagFlagship, models.TagFast} {
@@ -254,6 +260,7 @@ func TestProviderSwitch_DescendantRecoversPresetTagsFromStaleConcreteModel(t *te
 // Anthropic leads the fast and flagship tiers and stays connected throughout:
 // any fallthrough lands there.
 func TestProviderSwitch_OldProviderStillAvailableIsNeverChosen(t *testing.T) {
+	t.Parallel()
 	resolve := switchResolver(t, switchDrivers...)
 
 	t.Run("control: without a switch the tier resolves elsewhere, so the cases below discriminate", func(t *testing.T) {
@@ -301,6 +308,7 @@ func TestProviderSwitch_OldProviderStillAvailableIsNeverChosen(t *testing.T) {
 }
 
 func TestProviderSwitch_FallbackSelectorCannotReachOldProvider(t *testing.T) {
+	t.Parallel()
 	// codex is connected but serves nothing; anthropic and openai serve every tier.
 	resolve := switchResolverWithDisabled(t, "codex", switchDrivers...)
 
@@ -335,6 +343,7 @@ func TestProviderSwitch_FallbackSelectorCannotReachOldProvider(t *testing.T) {
 }
 
 func TestProviderSwitch_UnsupportedTagOnSelectedProviderHolds(t *testing.T) {
+	t.Parallel()
 	resolve := switchResolverWithDisabled(t, "codex", switchDrivers...)
 
 	for _, tag := range []string{models.TagFlagship, models.TagFast, models.TagModerate} {
@@ -392,6 +401,7 @@ func TestProviderSwitch_UnsupportedTagOnSelectedProviderHolds(t *testing.T) {
 }
 
 func TestProviderSwitch_UnknownTagHoldsInsteadOfGuessing(t *testing.T) {
+	t.Parallel()
 	resolve := switchResolver(t, switchDrivers...)
 
 	res, err := resolve(llmCallSpec{
@@ -407,6 +417,7 @@ func TestProviderSwitch_UnknownTagHoldsInsteadOfGuessing(t *testing.T) {
 }
 
 func TestProviderSwitch_SelectedProviderNotConnectedHolds(t *testing.T) {
+	t.Parallel()
 	resolve := switchResolver(t, "anthropic", "codex")
 
 	res, err := resolve(llmCallSpec{
@@ -421,6 +432,7 @@ func TestProviderSwitch_SelectedProviderNotConnectedHolds(t *testing.T) {
 }
 
 func TestProviderSwitch_ExactOnlyDescendantOnOldDriver(t *testing.T) {
+	t.Parallel()
 	resolve := switchResolver(t, switchDrivers...)
 
 	t.Run("same model served by the selected driver keeps its id and drops @old", func(t *testing.T) {
@@ -489,6 +501,7 @@ func TestProviderSwitch_ExactOnlyDescendantOnOldDriver(t *testing.T) {
 // selected provider: no path may resolve elsewhere, including a preference
 // whose own provider pin names a connected, unselected provider.
 func TestProviderSwitch_StrictGuardAcrossPrefsPinsAndPresetTags(t *testing.T) {
+	t.Parallel()
 	resolve := switchResolver(t, switchDrivers...)
 	fast := models.ModelSelector{Tags: []string{models.TagFast}}
 
@@ -544,6 +557,7 @@ func TestProviderSwitch_StrictGuardAcrossPrefsPinsAndPresetTags(t *testing.T) {
 // Without a switch nothing changes: a descendant pinned to another provider
 // keeps it. Guards against the constraint leaking into ordinary calls.
 func TestProviderSwitch_NoChatProviderLeavesDescendantsAlone(t *testing.T) {
+	t.Parallel()
 	resolve := switchResolver(t, switchDrivers...)
 
 	res, err := resolve(llmCallSpec{
