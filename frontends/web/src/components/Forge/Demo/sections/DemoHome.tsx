@@ -125,7 +125,8 @@ function Hero() {
         Ship your app safely, see what breaks, and let an agent fix it.
       </h1>
       <p className="max-w-2xl text-base leading-relaxed text-ink-muted">
-        Forge builds, releases and watches your app: errors, traces, session replays and releases in one console. Click anything; nothing here changes.
+        Forge builds and releases your app, and gives it one console: errors, traces and session replays, who uses it, its tests, its security
+        findings and its database. Click anything; nothing here changes.
       </p>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2 pt-1">
         <Link

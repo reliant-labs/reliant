@@ -262,7 +262,7 @@ func (s *Service) trackMessageSent(ctx context.Context, userID string, chat *db.
 	// recorded yet; the claim checks all three and records it in one
 	// statement, so a replayed send or another replica never emits it twice.
 	// A failed claim reports nothing rather than a wrong first.
-	firstForUser, err := s.deps.Repo.ClaimUserActivation(ctx, userID, chat.ID, messageID)
+	firstForUser, err := s.deps.Messages.ClaimUserActivation(ctx, userID, chat.ID, messageID)
 	if err != nil {
 		firstForUser = false
 		logging.WarnContext(ctx, "[Analytics] Could not claim the user's activation; user_first_message not emitted",

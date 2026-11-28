@@ -21,6 +21,19 @@
 # gate reads, so they still run here, from their own module
 # (tools/test-affected changed-tests names them).
 #
+# One invocation has one 10-minute budget for every run of every selected
+# package. Two ways it judges nothing about flakiness, and both are judged
+# again here, one package at a time, from tools/test-affected's per-package
+# patterns (each package alone, its changed tests three runs, its own 10m):
+#   - the selection is too large for one -run argument (over 8 KiB of names:
+#     a wide refactor), so forge runs EVERY test of the selected packages
+#     (`-run '^(Test|Fuzz)'`), three times, under that one budget;
+#   - the only failures are packages that ran out of the budget (`panic: test
+#     timed out`, no `--- FAIL:`, no build failure): load, not a flake
+#     (reliant#3723: internal/db, 589 DB tests x3, timed out with
+#     TestIsRetryableError still waiting for a t.Parallel slot).
+# A changed test that fails alone still fails the gate.
+#
 # forge.yaml's `lint.rules: {flake-check: error}` is the same policy for
 # forge's own gate step; this script blocks on the gate's exit status.
 #
@@ -59,9 +72,30 @@ repeat() {
   $annotate && echo "::endgroup::"
 }
 
-# changed_tests: tools/test-affected's `<pkg>\t<pattern>[\t<module>]` lines.
+# changed_tests: tools/test-affected's `<pkg>\t<pattern>[\t<module>]` lines
+# (TEST_FLAKE_CHANGED_CMD <base> replaces it in scripts/test-test-flake.sh).
 changed_tests() {
+  if [ -n "${TEST_FLAKE_CHANGED_CMD:-}" ]; then "$TEST_FLAKE_CHANGED_CMD" "$base"; return; fi
   go run ./tools/test-affected changed-tests -base "$base" || { echo "test-flake: tools/test-affected changed-tests failed" >&2; return 2; }
+}
+go_test=${TEST_FLAKE_GO_TEST:-scripts/go-test.sh}
+
+# alone <pkgs>: the root module's changed tests of each of <pkgs> (./dir per
+# line, or "all"), one package per go test, three runs, its own 10m budget.
+# 0 every one passed; 1 one failed, or there was nothing to run; 2 the changed
+# tests could not be identified.
+alone() {
+  local want=$1 targets pkg pattern mod rc=0 n=0
+  targets=$(changed_tests) || return 2
+  while IFS=$'\t' read -r pkg pattern mod; do
+    [ -n "$pkg" ] && [ -n "$pattern" ] && [ -z "$mod" ] || continue
+    [ "$want" = all ] || grep -qxF -- "$pkg" <<<"$want" || continue
+    n=$((n + 1))
+    echo "test-flake: $pkg alone: its changed tests (${#pattern}-byte -run), -count=3, its own 10m"
+    "$go_test" -short -count=3 -timeout 10m -run "$pattern" "$pkg" || rc=1
+  done <<<"$targets"
+  [ "$n" -gt 0 ] || return 1
+  return "$rc"
 }
 
 log=$(mktemp)
@@ -83,6 +117,24 @@ if [ "$rc" -ne 0 ]; then
   else
     [ "$rc" -eq 1 ] || echo "test-flake: forge test flakes gate exited $rc" >&2
     status=1
+    # The run judged nothing (every test of the packages, or only out of
+    # budget): judge the changed tests again, one package at a time.
+    mod=$(awk '$1 == "module" { print $2; exit }' go.mod 2>/dev/null)
+    redo=""
+    if grep -qF -- "-run '^(Test|Fuzz)'" "$log"; then
+      redo=all why="the selection outgrew one -run argument, so the gate ran every test of its packages under one 10m budget"
+    elif grep -q '^panic: test timed out' "$log" && ! grep -q -- '--- FAIL: ' "$log" && ! grep -q '\[build failed\]' "$log"; then
+      redo=$(sed -nE "s#^FAIL[[:space:]]+${mod//./\\.}/([^[:space:]]+)[[:space:]].*#./\1#p" "$log" | sort -u)
+      why="only packages that ran out of the 10m budget failed (load, not a flake)"
+    fi
+    if [ -n "$redo" ] && [ -n "$mod" ]; then
+      echo "test-flake: $why; judging the changed tests one package at a time"
+      if alone "$redo"; then
+        echo "flake gate: passed one package at a time ($why)"; status=0
+      else
+        echo "test-flake: FAIL: a changed test failed with its package alone"
+      fi
+    fi
   fi
 fi
 # A nested module's tests (sdk/go), from that module.

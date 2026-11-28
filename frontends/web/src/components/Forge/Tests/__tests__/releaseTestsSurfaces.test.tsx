@@ -17,6 +17,9 @@ import { useReleaseTests } from "@/hooks/test-queries";
 import { releaseTestsOf } from "@/services/controlPlane/tests/wire";
 import { createTestQueryClient } from "@/test/renderWithQuery";
 import { ObservabilityApiProvider } from "@/services/controlPlane/observability/ObservabilityApiContext";
+import { observabilityFixtureTransport } from "@/test/observabilityFixtures";
+import { createTransportScope, TransportScopeProvider } from "@/lib/transportScope";
+import { TestsService } from "@/gen/controlplane/services/tests/v1/tests_pb";
 import { ReleasesApiProvider } from "@/services/forge/ReleasesApiContext";
 
 import { ReleaseDetail, type ReleaseDetailSearch } from "../../Releases/ReleaseDetail";
@@ -28,7 +31,7 @@ import { FIXTURE_RELEASE_COMMITS, FIXTURE_RELEASE_VERSIONS, fixtureReleaseCommit
 import { fixtureReleaseTestsWire } from "../releaseTestsFixtures";
 import { releaseTestsColumnShown, useReleaseTestsColumn } from "../surfaces/ReleaseTestsColumn";
 import { ReleaseTestsTab, releaseTestsHrefs } from "../surfaces/ReleaseTestsTab";
-import { renderWithTests, TestsFixtureProvider } from "./testsTestUtils";
+import { fixtureScope, renderWithTests } from "./testsTestUtils";
 
 vi.mock("@tanstack/react-router", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@tanstack/react-router")>()),
@@ -194,12 +197,25 @@ describe("the Releases list's Tests column", () => {
 // ── Mounted where they live ─────────────────────────────────────────────────
 
 function Providers({ api, children }: { api: FixtureTests; children: ReactNode }) {
+  const [obsApi] = useState(() => fixtureObsApi());
+  const [scope] = useState(() => {
+    const tests = fixtureScope(api).transport;
+    const obs = observabilityFixtureTransport(() => obsApi, Date.now());
+    return createTransportScope({
+      id: "release-tests-fixtures",
+      queryClient: createTestQueryClient(),
+      transport: {
+        unary: (method, ...rest) => (method.parent.typeName === TestsService.typeName ? tests : obs).unary(method, ...rest),
+        stream: (method, ...rest) => (method.parent.typeName === TestsService.typeName ? tests : obs).stream(method, ...rest),
+      },
+    });
+  });
   return (
-    <TestsFixtureProvider fixture={api} queryClient={createTestQueryClient()}>
-      <ObservabilityApiProvider api={fixtureObsApi()}>
+    <TransportScopeProvider scope={scope}>
+      <ObservabilityApiProvider api={obsApi}>
         <ReleasesApiProvider api={createReleasesFixtureApi()}>{children}</ReleasesApiProvider>
       </ObservabilityApiProvider>
-    </TestsFixtureProvider>
+    </TransportScopeProvider>
   );
 }
 

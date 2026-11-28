@@ -5,7 +5,7 @@
  *     its loopback receiver and DO NOT exchange;
  *   - the account has no GitHub App installation: send the user to install,
  *     remembering where they were so the stateless setup return can land back;
- *   - there is no Supabase session in this browser: end on a terminal page
+ *   - nobody is signed in to Reliant in this browser: end on a terminal page
  *     instead of navigating into a route that would ask to sign in.
  */
 
@@ -30,8 +30,10 @@ vi.mock("@/services/controlPlane/git", () => ({
   gitService: { exchangeGithubOAuthCode: mocks.exchangeGithubOAuthCode },
 }));
 
-vi.mock("@/lib/supabase", () => ({
-  supabase: { auth: { getSession: mocks.getSession } },
+// Who is signed in, by the active provider (lib/auth/use-auth): getSession
+// stands for the provider's restored session.
+vi.mock("@/lib/auth/use-auth", () => ({
+  restoredAuthIdentity: async () => ((await mocks.getSession()).data.session ? { id: "u" } : null),
 }));
 
 vi.mock("@/lib/logger", () => ({
@@ -155,7 +157,7 @@ describe("a user with no App installation", () => {
   });
 });
 
-describe("no Supabase session in this browser", () => {
+describe("nobody signed in to Reliant in this browser", () => {
   beforeEach(() => {
     mocks.getSession.mockResolvedValue({ data: { session: null } });
   });

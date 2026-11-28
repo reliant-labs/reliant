@@ -118,7 +118,7 @@ export const overview: NavRow = {
 export const services = consoleRow("services", "Services", { kind: "services" }, icon(Boxes), ["services", "service", "workload"]);
 /** Buckets and managed Postgres (PAGES makes the page top-level). */
 export const storage = consoleRow("storage", "Storage", { kind: "storage" }, icon(HardDrive), ["storage"]);
-export const data = consoleRow("data", "Data", { kind: "data" }, icon(Database), ["data"]);
+export const data: NavRow = { ...consoleRow("data", "Data", { kind: "data" }, icon(Database), ["data"]), tour: "nav-data" };
 export const releases = consoleRow("releases", "Releases", { kind: "releases" }, icon(Tag), ["releases", "release"]);
 
 /** The Environments page's previews view (`?show=previews`), a URL of its own. */
@@ -304,14 +304,15 @@ function obsRow(view: ObsNavView, extra: Partial<NavRow> = {}): NavRow {
   };
 }
 
-const speedInsights: NavRow = {
+/** Site insights (was Speed insights): a site's speed, SEO and accessibility, one page with a tab each. */
+const siteInsights: NavRow = {
   kind: "row",
-  id: "speed-insights",
-  label: "Speed insights",
+  id: "site-insights",
+  label: "Site insights",
   flatIcon: icon(Zap),
-  href: consoleHref({ kind: "speed-insights" }),
-  match: pageIs("speed-insights"),
-  page: "speed-insights",
+  href: consoleHref({ kind: "site-insights" }),
+  match: pageIs("site-insights"),
+  page: "site-insights",
   available: hasApp,
 };
 
@@ -338,7 +339,7 @@ export const performanceRows: readonly NavItem[] = [
   obsRow("errors"),
   alertsRow,
   obsRow("traces"),
-  speedInsights,
+  siteInsights,
   sessionsRow,
 ];
 
@@ -356,11 +357,11 @@ export const obsOverview: NavRow = {
   available: (ctx) => hasApp(ctx) || ctx.mode !== "one",
 };
 
-/** The routes that are Observability: its Overview, every view but Dashboards (top-level), Speed insights, and the org-wide pages. */
+/** The routes that are Observability: its Overview, every view but Dashboards (top-level), Site insights, and the org-wide pages. */
 export const isObservabilityRoute = (ctx: NavCtx): boolean =>
   isObsOverview(ctx) ||
   (ctx.page?.kind === "obs-view" && ctx.page.view !== "dashboards") ||
-  ctx.page?.kind === "speed-insights" ||
+  ctx.page?.kind === "site-insights" ||
   ctx.orgPage?.kind === "observability" ||
   (ctx.orgPage?.kind === "obs-view" && ctx.orgPage.view !== "dashboards");
 
@@ -460,6 +461,7 @@ export const isAnalyticsRoute = (ctx: NavCtx): boolean =>
 export const analyticsGroup: NavGroup = {
   kind: "group",
   id: "analytics",
+  tour: "nav-analytics",
   label: "Analytics",
   icon: icon(BarChart3),
   available: hasApp,

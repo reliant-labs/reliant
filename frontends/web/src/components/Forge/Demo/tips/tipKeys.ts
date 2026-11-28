@@ -10,8 +10,7 @@
  *    which the other shells keep.
  *
  * A page with no tour is null: nothing shows, and an open card closes. The
- * pages the demo does not serve (DEMO_HIDDEN_PAGES) have none, and neither
- * does Experiments, which the demo's nav does not list.
+ * pages the demo does not serve (DEMO_HIDDEN_PAGES) have none.
  */
 
 import { consolePageOf } from "../../Console/paths";
@@ -39,6 +38,7 @@ export const DEMO_TIP_KEYS = [
   "tests-flaky",
   "analytics",
   "events",
+  "experiments",
   "obs-overview",
   "dashboards",
   "errors",
@@ -51,7 +51,7 @@ export const DEMO_TIP_KEYS = [
   "metrics",
   "rpc",
   "graph",
-  "speed-insights",
+  "site-insights",
   "workload",
 ] as const;
 
@@ -136,10 +136,14 @@ export function demoTipKey(pathname: string, search: Record<string, unknown>): D
       return page.tab === "events" ? "events" : "analytics";
     case "events":
       return "events";
+    // One change is a sub-page of Experiments, under the same tip.
+    case "experiments":
+    case "experiment":
+      return "experiments";
     case "obs-overview":
       return "obs-overview";
-    case "speed-insights":
-      return "speed-insights";
+    case "site-insights":
+      return "site-insights";
     // The Product analytics hub's dashboards are Analytics' tabs, not one of the app's dashboards.
     case "dashboard":
       return PEOPLE_DASHBOARD_KEYS.includes(page.key) ? "analytics" : "dashboards";
@@ -173,5 +177,5 @@ export function isDemoSectionPage(pathname: string, search: Record<string, unkno
   if (pathname === FORGE_DEMO_PATH || pathname.startsWith(`${FORGE_DEMO_PATH}/`)) return !search.section;
   const page = consolePageOf(pathname)?.page;
   if (!page) return false;
-  return !["workload", "release", "environment", "dashboard", "service", "vulnerability", "tests-run", "tests-flaky-test"].includes(page.kind);
+  return !["workload", "release", "environment", "dashboard", "service", "vulnerability", "tests-run", "tests-flaky-test", "experiment"].includes(page.kind);
 }

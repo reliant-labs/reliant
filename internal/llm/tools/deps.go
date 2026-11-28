@@ -135,12 +135,6 @@ type SpawnTree interface {
 	ListInheritedSpawnChildren(ctx context.Context, threadID string) ([]*core.InheritedSpawnChild, error)
 }
 
-// startRunLineageReader is what agentStartRunDepth walks: the launch event
-// that started each run in the caller's lineage.
-type startRunLineageReader interface {
-	GetTriggerEventByChat(ctx context.Context, kind core.TriggerEventKind, chatID string) (*core.TriggerEvent, error)
-}
-
 // scenarioLoaderStore is what createScenarioWorkflowLoader reads: the caller's
 // chat (for its project) and the workflow sources refs resolve against.
 type scenarioLoaderStore interface {
@@ -217,6 +211,9 @@ type scenarioFinder interface {
 // are still live. store.TriggerEventExtStore satisfies it.
 type LaunchedRunCounter interface {
 	CountLiveLaunchedRuns(ctx context.Context, userID string, kind core.TriggerEventKind) (int, error)
+	// GetTriggerEventByChat is the launch event of the given kind that started
+	// chatID: what agentStartRunDepth walks up a run's lineage.
+	GetTriggerEventByChat(ctx context.Context, kind core.TriggerEventKind, chatID string) (*core.TriggerEvent, error)
 }
 
 // WorktreeChatLister lists the chats bound to a worktree.
@@ -418,7 +415,6 @@ type spawnStopStore interface {
 // startRunStore is start_run's store.
 type startRunStore interface {
 	runCallerStore
-	startRunLineageReader
 	GetTriggerEventByDedupe(ctx context.Context, kind core.TriggerEventKind, dedupeKey string) (*core.TriggerEvent, error)
 }
 

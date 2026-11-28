@@ -24,7 +24,10 @@
 //      `[data-testid=shell-nav]`: every page of the demo is a page of the app's
 //      one shell, Layout/shell/AppShell.tsx, with the demo's nav, demoNavConfig.ts);
 //    - the sample image's preview (Storage, staging) not rendering, or its URL
-//      not same-origin or shaped like a presigned GCS/S3 link.
+//      not same-origin or shaped like a presigned GCS/S3 link;
+//    - Experiments listing no change, the A/B test showing no results readout,
+//      or either saying Experiments aren't available (the shop pack answers
+//      ChangesService, fixtures/shop/handlers/changes.ts).
 //    Per page it also prints how often "Sample data isn't available" showed (an
 //    RPC the demo has no sample data for): a content gap, not a failure.
 //
@@ -89,6 +92,9 @@ const audited = [
 // SAMPLE_IMAGE_URL): same-origin, never shaped like a presigned GCS/S3 link.
 const sampleImagePage = `${home}/storage?env=staging&bucket=uploads&object=product-photo.png`;
 const PRESIGNED = /storage\.googleapis\.com|amazonaws\.com|X-Goog-|X-Amz-|Signature=|GoogleAccessId/i;
+// Experiments: the list, and the shop's A/B test (model/changes.ts), which has a readout.
+const experimentsPage = `${home}/experiments`;
+const experimentPage = `${home}/experiments/chg-express-checkout-prod`;
 // The demo's own pages, `?section=` of the demo console (demoPath.ts).
 const demoSection = (section) => `/forge/demo?section=${section}`;
 const pages = [
@@ -106,13 +112,15 @@ const pages = [
   `${home}/observability/logs`,
   `${home}/observability/dashboards`,
   `${home}/observability/alerts`,
-  `${home}/speed-insights`,
+  `${home}/site-insights`,
   `${home}/security/vulnerabilities`,
   `${home}/security/sboms`,
   `${home}/tests`,
   `${home}/tests/coverage`,
   `${home}/tests/runs`,
   `${home}/tests/flaky`,
+  experimentsPage,
+  experimentPage,
   ...(auditedEnvs.length ? audited.map((surface) => `${surface.path}?env=${auditedEnvs[0]}`) : []),
   sampleImagePage,
 ];
@@ -138,7 +146,7 @@ const tourStart = "forge:fg-intro";
 // these pages. A row is a link of its own: its label and where it goes.
 const navGroups = {
   Dashboards: [`${home}/observability/dashboards`],
-  Analytics: [`${home}/analytics`, ...["users", "product", "acquisition", "events"].map((tab) => `${home}/analytics/${tab}`)],
+  Analytics: [`${home}/analytics`, ...["users", "product", "acquisition", "events"].map((tab) => `${home}/analytics/${tab}`), experimentsPage],
   Deployments: [`${home}/services`, `${home}/releases`, `${home}/environments`],
   Tests: [`${home}/tests`, `${home}/tests/coverage`, `${home}/tests/runs`, `${home}/tests/flaky`],
   Security: [`${home}/security/vulnerabilities`, `${home}/security/sboms`],
@@ -153,7 +161,7 @@ const navDrill = {
     pages: [
       `${home}/observability`,
       ...["graph", "metrics", "logs", "rpc", "profiles", "errors", "alerts", "traces", "sessions"].map((view) => `${home}/observability/${view}`),
-      `${home}/speed-insights`,
+      `${home}/site-insights`,
     ],
   },
 };
@@ -515,6 +523,11 @@ try {
     if (!(await page.getByTestId("shell-nav").count())) problems.push("not in the app's shell (no [data-testid=shell-nav])");
     problems.push(...(await answerAudit(page, new Set())));
     if (path === sampleImagePage) problems.push(...(await checkSampleImage(page)));
+    if (path === experimentsPage || path === experimentPage) {
+      if (/Experiments aren't available/.test(text)) problems.push(`${path} says Experiments aren't available`);
+      if (path === experimentsPage && !(await page.locator("[data-testid^='change-row-']").count())) problems.push("Experiments lists no change");
+      if (path === experimentPage && !(await page.getByTestId("results-verdict").count())) problems.push("the A/B test shows no results readout");
+    }
     if (process.env.SCREENSHOT_DIR) {
       fs.mkdirSync(process.env.SCREENSHOT_DIR, { recursive: true });
       const name = path === "/" ? "root" : path.replace(/^\//, "").replace(/\//g, "_");

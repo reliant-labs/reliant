@@ -102,7 +102,7 @@ func TestStartChat_BuilderTestRecordsBuilderTestKind(t *testing.T) {
 	chatID := resp.Msg.GetChat().GetId()
 
 	assert.Equal(t, "builder.test", f.launchKind(t, chatID))
-	event, err := f.repo.GetTriggerEventByChatID(f.ctx, chatID)
+	event, err := store.GetTriggerEventByChatID(f.ctx, f.repo.ORM(), chatID)
 	require.NoError(t, err)
 	assert.Equal(t, core.TriggerEventKindBuilderTest, event.Kind)
 	assert.Equal(t, chatID, event.DedupeKey, "attended: deduped on the chat id, like chat.start")

@@ -12,11 +12,10 @@ import (
 
 // Stores is the production store of both receivers and the delivery relay:
 // the repository facade for the reads and the receipt transaction other areas
-// share (GetTrigger, RevokeIntegrationAccess,
+// share (RevokeIntegrationAccess,
 // RecordTriggerDelivery, TriggerDeliveryEvent), joined with the generated
 // stores that own the delivery inbox and the integration routes. The generated
-// methods are forwarded one by one, not embedded: TriggerExtStore also carries
-// GetTrigger, which would make that selector ambiguous.
+// methods are forwarded one by one, not embedded.
 //
 // *db.Repo alone satisfies none of Store, RelayStore or ReceiptStore any more,
 // so a receiver cannot be built over a repository without the delivery inbox:
@@ -58,6 +57,10 @@ func (s Stores) RenewTriggerDelivery(ctx context.Context, id, token string, now,
 
 func (s Stores) PruneTriggerDeliveries(ctx context.Context, before time.Time) (int64, error) {
 	return s.deliveries.PruneTriggerDeliveries(ctx, before)
+}
+
+func (s Stores) GetTrigger(ctx context.Context, id string) (*core.Trigger, error) {
+	return s.triggers.GetTrigger(ctx, id)
 }
 
 func (s Stores) GetTriggerWebhookCredentials(ctx context.Context, id string) (*core.TriggerWebhookCredentials, error) {

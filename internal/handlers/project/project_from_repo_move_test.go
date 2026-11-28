@@ -154,6 +154,87 @@ func TestMachineProjectsDir_ADaemonStartedInsideACheckoutUsesItsParent(t *testin
 	assert.Equal(t, "/home/workspace/projects/new", svc.defaultClonePath(ctx, root, "new"), "the filesystem root is no projects directory")
 }
 
+// seedCheckout records a project checked out at path on machine; a deleted
+// project is scheduled for deletion, as DeleteProject leaves it.
+func seedCheckout(t *testing.T, ctx context.Context, repo *db.Repo, userID, machine, path string, deleted bool) *db.Project {
+	t.Helper()
+	now := time.Now().UTC()
+	p := &db.Project{
+		ID: uuid.NewString(), Name: "p-" + uuid.NewString()[:8], Path: path,
+		UserID: userID, IsGitRepo: true, CreatedAt: now, UpdatedAt: now, LastActive: now,
+	}
+	if deleted {
+		after := now.Add(core.ProjectDeleteWindow)
+		p.DeleteAfter, p.DeletedBy = &after, &userID
+	}
+	require.NoError(t, repo.CreateProject(ctx, p))
+	require.NoError(t, repo.UpsertProjectDaemon(ctx, p.ID, machine, path, nil))
+	return p
+}
+
+// TestMachineProjectsDir_StaleCheckoutAtTheWorkingDirectoryDoesNotDecide is
+// the prod failure of 2026-11-26: a self-hosted machine whose daemon runs in
+// /home/workspace still had an installed row for a deleted project at
+// /home/workspace itself, older than every live checkout under
+// /home/workspace/projects. Its parent won, and the clone failed with "mkdir
+// /home/.reliant-clone-reliant-…: permission denied". The clone goes where
+// the machine's live checkouts are, whether that old project is deleted or
+// not.
+func TestMachineProjectsDir_StaleCheckoutAtTheWorkingDirectoryDoesNotDecide(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		deleted bool
+	}{
+		{"deleted project", true},
+		{"live project", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cp := &cloneStubControlPlane{result: controlplane.CloneRepoResult{Queued: true}}
+			svc, repo, cleanup := newFromRepoService(t, cp)
+			defer cleanup()
+			ctx, userID := fromRepoCtx()
+			selfHosted := "self_hosted"
+			box := "box-" + uuid.NewString()[:8]
+			require.NoError(t, repo.UpsertDaemon(ctx, &db.Daemon{ID: box, UserID: userID, DaemonType: &selfHosted, WorkingDir: ptrStr("/home/workspace")}))
+			seedCheckout(t, ctx, repo, userID, box, "/home/workspace", tc.deleted)
+			seedCheckout(t, ctx, repo, userID, box, "/home/workspace/projects/a", false)
+			seedCheckout(t, ctx, repo, userID, box, "/home/workspace/projects/b", false)
+
+			machine, err := repo.GetDaemon(ctx, box)
+			require.NoError(t, err)
+			assert.Equal(t, "/home/workspace/projects/reliant", svc.defaultClonePath(ctx, machine, "reliant"),
+				"the clone goes beside the machine's live checkouts, never above its working directory")
+		})
+	}
+}
+
+// TestMachineProjectsDir_AFailedCloneIsNoEvidence: a clone that failed left
+// nothing on disk, so however many there are, the directory they were bound
+// for is not where the machine keeps projects.
+func TestMachineProjectsDir_AFailedCloneIsNoEvidence(t *testing.T) {
+	cp := &cloneStubControlPlane{result: controlplane.CloneRepoResult{Queued: true}}
+	svc, repo, cleanup := newFromRepoService(t, cp)
+	defer cleanup()
+	ctx, userID := fromRepoCtx()
+	selfHosted := "self_hosted"
+	box := "box-" + uuid.NewString()[:8]
+	require.NoError(t, repo.UpsertDaemon(ctx, &db.Daemon{ID: box, UserID: userID, DaemonType: &selfHosted, WorkingDir: ptrStr("/home/workspace")}))
+	for _, path := range []string{"/opt/elsewhere/a", "/opt/elsewhere/b"} {
+		p := seedCheckout(t, ctx, repo, userID, box, path, false)
+		recorded, err := repo.RecordFailedProjectDaemonRestoreInScope(ctx, p.ID, box, path, nil, "clone failed", nil)
+		require.NoError(t, err)
+		require.True(t, recorded)
+	}
+	machine, err := repo.GetDaemon(ctx, box)
+	require.NoError(t, err)
+	assert.Equal(t, "/home/workspace/new", svc.defaultClonePath(ctx, machine, "new"),
+		"with no live checkout the working directory decides, not failed clones")
+
+	seedCheckout(t, ctx, repo, userID, box, "/home/workspace/projects/a", false)
+	assert.Equal(t, "/home/workspace/projects/new", svc.defaultClonePath(ctx, machine, "new"),
+		"one live checkout outweighs any number of failed ones")
+}
+
 // TestCreateProjectFromRepo_ClonesAGitHubSSHRemoteOverHTTPS: the clone is
 // queued only when the control plane holds the user's GitHub token, and the
 // machine's git authenticates with that token through a credential helper,

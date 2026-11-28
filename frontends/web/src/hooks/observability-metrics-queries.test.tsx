@@ -13,11 +13,16 @@ import type { ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
 
 import { createFixtureApi } from "@/components/Forge/Observability/__fixtures__/fixtureApi";
-import { ObservabilityApiProvider, type ObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
+import { type ObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
+import { ObservabilityFixtures } from "@/test/observabilityFixtures";
 import type { ObsScope } from "@/services/controlPlane/observability/types";
 import { createTestQueryClient } from "@/test/renderWithQuery";
 
-import { metricKeys, obsKeys, useMetric, useMetricCatalog, useMetricExemplars } from "./observability-queries";
+import { observabilityServiceKeys } from "@/hooks/controlplane/observability-service-hooks_gen";
+import { relativeWindow } from "@/services/controlPlane/observability/api";
+import { metricCatalogRequest, metricRequest } from "@/services/controlPlane/observability/metricsApi";
+
+import { useMetric, useMetricCatalog, useMetricExemplars } from "./observability-queries";
 
 const scope: ObsScope = { orgId: "org-1", projectId: "p", envIds: ["env-prod"], filters: [] };
 
@@ -25,26 +30,27 @@ function setup(api: ObservabilityApi) {
   const client = createTestQueryClient();
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={client}>
-      <ObservabilityApiProvider api={api}>{children}</ObservabilityApiProvider>
+      <ObservabilityFixtures api={api}>{children}</ObservabilityFixtures>
     </QueryClientProvider>
   );
   return { client, wrapper };
 }
 
 describe("metric keys", () => {
-  it("start with the whole scope, so Refresh invalidates them", () => {
-    const prefix = obsKeys.all(scope);
-    for (const key of [metricKeys.all(scope), metricKeys.catalog(scope, "1h", "", 0), metricKeys.detail(scope, "1h", "m", ""), metricKeys.exemplars(scope, "1h", { name: "m" })]) {
-      expect(key.slice(0, prefix.length)).toEqual([...prefix]);
-    }
+  it("name the whole scope in the request, so Refresh and an org switch reach them", () => {
+    const catalog = observabilityServiceKeys.listMetrics(metricCatalogRequest({ ...scope, window: relativeWindow(3_600_000) }));
+    expect(catalog[0]).toBe("controlplane.v1.ObservabilityService");
+    expect(catalog[catalog.length - 1]).toMatchObject({ scope: { orgId: "org-1", projectId: "p", envIds: ["env-prod"] } });
   });
 
   it("differ by scope, range and name, so two views never share an answer", () => {
     const other: ObsScope = { ...scope, envIds: ["env-dev"] };
-    expect(metricKeys.catalog(scope, "1h", "", 0)).not.toEqual(metricKeys.catalog(other, "1h", "", 0));
-    expect(metricKeys.catalog(scope, "1h", "", 0)).not.toEqual(metricKeys.catalog(scope, "6h", "", 0));
-    expect(metricKeys.catalog(scope, "1h", "a", 0)).not.toEqual(metricKeys.catalog(scope, "1h", "b", 0));
-    expect(metricKeys.detail(scope, "1h", "a", "")).not.toEqual(metricKeys.detail(scope, "1h", "a", "gauge"));
+    const catalog = (s: ObsScope, lastMs: number, name = "") => observabilityServiceKeys.listMetrics(metricCatalogRequest({ ...s, window: relativeWindow(lastMs), name }));
+    const detail = (name: string, kind?: "gauge") => observabilityServiceKeys.getMetric(metricRequest({ ...scope, window: relativeWindow(3_600_000), name, kind }));
+    expect(catalog(scope, 3_600_000)).not.toEqual(catalog(other, 3_600_000));
+    expect(catalog(scope, 3_600_000)).not.toEqual(catalog(scope, 6 * 3_600_000));
+    expect(catalog(scope, 3_600_000, "a")).not.toEqual(catalog(scope, 3_600_000, "b"));
+    expect(detail("a")).not.toEqual(detail("a", "gauge"));
   });
 });
 

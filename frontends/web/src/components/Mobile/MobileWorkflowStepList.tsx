@@ -64,7 +64,7 @@ export function MobileWorkflowStepList({
 
   if (orderedIds.length === 0) {
     return (
-      <div className="flex flex-1 items-center justify-center px-6 py-10 text-center text-sm text-muted-foreground">
+      <div className="flex flex-1 items-center justify-center px-6 py-10 text-center text-ui text-muted-foreground">
         This workflow has no steps.
       </div>
     );
@@ -96,12 +96,12 @@ export function MobileWorkflowStepList({
                 <Icon className="h-4 w-4 text-muted-foreground" />
               </span>
               <div className="min-w-0 flex-1">
-                <div className="truncate text-sm text-foreground">
+                <div className="truncate text-ui text-foreground">
                   {getNodeDisplayName(typeKey)}
                 </div>
-                <div className="truncate text-xs text-muted-foreground">{nodeId}</div>
+                <div className="truncate text-meta text-muted-foreground">{nodeId}</div>
               </div>
-              <div className="flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
+              <div className="flex shrink-0 items-center gap-1.5 text-meta text-muted-foreground">
                 <StatusIcon status={status} />
                 <span>{statusLabel(status)}</span>
               </div>
