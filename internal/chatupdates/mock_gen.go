@@ -18,14 +18,15 @@ import (
 )
 
 // forge:section MockService
-// forge:hash=0a0d0f2715b91e3b73627a4804153ce0b3d375f175164cd21093ee75820e31f3
+// forge:hash=4f5cae97095620abc51187d9f1cc599250372e3967d67df30dc6822127149b0f
 
 // MockService is a test mock for the Service interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockService.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockService.<Method>Func not set" error.
 type MockService struct {
 	contractkit.Recorder
 	EmitChatRefetchFunc    func(context.Context, string, core.RefetchType) error
@@ -60,18 +61,87 @@ func (m *MockService) EmitQuestionUpdate(ctx context.Context, chatID string, upd
 	return contractkit.MockNotSet("MockService", "EmitQuestionUpdate")
 }
 
+// MockServiceEmitChatRefetchCall is one recorded call of MockService.EmitChatRefetch, one
+// field per parameter.
+type MockServiceEmitChatRefetchCall struct {
+	Ctx         context.Context
+	ChatID      string
+	RefetchType core.RefetchType
+}
+
+// EmitChatRefetchCalls returns every recorded EmitChatRefetch call, oldest first, with
+// its arguments typed. It reads the same log as Calls("EmitChatRefetch").
+func (m *MockService) EmitChatRefetchCalls() []MockServiceEmitChatRefetchCall {
+	var out []MockServiceEmitChatRefetchCall
+	for _, c := range m.Recorder.Calls("EmitChatRefetch") {
+		var r MockServiceEmitChatRefetchCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ChatID, _ = c.Args[1].(string)
+		r.RefetchType, _ = c.Args[2].(core.RefetchType)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceEmitUserRefetchCall is one recorded call of MockService.EmitUserRefetch, one
+// field per parameter.
+type MockServiceEmitUserRefetchCall struct {
+	Ctx         context.Context
+	UserID      string
+	RefetchType core.RefetchType
+	Opts        core.RefetchOpts
+}
+
+// EmitUserRefetchCalls returns every recorded EmitUserRefetch call, oldest first, with
+// its arguments typed. It reads the same log as Calls("EmitUserRefetch").
+func (m *MockService) EmitUserRefetchCalls() []MockServiceEmitUserRefetchCall {
+	var out []MockServiceEmitUserRefetchCall
+	for _, c := range m.Recorder.Calls("EmitUserRefetch") {
+		var r MockServiceEmitUserRefetchCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.RefetchType, _ = c.Args[2].(core.RefetchType)
+		r.Opts, _ = c.Args[3].(core.RefetchOpts)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceEmitQuestionUpdateCall is one recorded call of MockService.EmitQuestionUpdate, one
+// field per parameter.
+type MockServiceEmitQuestionUpdateCall struct {
+	Ctx    context.Context
+	ChatID string
+	Update core.QuestionUpdate
+}
+
+// EmitQuestionUpdateCalls returns every recorded EmitQuestionUpdate call, oldest first, with
+// its arguments typed. It reads the same log as Calls("EmitQuestionUpdate").
+func (m *MockService) EmitQuestionUpdateCalls() []MockServiceEmitQuestionUpdateCall {
+	var out []MockServiceEmitQuestionUpdateCall
+	for _, c := range m.Recorder.Calls("EmitQuestionUpdate") {
+		var r MockServiceEmitQuestionUpdateCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ChatID, _ = c.Args[1].(string)
+		r.Update, _ = c.Args[2].(core.QuestionUpdate)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ Service = (*MockService)(nil)
 
 // forge:section MockStore
-// forge:hash=7cf8b7c9873f34631540e91dcd2838547aab84dd84e239af17f6ad84a7946f67
+// forge:hash=530dc8ef4f04091056503cce4984ba59e4f2a0c1ea7719e3078d48785555f1e8
 
 // MockStore is a test mock for the Store interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockStore.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockStore.<Method>Func not set" error.
 type MockStore struct {
 	contractkit.Recorder
 	AppendChatUpdateFunc func(context.Context, string, reliantv1.ChatUpdateType, string, string) (core.ChatUpdate, error)
@@ -96,18 +166,67 @@ func (m *MockStore) AppendUserUpdate(ctx context.Context, update *core.UserUpdat
 	return contractkit.MockNotSet("MockStore", "AppendUserUpdate")
 }
 
+// MockStoreAppendChatUpdateCall is one recorded call of MockStore.AppendChatUpdate, one
+// field per parameter.
+type MockStoreAppendChatUpdateCall struct {
+	Ctx        context.Context
+	ChatID     string
+	UpdateType reliantv1.ChatUpdateType
+	EntityID   string
+	Data       string
+}
+
+// AppendChatUpdateCalls returns every recorded AppendChatUpdate call, oldest first, with
+// its arguments typed. It reads the same log as Calls("AppendChatUpdate").
+func (m *MockStore) AppendChatUpdateCalls() []MockStoreAppendChatUpdateCall {
+	var out []MockStoreAppendChatUpdateCall
+	for _, c := range m.Recorder.Calls("AppendChatUpdate") {
+		var r MockStoreAppendChatUpdateCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ChatID, _ = c.Args[1].(string)
+		r.UpdateType, _ = c.Args[2].(reliantv1.ChatUpdateType)
+		r.EntityID, _ = c.Args[3].(string)
+		r.Data, _ = c.Args[4].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockStoreAppendUserUpdateCall is one recorded call of MockStore.AppendUserUpdate, one
+// field per parameter.
+type MockStoreAppendUserUpdateCall struct {
+	Ctx           context.Context
+	Update        *core.UserUpdate
+	CallerChoseID bool
+}
+
+// AppendUserUpdateCalls returns every recorded AppendUserUpdate call, oldest first, with
+// its arguments typed. It reads the same log as Calls("AppendUserUpdate").
+func (m *MockStore) AppendUserUpdateCalls() []MockStoreAppendUserUpdateCall {
+	var out []MockStoreAppendUserUpdateCall
+	for _, c := range m.Recorder.Calls("AppendUserUpdate") {
+		var r MockStoreAppendUserUpdateCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Update, _ = c.Args[1].(*core.UserUpdate)
+		r.CallerChoseID, _ = c.Args[2].(bool)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ Store = (*MockStore)(nil)
 
 // forge:section MockTx
-// forge:hash=ffce48552bee91ccb665705a683df397a29668d5b6863008c17a2342870bca53
+// forge:hash=00ead4cd1a6862ca1f26f7990f03a64254b01ad3e88992c4f4df3bb5aa564822
 
 // MockTx is a test mock for the Tx interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockTx.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockTx.<Method>Func not set" error.
 type MockTx struct {
 	contractkit.Recorder
 	RunTxFunc func(context.Context, orm.TxPolicy, func(ctx context.Context) error) error
@@ -122,18 +241,41 @@ func (m *MockTx) RunTx(p0 context.Context, policy orm.TxPolicy, fn func(ctx cont
 	return contractkit.MockNotSet("MockTx", "RunTx")
 }
 
+// MockTxRunTxCall is one recorded call of MockTx.RunTx, one
+// field per parameter.
+type MockTxRunTxCall struct {
+	Ctx    context.Context
+	Policy orm.TxPolicy
+	Fn     func(ctx context.Context) error
+}
+
+// RunTxCalls returns every recorded RunTx call, oldest first, with
+// its arguments typed. It reads the same log as Calls("RunTx").
+func (m *MockTx) RunTxCalls() []MockTxRunTxCall {
+	var out []MockTxRunTxCall
+	for _, c := range m.Recorder.Calls("RunTx") {
+		var r MockTxRunTxCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Policy, _ = c.Args[1].(orm.TxPolicy)
+		r.Fn, _ = c.Args[2].(func(ctx context.Context) error)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ Tx = (*MockTx)(nil)
 
 // forge:section MockPublisher
-// forge:hash=34c1929a1081f43d90a44e4c159c8c348b4bc712bd84079de9abe0fd39ff255d
+// forge:hash=abc8863a57c5f3df70536b15cb916bb9e23858d44d6158a64d422842e6db15da
 
 // MockPublisher is a test mock for the Publisher interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockPublisher.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockPublisher.<Method>Func not set" error.
 type MockPublisher struct {
 	contractkit.Recorder
 	PublishChatFunc func(string, int64, core.ChatUpdate)
@@ -156,6 +298,46 @@ func (m *MockPublisher) PublishUser(update *core.UserUpdate) {
 		m.PublishUserFunc(update)
 		return
 	}
+}
+
+// MockPublisherPublishChatCall is one recorded call of MockPublisher.PublishChat, one
+// field per parameter.
+type MockPublisherPublishChatCall struct {
+	ChatID string
+	Seq    int64
+	Update core.ChatUpdate
+}
+
+// PublishChatCalls returns every recorded PublishChat call, oldest first, with
+// its arguments typed. It reads the same log as Calls("PublishChat").
+func (m *MockPublisher) PublishChatCalls() []MockPublisherPublishChatCall {
+	var out []MockPublisherPublishChatCall
+	for _, c := range m.Recorder.Calls("PublishChat") {
+		var r MockPublisherPublishChatCall
+		r.ChatID, _ = c.Args[0].(string)
+		r.Seq, _ = c.Args[1].(int64)
+		r.Update, _ = c.Args[2].(core.ChatUpdate)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockPublisherPublishUserCall is one recorded call of MockPublisher.PublishUser, one
+// field per parameter.
+type MockPublisherPublishUserCall struct {
+	Update *core.UserUpdate
+}
+
+// PublishUserCalls returns every recorded PublishUser call, oldest first, with
+// its arguments typed. It reads the same log as Calls("PublishUser").
+func (m *MockPublisher) PublishUserCalls() []MockPublisherPublishUserCall {
+	var out []MockPublisherPublishUserCall
+	for _, c := range m.Recorder.Calls("PublishUser") {
+		var r MockPublisherPublishUserCall
+		r.Update, _ = c.Args[0].(*core.UserUpdate)
+		out = append(out, r)
+	}
+	return out
 }
 
 // Compile-time check.

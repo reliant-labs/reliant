@@ -8,7 +8,7 @@ import { describe, expect, it, vi } from "vitest";
 import { useAddIssueComment, useIssueTimeline } from "@/hooks/observability-queries";
 import { createTestQueryClient } from "@/test/renderWithQuery";
 import { ObsQuotaProvider, useObsQuota } from "@/services/controlPlane/observability/ObsQuotaContext";
-import { ObservabilityApiProvider } from "@/services/controlPlane/observability/ObservabilityApiContext";
+import { ObservabilityFixtures } from "@/test/observabilityFixtures";
 import { createFixtureApi } from "../../__fixtures__/fixtureApi";
 
 // Exhaust the actual quota store BEFORE the timeline observer mounts.
@@ -28,9 +28,9 @@ function rig() {
   const client = createTestQueryClient();
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={client}>
-      <ObservabilityApiProvider api={api}>
+      <ObservabilityFixtures api={api}>
         <ObsQuotaProvider><Paused>{children}</Paused></ObsQuotaProvider>
-      </ObservabilityApiProvider>
+      </ObservabilityFixtures>
     </QueryClientProvider>
   );
   const hook = renderHook(() => ({ timeline: useIssueTimeline("iss-orders-deadline"), add: useAddIssueComment(), quota: useObsQuota() }), { wrapper });
@@ -43,7 +43,7 @@ describe("Postgres issue discussion while ClickHouse is paused", () => {
     await waitFor(() => expect(r.result.current.timeline.isSuccess).toBe(true));
     expect(r.result.current.quota.store.getState().kind).toBe("exhausted");
     expect(r.list).toHaveBeenCalledTimes(1);
-    expect(r.list).toHaveBeenCalledWith({ issueId: "iss-orders-deadline", pageSize: 100, pageToken: undefined });
+    expect(r.list).toHaveBeenCalledWith({ issueId: "iss-orders-deadline", pageSize: 100, pageToken: "" });
     await act(async () => { await r.result.current.timeline.refetch(); });
     expect(r.list).toHaveBeenCalledTimes(2);
     expect(r.result.current.timeline.data?.pages[0].entries.length).toBeGreaterThan(0);

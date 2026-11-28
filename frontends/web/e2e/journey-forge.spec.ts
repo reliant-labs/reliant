@@ -81,7 +81,7 @@ test.describe('the forge journey in Reliant, signed in', () => {
   const SAMPLE = '/forge/p/sample_shop';
   const TRACE = 'sample_4bf92f3577b34da6a3ce929d0e0e4736';
   const ISSUE = 'sample_iss-orders-deadline';
-  const T = 14;
+  const T = 16;
   const callout = (page: Page) => page.getByTestId('tour-callout').or(page.getByTestId('tour-card'));
 
   async function atStep(page: Page, n: number, title: string) {

@@ -21,53 +21,77 @@ type Deps struct {
 	Store Store
 	// Scope is which repositories records are kept for.
 	Scope Scope
+	// Pipeline, when set, also keeps records for every repository enrolled
+	// in the PR pipeline (mode shadow or on), and projects their PR events
+	// into pr_pipeline and their base-branch pushes into a pending read of
+	// the repository's config, which the worker's ConfigRefresher does
+	// (pipeline.go). nil (pipeline.enabled off): neither, and the
+	// projector is exactly the records projector.
+	// forge:optional-dep
+	Pipeline PipelineStore
 }
 
 // projector applies deliveries to records. It is safe for concurrent use.
 //
 //forge:contract
 type projector struct {
-	store Store
-	scope Scope
-	newID func() string
-	now   func() time.Time
+	store    Store
+	scope    Scope
+	pipeline PipelineStore
+	newID    func() string
+	now      func() time.Time
 }
 
 // New builds a projector that keeps records for deps.Scope.
 func New(deps Deps) Service {
-	return &projector{store: deps.Store, scope: deps.Scope, newID: uuid.NewString, now: time.Now}
+	return &projector{store: deps.Store, scope: deps.Scope, pipeline: deps.Pipeline,
+		newID: uuid.NewString, now: time.Now}
 }
 
 // Apply applies every event of a delivery that concerns a recorded
 // repository's pull requests, each at most once. An error leaves the events
 // not yet applied unclaimed, so retrying the delivery finishes the job.
+//
+// An enrolled repository's events are then projected into the pipeline
+// (projectPipeline). That projection is level-triggered (it reads the
+// record as applied, not the event), so a retried delivery repeats it
+// harmlessly.
 func (p *projector) Apply(ctx context.Context, d Delivery) error {
-	if p.scope.Empty() || d.Key == "" {
+	if (p.scope.Empty() && p.pipeline == nil) || d.Key == "" {
 		return nil
 	}
 	now := p.now().UTC()
+	enrolments := map[string]*core.PipelineRepo{}
 	for i, ev := range d.Events {
-		c, ok := p.decode(d.Provider, ev, now)
-		if !ok {
-			continue
+		repo, err := p.enrolment(ctx, d.Provider, ev, enrolments)
+		if err != nil {
+			return fmt.Errorf("prrecords: %s event %d: %w", ev.Type, i, err)
 		}
-		c.Delivery = core.PRRecordDelivery{
-			Provider: d.Provider, DeliveryKey: d.Key, EventIndex: i,
-			EventType: ev.Type, AppliedAt: now,
+		if c, ok := p.decode(d.Provider, ev, now, repo != nil); ok {
+			c.Delivery = core.PRRecordDelivery{
+				Provider: d.Provider, DeliveryKey: d.Key, EventIndex: i,
+				EventType: ev.Type, AppliedAt: now,
+			}
+			if _, err := p.store.ApplyPRRecordChange(ctx, c); err != nil {
+				return fmt.Errorf("prrecords: apply %s event %d: %w", ev.Type, i, err)
+			}
 		}
-		if _, err := p.store.ApplyPRRecordChange(ctx, c); err != nil {
-			return fmt.Errorf("prrecords: apply %s event %d: %w", ev.Type, i, err)
+		if repo != nil {
+			if err := p.projectPipeline(ctx, d.Provider, ev, repo, now); err != nil {
+				return fmt.Errorf("prrecords: project %s event %d into the pipeline: %w", ev.Type, i, err)
+			}
 		}
 	}
 	return nil
 }
 
 // decode turns one event into the change it makes, or false when it makes
-// none: another provider, a repository out of scope, an event type records
-// do not follow, or an event missing what its type must carry.
-func (p *projector) decode(provider string, ev Event, now time.Time) (core.PRRecordChange, bool) {
+// none: another provider, a repository out of scope (neither in Scope nor
+// enrolled), an event type records do not follow, or an event missing what
+// its type must carry.
+func (p *projector) decode(provider string, ev Event, now time.Time, enrolled bool) (core.PRRecordChange, bool) {
 	repository := ev.Attributes["repository"]
-	if ev.ResourceKey == "" || !p.scope.Includes(provider, repository) {
+	if ev.ResourceKey == "" || (!enrolled && !p.scope.Includes(provider, repository)) {
 		return core.PRRecordChange{}, false
 	}
 	family, action, _ := strings.Cut(ev.Type, ".")

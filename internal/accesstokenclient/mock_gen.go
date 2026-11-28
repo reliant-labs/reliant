@@ -17,14 +17,15 @@ import (
 )
 
 // forge:section MockService
-// forge:hash=31ca19fe8887c32bad250a97b66e4eaade281737dedc87d86c619ae700483ec7
+// forge:hash=b1795999b82becbd012075abf960cedf4530dccfd9d375a309d6f3a2ff673471
 
 // MockService is a test mock for the Service interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockService.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockService.<Method>Func not set" error.
 type MockService struct {
 	contractkit.Recorder
 	IntrospectFunc           func(context.Context, string) (*fat.Principal, error)
@@ -139,18 +140,251 @@ func (m *MockService) ResolveOrgPolicy(ctx context.Context, orgID string) (OrgPo
 	return OrgPolicy{}, contractkit.MockNotSet("MockService", "ResolveOrgPolicy")
 }
 
+// MockServiceIntrospectCall is one recorded call of MockService.Introspect, one
+// field per parameter.
+type MockServiceIntrospectCall struct {
+	Ctx   context.Context
+	Token string
+}
+
+// IntrospectCalls returns every recorded Introspect call, oldest first, with
+// its arguments typed. It reads the same log as Calls("Introspect").
+func (m *MockService) IntrospectCalls() []MockServiceIntrospectCall {
+	var out []MockServiceIntrospectCall
+	for _, c := range m.Recorder.Calls("Introspect") {
+		var r MockServiceIntrospectCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Token, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceIntrospectAccountCall is one recorded call of MockService.IntrospectAccount, one
+// field per parameter.
+type MockServiceIntrospectAccountCall struct {
+	Ctx   context.Context
+	Token string
+}
+
+// IntrospectAccountCalls returns every recorded IntrospectAccount call, oldest first, with
+// its arguments typed. It reads the same log as Calls("IntrospectAccount").
+func (m *MockService) IntrospectAccountCalls() []MockServiceIntrospectAccountCall {
+	var out []MockServiceIntrospectAccountCall
+	for _, c := range m.Recorder.Calls("IntrospectAccount") {
+		var r MockServiceIntrospectAccountCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Token, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceMintForUserCall is one recorded call of MockService.MintForUser, one
+// field per parameter.
+type MockServiceMintForUserCall struct {
+	Ctx context.Context
+	Req MintRequest
+}
+
+// MintForUserCalls returns every recorded MintForUser call, oldest first, with
+// its arguments typed. It reads the same log as Calls("MintForUser").
+func (m *MockService) MintForUserCalls() []MockServiceMintForUserCall {
+	var out []MockServiceMintForUserCall
+	for _, c := range m.Recorder.Calls("MintForUser") {
+		var r MockServiceMintForUserCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Req, _ = c.Args[1].(MintRequest)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceListForUserCall is one recorded call of MockService.ListForUser, one
+// field per parameter.
+type MockServiceListForUserCall struct {
+	Ctx    context.Context
+	UserID string
+	Scope  fat.Scope
+}
+
+// ListForUserCalls returns every recorded ListForUser call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListForUser").
+func (m *MockService) ListForUserCalls() []MockServiceListForUserCall {
+	var out []MockServiceListForUserCall
+	for _, c := range m.Recorder.Calls("ListForUser") {
+		var r MockServiceListForUserCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.Scope, _ = c.Args[2].(fat.Scope)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceRevokeForUserCall is one recorded call of MockService.RevokeForUser, one
+// field per parameter.
+type MockServiceRevokeForUserCall struct {
+	Ctx     context.Context
+	UserID  string
+	TokenID string
+}
+
+// RevokeForUserCalls returns every recorded RevokeForUser call, oldest first, with
+// its arguments typed. It reads the same log as Calls("RevokeForUser").
+func (m *MockService) RevokeForUserCalls() []MockServiceRevokeForUserCall {
+	var out []MockServiceRevokeForUserCall
+	for _, c := range m.Recorder.Calls("RevokeForUser") {
+		var r MockServiceRevokeForUserCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.TokenID, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceUpdateForUserCall is one recorded call of MockService.UpdateForUser, one
+// field per parameter.
+type MockServiceUpdateForUserCall struct {
+	Ctx     context.Context
+	UserID  string
+	TokenID string
+	Name    *string
+	Scopes  fat.Set
+}
+
+// UpdateForUserCalls returns every recorded UpdateForUser call, oldest first, with
+// its arguments typed. It reads the same log as Calls("UpdateForUser").
+func (m *MockService) UpdateForUserCalls() []MockServiceUpdateForUserCall {
+	var out []MockServiceUpdateForUserCall
+	for _, c := range m.Recorder.Calls("UpdateForUser") {
+		var r MockServiceUpdateForUserCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.TokenID, _ = c.Args[2].(string)
+		r.Name, _ = c.Args[3].(*string)
+		r.Scopes, _ = c.Args[4].(fat.Set)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceRevokeResourceCall is one recorded call of MockService.RevokeResource, one
+// field per parameter.
+type MockServiceRevokeResourceCall struct {
+	Ctx      context.Context
+	Resource fat.Resource
+}
+
+// RevokeResourceCalls returns every recorded RevokeResource call, oldest first, with
+// its arguments typed. It reads the same log as Calls("RevokeResource").
+func (m *MockService) RevokeResourceCalls() []MockServiceRevokeResourceCall {
+	var out []MockServiceRevokeResourceCall
+	for _, c := range m.Recorder.Calls("RevokeResource") {
+		var r MockServiceRevokeResourceCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Resource, _ = c.Args[1].(fat.Resource)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceRevokeEphemeralCall is one recorded call of MockService.RevokeEphemeral, one
+// field per parameter.
+type MockServiceRevokeEphemeralCall struct {
+	Ctx    context.Context
+	UserID string
+}
+
+// RevokeEphemeralCalls returns every recorded RevokeEphemeral call, oldest first, with
+// its arguments typed. It reads the same log as Calls("RevokeEphemeral").
+func (m *MockService) RevokeEphemeralCalls() []MockServiceRevokeEphemeralCall {
+	var out []MockServiceRevokeEphemeralCall
+	for _, c := range m.Recorder.Calls("RevokeEphemeral") {
+		var r MockServiceRevokeEphemeralCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceResolveOrgMembershipCall is one recorded call of MockService.ResolveOrgMembership, one
+// field per parameter.
+type MockServiceResolveOrgMembershipCall struct {
+	Ctx    context.Context
+	UserID string
+	OrgID  string
+}
+
+// ResolveOrgMembershipCalls returns every recorded ResolveOrgMembership call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ResolveOrgMembership").
+func (m *MockService) ResolveOrgMembershipCalls() []MockServiceResolveOrgMembershipCall {
+	var out []MockServiceResolveOrgMembershipCall
+	for _, c := range m.Recorder.Calls("ResolveOrgMembership") {
+		var r MockServiceResolveOrgMembershipCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.OrgID, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceResolveGoneOrgsCall is one recorded call of MockService.ResolveGoneOrgs, one
+// field per parameter.
+type MockServiceResolveGoneOrgsCall struct {
+	Ctx    context.Context
+	OrgIDs []string
+}
+
+// ResolveGoneOrgsCalls returns every recorded ResolveGoneOrgs call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ResolveGoneOrgs").
+func (m *MockService) ResolveGoneOrgsCalls() []MockServiceResolveGoneOrgsCall {
+	var out []MockServiceResolveGoneOrgsCall
+	for _, c := range m.Recorder.Calls("ResolveGoneOrgs") {
+		var r MockServiceResolveGoneOrgsCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.OrgIDs, _ = c.Args[1].([]string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceResolveOrgPolicyCall is one recorded call of MockService.ResolveOrgPolicy, one
+// field per parameter.
+type MockServiceResolveOrgPolicyCall struct {
+	Ctx   context.Context
+	OrgID string
+}
+
+// ResolveOrgPolicyCalls returns every recorded ResolveOrgPolicy call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ResolveOrgPolicy").
+func (m *MockService) ResolveOrgPolicyCalls() []MockServiceResolveOrgPolicyCall {
+	var out []MockServiceResolveOrgPolicyCall
+	for _, c := range m.Recorder.Calls("ResolveOrgPolicy") {
+		var r MockServiceResolveOrgPolicyCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.OrgID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ Service = (*MockService)(nil)
 
 // forge:section MockIntrospector
-// forge:hash=58564ca374038c6fd942246bec2c0b11996a8759beb11e26ea43634761fdd995
+// forge:hash=a20e3db7ce7bc5bf041e4b117e1304ed9efe31f1d2f2f95c7bb01cc2a99560e3
 
 // MockIntrospector is a test mock for the Introspector interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockIntrospector.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockIntrospector.<Method>Func not set" error.
 type MockIntrospector struct {
 	contractkit.Recorder
 	IntrospectFunc func(context.Context, string) (*fat.Principal, error)
@@ -163,6 +397,26 @@ func (m *MockIntrospector) Introspect(ctx context.Context, token string) (*fat.P
 		return m.IntrospectFunc(ctx, token)
 	}
 	return nil, contractkit.MockNotSet("MockIntrospector", "Introspect")
+}
+
+// MockIntrospectorIntrospectCall is one recorded call of MockIntrospector.Introspect, one
+// field per parameter.
+type MockIntrospectorIntrospectCall struct {
+	Ctx   context.Context
+	Token string
+}
+
+// IntrospectCalls returns every recorded Introspect call, oldest first, with
+// its arguments typed. It reads the same log as Calls("Introspect").
+func (m *MockIntrospector) IntrospectCalls() []MockIntrospectorIntrospectCall {
+	var out []MockIntrospectorIntrospectCall
+	for _, c := range m.Recorder.Calls("Introspect") {
+		var r MockIntrospectorIntrospectCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Token, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
 }
 
 // Compile-time check.

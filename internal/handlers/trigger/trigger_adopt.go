@@ -221,6 +221,8 @@ func adoptionDefinition(t *core.Trigger, rb *reliantv1.TriggerRebinding) (*relia
 		def.Source = &reliantv1.TriggerDefinition_Integration{Integration: src.Integration}
 	case *reliantv1.Trigger_WorkflowEvent:
 		def.Source = &reliantv1.TriggerDefinition_WorkflowEvent{WorkflowEvent: src.WorkflowEvent}
+	case *reliantv1.Trigger_RecordDue:
+		def.Source = &reliantv1.TriggerDefinition_RecordDue{RecordDue: src.RecordDue}
 	default:
 		return nil, svcerr.Internal(fmt.Sprintf("trigger %s has no source to adopt", t.ID))
 	}

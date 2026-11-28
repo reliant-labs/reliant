@@ -240,6 +240,8 @@ func (w *Watcher) TrimCaches(ctx context.Context, urgent bool) TrimResult {
 		trigger = "trim_urgent"
 	}
 	res := TrimResult{Caches: w.trimNativeCaches(ctx, urgent, urgent, trigger)}
+	// The caches the daemon alone creates (owncaches.go): they log their own.
+	w.pruneOwnCaches(ctx, urgent, trigger)
 	res.Reaper = w.reaperPass(ctx, w.reaperPolicyPath(w.reaperConfig()), trigger)
 	return res
 }

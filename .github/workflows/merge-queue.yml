@@ -237,6 +237,20 @@ jobs:
       - name: Summary
         if: ${{ !cancelled() }}
         run: cat "${RUNNER_TEMP}/merge-gate/summary.md" >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true
+      # The gate's recorded test run (scripts/merge-gate.sh `forge test begin`:
+      # lanes short and web-affected), pass or fail, as data for the Tests
+      # view. This job holds no credential to upload it: the default-branch
+      # listener test-upload-merge-queue.yml downloads it after the run and
+      # uploads it with main's code, so the candidate never holds id-token.
+      - name: Keep the recorded test run
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: merge-gate-test-runs-${{ github.run_attempt }}
+          path: .forge/tests/runs
+          include-hidden-files: true
+          retention-days: 3
+          if-no-files-found: ignore
       - name: Upload the gate's phase logs
         if: failure()
         uses: actions/upload-artifact@v4

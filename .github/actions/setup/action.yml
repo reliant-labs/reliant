@@ -171,8 +171,13 @@ runs:
       shell: bash
       run: echo "embedded_pg=$(sed -n 's|^[[:space:]]*github.com/fergusstrange/embedded-postgres \(v[^[:space:]]*\).*|\1|p' go.mod)" >> "$GITHUB_OUTPUT"
 
+    # SELF-HOSTED (the cicd merge-queue runners, merge-queue.yml): no restore.
+    # Each repository's runners share one GOMODCACHE and GOCACHE on the
+    # machine (set in the runner units, under /srv/gha/cache/<repo>), which
+    # stay warm across jobs; extracting these multi-GB archives there took 8+
+    # minutes a job (the disk, not the download, was the bound).
     - name: Restore Go module cache
-      if: inputs.go == 'true'
+      if: inputs.go == 'true' && runner.environment != 'self-hosted'
       uses: actions/cache/restore@v4
       with:
         path: ~/go/pkg/mod
@@ -183,7 +188,7 @@ runs:
     # Every compile here is -trimpath (the Taskfile and both gates add it), so
     # a package compiled on main's runner is a cache hit on a PR's.
     - name: Restore Go build cache
-      if: inputs.go == 'true' && inputs.go-build-cache == 'true'
+      if: inputs.go == 'true' && inputs.go-build-cache == 'true' && runner.environment != 'self-hosted'
       uses: actions/cache/restore@v4
       with:
         path: ~/.cache/go-build

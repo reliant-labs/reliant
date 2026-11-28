@@ -312,6 +312,17 @@ export type ScenarioRpcHandlers =
     "reliant.v1.PackageCommandsService/SetCommandFavorite"?: (req: import("@/gen/reliant/v1/package_commands_pb").SetCommandFavoriteRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/package_commands_pb").SetCommandFavoriteResponseSchema>>;
   }
 
+  // forge:section reliant.v1.PipelineService
+  // forge:hash=dded8be9f53bcc5ce9954d8c67a198db62cacfa0389f73eea34bece4f183b2bb
+  & {
+    "reliant.v1.PipelineService/EnrolRepository"?: (req: import("@/gen/reliant/v1/pipeline_pb").EnrolRepositoryRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/pipeline_pb").EnrolRepositoryResponseSchema>>;
+    "reliant.v1.PipelineService/SetPipelineMode"?: (req: import("@/gen/reliant/v1/pipeline_pb").SetPipelineModeRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/pipeline_pb").SetPipelineModeResponseSchema>>;
+    "reliant.v1.PipelineService/GetPipelineState"?: (req: import("@/gen/reliant/v1/pipeline_pb").GetPipelineStateRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/pipeline_pb").GetPipelineStateResponseSchema>>;
+    "reliant.v1.PipelineService/ListQueue"?: (req: import("@/gen/reliant/v1/pipeline_pb").ListQueueRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/pipeline_pb").ListQueueResponseSchema>>;
+    "reliant.v1.PipelineService/ListCapabilityGrants"?: (req: import("@/gen/reliant/v1/pipeline_pb").ListCapabilityGrantsRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/pipeline_pb").ListCapabilityGrantsResponseSchema>>;
+    "reliant.v1.PipelineService/RevokeCapabilityGrant"?: (req: import("@/gen/reliant/v1/pipeline_pb").RevokeCapabilityGrantRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/pipeline_pb").RevokeCapabilityGrantResponseSchema>>;
+  }
+
   // forge:section reliant.v1.PlanService
   // forge:hash=ef8e37ba12e504a9832eddb4b7c34950ec7fa8cecbb43283e8e344845c389988
   & {

@@ -23,6 +23,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/orgs"
 	"github.com/reliant-labs/reliant/internal/projectpurge"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/store/triggertest"
 )
 
@@ -196,7 +197,7 @@ func TestProjectDeleteAuthorityWhileTheOwnerIsAMember(t *testing.T) {
 		assert.EqualValues(t, 1, restored.Msg.GetTriggersResumed())
 		assert.Nil(t, restored.Msg.GetProject().DeleteAfter)
 		assert.False(t, f.scheduled())
-		tr, err := f.repo.GetTrigger(context.Background(), f.trigger)
+		tr, err := store.GetTrigger(context.Background(), f.repo.ORM(), f.trigger)
 		require.NoError(t, err)
 		assert.True(t, tr.Enabled, "restore turns the paused trigger back on")
 	})

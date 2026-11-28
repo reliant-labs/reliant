@@ -2524,6 +2524,9 @@ export type GetFreeHostingStatusResponse = Message<"controlplane.v1.GetFreeHosti
   sites: FreeHostingSite[];
 
   /**
+   * Site-count limit of the allowance. 0 means no limit (signed-in free
+   * hosting has none); a positive value is a cap.
+   *
    * @generated from field: int32 sites_limit = 5;
    */
   sitesLimit: number;

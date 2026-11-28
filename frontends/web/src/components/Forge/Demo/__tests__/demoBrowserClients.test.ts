@@ -21,10 +21,28 @@ import { connectClient } from "@/lib/connect";
 import { listIdentityUsersRequest, toIdentityStatus, toIdentityUser, toIdentityUsersPage, type IdentityUserFilter } from "@/services/controlPlane/identity/api";
 import { currentOrgId } from "@/services/controlPlane/orgs";
 import { controlPlaneDataBrowserApi as data } from "@/services/controlPlane/observability/DataBrowserApiContext";
-import { controlPlaneStorageBrowserApi as storage } from "@/services/controlPlane/storageBrowser/StorageBrowserApiContext";
+import { StorageBrowserService } from "@/gen/controlplane/services/storage_browser/v1/storage_browser_pb";
+import { storageBrowserServiceMutations } from "@/hooks/controlplane/storage-browser-service-hooks_gen";
+import {
+  objectRequest,
+  toBucketList,
+  toObjectMeta,
+  toPresignedDownload,
+  toPreview,
+  type ObjectInput,
+} from "@/services/controlPlane/storageBrowser/storageBrowserApi";
 
 // The demo bundle's twin (services/controlPlane/config.demo.ts): the cloud reads are on.
 vi.mock("@/services/controlPlane/config", () => ({ CONTROL_PLANE_API_URL: "https://demo.invalid", hasControlPlane: true }));
+
+/** The storage browser's calls as useStorageBrowser makes them, outside a scope: the reads on connectClient, the two writes through the generated calls. */
+const storage = {
+  listBrowsableBuckets: async (environmentId: string) => toBucketList(await connectClient(StorageBrowserService).listBrowsableBuckets({ environmentId })),
+  getObjectMetadata: async (target: ObjectInput) => toObjectMeta(await connectClient(StorageBrowserService).getObjectMetadata(objectRequest(target))),
+  previewObject: async (target: ObjectInput) => toPreview(await storageBrowserServiceMutations(queryClient).previewObject(objectRequest(target), { invalidate: false })),
+  presignObjectDownload: async (target: ObjectInput) =>
+    toPresignedDownload(await storageBrowserServiceMutations(queryClient).presignObjectDownload(objectRequest(target), { invalidate: false })),
+};
 
 /** The Identity tab's calls, outside React: the generated hooks' queries and writes on the app's QueryClient. */
 const identity = {

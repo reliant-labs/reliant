@@ -117,8 +117,8 @@ function SectionRow({
     >
       <MobileRowIcon icon={section.icon} />
       <div className="min-w-0 flex-1">
-        <p className="text-sm font-medium text-foreground">{section.label}</p>
-        <p className="truncate text-xs text-muted-foreground">
+        <p className="text-ui font-medium text-foreground">{section.label}</p>
+        <p className="truncate text-meta text-muted-foreground">
           {section.description}
         </p>
       </div>
@@ -300,7 +300,7 @@ export function MobileSettingsScreen() {
             rather than as a caption someone forgot to place. */}
         <div className="flex gap-3 rounded-lg border border-border bg-muted/40 p-4">
           <Monitor className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
-          <p className="text-xs leading-relaxed text-muted-foreground">
+          <p className="text-meta leading-relaxed text-muted-foreground">
             Agent sandboxes are in the main menu. MCP servers, prompts, keyboard
             shortcuts, developer tools, app access, and port access rules
             aren&apos;t available here. Manage those on desktop.

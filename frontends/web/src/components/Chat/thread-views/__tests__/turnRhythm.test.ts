@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { ContentBlockType, MessageRole, StreamingState } from "../../../../types/chat";
+import { ContentBlockType, DisplayStyle, MessageRole, StreamingState } from "../../../../types/chat";
 import type { Message } from "../../../../types/chat";
 import { failedSendId } from "../../../../lib/pendingSends";
-import { turnEnds, turnRhythm } from "../InterleavedTimeline";
+import { latestTurnEnd, turnEnds, turnRhythm } from "../InterleavedTimeline";
 
 function message(id: string, role: MessageRole, type: ContentBlockType, extra: Partial<Message> = {}): Message {
   return {
@@ -142,5 +142,66 @@ describe("turnEnds", () => {
       const items = [at(failed), { type: "error" }, at(user("u2")), at(answer("a2"))];
       expect(turnEnds(items)).toEqual([true, true, false, true]);
     });
+  });
+
+  // A row that draws no actions row cannot take them off the answer it follows.
+  describe("a row after the answer that draws no actions row", () => {
+    const notice = at({
+      type: "message",
+      message: message("n1", MessageRole.SYSTEM, ContentBlockType.TEXT, { displayStyle: DisplayStyle.INFO }),
+    });
+    const mail = at({
+      type: "message",
+      message: message("m1", MessageRole.USER, ContentBlockType.TEXT, {
+        sender: { threadId: "th-review" } as Message["sender"],
+      }),
+    });
+    const surfaced = at({ ...tools("a1"), slice: { role: "surfaced" as const } });
+    const earlierProse = at({ ...answer("a1"), slice: { role: "prose" as const } });
+    const lastProse = at({ ...answer("a1"), slice: { role: "prose" as const, chrome: true } });
+
+    it.each([
+      ["a fold of work", at({ type: "work" })],
+      ["a notice", notice],
+      ["another agent's mail", mail],
+      ["a surfaced call", surfaced],
+    ])("leaves them under the answer: %s", (_label, after) => {
+      const items = [at(user("u1")), at(answer("a1")), after];
+      expect(turnEnds(items).slice(0, 2)).toEqual([false, true]);
+      expect(latestTurnEnd(items, turnEnds(items))).toBe(1);
+    });
+
+    it("gives them to the message's last prose slice, never an earlier one", () => {
+      const items = [at(user("u1")), earlierProse, at({ type: "work" }), lastProse, at({ type: "work" })];
+      expect(turnEnds(items)).toEqual([false, false, false, true, true]);
+      expect(latestTurnEnd(items, turnEnds(items))).toBe(3);
+    });
+  });
+
+  describe("while the run is live", () => {
+    it("ends nothing in the part still being written", () => {
+      const items = [at(user("u1")), at(answer("a1")), at({ type: "work" })];
+      expect(turnEnds(items, { live: true })).toEqual([false, false, false]);
+      expect(latestTurnEnd(items, turnEnds(items, { live: true }), { live: true })).toBe(-1);
+    });
+
+    it("still ends another thread's finished part, without holding it on screen", () => {
+      const items = [at(user("u1")), at(answer("a1")), at(answer("r1"), review)];
+      const ends = turnEnds(items, { live: true });
+      expect(ends).toEqual([false, true, false]);
+      expect(latestTurnEnd(items, ends, { live: true })).toBe(-1);
+    });
+
+    it("keeps a just-sent prompt's actions on screen", () => {
+      const items = [at(user("u1")), at(answer("a1")), at(user("u2"))];
+      const ends = turnEnds(items, { live: true });
+      expect(ends).toEqual([false, true, true]);
+      expect(latestTurnEnd(items, ends, { live: true })).toBe(2);
+    });
+  });
+
+  it("holds no earlier turn's actions on screen when the latest has none", () => {
+    const items = [at(user("u1")), at(answer("a1")), at(user("u2")), at({ type: "work" })];
+    expect(latestTurnEnd(items, turnEnds(items))).toBe(-1);
   });
 });

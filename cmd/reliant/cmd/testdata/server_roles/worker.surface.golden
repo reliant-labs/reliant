@@ -7,6 +7,7 @@ DB_CONNECT_TIMEOUT kind=google.protobuf.Duration flag="" default="" required=fal
 DISABLE_TLS kind=bool flag="disable-tls" default="" required=false optional=false sensitive=false allowed=[] aliases=[]
 ENVIRONMENT kind=string flag="" default="" required=false optional=false sensitive=false allowed=[] aliases=[]
 FORGE_STORAGE_POLICY kind=string flag="" default="" required=false optional=false sensitive=false allowed=[] aliases=[]
+GITHUB_QUEUE_APP_CALLER_SECRET kind=string flag="" default="" required=false optional=true sensitive=true allowed=[] aliases=[]
 HEALTH_PORT kind=int32 flag="health-port" default="8081" required=false optional=false sensitive=false allowed=[] aliases=[]
 INTERNAL_SERVICE_SECRET kind=string flag="" default="" required=false optional=true sensitive=true allowed=[] aliases=[]
 LIVENESS_PATHS kind=string flag="" default="/health,/healthz" required=false optional=false sensitive=false allowed=[] aliases=[]

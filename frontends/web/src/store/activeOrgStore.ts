@@ -240,6 +240,9 @@ export const ORG_SCOPED_QUERY_ROOTS: readonly string[] = [
   // Every LLMGatewayService read: the org's managed keys, spend and the
   // models its plan permits.
   "controlplane.v1.LLMGatewayService",
+  // Every AlertingService read on its generated keys: alerts, their history,
+  // silences, receivers and notifications, each scoped by its request's org.
+  "controlplane.v1.AlertingService",
   "cp",
   // Every DaemonService read on its generated keys: a machine's detail,
   // preview template and port-access rules.
@@ -248,6 +251,9 @@ export const ORG_SCOPED_QUERY_ROOTS: readonly string[] = [
   // profiles, signals, filter values, metrics, workloads, release health and
   // each frontend's replay switch, every one scoped by its request's org.
   "controlplane.v1.ObservabilityService",
+  // IssuesService's reads on generated keys: the inbox (scoped by its
+  // request's org), an issue, its events and its timeline.
+  "controlplane.v1.IssuesService",
   // The machine → org map (services/controlPlane/machineOrgs.ts).
   "controlPlane",
   "orgs-members",
@@ -257,4 +263,7 @@ export const ORG_SCOPED_QUERY_ROOTS: readonly string[] = [
   // hooks/changes-queries.ts: the page's org, then ChangesService's reads.
   "changes",
   "controlplane.v1.ChangesService",
+  // The managed secret store's reads (hooks/forge-queries.ts): an
+  // environment's secrets and their version histories.
+  "controlplane.v1.SecretStoreService",
 ];

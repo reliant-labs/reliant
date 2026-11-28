@@ -70,7 +70,7 @@ func TestBackgroundFunding_TitleNeverSpendsThePersonsAccountWithoutConsent(t *te
 			}
 			before := env.store.row("chat-1")
 
-			_, err := NewGenerateTitleActivity(nil, nil).WithAccountRouting(env.routing).generateTitleForChat(context.Background(), fundOrgChat(), "rename the billing page")
+			_, err := NewGenerateTitleActivity(nil, nil, nil).WithAccountRouting(env.routing).generateTitleForChat(context.Background(), fundOrgChat(), "rename the billing page")
 			var refused *personalFundingRefused
 			require.ErrorAs(t, err, &refused, "only the person's own accounts could title it")
 			assert.Empty(t, env.built, "no driver on any account")
@@ -106,7 +106,7 @@ func TestBackgroundFunding_TitleUsesThePersonsAccountWithConsent(t *testing.T) {
 			}
 			before := env.store.row("chat-1")
 
-			title, err := NewGenerateTitleActivity(nil, nil).WithAccountRouting(env.routing).generateTitleForChat(context.Background(), fundOrgChat(), "rename the billing page")
+			title, err := NewGenerateTitleActivity(nil, nil, nil).WithAccountRouting(env.routing).generateTitleForChat(context.Background(), fundOrgChat(), "rename the billing page")
 			require.NoError(t, err)
 			assert.Equal(t, "Billing Page Copy", title)
 			require.NotEmpty(t, accounts.calls())
@@ -124,7 +124,7 @@ func TestBackgroundFunding_TitleOnTheOrgLeavesTheQuestion(t *testing.T) {
 	env, accounts := backgroundEnv(t, "")
 	env.store.rows["chat-1"] = &core.PersonalFunding{ChatID: "chat-1", UserID: "u1", OrgID: fundOrg,
 		State: core.PersonalFundingKeepWaiting, Reason: core.PersonalFundingUnserved, Model: "gpt-5.6-sol"}
-	_, err := NewGenerateTitleActivity(nil, nil).WithAccountRouting(env.routing).generateTitleForChat(context.Background(), fundOrgChat(), "rename the billing page")
+	_, err := NewGenerateTitleActivity(nil, nil, nil).WithAccountRouting(env.routing).generateTitleForChat(context.Background(), fundOrgChat(), "rename the billing page")
 	require.NoError(t, err)
 	assert.Equal(t, []string{"acme-key"}, accounts.calls())
 	require.NotNil(t, env.store.row("chat-1"), "only the turn ends the episode")
