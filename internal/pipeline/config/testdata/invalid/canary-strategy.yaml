@@ -1,6 +1,0 @@
-# want: release.envs[0].strategy.kind
-version: 1
-gate: "npm test"
-release:
-  envs:
-    - {name: prod, strategy: {kind: canary, steps: [5, 25, 100]}}

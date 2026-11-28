@@ -1,4 +1,0 @@
-absent: "null"
-fields:
-  login: string
-  id: integer

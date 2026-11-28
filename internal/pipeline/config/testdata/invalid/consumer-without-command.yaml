@@ -1,4 +1,0 @@
-# want: consumers[0].command
-version: 1
-gate: "npm test"
-consumers: [{repo: a/b}]

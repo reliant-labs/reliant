@@ -1,7 +1,0 @@
-# forge/.reliant/pipeline.yaml (design §10.2, with the release placeholder filled in)
-version: 1
-check: {checks: ["CI gate"]}                      # forge's merge tier, now on PR heads
-gate: {run: "task test && task test:e2e", runner: machine, pool: gate,   # isolated; e2e needs the nested engine
-       checks: ["Windows"]}                       # the one lane a Linux daemon cannot run, on Actions
-consumers: [{repo: reliant-labs/control-plane, mode: advisory, command: "task ci:consumer PRODUCER_SHA={candidate}"}]
-release: {on_land: true, schedule: "every 2h if main moved", on_fail: hold}   # ship forge on each green landing

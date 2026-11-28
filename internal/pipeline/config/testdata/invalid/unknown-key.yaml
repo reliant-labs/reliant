@@ -1,4 +1,0 @@
-# want: queue.batchmax
-version: 1
-gate: "npm test"
-queue: {batchmax: 3}

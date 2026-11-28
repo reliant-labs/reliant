@@ -1,6 +1,0 @@
-# Only the happy ending is tested; nothing expects `failed`.
-name: passes
-events: []
-expect:
-  outcome: completed
-  completed: [passed]

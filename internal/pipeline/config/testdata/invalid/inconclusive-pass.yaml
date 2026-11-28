@@ -1,4 +1,0 @@
-# want: release.envs[0].inconclusive
-version: 1
-gate: "npm test"
-release: {envs: [{name: prod, inconclusive: pass}]}

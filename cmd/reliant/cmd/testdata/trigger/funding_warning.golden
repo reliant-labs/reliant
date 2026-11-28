@@ -1,4 +1,0 @@
-
-Warning: No account of this organization can run claude-opus-4-6 yet, so its runs will fail until an admin adds one.
-  An organization admin adds an API key or turns on Reliant credits in the app (Settings → Organization → AI accounts),
-  or choose a model one of its accounts can run (--param model=...). `reliant providers list --org acme` shows them.

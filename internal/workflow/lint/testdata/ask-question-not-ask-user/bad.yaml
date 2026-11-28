@@ -1,7 +1,0 @@
-name: fixture
-entry: [ask]
-nodes:
-- id: ask
-  type: ask_question
-  args:
-    metadata: '{"questions":[{"question":"Ship this change?","options":[{"label":"Ship it"},{"label":"Not yet"}]}]}'

@@ -1,7 +1,0 @@
-{
-  "version": "forge.dashboard-parts/v2",
-  "alert": {
-    "name": "pipeline",
-    "rpc_service": "reliant.v1.PipelineService"
-  }
-}

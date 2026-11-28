@@ -1,8 +1,0 @@
-# The gate's built-in stages: one overridden, one off, the rest at their
-# detected defaults (owner decision D13).
-version: 1
-gate:
-  stages:
-    lint: {run: "golangci-lint run ./..."}
-    test: {run: "go test -race ./..."}
-    sbom_scan: off

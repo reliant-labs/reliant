@@ -1,1 +1,0 @@
-{ name: base_branch, description: The branch the pull request targets., example: main }

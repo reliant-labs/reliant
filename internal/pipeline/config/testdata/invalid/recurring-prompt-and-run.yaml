@@ -1,5 +1,0 @@
-# want: recurring[0]
-version: 1
-gate: "npm test"
-recurring:
-  - {name: both, schedule: "0 3 * * 1", prompt: .reliant/prompts/x.md, run: "task x"}

@@ -1,3 +1,0 @@
-id: demo
-triggers:
-  - $ref: events/thing.created.yaml

@@ -1,4 +1,0 @@
-# want: regen
-version: 1
-gate: "npm test"
-regen: "task generate"

@@ -1,4 +1,0 @@
-# want: owner_approval[0].kind
-version: 1
-gate: "npm test"
-owner_approval: [{kind: emergency_land}]

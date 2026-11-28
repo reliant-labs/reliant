@@ -1,9 +1,0 @@
-version: "v1.34.1"
-date: "2026-11-27"
-title: "1 other change"
-summary: "Every pull request merged since v1.34.0, grouped by its conventional-commit type."
-sections:
-  - title: "Changed"
-    items:
-      - title: "web: use generated reads for Settings hosting billing"
-        description: "[#3880](https://github.com/reliant-labs/reliant/pull/3880)"

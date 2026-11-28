@@ -1,9 +1,0 @@
-version: "v1.21.1"
-date: "2026-11-14"
-title: "1 fix"
-summary: "Every pull request merged since v1.21.0, grouped by its conventional-commit type."
-sections:
-  - title: "Fixed"
-    items:
-      - title: "github: repo.get_tree answers missing for a directory or ref that is not there"
-        description: "[#2739](https://github.com/reliant-labs/reliant/pull/2739)"

@@ -1,7 +1,0 @@
-{
-  "version": "forge.dashboard-parts/v2",
-  "alert": {
-    "name": "pull_request_record",
-    "rpc_service": "reliant.v1.PullRequestRecordService"
-  }
-}

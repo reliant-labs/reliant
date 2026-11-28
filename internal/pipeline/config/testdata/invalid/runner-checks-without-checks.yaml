@@ -1,3 +1,0 @@
-# want: gate.checks
-version: 1
-gate: {runner: checks}

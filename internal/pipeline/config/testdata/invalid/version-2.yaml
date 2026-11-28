@@ -1,3 +1,0 @@
-# want: version
-version: 2
-gate: "npm test"

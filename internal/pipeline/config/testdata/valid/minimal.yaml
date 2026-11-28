@@ -1,2 +1,0 @@
-version: 1
-gate: "npm test"      # the full suite main must always pass
