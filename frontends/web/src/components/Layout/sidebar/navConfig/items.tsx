@@ -362,6 +362,7 @@ export const isObservabilityRoute = (ctx: NavCtx): boolean =>
   isObsOverview(ctx) ||
   (ctx.page?.kind === "obs-view" && ctx.page.view !== "dashboards") ||
   ctx.page?.kind === "site-insights" ||
+  ctx.page?.kind === "speed-insights" ||
   ctx.orgPage?.kind === "observability" ||
   (ctx.orgPage?.kind === "obs-view" && ctx.orgPage.view !== "dashboards");
 

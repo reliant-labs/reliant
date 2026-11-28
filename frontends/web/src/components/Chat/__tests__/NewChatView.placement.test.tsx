@@ -326,8 +326,9 @@ describe("NewChatView: the project and machine always go together", () => {
       cloneUrl: "https://github.com/acme/temp",
       daemonId: "d-cicd",
       name: "temp",
-      path: "/home/workspace/projects/temp",
     });
+    // Unknown target platforms must use the server's default clone directory.
+    expect((createProjectFromRepo.mock.calls[0] as unknown[])[0]).not.toHaveProperty("path");
     // The machine stays cicd (not the default, which would move to laptop).
     expect(screen.getByTestId("machine-picker")).toHaveTextContent("cicd");
     expect(screen.getByTestId("new-chat-placement-note")).toHaveTextContent("Setting up temp on cicd.");
