@@ -54,8 +54,9 @@ describe("ShareWorkflowDialog", () => {
     await waitFor(() => expect(mocks.share).toHaveBeenCalledWith("d1"));
     expect(mocks.unshare).not.toHaveBeenCalled();
     expect(mocks.toastSuccess).toHaveBeenCalledWith("Shared with Acme");
-    // The dialog stays open on the state the server answered.
-    expect(within(org).getByTestId("share-workflow-org-state")).toHaveTextContent("Shared");
+    // Calling the mutation isn't its completion: wait for React to commit
+    // the state the server answered before asserting on the open dialog.
+    await waitFor(() => expect(within(org).getByTestId("share-workflow-org-state")).toHaveTextContent("Shared"));
     expect(within(org).getByTestId("share-workflow-confirm")).toHaveTextContent("Stop sharing");
     expect(onClose).not.toHaveBeenCalled();
   });
