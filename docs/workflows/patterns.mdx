@@ -684,9 +684,19 @@ on_failure:
 What reaches the parent then depends on how the child failed:
 
 - **An unhandled error** propagates after the child's handler: the parent's `workflow:` node fails, and the parent's own handler runs as usual.
-- **A declared `outcome: failure`** does not. A verdict belongs to the run, and only the run's own top-level nodes stamp it; a node inside a child, an `inline:` body or a loop body never does. So the child's handler runs, the parent's `workflow:` node completes, and the parent's graph goes on to its next node. To fail the parent too, declare `outputs:` on the child (a `result`, say) and route the parent on `nodes.<node>.result` to a node of its own with `outcome: failure`.
+- **A declared `outcome: failure`** does not, unless the parent asks for it. A verdict belongs to the run, and only the run's own top-level nodes stamp it; a node inside a child or an `inline:` body does not. So the child's handler runs, the parent's `workflow:` node completes, and the parent's graph goes on to its next node. The declaring node is recorded as a failed attempt, so a run that then completes ends with the outcome `failure_handled` (it completed, but a node failed and its failure path ran), naming that node (`release.blocked`), and not `succeeded`. Its trigger's health and the run list show it as handled rather than green.
+- **`propagate_outcome: true`** on the parent's `workflow:` node makes the child's declared failure the node's: the node fails as it would on an unhandled error. The parent's graph stops there, the parent's handler runs with `failure.node_path` naming the child's declaring node, and the run fails. `tolerate_failure: true` on the same node tolerates it like any other failure. It is off by default.
 
-**Make failures reach it.** A path that ends normally after a "blocked" or "could not finish" message is a success to the platform: it is auto-archived and never reaches the handler. Give that terminal node `outcome: failure`, in the graph the run starts (a nested one's verdict does not count, above).
+```yaml
+- id: release
+  type: workflow
+  ref: project://release
+  propagate_outcome: true   # release's outcome: failure fails this run too
+```
+
+A loop's body is not covered by either: its declared failure is neither recorded nor propagated.
+
+**Make failures reach it.** A path that ends normally after a "blocked" or "could not finish" message is a success to the platform: it is auto-archived and never reaches the handler. Give that terminal node `outcome: failure`, in the graph the run starts, or in a child whose `workflow:` node sets `propagate_outcome: true` (above).
 
 **Testing.** Name the handler's nodes `on_failure.<node>` in a scenario's `events`, `completed` and `messages`, and assert `expect.on_failure` (`ran`, `node_id`, `error_code`, `attempt`, `error_contains`, `handler_failed`).
 

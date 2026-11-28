@@ -111,11 +111,22 @@ func recordToleratedFailure(ctx workflow.Context, scope toleratedScope, err erro
 	if workflow.GetVersion(ctx, toleratedFailureRecordChangeID, workflow.DefaultVersion, 1) == workflow.DefaultVersion {
 		return
 	}
+	recordNodeFailure(ctx, scope, oneLineError(err))
+}
+
+// recordNodeFailure writes the failed attempt recordToleratedFailure
+// describes, ungated: each caller gates it under its own change id, since it
+// adds an activity command where none was. It is also how a sub-workflow's
+// declared failure is put on record (child_outcome.go).
+func recordNodeFailure(ctx workflow.Context, scope toleratedScope, errText string) {
+	if ctx == nil || scope.StepID == "" || errText == "" {
+		return
+	}
 	input := map[string]interface{}{
 		"workflow_id": scope.WorkflowID,
 		"step_id":     scope.StepID,
 		"node_path":   scope.NodePath,
-		"error":       oneLineError(err),
+		"error":       errText,
 	}
 	if scope.LoopNodeID != "" {
 		input["loop_node_id"] = scope.LoopNodeID

@@ -67,6 +67,7 @@ function cleanStepForYaml(step: Step): Record<string, unknown> {
   if (keyExpr) result.key = keyExpr
   const onFailure = getStepOnFailure(step)
   if (onFailure) result.on_failure = onFailure
+  if (step.args?.case === 'workflow' && step.args.value.propagateOutcome) result.propagate_outcome = true
   const condStr = normalizeCelString(step.condition)
   if (condStr) result.condition = condStr
   const timeoutStr = normalizeCelString(step.timeout)
@@ -599,6 +600,7 @@ function parseRawStep(raw: Record<string, unknown>): Step {
     const workflowArgs: Record<string, unknown> = { args: {}, presets: {} }
     if (ref) workflowArgs.ref = celString(ref)
     if (isRecord(raw.inputs)) workflowArgs.args = raw.inputs
+    if (raw.propagate_outcome === true) workflowArgs.propagateOutcome = true
     if (isRecord(raw.presets)) {
       const presetsEntries = Object.entries(raw.presets).filter(isStringEntry)
       if (presetsEntries.length > 0) workflowArgs.presets = Object.fromEntries(presetsEntries)

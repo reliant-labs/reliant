@@ -1444,6 +1444,15 @@ message SubWorkflowArgs {
     example: "[prompt, model]"
     type_hint: "list of input names"
   }];
+  // PropagateOutcome makes a sub-workflow's declared verdict this node's:
+  // when the sub-workflow's graph ends after reaching a node that declares
+  // `outcome: failure`, this node FAILS, as it would on an error nothing in
+  // the sub-workflow handled (so tolerate_failure, the edges after it and the
+  // parent's on_failure treat it as one). Unset (the default), the node
+  // completes and the run goes on; the child's declaring node is recorded as
+  // a failed attempt, so the run's outcome is failure_handled rather than
+  // succeeded.
+  bool propagate_outcome = 8 [(reliant) = {description: "Fail this node when the sub-workflow declares outcome: failure. Unset, the node completes and the run's outcome is failure_handled"}];
 }
 
 // ReviewArgs configures a review node: a reviewer agent that reads, and only

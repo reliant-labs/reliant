@@ -93,6 +93,9 @@ type InlineWorkflowExecutor struct {
 	// childFailure is armed for a ref'd child that declares on_failure
 	// (child_on_failure.go); nil otherwise.
 	childFailure *childFailureScope
+	// outcome and outcomeNode are the last verdict a node of the body
+	// declared, and the node (child_outcome.go).
+	outcome, outcomeNode string
 	// bodyInputs and bodyNodeOutputs are the child's own inputs and node
 	// outputs as its graph ran, which its on_failure handler reads.
 	bodyInputs      map[string]interface{}
@@ -682,6 +685,11 @@ func (e *InlineWorkflowExecutor) Execute() (map[string]interface{}, error) {
 	failureScope := e.beginChildFailureScope()
 	outputs, err := e.executeSubWorkflow()
 	e.finishChildFailureScope(failureScope, err)
+	// A body that ended on a declared failure is recorded, or fails the
+	// node when it propagates its outcome (child_outcome.go).
+	if err == nil {
+		err = e.settleDeclaredOutcome()
+	}
 	if err != nil {
 		return nil, fmt.Errorf("sub-workflow %s failed: %w", e.subWorkflowName, err)
 	}
@@ -965,7 +973,7 @@ func (e *InlineWorkflowExecutor) executeSubWorkflow() (map[string]interface{}, e
 				events = append(events, skipEvt)
 				continue
 			}
-			e.childFailure.noteOutcome(node)
+			e.noteOutcome(node)
 
 			// Handle loop nodes
 			if node.GetType() == model.NodeTypeLoop {

@@ -52730,6 +52730,10 @@
               "name": "passthrough",
               "kind": "string",
               "repeated": true
+            },
+            {
+              "name": "propagate_outcome",
+              "kind": "bool"
             }
           ],
           "reliant.v1.SwitchCase": [
