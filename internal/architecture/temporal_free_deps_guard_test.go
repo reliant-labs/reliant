@@ -2,9 +2,7 @@ package architecture
 
 import (
 	"bytes"
-	"errors"
 	"go/ast"
-	"go/build"
 	"go/build/constraint"
 	"go/parser"
 	"go/token"
@@ -76,23 +74,10 @@ func isModulePackage(importPath string) bool {
 }
 
 func packageDir(repo, importPath string) string {
-	return filepath.Join(repo, filepath.FromSlash(strings.TrimPrefix(importPath, temporalGuardReliantModule+"/")))
-}
-
-// hostImports returns, for the in-module package importPath, every import of
-// its non-test files for the host's build constraints. It reads the files
-// itself (go/build), so the test cache sees them, unlike a `go list` child.
-func hostImports(t *testing.T, repo, importPath string) []string {
-	t.Helper()
-	pkg, err := build.Default.ImportDir(packageDir(repo, importPath), 0)
-	if err != nil {
-		var none *build.NoGoError
-		if errors.As(err, &none) {
-			return nil
-		}
-		t.Fatalf("read imports of %s: %v", importPath, err)
+	if importPath == temporalGuardReliantModule {
+		return repo
 	}
-	return pkg.Imports
+	return filepath.Join(repo, filepath.FromSlash(strings.TrimPrefix(importPath, temporalGuardReliantModule+"/")))
 }
 
 // packageFileImports returns the imports of every Go file of the in-module package
@@ -111,6 +96,7 @@ func packageFileImports(t *testing.T, repo, importPath string, withTests bool) m
 		t.Fatalf("read in-module package %s at %s: %v", importPath, dir, err)
 	}
 	out := map[string][]string{}
+	hasSource := false
 	fset := token.NewFileSet()
 	for _, entry := range entries {
 		name := entry.Name()
@@ -128,6 +114,9 @@ func packageFileImports(t *testing.T, repo, importPath string, withTests bool) m
 		if buildIgnored(f.Comments, f.Package) {
 			continue
 		}
+		if !strings.HasSuffix(name, "_test.go") {
+			hasSource = true
+		}
 		rel, err := filepath.Rel(repo, file)
 		if err != nil {
 			t.Fatal(err)
@@ -141,6 +130,9 @@ func packageFileImports(t *testing.T, repo, importPath string, withTests bool) m
 			imports = append(imports, imp)
 		}
 		out[filepath.ToSlash(rel)] = imports
+	}
+	if !hasSource {
+		t.Fatalf("in-module package %s at %s has no non-test Go source", importPath, dir)
 	}
 	return out
 }
@@ -367,8 +359,8 @@ func TestLeafPackagesDoNotLinkTemporal(t *testing.T) {
 // TestTemporalClassIsLinkedWhereTemporalRuns pins the registration: errclass
 // reads a Temporal error's verdict only once temporalclass's init has run, so
 // every package that executes or wraps Temporal activities must link it, and so
-// must each process entry point. It walks the host's build (prod runs linux),
-// not every platform's: a file of another GOOS must not satisfy it.
+// must each process entry point. It walks all source-file imports, including
+// GOOS/GOARCH-specific and tag-constrained files, rather than only the host build.
 func TestTemporalClassIsLinkedWhereTemporalRuns(t *testing.T) {
 	t.Parallel()
 	repo := root(t)
@@ -382,6 +374,7 @@ func TestTemporalClassIsLinkedWhereTemporalRuns(t *testing.T) {
 	} {
 		t.Run(pkg, func(t *testing.T) {
 			t.Parallel()
+			read := sourceImports(t, repo)
 			reached := map[string]bool{}
 			queue := []string{path.Join(temporalGuardReliantModule, pkg)}
 			for len(queue) > 0 {
@@ -391,7 +384,7 @@ func TestTemporalClassIsLinkedWhereTemporalRuns(t *testing.T) {
 					continue
 				}
 				reached[cur] = true
-				for _, imp := range hostImports(t, repo, cur) {
+				for _, imp := range read(cur) {
 					if isModulePackage(imp) {
 						queue = append(queue, imp)
 					}
