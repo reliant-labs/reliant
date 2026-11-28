@@ -147,7 +147,7 @@ function NewChatAttachedProjects({
   disabled: boolean;
 }) {
   const control = useDraftChatProjects({ primaryId, machineDaemonId, noMachine });
-  return <ChatProjectChips control={control} orgId={orgId} showPrimary={false} disabled={disabled} />;
+  return <ChatProjectChips control={control} orgId={orgId} showPrimary={false} addSize="control" disabled={disabled} />;
 }
 
 export function NewChatView({

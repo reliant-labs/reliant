@@ -32,6 +32,7 @@ import {
   type ProjectSelection,
 } from "../Projects/ProjectSelector";
 import { ComposerChip } from "./AttachmentPreview";
+import { COMPOSER_CONTROL } from "./composerControl";
 
 export interface ChatProjectChipsProps {
   control: ChatProjectsControl;
@@ -43,12 +44,28 @@ export interface ChatProjectChipsProps {
   showAdd?: boolean;
   /** The add control's label ("Add project"). */
   addLabel?: string;
+  /**
+   * The add control's shape, always with a dashed outline: `chip` (default)
+   * is a pill among the composer's project chips; `toolbar` is the composer
+   * tools row's pill (COMPOSER_CONTROL, like the model and mode pills beside
+   * it); `control` matches the new-chat view's project, machine and workspace
+   * buttons.
+   */
+  addSize?: "chip" | "toolbar" | "control";
   disabled?: boolean;
   className?: string;
 }
 
-const ADD_BUTTON =
-  "flex h-8 shrink-0 items-center gap-1 rounded-full border border-dashed border-border px-2.5 text-xs text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-60 touch:h-11";
+const ADD_BUTTON_BASE =
+  "flex shrink-0 items-center border border-dashed border-border text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-60";
+
+const ADD_BUTTON = {
+  chip: "h-8 gap-1 rounded-full px-2.5 text-xs touch:h-11",
+  toolbar: cn("gap-1 rounded-full px-2.5 text-xs font-medium", COMPOSER_CONTROL),
+  control: "gap-2 rounded-lg px-5 py-2.5 text-sm font-medium hover:border-border-strong",
+} as const;
+
+const ADD_ICON = { chip: "h-3.5 w-3.5", toolbar: "h-3.5 w-3.5", control: "h-4 w-4" } as const;
 
 const NOTICE_BUTTON =
   "rounded-md px-1.5 py-0.5 text-meta font-medium text-primary-ink hover:bg-foreground/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
@@ -108,6 +125,7 @@ export function ChatProjectChips({
   showPrimary = true,
   showAdd = true,
   addLabel = "Add project",
+  addSize = "chip",
   disabled = false,
   className,
 }: ChatProjectChipsProps) {
@@ -159,9 +177,9 @@ export function ChatProjectChips({
                   }}
                   disabled={disabled}
                   data-testid="chat-project-add"
-                  className={ADD_BUTTON}
+                  className={cn(ADD_BUTTON_BASE, ADD_BUTTON[addSize])}
                 >
-                  <Plus className="h-3.5 w-3.5" aria-hidden />
+                  <Plus className={ADD_ICON[addSize]} aria-hidden />
                   <span>{addLabel}</span>
                 </button>
               </Tooltip>
