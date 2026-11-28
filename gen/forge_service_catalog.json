@@ -15328,6 +15328,16 @@
           "auth_required": true
         },
         {
+          "id": "reliant.v1.FileSystemService/ListMachineDirectory",
+          "name": "ListMachineDirectory",
+          "input": "reliant.v1.ListMachineDirectoryRequest",
+          "output": "reliant.v1.ListMachineDirectoryResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "NO_SIDE_EFFECTS",
+          "auth_required": true
+        },
+        {
           "id": "reliant.v1.FileSystemService/ReplaceInFiles",
           "name": "ReplaceInFiles",
           "input": "reliant.v1.ReplaceInFilesRequest",
@@ -15609,6 +15619,24 @@
             "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.DownloadFileRequest",
             "OutputTypeFQ": "reliant.v1.DownloadFileResponse",
+            "InputProtoFile": "reliant/v1/filesystem.proto",
+            "OutputProtoFile": "reliant/v1/filesystem.proto",
+            "Activity": {
+              "Mutating": false
+            }
+          },
+          {
+            "Name": "ListMachineDirectory",
+            "InputType": "ListMachineDirectoryRequest",
+            "OutputType": "ListMachineDirectoryResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
+            "InputTypeFQ": "reliant.v1.ListMachineDirectoryRequest",
+            "OutputTypeFQ": "reliant.v1.ListMachineDirectoryResponse",
             "InputProtoFile": "reliant/v1/filesystem.proto",
             "OutputProtoFile": "reliant/v1/filesystem.proto",
             "Activity": {
@@ -16010,6 +16038,56 @@
               "Name": "daemon_id",
               "ProtoType": "string",
               "IsOptional": true
+            }
+          ],
+          "ListMachineDirectoryRequest": [
+            {
+              "Name": "project_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "worktree_id",
+              "ProtoType": "string",
+              "IsOptional": true
+            },
+            {
+              "Name": "chat_id",
+              "ProtoType": "string",
+              "IsOptional": true
+            },
+            {
+              "Name": "path",
+              "ProtoType": "string",
+              "IsOptional": true
+            }
+          ],
+          "ListMachineDirectoryResponse": [
+            {
+              "Name": "path",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "entries",
+              "ProtoType": "[]message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.MachineDirectoryEntry"
+            },
+            {
+              "Name": "home_dir",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "workspace_root",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "truncated",
+              "ProtoType": "bool",
+              "IsOptional": false
             }
           ],
           "ReplaceInFilesRequest": [
@@ -16658,6 +16736,77 @@
               "optional": true
             }
           ],
+          "reliant.v1.ListMachineDirectoryRequest": [
+            {
+              "name": "project_id",
+              "kind": "string"
+            },
+            {
+              "name": "worktree_id",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "chat_id",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "path",
+              "kind": "string",
+              "optional": true
+            }
+          ],
+          "reliant.v1.ListMachineDirectoryResponse": [
+            {
+              "name": "path",
+              "kind": "string"
+            },
+            {
+              "name": "entries",
+              "kind": "message",
+              "type_name": "reliant.v1.MachineDirectoryEntry",
+              "repeated": true
+            },
+            {
+              "name": "home_dir",
+              "kind": "string"
+            },
+            {
+              "name": "workspace_root",
+              "kind": "string"
+            },
+            {
+              "name": "truncated",
+              "kind": "bool"
+            }
+          ],
+          "reliant.v1.MachineDirectoryEntry": [
+            {
+              "name": "name",
+              "kind": "string"
+            },
+            {
+              "name": "path",
+              "kind": "string"
+            },
+            {
+              "name": "is_directory",
+              "kind": "bool"
+            },
+            {
+              "name": "is_symlink",
+              "kind": "bool"
+            },
+            {
+              "name": "size",
+              "kind": "int64"
+            },
+            {
+              "name": "modified",
+              "kind": "string"
+            }
+          ],
           "reliant.v1.ReplaceInFilesRequest": [
             {
               "name": "project_id",
@@ -16895,6 +17044,9 @@
           "reliant.v1.GetFileTreeResponse": "reliant/v1/filesystem.proto",
           "reliant.v1.ListDirectoryRequest": "reliant/v1/filesystem.proto",
           "reliant.v1.ListDirectoryResponse": "reliant/v1/filesystem.proto",
+          "reliant.v1.ListMachineDirectoryRequest": "reliant/v1/filesystem.proto",
+          "reliant.v1.ListMachineDirectoryResponse": "reliant/v1/filesystem.proto",
+          "reliant.v1.MachineDirectoryEntry": "reliant/v1/filesystem.proto",
           "reliant.v1.ReplaceInFilesRequest": "reliant/v1/filesystem.proto",
           "reliant.v1.ReplaceInFilesResponse": "reliant/v1/filesystem.proto",
           "reliant.v1.ReplaceResult": "reliant/v1/filesystem.proto",
