@@ -113,6 +113,59 @@ func TestWorkerCallLLMGetsTheFeatureGate(t *testing.T) {
 	})
 }
 
+// TestFeatureGateReachesEveryConsumer holds every other consumer of the
+// process's feature gate to it, the same way: each Deps literal must set its
+// gate field to g.FeatureGate() in compose.go, or to d.Gate where a provider
+// passes its own Deps.Gate on. Each field is optional and a nil gate entitles
+// nothing, so dropping any one of these fails closed and compiles: GTM would
+// silently disappear from that surface (the catalog, the API server's and the
+// worker's trigger services, or the API server's and the worker's GTM domain).
+func TestFeatureGateReachesEveryConsumer(t *testing.T) {
+	fromGraph := func(v ast.Expr) bool { return isCallOf(v, "g", "FeatureGate") }
+	fromDeps := func(v ast.Expr) bool { return isSelector(v, "d", "Gate") }
+	cases := []struct {
+		file, fn  string
+		pkg, typ  string // the Deps literal's type: pkg.typ, or typ when pkg is ""
+		field     string
+		value     func(ast.Expr) bool
+		valueName string
+	}{
+		{"compose.go", "newCatalog", "catalog", "Deps", "Gate", fromGraph, "g.FeatureGate()"},
+		{"compose.go", "newTrigger", "trigger", "Deps", "Gate", fromGraph, "g.FeatureGate()"},
+		{"compose.go", "newWorkerTrigger", "", "WorkerTriggerDeps", "Gate", fromGraph, "g.FeatureGate()"},
+		{"providers_worker.go", "NewWorkerTrigger", "trigger", "Deps", "Gate", fromDeps, "d.Gate"},
+		{"compose.go", "newGtmDomain", "", "GtmDomainDeps", "Gate", fromGraph, "g.FeatureGate()"},
+		{"providers_gtm.go", "NewGtmDomain", "gtmsvc", "Deps", "Gate", fromDeps, "d.Gate"},
+		{"compose.go", "newWorkerGtmDomain", "", "WorkerGtmDomainDeps", "Gate", fromGraph, "g.FeatureGate()"},
+		{"providers_gtm.go", "NewWorkerGtmDomain", "gtmsvc", "Deps", "Gate", fromDeps, "d.Gate"},
+	}
+	for _, c := range cases {
+		typ := c.typ
+		if c.pkg != "" {
+			typ = c.pkg + "." + c.typ
+		}
+		t.Run(c.file+": "+c.fn+" sets "+typ+"."+c.field, func(t *testing.T) {
+			f := parseGo(t, c.file)
+			found := false
+			eachFunc(f, c.fn, func(body *ast.BlockStmt) {
+				ast.Inspect(body, func(n ast.Node) bool {
+					lit, ok := n.(*ast.CompositeLit)
+					if !ok {
+						return true
+					}
+					if (c.pkg == "" && isIdent(lit.Type, c.typ)) || (c.pkg != "" && isSelector(lit.Type, c.pkg, c.typ)) {
+						found = found || hasField(lit, c.field, c.value)
+					}
+					return true
+				})
+			})
+			if !found {
+				t.Errorf("%s does not set %s.%s to %s", c.fn, typ, c.field, c.valueName)
+			}
+		})
+	}
+}
+
 func parseGo(t *testing.T, path string) *ast.File {
 	t.Helper()
 	f, err := parser.ParseFile(token.NewFileSet(), path, nil, 0)
