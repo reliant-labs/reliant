@@ -220,6 +220,8 @@ type LaunchedRunCounter interface {
 // store.ChatExtStore satisfies it.
 type WorktreeChatLister interface {
 	ListChatsForWorktree(ctx context.Context, userID, worktreeID string, limit int) ([]db.WorktreeChat, error)
+	// GetLiveChatIDForWorktree is a non-archived chat bound to the worktree, "" when none.
+	GetLiveChatIDForWorktree(ctx context.Context, worktreeID string) (string, error)
 }
 
 // WorkflowSlugChecker reports whether a user already has a workflow with a
@@ -534,7 +536,6 @@ type runScenarioStore interface {
 type worktreeStore interface {
 	workspacecreate.Store
 	repopkg.AdoptStore
-	GetLiveChatIDForWorktree(ctx context.Context, worktreeID string) (string, error)
 	ListReposByProject(ctx context.Context, projectID string) ([]*core.Repo, error)
 	ListWorktrees(ctx context.Context, filters db.WorktreeFilters) ([]*db.Worktree, error)
 }

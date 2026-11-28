@@ -31,6 +31,15 @@ type Deps struct {
 	// writes. Required for SaveMessage (a read-only caller may leave it
 	// nil). store.ThreadExtStore satisfies it.
 	Senders Senders
+	// AmbientMemory commits a new thread's ambient-memory policy inside the
+	// creating transaction. When nil, New derives it only when Repo supplies
+	// the role or a non-nil ORM handle; otherwise it remains nil and workflow
+	// creation fails closed. An explicit implementation is always retained,
+	// even with a nil Repo (workflow creation still requires Repo).
+	// store.ThreadExtStore satisfies it.
+	//
+	// forge:optional-dep
+	AmbientMemory AmbientMemory
 	// Signaler wakes a thread's workflow when it is interrupted. Nil sends
 	// no signal: the interrupt still cancels the thread's running tools.
 	Signaler TemporalSignaler
@@ -53,13 +62,18 @@ type Senders interface {
 	SenderTitlesByThreadIDs(ctx context.Context, threadIDs []string) (map[string]string, error)
 }
 
+// AmbientMemory latches a thread's ambient-memory exclusion once, and answers
+// the value in force. store.ThreadExtStore satisfies it.
+type AmbientMemory interface {
+	ResolveThreadAmbientMemoryExclusion(ctx context.Context, chatID, threadID string, requested bool) (bool, error)
+}
+
 // Repository defines the subset of *db.Repo needed by the threads service.
 // This allows for easier testing and decouples threads from the full repository.
 type Repository interface {
 	// Thread operations
 	CreateThread(ctx context.Context, thread *db.Thread) (*db.Thread, error)
 	GetThread(ctx context.Context, id string) (*db.Thread, error)
-	ResolveThreadAmbientMemoryExclusion(ctx context.Context, chatID, threadID string, requested bool) (bool, error)
 	GetThreadWithParent(ctx context.Context, id string) (*db.Thread, *string, error)
 	GetRootThread(ctx context.Context, conversationID string) (*db.Thread, error)
 

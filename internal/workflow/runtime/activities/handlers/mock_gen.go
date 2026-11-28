@@ -802,7 +802,7 @@ func (m *MockMessageRepairStore) GetAttachmentCalls() []MockMessageRepairStoreGe
 var _ MessageRepairStore = (*MockMessageRepairStore)(nil)
 
 // forge:section MockLLMHistoryStore
-// forge:hash=0b6286892c10c8b2dcc27cdfb8512b657baceb0f51eea723edea4c8e6a60805b
+// forge:hash=02a50fa0453b59397ca73aeb23ef8f7724199f648361d4cae4241a6a37a57bf1
 
 // MockLLMHistoryStore is a test mock for the LLMHistoryStore interface.
 //
@@ -815,7 +815,6 @@ type MockLLMHistoryStore struct {
 	contractkit.Recorder
 	CreateThreadFunc                                         func(context.Context, *db.Thread) (*db.Thread, error)
 	GetThreadFunc                                            func(context.Context, string) (*db.Thread, error)
-	ResolveThreadAmbientMemoryExclusionFunc                  func(context.Context, string, string, bool) (bool, error)
 	GetThreadWithParentFunc                                  func(context.Context, string) (*db.Thread, *string, error)
 	GetRootThreadFunc                                        func(context.Context, string) (*db.Thread, error)
 	CreateWorkflowFunc                                       func(context.Context, *db.Workflow) error
@@ -870,15 +869,6 @@ func (m *MockLLMHistoryStore) GetThread(ctx context.Context, id string) (*db.Thr
 		return m.GetThreadFunc(ctx, id)
 	}
 	return nil, contractkit.MockNotSet("MockLLMHistoryStore", "GetThread")
-}
-
-// ResolveThreadAmbientMemoryExclusion records the call and delegates to ResolveThreadAmbientMemoryExclusionFunc when set.
-func (m *MockLLMHistoryStore) ResolveThreadAmbientMemoryExclusion(ctx context.Context, chatID string, threadID string, requested bool) (bool, error) {
-	m.Recorder.Record("ResolveThreadAmbientMemoryExclusion", ctx, chatID, threadID, requested)
-	if m.ResolveThreadAmbientMemoryExclusionFunc != nil {
-		return m.ResolveThreadAmbientMemoryExclusionFunc(ctx, chatID, threadID, requested)
-	}
-	return false, contractkit.MockNotSet("MockLLMHistoryStore", "ResolveThreadAmbientMemoryExclusion")
 }
 
 // GetThreadWithParent records the call and delegates to GetThreadWithParentFunc when set.
@@ -1240,30 +1230,6 @@ func (m *MockLLMHistoryStore) GetThreadCalls() []MockLLMHistoryStoreGetThreadCal
 		var r MockLLMHistoryStoreGetThreadCall
 		r.Ctx, _ = c.Args[0].(context.Context)
 		r.ID, _ = c.Args[1].(string)
-		out = append(out, r)
-	}
-	return out
-}
-
-// MockLLMHistoryStoreResolveThreadAmbientMemoryExclusionCall is one recorded call of MockLLMHistoryStore.ResolveThreadAmbientMemoryExclusion, one
-// field per parameter.
-type MockLLMHistoryStoreResolveThreadAmbientMemoryExclusionCall struct {
-	Ctx       context.Context
-	ChatID    string
-	ThreadID  string
-	Requested bool
-}
-
-// ResolveThreadAmbientMemoryExclusionCalls returns every recorded ResolveThreadAmbientMemoryExclusion call, oldest first, with
-// its arguments typed. It reads the same log as Calls("ResolveThreadAmbientMemoryExclusion").
-func (m *MockLLMHistoryStore) ResolveThreadAmbientMemoryExclusionCalls() []MockLLMHistoryStoreResolveThreadAmbientMemoryExclusionCall {
-	var out []MockLLMHistoryStoreResolveThreadAmbientMemoryExclusionCall
-	for _, c := range m.Recorder.Calls("ResolveThreadAmbientMemoryExclusion") {
-		var r MockLLMHistoryStoreResolveThreadAmbientMemoryExclusionCall
-		r.Ctx, _ = c.Args[0].(context.Context)
-		r.ChatID, _ = c.Args[1].(string)
-		r.ThreadID, _ = c.Args[2].(string)
-		r.Requested, _ = c.Args[3].(bool)
 		out = append(out, r)
 	}
 	return out
@@ -5142,7 +5108,7 @@ func (m *MockCleanupStore) UpsertToolCallCalls() []MockCleanupStoreUpsertToolCal
 var _ CleanupStore = (*MockCleanupStore)(nil)
 
 // forge:section MockCompactStore
-// forge:hash=3b7104057468adccfbc1cb449e32a94fe15c65368fa03cdc7af993ad63cf0ba3
+// forge:hash=1728f314822aa873326f941aaec223e0a9557494183e31e7180e3be17831c424
 
 // MockCompactStore is a test mock for the CompactStore interface.
 //
@@ -5157,7 +5123,6 @@ type MockCompactStore struct {
 	SetCompactionSummaryMessageFunc                          func(context.Context, string, string) (*db.ContextWindow, error)
 	CreateChatUpdateFunc                                     func(context.Context, string, reliantv1.ChatUpdateType, string, string) error
 	CreateThreadFunc                                         func(context.Context, *db.Thread) (*db.Thread, error)
-	ResolveThreadAmbientMemoryExclusionFunc                  func(context.Context, string, string, bool) (bool, error)
 	GetThreadWithParentFunc                                  func(context.Context, string) (*db.Thread, *string, error)
 	GetRootThreadFunc                                        func(context.Context, string) (*db.Thread, error)
 	CreateWorkflowFunc                                       func(context.Context, *db.Workflow) error
@@ -5231,15 +5196,6 @@ func (m *MockCompactStore) CreateThread(ctx context.Context, thread *db.Thread) 
 		return m.CreateThreadFunc(ctx, thread)
 	}
 	return nil, contractkit.MockNotSet("MockCompactStore", "CreateThread")
-}
-
-// ResolveThreadAmbientMemoryExclusion records the call and delegates to ResolveThreadAmbientMemoryExclusionFunc when set.
-func (m *MockCompactStore) ResolveThreadAmbientMemoryExclusion(ctx context.Context, chatID string, threadID string, requested bool) (bool, error) {
-	m.Recorder.Record("ResolveThreadAmbientMemoryExclusion", ctx, chatID, threadID, requested)
-	if m.ResolveThreadAmbientMemoryExclusionFunc != nil {
-		return m.ResolveThreadAmbientMemoryExclusionFunc(ctx, chatID, threadID, requested)
-	}
-	return false, contractkit.MockNotSet("MockCompactStore", "ResolveThreadAmbientMemoryExclusion")
 }
 
 // GetThreadWithParent records the call and delegates to GetThreadWithParentFunc when set.
@@ -5658,30 +5614,6 @@ func (m *MockCompactStore) CreateThreadCalls() []MockCompactStoreCreateThreadCal
 		var r MockCompactStoreCreateThreadCall
 		r.Ctx, _ = c.Args[0].(context.Context)
 		r.Thread, _ = c.Args[1].(*db.Thread)
-		out = append(out, r)
-	}
-	return out
-}
-
-// MockCompactStoreResolveThreadAmbientMemoryExclusionCall is one recorded call of MockCompactStore.ResolveThreadAmbientMemoryExclusion, one
-// field per parameter.
-type MockCompactStoreResolveThreadAmbientMemoryExclusionCall struct {
-	Ctx       context.Context
-	ChatID    string
-	ThreadID  string
-	Requested bool
-}
-
-// ResolveThreadAmbientMemoryExclusionCalls returns every recorded ResolveThreadAmbientMemoryExclusion call, oldest first, with
-// its arguments typed. It reads the same log as Calls("ResolveThreadAmbientMemoryExclusion").
-func (m *MockCompactStore) ResolveThreadAmbientMemoryExclusionCalls() []MockCompactStoreResolveThreadAmbientMemoryExclusionCall {
-	var out []MockCompactStoreResolveThreadAmbientMemoryExclusionCall
-	for _, c := range m.Recorder.Calls("ResolveThreadAmbientMemoryExclusion") {
-		var r MockCompactStoreResolveThreadAmbientMemoryExclusionCall
-		r.Ctx, _ = c.Args[0].(context.Context)
-		r.ChatID, _ = c.Args[1].(string)
-		r.ThreadID, _ = c.Args[2].(string)
-		r.Requested, _ = c.Args[3].(bool)
 		out = append(out, r)
 	}
 	return out
@@ -9492,7 +9424,7 @@ func (m *MockThreadStatusStore) CreateChatUpdateCalls() []MockThreadStatusStoreC
 var _ ThreadStatusStore = (*MockThreadStatusStore)(nil)
 
 // forge:section MockUsageLimitWaitStore
-// forge:hash=7958c62c30795d44543d84273daa78b229bcfda2b2739fc4e1a18caf60f036d7
+// forge:hash=4ba7d31607a2618b4d1c95310f0930e1dff70d026e5b92b8b9ea02239aa84c6f
 
 // MockUsageLimitWaitStore is a test mock for the UsageLimitWaitStore interface.
 //
@@ -9505,7 +9437,6 @@ type MockUsageLimitWaitStore struct {
 	contractkit.Recorder
 	CreateThreadFunc                                         func(context.Context, *db.Thread) (*db.Thread, error)
 	GetThreadFunc                                            func(context.Context, string) (*db.Thread, error)
-	ResolveThreadAmbientMemoryExclusionFunc                  func(context.Context, string, string, bool) (bool, error)
 	GetThreadWithParentFunc                                  func(context.Context, string) (*db.Thread, *string, error)
 	GetRootThreadFunc                                        func(context.Context, string) (*db.Thread, error)
 	CreateWorkflowFunc                                       func(context.Context, *db.Workflow) error
@@ -9559,15 +9490,6 @@ func (m *MockUsageLimitWaitStore) GetThread(ctx context.Context, id string) (*db
 		return m.GetThreadFunc(ctx, id)
 	}
 	return nil, contractkit.MockNotSet("MockUsageLimitWaitStore", "GetThread")
-}
-
-// ResolveThreadAmbientMemoryExclusion records the call and delegates to ResolveThreadAmbientMemoryExclusionFunc when set.
-func (m *MockUsageLimitWaitStore) ResolveThreadAmbientMemoryExclusion(ctx context.Context, chatID string, threadID string, requested bool) (bool, error) {
-	m.Recorder.Record("ResolveThreadAmbientMemoryExclusion", ctx, chatID, threadID, requested)
-	if m.ResolveThreadAmbientMemoryExclusionFunc != nil {
-		return m.ResolveThreadAmbientMemoryExclusionFunc(ctx, chatID, threadID, requested)
-	}
-	return false, contractkit.MockNotSet("MockUsageLimitWaitStore", "ResolveThreadAmbientMemoryExclusion")
 }
 
 // GetThreadWithParent records the call and delegates to GetThreadWithParentFunc when set.
@@ -9920,30 +9842,6 @@ func (m *MockUsageLimitWaitStore) GetThreadCalls() []MockUsageLimitWaitStoreGetT
 		var r MockUsageLimitWaitStoreGetThreadCall
 		r.Ctx, _ = c.Args[0].(context.Context)
 		r.ID, _ = c.Args[1].(string)
-		out = append(out, r)
-	}
-	return out
-}
-
-// MockUsageLimitWaitStoreResolveThreadAmbientMemoryExclusionCall is one recorded call of MockUsageLimitWaitStore.ResolveThreadAmbientMemoryExclusion, one
-// field per parameter.
-type MockUsageLimitWaitStoreResolveThreadAmbientMemoryExclusionCall struct {
-	Ctx       context.Context
-	ChatID    string
-	ThreadID  string
-	Requested bool
-}
-
-// ResolveThreadAmbientMemoryExclusionCalls returns every recorded ResolveThreadAmbientMemoryExclusion call, oldest first, with
-// its arguments typed. It reads the same log as Calls("ResolveThreadAmbientMemoryExclusion").
-func (m *MockUsageLimitWaitStore) ResolveThreadAmbientMemoryExclusionCalls() []MockUsageLimitWaitStoreResolveThreadAmbientMemoryExclusionCall {
-	var out []MockUsageLimitWaitStoreResolveThreadAmbientMemoryExclusionCall
-	for _, c := range m.Recorder.Calls("ResolveThreadAmbientMemoryExclusion") {
-		var r MockUsageLimitWaitStoreResolveThreadAmbientMemoryExclusionCall
-		r.Ctx, _ = c.Args[0].(context.Context)
-		r.ChatID, _ = c.Args[1].(string)
-		r.ThreadID, _ = c.Args[2].(string)
-		r.Requested, _ = c.Args[3].(bool)
 		out = append(out, r)
 	}
 	return out
@@ -11430,7 +11328,7 @@ func (m *MockTriggerPauser) SystemPauseTriggerCalls() []MockTriggerPauserSystemP
 var _ TriggerPauser = (*MockTriggerPauser)(nil)
 
 // forge:section MockWorkflowStatusStore
-// forge:hash=5c5c6decf91dba13f0226bd759700435da00b023b0e004b3c02b45524c4dcf0a
+// forge:hash=d55c304783ad575271bad8641c2f57ff3b686386afce45b4c274eb19c7109846
 
 // MockWorkflowStatusStore is a test mock for the WorkflowStatusStore interface.
 //
@@ -11456,7 +11354,6 @@ type MockWorkflowStatusStore struct {
 	SetChatPausedForMachineFunc                              func(context.Context, string, bool) (bool, error)
 	CreateChatUpdateFunc                                     func(context.Context, string, reliantv1.ChatUpdateType, string, string) error
 	CreateThreadFunc                                         func(context.Context, *db.Thread) (*db.Thread, error)
-	ResolveThreadAmbientMemoryExclusionFunc                  func(context.Context, string, string, bool) (bool, error)
 	GetThreadWithParentFunc                                  func(context.Context, string) (*db.Thread, *string, error)
 	GetRootThreadFunc                                        func(context.Context, string) (*db.Thread, error)
 	CreateContextWindowFunc                                  func(context.Context, *db.ContextWindow) (*db.ContextWindow, error)
@@ -11635,15 +11532,6 @@ func (m *MockWorkflowStatusStore) CreateThread(ctx context.Context, thread *db.T
 		return m.CreateThreadFunc(ctx, thread)
 	}
 	return nil, contractkit.MockNotSet("MockWorkflowStatusStore", "CreateThread")
-}
-
-// ResolveThreadAmbientMemoryExclusion records the call and delegates to ResolveThreadAmbientMemoryExclusionFunc when set.
-func (m *MockWorkflowStatusStore) ResolveThreadAmbientMemoryExclusion(ctx context.Context, chatID string, threadID string, requested bool) (bool, error) {
-	m.Recorder.Record("ResolveThreadAmbientMemoryExclusion", ctx, chatID, threadID, requested)
-	if m.ResolveThreadAmbientMemoryExclusionFunc != nil {
-		return m.ResolveThreadAmbientMemoryExclusionFunc(ctx, chatID, threadID, requested)
-	}
-	return false, contractkit.MockNotSet("MockWorkflowStatusStore", "ResolveThreadAmbientMemoryExclusion")
 }
 
 // GetThreadWithParent records the call and delegates to GetThreadWithParentFunc when set.
@@ -12366,30 +12254,6 @@ func (m *MockWorkflowStatusStore) CreateThreadCalls() []MockWorkflowStatusStoreC
 		var r MockWorkflowStatusStoreCreateThreadCall
 		r.Ctx, _ = c.Args[0].(context.Context)
 		r.Thread, _ = c.Args[1].(*db.Thread)
-		out = append(out, r)
-	}
-	return out
-}
-
-// MockWorkflowStatusStoreResolveThreadAmbientMemoryExclusionCall is one recorded call of MockWorkflowStatusStore.ResolveThreadAmbientMemoryExclusion, one
-// field per parameter.
-type MockWorkflowStatusStoreResolveThreadAmbientMemoryExclusionCall struct {
-	Ctx       context.Context
-	ChatID    string
-	ThreadID  string
-	Requested bool
-}
-
-// ResolveThreadAmbientMemoryExclusionCalls returns every recorded ResolveThreadAmbientMemoryExclusion call, oldest first, with
-// its arguments typed. It reads the same log as Calls("ResolveThreadAmbientMemoryExclusion").
-func (m *MockWorkflowStatusStore) ResolveThreadAmbientMemoryExclusionCalls() []MockWorkflowStatusStoreResolveThreadAmbientMemoryExclusionCall {
-	var out []MockWorkflowStatusStoreResolveThreadAmbientMemoryExclusionCall
-	for _, c := range m.Recorder.Calls("ResolveThreadAmbientMemoryExclusion") {
-		var r MockWorkflowStatusStoreResolveThreadAmbientMemoryExclusionCall
-		r.Ctx, _ = c.Args[0].(context.Context)
-		r.ChatID, _ = c.Args[1].(string)
-		r.ThreadID, _ = c.Args[2].(string)
-		r.Requested, _ = c.Args[3].(bool)
 		out = append(out, r)
 	}
 	return out

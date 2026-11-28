@@ -81,6 +81,10 @@ func TestWorkerPresetPathsReadOnlyThePresetsColumn(t *testing.T) {
 	require.Empty(t, spy.callers, "worker preset paths read the whole project config row")
 }
 
+func (s *fullConfigRowReads) ResolveThreadAmbientMemoryExclusion(ctx context.Context, chatID, threadID string, requested bool) (bool, error) {
+	return store.NewThreadExtStore(s.ORM()).ResolveThreadAmbientMemoryExclusion(ctx, chatID, threadID, requested)
+}
+
 func (s *fullConfigRowReads) GetChat(ctx context.Context, id string) (*db.Chat, error) {
 	return chatviews.Of(s.Repo).GetChat(ctx, id)
 }

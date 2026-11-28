@@ -394,7 +394,7 @@ func (m *MockTriggerReads) GetTriggerEventByChatCalls() []MockTriggerReadsGetTri
 var _ TriggerReads = (*MockTriggerReads)(nil)
 
 // forge:section MockRepository
-// forge:hash=90865156acc0019ef5ece0a88932fe4832d9395e897102d666e0925082dd9922
+// forge:hash=4db154c96afa941dd6cca1de6dbf7aa203244de29d238375797cb1b9ea323766
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -416,7 +416,6 @@ type MockRepository struct {
 	ListLiveToolCallsByChatFunc                              func(context.Context, string) ([]*db.ToolCall, error)
 	CreateThreadFunc                                         func(context.Context, *db.Thread) (*db.Thread, error)
 	GetThreadFunc                                            func(context.Context, string) (*db.Thread, error)
-	ResolveThreadAmbientMemoryExclusionFunc                  func(context.Context, string, string, bool) (bool, error)
 	GetThreadWithParentFunc                                  func(context.Context, string) (*db.Thread, *string, error)
 	GetRootThreadFunc                                        func(context.Context, string) (*db.Thread, error)
 	CreateWorkflowFunc                                       func(context.Context, *db.Workflow) error
@@ -551,15 +550,6 @@ func (m *MockRepository) GetThread(ctx context.Context, id string) (*db.Thread, 
 		return m.GetThreadFunc(ctx, id)
 	}
 	return nil, contractkit.MockNotSet("MockRepository", "GetThread")
-}
-
-// ResolveThreadAmbientMemoryExclusion records the call and delegates to ResolveThreadAmbientMemoryExclusionFunc when set.
-func (m *MockRepository) ResolveThreadAmbientMemoryExclusion(ctx context.Context, chatID string, threadID string, requested bool) (bool, error) {
-	m.Recorder.Record("ResolveThreadAmbientMemoryExclusion", ctx, chatID, threadID, requested)
-	if m.ResolveThreadAmbientMemoryExclusionFunc != nil {
-		return m.ResolveThreadAmbientMemoryExclusionFunc(ctx, chatID, threadID, requested)
-	}
-	return false, contractkit.MockNotSet("MockRepository", "ResolveThreadAmbientMemoryExclusion")
 }
 
 // GetThreadWithParent records the call and delegates to GetThreadWithParentFunc when set.
@@ -1096,30 +1086,6 @@ func (m *MockRepository) GetThreadCalls() []MockRepositoryGetThreadCall {
 		var r MockRepositoryGetThreadCall
 		r.Ctx, _ = c.Args[0].(context.Context)
 		r.ID, _ = c.Args[1].(string)
-		out = append(out, r)
-	}
-	return out
-}
-
-// MockRepositoryResolveThreadAmbientMemoryExclusionCall is one recorded call of MockRepository.ResolveThreadAmbientMemoryExclusion, one
-// field per parameter.
-type MockRepositoryResolveThreadAmbientMemoryExclusionCall struct {
-	Ctx       context.Context
-	ChatID    string
-	ThreadID  string
-	Requested bool
-}
-
-// ResolveThreadAmbientMemoryExclusionCalls returns every recorded ResolveThreadAmbientMemoryExclusion call, oldest first, with
-// its arguments typed. It reads the same log as Calls("ResolveThreadAmbientMemoryExclusion").
-func (m *MockRepository) ResolveThreadAmbientMemoryExclusionCalls() []MockRepositoryResolveThreadAmbientMemoryExclusionCall {
-	var out []MockRepositoryResolveThreadAmbientMemoryExclusionCall
-	for _, c := range m.Recorder.Calls("ResolveThreadAmbientMemoryExclusion") {
-		var r MockRepositoryResolveThreadAmbientMemoryExclusionCall
-		r.Ctx, _ = c.Args[0].(context.Context)
-		r.ChatID, _ = c.Args[1].(string)
-		r.ThreadID, _ = c.Args[2].(string)
-		r.Requested, _ = c.Args[3].(bool)
 		out = append(out, r)
 	}
 	return out

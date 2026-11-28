@@ -27,23 +27,46 @@ import (
 
 // ==================== Chats ====================
 
+// GetChat returns the chat with its computed state.
+//
+// Deprecated: use store.ChatsWithActivityExtStore.GetChat.
+func (r *Repo) GetChat(ctx context.Context, id string) (*Chat, error) {
+	return store.GetChat(ctx, r.ORM(), id)
+}
+
+// GetChatWithUserCheck returns the chat only when userID owns it.
+//
+// Deprecated: use store.ChatsWithActivityExtStore.GetChatWithUserCheck.
+func (r *Repo) GetChatWithUserCheck(ctx context.Context, id, userID string) (*Chat, error) {
+	return store.GetChatWithUserCheck(ctx, r.ORM(), id, userID)
+}
+
+// GetLiveChatIDForWorktree returns one non-archived bound chat, or an empty string.
+//
+// Deprecated: use store.ChatExtStore.GetLiveChatIDForWorktree.
+func (r *Repo) GetLiveChatIDForWorktree(ctx context.Context, worktreeID string) (string, error) {
+	return store.GetLiveChatIDForWorktree(ctx, r.ORM(), worktreeID)
+}
+
+// ListWorktreeIDsWithRunningChat reports which worktrees have a run going in them.
+//
+// Deprecated: use store.ChatExtStore.ListWorktreeIDsWithRunningChat.
+func (r *Repo) ListWorktreeIDsWithRunningChat(ctx context.Context, worktreeIDs []string) (map[string]bool, error) {
+	return store.ListWorktreeIDsWithRunningChat(ctx, r.ORM(), worktreeIDs)
+}
+
+// ResolveThreadAmbientMemoryExclusion reads and latches the thread's memory exclusion policy.
+//
+// Deprecated: use store.ThreadExtStore.ResolveThreadAmbientMemoryExclusion.
+func (r *Repo) ResolveThreadAmbientMemoryExclusion(ctx context.Context, chatID, threadID string, requested bool) (bool, error) {
+	return store.ResolveThreadAmbientMemoryExclusion(ctx, r.ORM(), chatID, threadID, requested)
+}
+
 func (r *Repo) CreateChat(ctx context.Context, chat *Chat) error {
 	if chat == nil {
 		return fmt.Errorf("chat cannot be nil")
 	}
 	return store.InsertChat(ctx, r.ORM(), chat)
-}
-
-// GetLiveChatIDForWorktree returns a non-archived chat bound to this worktree,
-// or an empty string when it is unused.
-func (r *Repo) GetLiveChatIDForWorktree(ctx context.Context, worktreeID string) (string, error) {
-	return store.GetLiveChatIDForWorktree(ctx, r.ORM(), worktreeID)
-}
-
-// ListWorktreeIDsWithRunningChat reports which of worktreeIDs have a run going
-// in them: a bound chat's run, or a bound thread's own (store.WorktreeRunActivities).
-func (r *Repo) ListWorktreeIDsWithRunningChat(ctx context.Context, worktreeIDs []string) (map[string]bool, error) {
-	return store.ListWorktreeIDsWithRunningChat(ctx, r.ORM(), worktreeIDs)
 }
 
 func (r *Repo) ListChats(ctx context.Context, filters ChatFilters) ([]*Chat, error) {
@@ -2906,11 +2929,6 @@ func (r *Repo) GetThread(ctx context.Context, id string) (*Thread, error) {
 		return nil, fmt.Errorf("thread ID cannot be empty")
 	}
 	return store.GetThread(ctx, r.ORM(), id)
-}
-
-// ResolveThreadAmbientMemoryExclusion fails closed on persistence errors.
-func (r *Repo) ResolveThreadAmbientMemoryExclusion(ctx context.Context, chatID, threadID string, requested bool) (bool, error) {
-	return store.ResolveThreadAmbientMemoryExclusion(ctx, r.ORM(), chatID, threadID, requested)
 }
 
 func (r *Repo) GetRootThread(ctx context.Context, chatID string) (*Thread, error) {

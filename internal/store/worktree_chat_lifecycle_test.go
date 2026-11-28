@@ -34,14 +34,14 @@ func TestGetLiveChatIDForWorktree(t *testing.T) {
 	for i := 0; i < 1001; i++ {
 		require.NoError(t, env.Repo.CreateChat(ctx, convChat(fmt.Sprintf("unrelated-%d", i), time.Now().UTC())))
 	}
-	id, err := env.Repo.GetLiveChatIDForWorktree(ctx, *c.WorktreeID)
+	id, err := store.GetLiveChatIDForWorktree(ctx, env.Repo.ORM(), *c.WorktreeID)
 	require.NoError(t, err)
 	require.Equal(t, c.ID, id)
-	id, err = env.Repo.GetLiveChatIDForWorktree(ctx, "unused")
+	id, err = store.GetLiveChatIDForWorktree(ctx, env.Repo.ORM(), "unused")
 	require.NoError(t, err)
 	require.Empty(t, id)
 	require.NoError(t, env.Repo.UpdateChatState(ctx, c.ID, core.ChatStateArchived, "test"))
-	id, err = env.Repo.GetLiveChatIDForWorktree(ctx, *c.WorktreeID)
+	id, err = store.GetLiveChatIDForWorktree(ctx, env.Repo.ORM(), *c.WorktreeID)
 	require.NoError(t, err)
 	require.Empty(t, id)
 }
@@ -65,10 +65,10 @@ func TestListWorktreeIDsWithRunningChat(t *testing.T) {
 		c := boundFixture(t, env, id, false)
 		require.NoError(t, env.Repo.CreateWorkflow(ctx, newWorkflow("wf-"+id, c.ID, nil, *status, now)))
 	}
-	got, err := env.Repo.ListWorktreeIDsWithRunningChat(ctx, []string{"active", "pending", "done", "paused", "nochat", "missing"})
+	got, err := store.ListWorktreeIDsWithRunningChat(ctx, env.Repo.ORM(), []string{"active", "pending", "done", "paused", "nochat", "missing"})
 	require.NoError(t, err)
 	require.Equal(t, map[string]bool{"active": true, "pending": true, "paused": true}, got)
-	got, err = env.Repo.ListWorktreeIDsWithRunningChat(ctx, nil)
+	got, err = store.ListWorktreeIDsWithRunningChat(ctx, env.Repo.ORM(), nil)
 	require.NoError(t, err)
 	require.Empty(t, got)
 }
@@ -88,13 +88,13 @@ func TestRunningChatExcludesSpawnedThreadWorkspaceOverride(t *testing.T) {
 			require.NoError(t, env.Repo.CreateWorktree(ctx, child))
 			require.NoError(t, env.Repo.CreateWorkflow(ctx, newWorkflow("wf-parent", chat.ID, nil, status, time.Now().UTC())))
 			mustExecConv(t, env, `INSERT INTO threads (id, chat_id, created_at, origin, status, worktree_id) VALUES ('spawn-child', $1, NOW(), 'spawn', 2, $2)`, chat.ID, child.ID)
-			got, err := env.Repo.ListWorktreeIDsWithRunningChat(ctx, []string{*chat.WorktreeID, child.ID})
+			got, err := store.ListWorktreeIDsWithRunningChat(ctx, env.Repo.ORM(), []string{*chat.WorktreeID, child.ID})
 			require.NoError(t, err)
 			require.Equal(t, map[string]bool{*chat.WorktreeID: true}, got, "the parent chat's run holds only the chat's workspace")
 
 			wf := newWorkflow("spawn-child", chat.ID, ptr("wf-parent"), status, time.Now().UTC())
 			require.NoError(t, env.Repo.CreateWorkflow(ctx, wf))
-			got, err = env.Repo.ListWorktreeIDsWithRunningChat(ctx, []string{*chat.WorktreeID, child.ID})
+			got, err = store.ListWorktreeIDsWithRunningChat(ctx, env.Repo.ORM(), []string{*chat.WorktreeID, child.ID})
 			require.NoError(t, err)
 			require.Equal(t, map[string]bool{*chat.WorktreeID: true, child.ID: true}, got, "the spawned thread's own run holds its workspace")
 		})

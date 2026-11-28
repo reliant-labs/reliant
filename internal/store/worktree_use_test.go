@@ -60,7 +60,7 @@ func TestWorktreeRunActivities_UsageLimitWaitIsRunning(t *testing.T) {
 	require.WithinDuration(t, time.Now().Add(-time.Hour), acts[*cleared.WorktreeID].LastActive, 2*time.Minute,
 		"a cleared wait is not activity")
 
-	running, err := env.Repo.ListWorktreeIDsWithRunningChat(ctx, ids)
+	running, err := store.ListWorktreeIDsWithRunningChat(ctx, env.Repo.ORM(), ids)
 	require.NoError(t, err)
 	require.Equal(t, map[string]bool{*held.WorktreeID: true}, running)
 
@@ -80,7 +80,7 @@ func TestWorktreeRunActivities_UsageLimitWaitOfSpawnedThread(t *testing.T) {
 	mustExecConv(t, env, `INSERT INTO threads (id, chat_id, created_at, origin, status, worktree_id) VALUES ('t-sub', $1, NOW(), 'spawn', 2, 'spawned')`, parent.ID)
 	providerWait(t, env, parent.ID, "t-sub", time.Now().Add(time.Hour))
 
-	running, err := env.Repo.ListWorktreeIDsWithRunningChat(ctx, []string{"spawned"})
+	running, err := store.ListWorktreeIDsWithRunningChat(ctx, env.Repo.ORM(), []string{"spawned"})
 	require.NoError(t, err)
 	require.True(t, running["spawned"], "a sub-agent's wait holds the worktree it was spawned into")
 }

@@ -21,3 +21,9 @@ func WithChats(repo *db.Repo) RepoWithChats { return RepoWithChats{Repo: repo} }
 func (r RepoWithChats) GetChat(ctx context.Context, id string) (*db.Chat, error) {
 	return chatviews.Of(r.Repo).GetChat(ctx, id)
 }
+
+// ResolveThreadAmbientMemoryExclusion latches a thread's ambient-memory
+// exclusion once and answers the value in force.
+func (r RepoWithChats) ResolveThreadAmbientMemoryExclusion(ctx context.Context, chatID, threadID string, requested bool) (bool, error) {
+	return chatviews.AmbientMemory(r.Repo)(ctx, chatID, threadID, requested)
+}

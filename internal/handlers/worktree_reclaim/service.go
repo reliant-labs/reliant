@@ -37,6 +37,11 @@ type Daemons interface {
 type Repository interface {
 	GetDaemonStorageState(ctx context.Context, daemonID string) (string, error)
 	ListAttachedDaemonIDsForUser(ctx context.Context, userID string, staleThreshold time.Duration) ([]string, error)
+}
+
+// Chats says whether a Reliant workspace is in use. store.ChatExtStore
+// satisfies it.
+type Chats interface {
 	// GetLiveChatIDForWorktree is a non-archived chat bound to a Reliant
 	// workspace, "" when none: its checkout is never removed on approval.
 	GetLiveChatIDForWorktree(ctx context.Context, worktreeID string) (string, error)
@@ -56,6 +61,8 @@ type Deps struct {
 	Logger *slog.Logger
 	Config *config.Config
 	Repo   Repository
+	// Chats is whether a workspace has a live chat (store.ChatExtStore).
+	Chats Chats
 	// Daemons reads the caller's machine.
 	Daemons Daemons
 	// Sender reaches the machine's daemon. nil when no daemon router is
@@ -75,6 +82,9 @@ func (d Deps) validateDeps() error {
 	}
 	if d.Repo == nil {
 		return fmt.Errorf("worktree_reclaim: Deps.Repo is required")
+	}
+	if d.Chats == nil {
+		return fmt.Errorf("worktree_reclaim: Deps.Chats is required")
 	}
 	if d.Daemons == nil {
 		return fmt.Errorf("worktree_reclaim: Deps.Daemons is required")

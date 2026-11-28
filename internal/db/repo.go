@@ -1118,7 +1118,7 @@ func (r *Repo) UpdateChatState(ctx context.Context, chatID string, state ChatSta
 			return nil
 		}
 		if state == ChatStateArchived {
-			live, err := r.GetLiveChatIDForWorktree(ctx, wt.ID)
+			live, err := store.GetLiveChatIDForWorktree(ctx, r.ORM(), wt.ID)
 			if err != nil {
 				return fmt.Errorf("check shared worktree: %w", err)
 			}

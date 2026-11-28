@@ -1758,6 +1758,7 @@ func (g *Graph) newWorktreeReclaim() (*worktree_reclaim.Service, error) {
 		Logger:  g.Log,
 		Config:  g.Cfg,
 		Repo:    g.Database(),
+		Chats:   store.NewChatExtStore(g.Database().ORM()),
 		Daemons: store.NewDaemonExtStore(g.Database().ORM()),
 		Sender:  g.APIDaemonRouter().NATSDaemonRouter,
 	})

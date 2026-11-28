@@ -9,6 +9,7 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
+	"github.com/reliant-labs/forge/pkg/orm"
 	"go.temporal.io/sdk/client"
 
 	"github.com/stretchr/testify/require"
@@ -62,6 +63,12 @@ type failAfterUserUpdateRepo struct {
 }
 
 var _ Repository = (*failAfterUserUpdateRepo)(nil)
+
+// ORM keeps the real database handle visible to the launcher's thread service
+// while CreateUserUpdate still goes through the failure-injecting wrapper.
+func (r *failAfterUserUpdateRepo) ORM() *orm.Client {
+	return r.Repository.(*db.Repo).ORM()
+}
 
 func (r *failAfterUserUpdateRepo) CreateUserUpdate(ctx context.Context, update *db.UserUpdate) error {
 	if r.shouldFail {
@@ -118,7 +125,7 @@ func TestChatService_CreateChat_AtomicOnMidTransactionFailure(t *testing.T) {
 	temporal := &atomicityTestTemporalClient{}
 	service := &Service{
 		deps: Deps{
-			Repo: failingRepo, Chats: chataccesstest.For(failingRepo),
+			Repo: failingRepo, Chats: chataccesstest.For(repo),
 			Workflows:   store.NewWorkflowExtStore(repo.ORM()),
 			Worktrees:   store.NewWorktreeExtStore(repo.ORM()),
 			ProjectRows: store.NewProjectExtStore(repo.ORM()), TriggerEvents: store.NewTriggerEventExtStore(repo.ORM()),
@@ -127,7 +134,7 @@ func TestChatService_CreateChat_AtomicOnMidTransactionFailure(t *testing.T) {
 			AgentMessages: store.NewAgentMessageExtStore(repo.ORM()),
 			Temporal:      temporal,
 		},
-		threads: threads.New(threads.Deps{Repo: failingRepo}),
+		threads: threads.New(threads.Deps{Repo: failingRepo, AmbientMemory: store.NewThreadExtStore(repo.ORM())}),
 		runs:    runs.New(runs.Deps{Repo: failingRepo, Resolver: questions.NewFromRepo(repo), Chats: store.NewChatsWithActivityExtStore(repo.ORM()), Workflows: store.NewWorkflowExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal, Pause: nil}),
 	}
 
@@ -203,7 +210,7 @@ func TestChatService_CreateChat_SucceedsWithoutInjectedFailure(t *testing.T) {
 	temporal := &atomicityTestTemporalClient{}
 	service := &Service{
 		deps: Deps{
-			Repo: failingRepo, Chats: chataccesstest.For(failingRepo),
+			Repo: failingRepo, Chats: chataccesstest.For(repo),
 			Workflows:   store.NewWorkflowExtStore(repo.ORM()),
 			Worktrees:   store.NewWorktreeExtStore(repo.ORM()),
 			ProjectRows: store.NewProjectExtStore(repo.ORM()), TriggerEvents: store.NewTriggerEventExtStore(repo.ORM()),
@@ -212,7 +219,7 @@ func TestChatService_CreateChat_SucceedsWithoutInjectedFailure(t *testing.T) {
 			AgentMessages: store.NewAgentMessageExtStore(repo.ORM()),
 			Temporal:      temporal,
 		},
-		threads: threads.New(threads.Deps{Repo: failingRepo}),
+		threads: threads.New(threads.Deps{Repo: failingRepo, AmbientMemory: store.NewThreadExtStore(repo.ORM())}),
 		runs:    runs.New(runs.Deps{Repo: failingRepo, Resolver: questions.NewFromRepo(repo), Chats: store.NewChatsWithActivityExtStore(repo.ORM()), Workflows: store.NewWorkflowExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal, Pause: nil}),
 	}
 
