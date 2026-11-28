@@ -20,12 +20,16 @@ import { useId, useState } from "react";
 import { Check, Copy, LayoutDashboard } from "lucide-react";
 
 import { useUnmountSafeTimeout } from "@/hooks/useUnmountSafeTimeout";
-import { Code, ConnectError } from "@connectrpc/connect";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { Code, ConnectError, type Client } from "@connectrpc/connect";
 
 import Link from "@/components/forge-ui/link";
 import Modal from "@/components/forge-ui/modal";
-import { useDashboardMutation } from "@/hooks/dashboard-queries";
-import type { ObservabilityContextApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
+import { DashboardService } from "@/gen/controlplane/services/dashboard/v1/dashboard_pb";
+import { invalidateOrgDashboards } from "@/hooks/dashboard-queries";
+import { connectClient } from "@/lib/connect";
+import { useClient } from "@/lib/transportScope";
+import { dashboardDocumentOf, getDashboardRequest, savedDashboardOf, saveDashboardRequest } from "@/services/controlPlane/observability/dashboardsApi";
 import type { DashboardRef, DashboardSummary, SavedDashboard } from "@/services/controlPlane/observability/dashboardTypes";
 import type { Dashboard, Panel } from "@/services/controlPlane/observability/types";
 import { cn } from "@/lib/utils";
@@ -47,22 +51,28 @@ function isConflict(error: unknown): boolean {
  * the current version, add the panel under an id the dashboard does not use,
  * save against that version. A conflict (someone saved in between) is retried
  * once against the version that won; a second one is the caller's to show.
+ *
+ * A read and a write (and a retry) in one step, so it calls DashboardService
+ * itself: `client` is the caller's, on its scope's transport (useClient).
  */
-export async function appendPanel(api: Pick<ObservabilityContextApi, "getDashboard" | "saveDashboard">, input: { orgId: string; projectId: string; slug: string; panel: Panel; message: string }): Promise<SavedDashboard> {
+export async function appendPanel(client: Client<typeof DashboardService>, input: { orgId: string; projectId: string; slug: string; panel: Panel; message: string }): Promise<SavedDashboard> {
   const ref: DashboardRef = { kind: "workspace", projectId: input.projectId, key: input.slug };
   for (let attempt = 0; ; attempt++) {
-    const doc = await api.getDashboard({ orgId: input.orgId, ref });
+    const doc = dashboardDocumentOf(await client.getDashboard(getDashboardRequest({ orgId: input.orgId, ref })));
     const base = slugify(input.panel.title) || "panel";
     const panel = { ...input.panel, id: doc.spec.panels.some((p) => p.id === base) ? newPanelId(doc.spec, base) : base };
     try {
-      return await api.saveDashboard({
-        orgId: input.orgId,
-        projectId: input.projectId,
-        slug: input.slug,
-        spec: upsertPanel(doc.spec, panel),
-        baseVersion: doc.version,
-        message: input.message,
-      });
+      const saved = await client.saveDashboard(
+        saveDashboardRequest({
+          orgId: input.orgId,
+          projectId: input.projectId,
+          slug: input.slug,
+          spec: upsertPanel(doc.spec, panel),
+          baseVersion: doc.version,
+          message: input.message,
+        })
+      );
+      return savedDashboardOf(saved);
     } catch (error) {
       if (attempt === 0 && isConflict(error)) continue;
       throw error;
@@ -148,19 +158,30 @@ export function SaveToDashboardDialog({ orgId, project, env, environments, panel
   const creating = target === "new";
   const titled = { ...panel, title: panelTitle.trim() || panel.title };
 
-  const save = useDashboardMutation(orgId, (api, org, _input: void) => {
-    if (creating) {
-      return api.saveDashboard({
-        orgId: org,
-        projectId: project,
-        slug,
-        spec: newDashboardSpec(slug, newTitle.trim(), titled),
-        envScope: envScopeOf(scope, env, (name) => environments.find((candidate) => candidate.name === name)?.id),
-        baseVersion: 0,
-        message: `Created from the metrics explorer with ${titled.title}`,
-      });
-    }
-    return appendPanel(api, { orgId: org, projectId: project, slug: target, panel: titled, message: `Added ${titled.title} from the metrics explorer` });
+  // Creating is one SaveDashboard; adding to a dashboard is appendPanel's read-modify-write. Either way the
+  // org's dashboards are re-read once it settles, as after every dashboard write (dashboard-queries.ts).
+  const client = useClient(DashboardService, connectClient(DashboardService));
+  const queryClient = useQueryClient();
+  const save = useMutation({
+    mutationFn: async (_input: void) => {
+      const org = orgId as string;
+      if (creating) {
+        const saved = await client.saveDashboard(
+          saveDashboardRequest({
+            orgId: org,
+            projectId: project,
+            slug,
+            spec: newDashboardSpec(slug, newTitle.trim(), titled),
+            envScope: envScopeOf(scope, env, (name) => environments.find((candidate) => candidate.name === name)?.id),
+            baseVersion: 0,
+            message: `Created from the metrics explorer with ${titled.title}`,
+          })
+        );
+        return savedDashboardOf(saved);
+      }
+      return appendPanel(client, { orgId: org, projectId: project, slug: target, panel: titled, message: `Added ${titled.title} from the metrics explorer` });
+    },
+    onSettled: () => invalidateOrgDashboards(queryClient, orgId),
   });
 
   const done = save.data;

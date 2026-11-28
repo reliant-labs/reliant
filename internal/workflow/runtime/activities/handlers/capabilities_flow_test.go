@@ -162,6 +162,7 @@ func TestCapabilities_SurviveAFreshWorkerBetweenCallLLMAndExecuteTools(t *testin
 // call_llm and execute_tools share no memory: the spawn offer and its presets
 // — what the workflow dispatches against — and the tier all ride the record.
 func TestCapabilities_FireTriggerCannotEscapeParentTierOrUnattendedPolicy(t *testing.T) {
+	t.Parallel()
 	f := setupNoMachineFixture(t, false)
 	cfg := toolsConfig(tools.PermissionOrchestrator, []string{tools.ToolView}, []string{"*"}, nil)
 	capped := throughHistory(t, f.turnAs(t, cfg, RuntimeContext{SpawnDepth: 1, ParentPermission: tools.PermissionMutating}).GetCapabilities())

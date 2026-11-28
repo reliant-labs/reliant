@@ -11,7 +11,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/reliant/internal/db"
-	"github.com/reliant-labs/reliant/internal/llm/drivers"
 	"github.com/reliant-labs/reliant/internal/llm/models"
 )
 
@@ -32,6 +31,7 @@ func (f fakeSettingsReader) ListSettingsByKey(_ context.Context, _ string, _ str
 }
 
 func TestResolveLLMCall_AppliesTagPreferences(t *testing.T) {
+	t.Parallel()
 	f64 := func(v float64) *float64 { return &v }
 	moderate := models.ModelSelector{Tags: []string{models.TagModerate}}
 	// [moderate] carries claude-5.5-sonnet at high (#649 floored every tier
@@ -173,14 +173,13 @@ func TestResolveLLMCall_AppliesTagPreferences(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			userID := "user-" + uuid.NewString()
 			ctx := context.Background()
-			provisionProviderKeys(t, ctx, userID, []string{"anthropic"})
+			providers := provisionProviderKeys(t, ctx, userID, []string{"anthropic"})
 
 			captured := &capturedDriverOptions{}
-			original := drivers.GetDriver
-			drivers.GetDriver = captureDriverOptionsResolver(captured)
-			t.Cleanup(func() { drivers.GetDriver = original })
+			providers.getDriver = captureDriverOptionsResolver(captured)
 
 			spec := llmCallSpec{
 				UserID:        userID,
@@ -188,6 +187,7 @@ func TestResolveLLMCall_AppliesTagPreferences(t *testing.T) {
 				Selector:      tt.selector,
 				Temperature:   tt.temperature,
 				ThinkingLevel: tt.thinking,
+				providers:     providers,
 			}
 			if tt.reader.rows != nil || tt.reader.err != nil {
 				spec.TagPrefsReader = tt.reader
@@ -208,20 +208,20 @@ func TestResolveLLMCall_AppliesTagPreferences(t *testing.T) {
 }
 
 func TestResolveLLMCall_NoTagPrefsReaderIgnoresPreferences(t *testing.T) {
+	t.Parallel()
 	// Compaction/title calls leave TagPrefsReader nil: the user's tier tuning
 	// must not reach housekeeping calls.
 	userID := "user-" + uuid.NewString()
 	ctx := context.Background()
-	provisionProviderKeys(t, ctx, userID, []string{"anthropic"})
+	providers := provisionProviderKeys(t, ctx, userID, []string{"anthropic"})
 	captured := &capturedDriverOptions{}
-	original := drivers.GetDriver
-	drivers.GetDriver = captureDriverOptionsResolver(captured)
-	t.Cleanup(func() { drivers.GetDriver = original })
+	providers.getDriver = captureDriverOptionsResolver(captured)
 
 	resolved, err := resolveLLMCall(ctx, nil, llmCallSpec{
 		UserID:    userID,
 		SessionID: "s",
 		Selector:  models.ModelSelector{Tags: []string{models.TagModerate}},
+		providers: providers,
 	})
 	require.NoError(t, err)
 	assert.Equal(t, "claude-5.5-sonnet@anthropic", resolved.ModelID)

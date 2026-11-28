@@ -61,6 +61,13 @@ const (
 	// FileTooLargeToDownload: DownloadFile on a file over its whole-file cap
 	// (25 MB). FailedPrecondition; the message names the size and the cap.
 	FileTooLargeToDownload = "file_too_large_to_download"
+	// MachineBrowseUnsupported: ListMachineDirectory on a machine whose
+	// daemon predates it. FailedPrecondition; updating Reliant on that
+	// machine fixes it, and the Files tab says so instead of the machine view.
+	MachineBrowseUnsupported = "machine_browse_unsupported"
+	// NotADirectory: ListMachineDirectory on a path that is a file.
+	// FailedPrecondition; the client opens the path as a file instead.
+	NotADirectory = "not_a_directory"
 
 	// ScopeMissing is forge's accesstoken.ReasonScopeMissing: authenticated,
 	// but the credential lacks a scope; the scopes ride

@@ -366,6 +366,12 @@ jobs:
   visual:
     name: Visual baseline
     runs-on: ubuntu-latest
+    # Advisory in the merge queue (owner, 2026-11-27): 29 group failures in 72h
+    # were pixel diffs in surfaces the group never touched, and each one ejected
+    # every group behind it. A mismatch still shows on the run and uploads its
+    # diffs; visual-nightly.yml still files it on main. CI result reads this
+    # job's result as success.
+    continue-on-error: true
     # The build plus ~3 minutes of Playwright; CI result starts after it,
     # inside the ruleset's 45-minute check timeout.
     timeout-minutes: 25

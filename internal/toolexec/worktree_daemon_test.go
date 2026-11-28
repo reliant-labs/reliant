@@ -3,7 +3,9 @@ package toolexec
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"log/slog"
+	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -11,6 +13,10 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 )
+
+// worktreeDaemonRuns numbers TestServerTools_SeeTheWorktreesMachine's runs in
+// this process, for a chat id of their own.
+var worktreeDaemonRuns atomic.Int64
 
 // TestServerTools_SeeTheWorktreesMachine: a server-placed tool runs on the
 // worker, in a ToolContext rebuilt from the request's context map. The daemon
@@ -20,6 +26,10 @@ import (
 //
 // Not parallel: it swaps the process's default slog handler to read the
 // report, which with Sentry off (as in tests) is filed to the log.
+//
+// Each run files from its own chat: report_bug answers a repeat in the same
+// chat with the first report and files nothing, so under -count=3 (the flake
+// gate) a fixed chat id left the second run with no report to read.
 func TestServerTools_SeeTheWorktreesMachine(t *testing.T) {
 	var logs bytes.Buffer
 	previous := slog.Default()
@@ -36,7 +46,7 @@ func TestServerTools_SeeTheWorktreesMachine(t *testing.T) {
 			`"actual":"ls: /home/workspace: No such file or directory"}`,
 		ToolCallID:       "call-1",
 		UserID:           "user-1",
-		ChatID:           "chat-worktree-daemon",
+		ChatID:           fmt.Sprintf("chat-worktree-daemon-%d", worktreeDaemonRuns.Add(1)),
 		ProjectID:        "project-1",
 		ProjectPath:      "/home/workspace/projects/reliant",
 		WorktreeID:       "wt-1",

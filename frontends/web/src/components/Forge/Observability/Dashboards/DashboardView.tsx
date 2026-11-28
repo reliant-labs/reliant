@@ -58,15 +58,24 @@ import Tabs from "@/components/forge-ui/tabs";
 import Tag from "@/components/forge-ui/tag";
 import Tooltip from "@/components/forge-ui/tooltip";
 import {
-  dashboardKeys,
+  recordDashboardView,
   useDashboard,
-  useDashboardMutation,
   useDashboardVersions,
-  useStarDashboard,
+  useDashboardWriteOptions,
+  useToggleDashboardStar,
 } from "@/hooks/dashboard-queries";
+import { useArchiveDashboard, usePromoteDashboardToCode, useRestoreDashboardVersion, useSaveAsCopy, useSaveDashboard } from "@/hooks/controlplane/dashboard-service-hooks_gen";
 import { panelRead, useAlertHistory, useObservabilityOrg, usePanelQuery, useReleases, useServiceOverview } from "@/hooks/observability-queries";
 import { useEscapeLayer } from "@/hooks/useEscapeLayer";
-import { useObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
+import {
+  dashboardRefRequest,
+  promotedDashboardOf,
+  promoteDashboardToCodeRequest,
+  restoreDashboardVersionRequest,
+  saveAsCopyRequest,
+  savedDashboardOf,
+  saveDashboardRequest,
+} from "@/services/controlPlane/observability/dashboardsApi";
 import type { DashboardRef, DashboardSummary } from "@/services/controlPlane/observability/dashboardTypes";
 import type { Dashboard, DashboardSection, ObsScope, Panel } from "@/services/controlPlane/observability/types";
 import { bucketLabel, dashboardDefaultRange, RANGE_LABELS, RANGE_PRESETS, rangeForBucket, type RangePreset } from "@/services/controlPlane/observability/window";
@@ -193,7 +202,6 @@ const NO_ORG_ENVS: readonly ObsEnvironment[] = [];
 export function DashboardView({ project, dashRef, env: consoleEnv, environments: projectEnvironments, orgEnvironments = NO_ORG_ENVS, orgEnvironmentsLoading = false, orgEnvironmentsError = null, onRetryOrgEnvironments, search, onSearch, onEnvChange, hrefs: consoleHrefs, navigateTo, hub = null }: DashboardViewProps) {
   const org = useObservabilityOrg();
   const orgId = org.orgId;
-  const api = useObservabilityApi();
   const queryClient = useQueryClient();
   const refresh: RefreshInterval = search.refresh ?? "off";
   const consoleExplore = useExploreHref();
@@ -253,14 +261,11 @@ export function DashboardView({ project, dashRef, env: consoleEnv, environments:
   const refKey = `${dashRef.kind}/${dashRef.projectId}/${dashRef.key}`;
   useEffect(() => {
     if (!orgId) return;
-    void api
-      .recordDashboardView(orgId, dashRef)
-      .then(() => queryClient.invalidateQueries({ queryKey: [...dashboardKeys.all(orgId), "index"] }))
-      .catch(() => undefined);
+    void recordDashboardView(queryClient, orgId, dashRef).catch(() => undefined);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orgId, refKey]);
 
-  const star = useStarDashboard(orgId);
+  const star = useToggleDashboardStar(orgId);
   const [starredHere, setStarredHere] = useState<boolean | null>(null);
   useEffect(() => setStarredHere(null), [summary?.starred]);
   const starred = starredHere ?? !!summary?.starred;
@@ -296,21 +301,21 @@ export function DashboardView({ project, dashRef, env: consoleEnv, environments:
 
   // ── Dialogs ──
   const [dialog, setDialog] = useState<"copy" | "promote" | "archive" | null>(null);
-  const copy = useDashboardMutation(orgId, (a, org, input: { title: string; scope: "scope" | "all" }) =>
-    a.saveDashboardAsCopy({
-      orgId: org,
+  const writeOptions = useDashboardWriteOptions(orgId);
+  const copy = useSaveAsCopy(writeOptions);
+  const copyRequest = (input: { title: string; scope: "scope" | "all" }) =>
+    saveAsCopyRequest({
+      orgId: orgId as string,
       from: dashRef,
       projectId: project,
       title: input.title,
       envScope: envScopeOf(input.scope, env, (name) => environments.find((candidate) => candidate.name === name)?.id),
-    })
-  );
-  const promote = useDashboardMutation(orgId, (a, org, version: number | undefined) => a.promoteDashboardToCode(org, dashRef, version));
-  const archive = useDashboardMutation(orgId, (a, org) => a.archiveDashboard(org, dashRef));
-  const restore = useDashboardMutation(orgId, (a, org, input: { version: number; base: number }) => a.restoreDashboardVersion(org, dashRef, input.version, input.base));
-  const save = useDashboardMutation(orgId, (a, org, input: { spec: Dashboard; base: number; message: string }) =>
-    a.saveDashboard({ orgId: org, projectId: project, slug: dashRef.key, spec: input.spec, baseVersion: input.base, message: input.message })
-  );
+    });
+  const promote = usePromoteDashboardToCode(writeOptions);
+  const promoteVersion = (version: number | undefined) => promote.mutate(promoteDashboardToCodeRequest(orgId as string, dashRef, version));
+  const archive = useArchiveDashboard(writeOptions);
+  const restore = useRestoreDashboardVersion(writeOptions);
+  const save = useSaveDashboard(writeOptions);
 
   // ── Editing ──
   const [layout, setLayout] = useState<Dashboard | null>(null);
@@ -359,7 +364,10 @@ export function DashboardView({ project, dashRef, env: consoleEnv, environments:
   const viewingOld = !!search.version && search.version !== currentVersion;
   const editable = !summary.readOnly && docCanWrite && !search.version && !search.release;
   const writeVersion = (next: Dashboard, message: string, done?: () => void) =>
-    save.mutate({ spec: next, base: currentVersion, message }, { onSuccess: () => done?.() });
+    save.mutate(
+      saveDashboardRequest({ orgId: orgId as string, projectId: project, slug: dashRef.key, spec: next, baseVersion: currentVersion, message }),
+      { onSuccess: () => done?.() }
+    );
   const shown = layout ?? spec;
   const workspaceScope = summary.workspace?.envIds.length
     ? summary.workspace.envIds.map((id) => environments.find((candidate) => candidate.id === id)?.name ?? id).join(", ")
@@ -600,7 +608,7 @@ export function DashboardView({ project, dashRef, env: consoleEnv, environments:
                   className={BUTTON_SECONDARY}
                   onClick={() => {
                     setDialog("promote");
-                    promote.mutate(search.version);
+                    promoteVersion(search.version);
                   }}
                   disabled={!docCanWrite}
                   title={docCanWrite ? undefined : readOnlyReason ?? "Only organization admins can promote dashboards."}
@@ -663,7 +671,7 @@ export function DashboardView({ project, dashRef, env: consoleEnv, environments:
               disabled={restore.isPending}
               onClick={() =>
                 restore.mutate(
-                  { version: search.version!, base: currentVersion },
+                  restoreDashboardVersionRequest(orgId as string, dashRef, search.version!, currentVersion),
                   { onSuccess: () => onSearch({ version: undefined }) }
                 )
               }
@@ -795,10 +803,10 @@ export function DashboardView({ project, dashRef, env: consoleEnv, environments:
             setDialog(null);
           }}
           onSave={(input) =>
-            copy.mutate(input, {
-              onSuccess: (saved) => {
+            copy.mutate(copyRequest(input), {
+              onSuccess: (res) => {
                 setDialog(null);
-                navigateTo(hrefs.dashboard(saved.summary.ref, { ...search, version: undefined, release: undefined }));
+                navigateTo(hrefs.dashboard(savedDashboardOf(res, "the copy").summary.ref, { ...search, version: undefined, release: undefined }));
               },
             })
           }
@@ -807,10 +815,10 @@ export function DashboardView({ project, dashRef, env: consoleEnv, environments:
       {dialog === "promote" && (
         <PromoteDialog
           title={summary.title}
-          result={promote.data}
+          result={promote.data && promotedDashboardOf(promote.data)}
           pending={promote.isPending}
           error={promote.error}
-          onRetry={() => promote.mutate(search.version)}
+          onRetry={() => promoteVersion(search.version)}
           onClose={() => {
             promote.reset();
             setDialog(null);
@@ -825,7 +833,7 @@ export function DashboardView({ project, dashRef, env: consoleEnv, environments:
         loading={archive.isPending}
         onCancel={() => setDialog(null)}
         onConfirm={() =>
-          archive.mutate(undefined, {
+          archive.mutate(dashboardRefRequest(orgId as string, dashRef), {
             onSuccess: () => {
               setDialog(null);
               navigateTo(hrefs.list);

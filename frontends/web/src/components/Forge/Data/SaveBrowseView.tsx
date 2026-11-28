@@ -3,8 +3,9 @@
 import { useState } from "react";
 import Button from "@/components/forge-ui/button";
 import { useObservabilityOrg } from "@/hooks/observability-queries";
-import { useDashboard, useDashboardIndex, useDashboardMutation } from "@/hooks/dashboard-queries";
-import type { Dashboard } from "@/services/controlPlane/observability/types";
+import { useDashboard, useDashboardIndex, useDashboardWriteOptions } from "@/hooks/dashboard-queries";
+import { useSaveDashboard } from "@/hooks/controlplane/dashboard-service-hooks_gen";
+import { saveDashboardRequest } from "@/services/controlPlane/observability/dashboardsApi";
 import { useForgeConsole } from "../Console/consoleContext";
 import { cn } from "@/lib/utils";
 import { FIELD } from "../controlStyles";
@@ -25,16 +26,14 @@ export function SaveBrowseView({ search, environmentId }: { search: DataSearch; 
   const choices = index.data?.dashboards.filter((item) => item.source === "workspace" && !item.readOnly && item.ref.projectId === forgeProject) ?? [];
   const selected = choices.find((item) => item.ref.key === key);
   const doc = useDashboard(orgId, selected?.ref ?? null);
-  const save = useDashboardMutation(orgId, (api, org, input: { spec: Dashboard; base: number; slug: string }) => api.saveDashboard({
-    orgId: org, projectId: forgeProject, slug: input.slug, spec: input.spec, baseVersion: input.base, message: `Added Data view: ${search.table}`,
-  }));
+  const save = useSaveDashboard(useDashboardWriteOptions(orgId));
   const submit = () => {
     if (!doc.data || !selected || !doc.data.canWrite) return;
     try {
       const browse = browseViewOf(search);
       const id = `browse-${crypto.randomUUID()}`;
       const spec = { ...doc.data.spec, panels: [...doc.data.spec.panels, { id, kind: "browse", title: title.trim() || search.table!, signal: "", series: [], browse }] };
-      save.mutate({ spec, base: doc.data.version, slug: selected.ref.key }, { onSuccess: () => { setOpen(false); setError(null); }, onError: (err) => setError(err instanceof Error ? err.message : "Could not save view") });
+      save.mutate(saveDashboardRequest({ orgId: orgId as string, projectId: forgeProject, slug: selected.ref.key, spec, baseVersion: doc.data.version, message: `Added Data view: ${search.table}` }), { onSuccess: () => { setOpen(false); setError(null); }, onError: (err) => setError(err instanceof Error ? err.message : "Could not save view") });
     } catch (err) { setError(err instanceof Error ? err.message : "Invalid view"); }
   };
   if (!search.db || !search.table) return null;

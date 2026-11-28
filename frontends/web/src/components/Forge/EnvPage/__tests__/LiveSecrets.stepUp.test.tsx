@@ -34,17 +34,15 @@ const beginStepUp = vi.fn();
 const completeStepUp = vi.fn();
 
 // The env's declared shape, served per environment (GetEnvironmentShape).
-const SHAPE = {
+const SHAPE: ShapeLike = {
   kind: "self_managed",
   workloads: [{ name: "api", runtime: "cluster", cluster: "gke" }],
   secrets: [{ name: "STRIPE_KEY", provider: "hosted", declaredBy: ["api"] }],
   domains: [],
   clusters: [],
 };
-vi.mock("@/services/forge/live", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/services/forge/live")>()),
-  getEnvironmentShape: () => Promise.resolve(SHAPE),
-}));
+
+import { environmentShapeHandlers, type ShapeLike } from "@/test/deployReads";
 
 import { LiveSecretsSection } from "../LiveSecretsSection";
 
@@ -103,9 +101,12 @@ afterEach(() => setTransport(null));
 
 beforeEach(() => {
   vi.clearAllMocks();
-  // SecretStoreService answers at the transport (the generated hooks' seam).
+  // Both the declaration and SecretStoreService answer at the transport.
   setTransport(
-    mockTransport(secretStoreHandlers({ listSecrets, setSecret, deleteSecret, getSecretVersions, beginStepUp, completeStepUp }))
+    mockTransport({
+      ...environmentShapeHandlers(() => SHAPE),
+      ...secretStoreHandlers({ listSecrets, setSecret, deleteSecret, getSecretVersions, beginStepUp, completeStepUp }),
+    })
   );
   listSecrets.mockResolvedValue({ secrets: [SUMMARY], protected: true });
   getSecretVersions.mockResolvedValue({

@@ -15,6 +15,7 @@ import {
   Trash2,
   Link2,
   Download,
+  MonitorUp,
 } from "lucide-react";
 import { fileNodeExpandable, fileNodeUnavailableReason } from "./symlinks";
 import { FileIcon } from "./FileIcon";
@@ -39,6 +40,7 @@ import { toast } from "../../lib/toast-manager";
 import { buildFullPath, getRelativePath } from "../../lib/fileUtils";
 import { useCurrentWorktree, useWorktreeById } from "../../hooks/worktree-queries";
 import { downloadWorkspaceFile } from "./downloadWorkspaceFile";
+import { useFileBrowserScopeStore } from "../../store/fileBrowserScopeStore";
 
 export type FileOperationType = "copy" | "delete";
 
@@ -150,6 +152,7 @@ export const FileTreeItem = memo(function FileTreeItem({
   const currentWorktree = useCurrentWorktree();
   const listedWorktree = useWorktreeById(worktreeId);
   const { setClipboard, operation, filePath, fileName, isDirectory: clipboardIsDirectory, worktreeId: clipboardWorktreeId, projectId: clipboardProjectId, clearClipboard } = useFileClipboardStore();
+  const browseMachine = useFileBrowserScopeStore((state) => state.browseMachine);
   // Get the worktree for building full paths
   const effectiveWorktree = worktreeId 
     ? listedWorktree || currentWorktree
@@ -410,6 +413,18 @@ export const FileTreeItem = memo(function FileTreeItem({
     const fullPath = buildFullPath(effectiveWorktree?.path, node.path);
     items.push(
       MENU_SEPARATOR,
+      {
+        // "Pop out" of the project: the Machine view at the folder holding
+        // this entry, which it highlights. The tree's paths are relative to
+        // the workspace, and so is the machine view's request (the server
+        // resolves it there); "." is the workspace root itself.
+        label: "Reveal in Machine View",
+        icon: <MonitorUp className="w-4 h-4" />,
+        onClick: () => {
+          const i = node.path.replace(/\/+$/, "").lastIndexOf("/");
+          browseMachine(i > 0 ? node.path.slice(0, i) : ".", node.name);
+        },
+      },
       {
         label: "Copy Path",
         icon: <Copy className="w-4 h-4" />,

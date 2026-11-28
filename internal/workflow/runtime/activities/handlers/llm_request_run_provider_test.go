@@ -9,7 +9,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/reliant-labs/reliant/internal/llm/drivers"
 	"github.com/reliant-labs/reliant/internal/llm/models"
 )
 
@@ -22,31 +21,33 @@ func resolveWithBothConnected(t *testing.T, spec llmCallSpec) (*resolvedLLMCall,
 	t.Helper()
 	ctx := context.Background()
 	userID := "user-" + uuid.NewString()
-	provisionProviderKeys(t, ctx, userID, []string{"anthropic", "codex"})
+	providers := provisionProviderKeys(t, ctx, userID, []string{"anthropic", "codex"})
 	captured := &capturedDriverOptions{}
-	original := drivers.GetDriver
-	drivers.GetDriver = captureDriverOptionsResolver(captured)
-	t.Cleanup(func() { drivers.GetDriver = original })
-	spec.UserID, spec.SessionID = userID, "s"
+	providers.getDriver = captureDriverOptionsResolver(captured)
+	spec.UserID, spec.SessionID, spec.providers = userID, "s", providers
 	return resolveLLMCall(ctx, nil, spec)
 }
 
 func TestResolveLLMCall_RunProviderMovesATierClaudeLeads(t *testing.T) {
+	t.Parallel()
 	fast := models.ModelSelector{Tags: []string{models.TagFast}}
 
 	t.Run("without a run provider the tier's leader wins", func(t *testing.T) {
+		t.Parallel()
 		res, err := resolveWithBothConnected(t, llmCallSpec{Selector: fast})
 		require.NoError(t, err)
 		assert.Equal(t, "anthropic", res.ProviderDriver)
 	})
 
 	t.Run("a codex run resolves its sub-agent's tier on codex", func(t *testing.T) {
+		t.Parallel()
 		res, err := resolveWithBothConnected(t, llmCallSpec{Selector: fast, RunProviders: []string{"codex"}})
 		require.NoError(t, err)
 		assert.Equal(t, "codex", res.ProviderDriver)
 	})
 
 	t.Run("a selector's own pin is never overridden", func(t *testing.T) {
+		t.Parallel()
 		res, err := resolveWithBothConnected(t, llmCallSpec{
 			Selector:     models.ModelSelector{ID: "claude-4.5-haiku@anthropic"},
 			RunProviders: []string{"codex"},
@@ -57,6 +58,7 @@ func TestResolveLLMCall_RunProviderMovesATierClaudeLeads(t *testing.T) {
 	})
 
 	t.Run("a selector's own providers list is never overridden", func(t *testing.T) {
+		t.Parallel()
 		res, err := resolveWithBothConnected(t, llmCallSpec{
 			Selector:     models.ModelSelector{Tags: []string{models.TagFast}, Providers: []string{"anthropic"}},
 			RunProviders: []string{"codex"},
@@ -66,6 +68,7 @@ func TestResolveLLMCall_RunProviderMovesATierClaudeLeads(t *testing.T) {
 	})
 
 	t.Run("a run provider that serves nothing in the tier falls back to the tier's order", func(t *testing.T) {
+		t.Parallel()
 		res, err := resolveWithBothConnected(t, llmCallSpec{Selector: fast, RunProviders: []string{"gemini"}})
 		require.NoError(t, err)
 		assert.Equal(t, "anthropic", res.ProviderDriver)
@@ -76,18 +79,21 @@ func TestResolveLLMCall_RunProviderMovesATierClaudeLeads(t *testing.T) {
 // provider cannot serve. The run's provider is the more specific fact: the
 // preference's model is skipped, its thinking level and temperature are kept.
 func TestResolveLLMCall_RunProviderBeatsTagPreferenceModel(t *testing.T) {
+	t.Parallel()
 	fast := models.ModelSelector{Tags: []string{models.TagFast}}
 	reader := fakeSettingsReader{rows: map[string]string{
 		"model.tag_config.fast": `{"model_id":"claude-4.5-haiku","thinking_level":"low","temperature":0.4}`,
 	}}
 
 	t.Run("without a run provider the tag preference's model applies", func(t *testing.T) {
+		t.Parallel()
 		res, err := resolveWithBothConnected(t, llmCallSpec{Selector: fast, TagPrefsReader: reader})
 		require.NoError(t, err)
 		assert.Equal(t, "claude-4.5-haiku@anthropic", res.ModelID)
 	})
 
 	t.Run("a codex run skips a model codex cannot serve but keeps thinking and temperature", func(t *testing.T) {
+		t.Parallel()
 		res, err := resolveWithBothConnected(t, llmCallSpec{Selector: fast, TagPrefsReader: reader, RunProviders: []string{"codex"}})
 		require.NoError(t, err)
 		assert.Equal(t, "codex", res.ProviderDriver)
@@ -98,6 +104,7 @@ func TestResolveLLMCall_RunProviderBeatsTagPreferenceModel(t *testing.T) {
 	})
 
 	t.Run("a tag preference the run's provider serves still applies", func(t *testing.T) {
+		t.Parallel()
 		pref := fakeSettingsReader{rows: map[string]string{
 			"model.tag_config.fast": `{"model_id":"gpt-6-luna"}`,
 		}}

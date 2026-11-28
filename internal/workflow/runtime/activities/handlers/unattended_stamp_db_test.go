@@ -24,6 +24,7 @@ import (
 // trigger clears its launch events' trigger_id, which must not turn its runs
 // attended (review of #2718, B1). On the migrated schema, through *db.Repo.
 func TestUnattendedStamp_DeletedTriggerStaysOrgFundedOnly(t *testing.T) {
+	t.Parallel()
 	repo, cleanup := db.SetupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()

@@ -19,13 +19,14 @@ import { createTestQueryClient } from "@/test/renderWithQuery";
 import { ObservabilityApiProvider } from "@/services/controlPlane/observability/ObservabilityApiContext";
 import { observabilityFixtureTransport } from "@/test/observabilityFixtures";
 import { createTransportScope, TransportScopeProvider } from "@/lib/transportScope";
+import { mockTransport } from "@/lib/test-utils";
 import { TestsService } from "@/gen/controlplane/services/tests/v1/tests_pb";
-import { ReleasesApiProvider } from "@/services/forge/ReleasesApiContext";
 
 import { ReleaseDetail, type ReleaseDetailSearch } from "../../Releases/ReleaseDetail";
 import { ReleasesList, type ReleasesSearch } from "../../Releases/ReleasesList";
 import { RELEASE_ENVS, RELEASE_PROJECT, RELEASES, createReleasesFixtureApi } from "../../Releases/__fixtures__/releaseFixtures";
 import { fixtureObsApi } from "../../Releases/__tests__/releasesTestUtils";
+import { releasesFixtureHandlers } from "../../Releases/__fixtures__/releaseFixtureTransport";
 import { FIXTURE_COMMIT, FIXTURE_NOW, FIXTURE_PROJECT, FIXTURE_RELEASES, fixtureSummaryResponse, fixtureTests, type FixtureTests, type TestsScenario } from "../fixtures";
 import { FIXTURE_RELEASE_COMMITS, FIXTURE_RELEASE_VERSIONS, fixtureReleaseCommit } from "../fixtureReleases";
 import { fixtureReleaseTestsWire } from "../releaseTestsFixtures";
@@ -201,20 +202,22 @@ function Providers({ api, children }: { api: FixtureTests; children: ReactNode }
   const [scope] = useState(() => {
     const tests = fixtureScope(api).transport;
     const obs = observabilityFixtureTransport(() => obsApi, Date.now());
+    const handlers = releasesFixtureHandlers(createReleasesFixtureApi());
+    const releases = mockTransport(handlers);
+    const pick = (method: { parent: { typeName: string }; name: string }) =>
+      method.parent.typeName === TestsService.typeName ? tests : `${method.parent.typeName}/${method.name}` in handlers ? releases : obs;
     return createTransportScope({
       id: "release-tests-fixtures",
       queryClient: createTestQueryClient(),
       transport: {
-        unary: (method, ...rest) => (method.parent.typeName === TestsService.typeName ? tests : obs).unary(method, ...rest),
-        stream: (method, ...rest) => (method.parent.typeName === TestsService.typeName ? tests : obs).stream(method, ...rest),
+        unary: (method, ...rest) => pick(method).unary(method, ...rest),
+        stream: (method, ...rest) => pick(method).stream(method, ...rest),
       },
     });
   });
   return (
     <TransportScopeProvider scope={scope}>
-      <ObservabilityApiProvider api={obsApi}>
-        <ReleasesApiProvider api={createReleasesFixtureApi()}>{children}</ReleasesApiProvider>
-      </ObservabilityApiProvider>
+      <ObservabilityApiProvider api={obsApi}>{children}</ObservabilityApiProvider>
     </TransportScopeProvider>
   );
 }

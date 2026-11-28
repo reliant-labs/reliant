@@ -236,6 +236,13 @@ export const DEMO_TIPS: Record<DemoTipKey, DemoTip> = {
     command: "forge obs query prod --sql \"<select>\"",
     target: tid("speed-insights-routes"),
   },
+  "site-insights-seo": {
+    title: "SEO",
+    body: "After every release, each page of your site is checked the way search engines and link previews read it. The worst pages come first: open one for what to fix and how its link looks in Slack, X and LinkedIn.",
+    help: "Your agent can audit the built site locally before the next release, with the same rules.",
+    command: "forge site audit dist",
+    target: tid("site-insights-seo-routes"),
+  },
   sessions: {
     title: "Sessions",
     body: "Understand what a visitor experienced before something went wrong. Open a session to follow its pages, actions and errors alongside the requests behind them.",
