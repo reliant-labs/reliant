@@ -85,6 +85,61 @@ func TestAskUserTask_AQuestionCarriesNoTaskFlag(t *testing.T) {
 	}
 }
 
+func TestAskUserTask_LegacyEnvelopePrecedence(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name  string
+		outer string
+		inner bool
+		want  bool
+	}{
+		{"outer true", `true`, false, true},
+		{"outer string true", `"true"`, false, true},
+		{"outer false overrides inner", `false`, true, false},
+		{"outer string false overrides inner", `"false"`, true, false},
+		{"outer null overrides inner", `null`, true, false},
+		{"absent outer uses inner", ``, true, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			inner, err := json.Marshal(map[string]interface{}{
+				"task":      tc.inner,
+				"questions": []map[string]string{{"question": "Sign in"}},
+			})
+			require.NoError(t, err)
+			envelope := map[string]interface{}{
+				"__reliant_tool_meta__": map[string]interface{}{},
+				"input":                string(inner),
+			}
+			if tc.outer != "" {
+				envelope["task"] = json.RawMessage(tc.outer)
+			}
+			input, err := json.Marshal(envelope)
+			require.NoError(t, err)
+			var suite temporaltest.WorkflowTestSuite
+			env := suite.NewTestWorkflowEnvironment()
+			var questions questionActivities
+			questions.register(env)
+
+			env.ExecuteWorkflow(askUserOnceWorkflow, string(input))
+
+			require.True(t, env.IsWorkflowCompleted())
+			require.NoError(t, env.GetWorkflowError())
+			var result map[string]interface{}
+			require.NoError(t, env.GetWorkflowResult(&result))
+			wantContent := asyncAskUserResponse("q-async")
+			if tc.want {
+				wantContent = asyncAskUserTaskResponse("q-async")
+			}
+			assert.Equal(t, wantContent, result["content"])
+			require.Len(t, questions.created, 1)
+			md := createdMetadata(t, questions.created[0])
+			assert.Equal(t, tc.want, md["task"] == true)
+			assert.Equal(t, []interface{}{map[string]interface{}{"question": "Sign in"}}, md["questions"])
+		})
+	}
+}
+
 // blocking: true with task: true waits for the user to mark it, and the
 // model reads what they marked.
 func TestAskUserTask_BlockingWaitsForTheMark(t *testing.T) {

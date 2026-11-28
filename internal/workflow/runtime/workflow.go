@@ -5224,11 +5224,15 @@ func executeAskUserInline(
 	toolCallID := tc.GetId()
 	rawInput := tc.GetInput()
 
-	// Unwrap __reliant_tool_meta__ envelope if present
+	// Unwrap __reliant_tool_meta__ envelope if present. An explicit outer
+	// task value takes precedence over the inner value, even when false.
 	var envelope map[string]interface{}
+	var outerTask, hasOuterTask bool
 	if err := json.Unmarshal([]byte(rawInput), &envelope); err == nil {
 		if _, hasMeta := envelope["__reliant_tool_meta__"]; hasMeta {
 			if inner, ok := envelope["input"].(string); ok {
+				_, hasOuterTask = envelope["task"]
+				outerTask = askUserInputFlag(envelope, "task")
 				rawInput = inner
 			}
 		}
@@ -5273,6 +5277,9 @@ func executeAskUserInline(
 	// is orthogonal to blocking: only the wording the model and the user see
 	// changes, never the path.
 	task := askUserInputFlag(toolInput, "task")
+	if hasOuterTask {
+		task = outerTask
+	}
 	if task {
 		metaObj["task"] = true
 	}
