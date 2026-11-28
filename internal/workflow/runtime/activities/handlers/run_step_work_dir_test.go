@@ -18,6 +18,7 @@ import (
 // under the credentials:none sandbox, a hand-off written in the work_dir the
 // workflow named was discarded (control-plane pr-regen, pr-fix).
 func TestRunStep_StartsTheCommandInTheNodesWorkDir(t *testing.T) {
+	t.Parallel()
 	f := newChatCheckoutFixture(t)
 	checkout := t.TempDir()
 	f.machine(t, "cloud-box", checkout)

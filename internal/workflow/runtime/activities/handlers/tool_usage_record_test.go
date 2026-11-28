@@ -188,6 +188,7 @@ func TestExecuteTools_AReplayedCallIsNotRecordedAgain(t *testing.T) {
 // An invoke_tool node's call is recorded like a model's, keyed by its
 // positional tool_call_id.
 func TestInvokeTool_RecordsTheCall(t *testing.T) {
+	t.Parallel()
 	h, chatID := newValidationChat(t)
 	usage := &captureToolUsage{}
 	activity := NewInvokeToolActivity(tools.WithChats(h.Repo()), workspaceRowsOf(h.Repo()), toolCallsOf(h.Repo()), newMockToolExecutor()).WithToolUsage(usage)

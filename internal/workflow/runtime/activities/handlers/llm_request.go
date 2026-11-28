@@ -164,6 +164,33 @@ type llmCallSpec struct {
 	// models never come from the registry: they are synthesized per request
 	// from the daemons' published inventories.
 	Local *LocalModelSpec
+
+	// providers is where the call reads the providers it may draw on and
+	// builds the default account's driver. The zero value is the process's.
+	providers providerSource
+}
+
+// providerSource is what an LLM call reads the user's providers from and
+// builds the provider's default-account driver with. Each nil field is the
+// process's own (lookupAvailableDrivers, drivers.GetDriver); a test sets
+// them on its own call, so it never swaps package state other tests read.
+type providerSource struct {
+	lookup    func(ctx context.Context, scope drivers.Scope) (models.AvailableDrivers, error)
+	getDriver func(ctx context.Context, scope drivers.Scope, preferences models.Preferences, opts ...llm.DriverOption) (llm.Driver, error)
+}
+
+func (p providerSource) lookupAvailable(ctx context.Context, scope drivers.Scope) (models.AvailableDrivers, error) {
+	if p.lookup != nil {
+		return p.lookup(ctx, scope)
+	}
+	return lookupAvailableDrivers(ctx, scope)
+}
+
+func (p providerSource) defaultDriver(ctx context.Context, scope drivers.Scope, preferences models.Preferences, opts ...llm.DriverOption) (llm.Driver, error) {
+	if p.getDriver != nil {
+		return p.getDriver(ctx, scope, preferences, opts...)
+	}
+	return drivers.GetDriver(ctx, scope, preferences, opts...)
 }
 
 // scope is the drivers.Scope every account read of this call uses: the
@@ -516,7 +543,7 @@ func resolveLLMCallOnce(ctx context.Context, resolver drivers.DriverResolver, sp
 		// configured.
 		// A store failure says nothing about what the user has connected, so it
 		// must not read as "connect a provider", which is terminal.
-		availableDrivers, lerr := lookupAvailableDriversWithRetry(ctx, spec.scope())
+		availableDrivers, lerr := lookupAvailableDriversWithRetry(ctx, spec.providers.lookupAvailable, spec.scope())
 		if lerr != nil {
 			return nil, lerr
 		}
@@ -789,7 +816,7 @@ func resolveLLMCallOnce(ctx context.Context, resolver drivers.DriverResolver, sp
 			} else {
 				// The provider's default account, from the same scope the
 				// router saw.
-				driver, err = drivers.GetDriver(ctx, spec.scope(), preferences, driverOpts...)
+				driver, err = spec.providers.defaultDriver(ctx, spec.scope(), preferences, driverOpts...)
 			}
 			if err != nil {
 				return nil, fmt.Errorf("failed to get LLM driver: %w", err)

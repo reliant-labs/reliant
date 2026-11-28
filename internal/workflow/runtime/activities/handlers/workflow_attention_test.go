@@ -51,6 +51,7 @@ func (s unavailableReceiptStore) SetLaunchEventRunStatus(context.Context, string
 }
 
 func TestAttentionReceiptFailureRollsBackCompletedLifecycle(t *testing.T) {
+	t.Parallel()
 	f := newStreakFixture(t, false)
 	ctx := context.Background()
 	chatID := f.launch(core.TriggerEventKindSchedule, db.Active())
@@ -74,6 +75,7 @@ func (s unavailableAttentionStore) ApplyAttentionUpdate(context.Context, core.At
 }
 
 func TestAttentionSuccessfulEscalationPersistsAtomically(t *testing.T) {
+	t.Parallel()
 	for _, lost := range []bool{false, true} {
 		t.Run(map[bool]string{false: "committed", true: "lost-write"}[lost], func(t *testing.T) {
 			f := newStreakFixture(t, false)
@@ -106,6 +108,7 @@ func TestAttentionSuccessfulEscalationPersistsAtomically(t *testing.T) {
 }
 
 func TestAttentionTerminalPersistenceLossKeepsLegacyFailureVisible(t *testing.T) {
+	t.Parallel()
 	f := newStreakFixture(t, false)
 	ctx := context.Background()
 	chatID := f.launch(core.TriggerEventKindSchedule, db.Active())
@@ -139,6 +142,7 @@ func TestAttentionTerminalPersistenceLossKeepsLegacyFailureVisible(t *testing.T)
 // Real status bookkeeping remains failed (including semantic failure routing),
 // while a newer repair owner controls whether that incident pages its human.
 func TestAttentionPreservesFailedOutcomeWhileRepairOwnsIncident(t *testing.T) {
+	t.Parallel()
 	f := newStreakFixture(t, false)
 	ctx := context.Background()
 	observer := f.launch(core.TriggerEventKindSchedule, db.Active())

@@ -21,6 +21,7 @@ import (
 // inputs never change. Registering a CI-only cloud machine must not move its
 // workspace check OR its tools to that new, empty disk.
 func TestExecuteTools_LiveChatStaysOnMachineWhenSecondCloudRegisters(t *testing.T) {
+	t.Parallel()
 	h := NewIdempotencyTestHelper(t)
 	defer h.Cleanup()
 	ctx := context.Background()

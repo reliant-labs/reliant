@@ -24,9 +24,9 @@ var providerStoreReadBackoff = []time.Duration{250 * time.Millisecond, time.Seco
 
 // lookupAvailableDriversWithRetry reads the user's providers, re-reading a few
 // times on a store failure. A persistent failure comes back as a retryable
-// transientStoreError.
-func lookupAvailableDriversWithRetry(ctx context.Context, scope drivers.Scope) (models.AvailableDrivers, error) {
-	avail, err := lookupAvailableDrivers(ctx, scope)
+// transientStoreError. lookup is the read (providerSource.lookupAvailable).
+func lookupAvailableDriversWithRetry(ctx context.Context, lookup func(context.Context, drivers.Scope) (models.AvailableDrivers, error), scope drivers.Scope) (models.AvailableDrivers, error) {
+	avail, err := lookup(ctx, scope)
 	for _, wait := range providerStoreReadBackoff {
 		if err == nil {
 			break
@@ -36,7 +36,7 @@ func lookupAvailableDriversWithRetry(ctx context.Context, scope drivers.Scope) (
 			return models.AvailableDrivers{}, ctx.Err()
 		case <-time.After(wait):
 		}
-		avail, err = lookupAvailableDrivers(ctx, scope)
+		avail, err = lookup(ctx, scope)
 	}
 	if err != nil {
 		return models.AvailableDrivers{}, newTransientStoreError(ctx, err)
