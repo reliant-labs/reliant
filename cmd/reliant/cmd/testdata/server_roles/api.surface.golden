@@ -17,6 +17,8 @@ ENVIRONMENT kind=string flag="" default="" required=false optional=false sensiti
 FORGE_STORAGE_POLICY kind=string flag="" default="" required=false optional=false sensitive=false allowed=[] aliases=[]
 GITHUB_QUEUE_APP_CALLER_SECRET kind=string flag="" default="" required=false optional=true sensitive=true allowed=[] aliases=[]
 GRPC_PORT kind=int32 flag="grpc-port" default="9090" required=false optional=false sensitive=false allowed=[] aliases=[]
+GTM_ALLOWED_ORG_IDS kind=repeated string flag="" default="" required=false optional=false sensitive=false allowed=[] aliases=[]
+GTM_ANALYTICS_TOKEN kind=string flag="" default="" required=false optional=true sensitive=true allowed=[] aliases=[]
 HANDOFF_REDIRECTS kind=string flag="" default="" required=false optional=false sensitive=false allowed=[] aliases=[]
 HEALTH_PORT kind=int32 flag="health-port" default="8081" required=false optional=false sensitive=false allowed=[] aliases=[]
 IDP_BASE kind=string flag="" default="" required=false optional=false sensitive=false allowed=[] aliases=[]

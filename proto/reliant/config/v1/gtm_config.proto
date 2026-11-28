@@ -1,0 +1,36 @@
+syntax = "proto3";
+
+package reliant.config.v1;
+
+import "forge/v1/forge.proto";
+
+option go_package = "github.com/reliant-labs/reliant/gen/reliant/config/v1;configv1";
+
+// GtmConfig is who gets GTM (the go-to-market workspace) and how its
+// product-analytics read reaches the control plane. It is on
+// ServerProcessConfig, which every server role loads, because the API server
+// (nav, GtmService) and the worker (the agent's GTM tools) must give one
+// answer from one setting; nothing else reads it, so no other role's env
+// carries it (pkg/config's gateway reach test). internal/featuregate turns allowed_org_ids into the Gate every
+// GTM surface asks. The rules every config here follows are in config.proto's
+// header.
+message GtmConfig {
+  // The organizations GTM is on for, comma-separated; none turns GTM off
+  // everywhere (the kill switch). A person sees GTM only in a listed org they
+  // are a live member of. The loader trims each element and drops blank
+  // ones, so " a, ,b" means a and b.
+  repeated string allowed_org_ids = 1 [(forge.v1.config) = {
+    env_var: "GTM_ALLOWED_ORG_IDS"
+    description: "Comma-separated organization ids GTM is enabled for (none: GTM is off everywhere)"
+  }];
+
+  // The control-plane access token GTM's product-analytics read sends: an
+  // org-bound token with obs:read only, minted by the owner. Unset, the
+  // analytics read reports itself unavailable.
+  string analytics_token = 2 [(forge.v1.config) = {
+    env_var: "GTM_ANALYTICS_TOKEN"
+    sensitive: true
+    optional: true
+    description: "Control-plane access token (obs:read, org-bound) for GTM's product-analytics read (unset: unavailable)"
+  }];
+}

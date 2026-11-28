@@ -1629,8 +1629,17 @@ schema ServerProcessConfigReconciler:
     check:
         stall_watchdog != "", "stall_watchdog = \"\" cannot reach the process: an empty RELIANT_RECONCILER_STALL_WATCHDOG counts as unset, so it would load the default \"off\" — set a value, or change its default in the proto"
 
+# forge:section schema ServerProcessConfigGtm
+# forge:hash=4585d795f25eced4fd9eb5d27b53a4dd2ced17b0f051787666615f9940e1ea21
+# ServerProcessConfigGtm is the gtm block (GtmConfig) — author its values in config.k as `gtm.<field> = ...`.
+schema ServerProcessConfigGtm:
+    # Comma-separated organization ids GTM is enabled for (none: GTM is off everywhere)
+    allowed_org_ids: str = ""
+    # Control-plane access token (obs:read, org-bound) for GTM's product-analytics read (unset: unavailable)
+    analytics_token: ConfigSecretRef = ConfigSecretRef { name = "reliant-secrets", key = "gtm_analytics_token" }
+
 # forge:section schema ServerProcessConfig
-# forge:hash=8a0a8e3ac4a7b600c452e4933eca1d47d4ae9208eb5b4233b8796efcb281a271
+# forge:hash=be49f651828024aefa4be09677c15efee1cbdf818823c9871b1db4ac95f1f8aa
 schema ServerProcessConfig:
     # Data directory for logs and certs
     data_dir: str = "./data"
@@ -1664,6 +1673,8 @@ schema ServerProcessConfig:
     pipeline: ServerProcessConfigPipeline = ServerProcessConfigPipeline {}
     # reconciler config block (ReconcilerConfig). Set its fields as `reconciler.<field> = ...`.
     reconciler: ServerProcessConfigReconciler = ServerProcessConfigReconciler {}
+    # gtm config block (GtmConfig). Set its fields as `gtm.<field> = ...`.
+    gtm: ServerProcessConfigGtm = ServerProcessConfigGtm {}
 
     check:
         data_dir != "", "data_dir = \"\" cannot reach the process: an empty DATA_DIR counts as unset, so it would load the default \"./data\" — set a value, or pass --data-dir= in the workload's args to make it empty"
@@ -1697,6 +1708,10 @@ SERVER_PROCESS_CONFIG_SENSITIVE_ENV: [str] = [
     # forge:hash=6594ffda7535afb64244644b45d9c43800553c8535ee696b11b5ab413288d403
     "GITHUB_QUEUE_APP_CALLER_SECRET"
 
+    # forge:section SERVER_PROCESS_CONFIG_SENSITIVE_ENV gtm
+    # forge:hash=0da69df5e99ffed3adee8573a56e53345423e99a3c92d1138eca3e18d1e414bb
+    "GTM_ANALYTICS_TOKEN"
+
     # forge:section SERVER_PROCESS_CONFIG_SENSITIVE_ENV (root)
     # forge:hash=fa807b1957f7aadf24512d851ee31f0a3cce8a592088aa1c8c31993baf88d46c
     "RELIANT_OAUTH_<KEY>_CLIENT_SECRET"
@@ -1729,6 +1744,10 @@ SERVER_PROCESS_CONFIG_OPTIONAL_SECRET_ENV: [str] = [
     # forge:section SERVER_PROCESS_CONFIG_OPTIONAL_SECRET_ENV pipeline
     # forge:hash=c7f4d0012220917673ad816e9119ec61101768b73e2b640f49ba438c01fc155a
     "GITHUB_QUEUE_APP_CALLER_SECRET"
+
+    # forge:section SERVER_PROCESS_CONFIG_OPTIONAL_SECRET_ENV gtm
+    # forge:hash=78ae2df0a749882a2534f831996250c33a208c6ca670084124edaa53287c5ead
+    "GTM_ANALYTICS_TOKEN"
 
     # forge:section SERVER_PROCESS_CONFIG_OPTIONAL_SECRET_ENV (root)
     # forge:hash=ba93ebc6a133877e7d793fafefbd1983453237ac12c4626f0f9d7b18d2613c3f
@@ -1773,6 +1792,10 @@ serverProcessConfigEnvMap = lambda c: ServerProcessConfig, config_secrets: [str]
         # forge:section serverProcessConfigEnvMap secrets pipeline
         # forge:hash=7943ac5c471d0f0980b001af916026aca87ecfb896d6016baed95fec58c48cdd
         "GITHUB_QUEUE_APP_CALLER_SECRET" = forge.SecretRef {name = c.pipeline.github_queue_app_caller_secret.name, key = c.pipeline.github_queue_app_caller_secret.key, store_key = "GITHUB_QUEUE_APP_CALLER_SECRET", optional = True}
+
+        # forge:section serverProcessConfigEnvMap secrets gtm
+        # forge:hash=7a64aeba41707745435902ba6d2623a9bd193f816eb7933035b5ebd0e83d7511
+        "GTM_ANALYTICS_TOKEN" = forge.SecretRef {name = c.gtm.analytics_token.name, key = c.gtm.analytics_token.key, store_key = "GTM_ANALYTICS_TOKEN", optional = True}
 
         # forge:section serverProcessConfigEnvMap secrets (end)
         # forge:hash=efede3d8161a204eb8a0d16899c8d3af3adbc86ab32cabf0dd06f8ee1f72642c
@@ -1891,6 +1914,10 @@ serverProcessConfigEnvMap = lambda c: ServerProcessConfig, config_secrets: [str]
         # forge:section serverProcessConfigEnvMap values reconciler
         # forge:hash=60e60ef61f114e977ffdcd6e05ca15e52e835e4dd1f9627665b5aa867b27f5e2
         "RELIANT_RECONCILER_STALL_WATCHDOG" = c.reconciler.stall_watchdog
+
+        # forge:section serverProcessConfigEnvMap values gtm
+        # forge:hash=adc348f52f0ec0451dec20dc908607e4f4acb2cc4deb7a60f177d70f1b130c80
+        "GTM_ALLOWED_ORG_IDS" = c.gtm.allowed_org_ids
 
         # forge:section serverProcessConfigEnvMap values (end)
         # forge:hash=6e40ebe66a4bd1160f079d94eae59be0c27a98446b351e00c478d59941a3fc6d

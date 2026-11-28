@@ -7,6 +7,7 @@ import "forge/v1/forge.proto";
 import "reliant/config/v1/analytics_config.proto";
 import "reliant/config/v1/client_version_config.proto";
 import "reliant/config/v1/control_plane_config.proto";
+import "reliant/config/v1/gtm_config.proto";
 import "reliant/config/v1/integrations_config.proto";
 import "reliant/config/v1/llm_config.proto";
 import "reliant/config/v1/observability_config.proto";
@@ -85,6 +86,11 @@ message ServerProcessConfig {
   // runs in the API server today; every role loads it so the switch follows
   // the reconciler wherever it runs.
   ReconcilerConfig reconciler = 17;
+  // Who gets GTM and how its analytics read reaches the control plane
+  // (gtm_config.proto). Here, not on the root config, so only the server
+  // roles whose graph reads it (the API server and the worker) are handed
+  // its settings and its secret; the gateway never is.
+  GtmConfig gtm = 18;
 }
 
 // ReconcilerConfig holds the workflow reconciler's opt-in checks.
