@@ -3386,7 +3386,7 @@ func rootCauseMessage(f *failurepb.Failure) string {
 
 // rootCauseIsBenign reports whether the innermost application failure of a
 // chain was marked benign — a user error, as the activity boundary records
-// one (errclass.TemporalCategory). The workflow's own wrapping of it is never
+// one (temporalclass.Category). The workflow's own wrapping of it is never
 // marked, so the outer failures say nothing.
 func rootCauseIsBenign(f *failurepb.Failure) bool {
 	benign := false

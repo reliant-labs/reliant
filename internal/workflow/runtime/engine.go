@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/cel-go/cel"
+	"cel.dev/cel-go/cel"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/workflow/builtin"
 	wfcel "github.com/reliant-labs/reliant/internal/workflow/cel"

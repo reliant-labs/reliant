@@ -13,24 +13,66 @@
 // serialization boundary on its way to the workflow, and every Go type and
 // svcerr marker on it is lost. What survives is the ApplicationError's
 // category, so the activity boundary (runtime.flattenForTemporal) records a
-// user error as ApplicationErrorCategoryBenign, and this package reads it back.
+// user error as ApplicationErrorCategoryBenign, and
+// internal/errclass/temporalclass reads it back.
 // Temporal itself treats a benign error the same way: its own "Activity
 // error." line drops to DEBUG and the failure metrics skip it.
 //
-//forge:exclude-contract: pure error classification over svcerr kinds and Temporal's benign error category; no I/O, state or time
+// This package imports no Temporal code: the process logger (internal/logging)
+// and internal/db reach it, and the Temporal SDK with its gRPC closure is
+// about 225 packages that every test binary linking either would otherwise
+// carry. The Temporal verdicts are a Rule that temporalclass registers from
+// its init; any package that produces or consumes Temporal errors imports
+// temporalclass, so a binary that runs Temporal code always has them.
+// TestTemporalPackagesImportTemporalclass pins that, and
+// TestNoTemporalDependency pins this package's side.
+//
+//forge:exclude-contract: pure error classification over svcerr kinds and registered library rules; no I/O, state or time
 package errclass
 
 import (
 	"errors"
+	"sync"
+	"sync/atomic"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
-	"go.temporal.io/sdk/temporal"
 )
 
-// Classify reports who has to act on err: Temporal's verdict when an
-// ApplicationError carries one, otherwise svcerr.Classify.
-func Classify(err error) svcerr.Class {
-	if class := Library(err); class != svcerr.ClassNone {
+// Rule is one library's verdict on an error: its class, or svcerr.ClassNone
+// ("no opinion") for an error it does not recognise.
+type Rule func(err error) svcerr.Class
+
+type registry struct {
+	mu    sync.Mutex
+	rules atomic.Pointer[[]Rule]
+}
+
+var libraryRules registry
+
+// Register adds a library rule to Library, and so to Classify. It is meant for
+// a package's init: rules are consulted in registration order, the first
+// verdict other than ClassNone wins, and the built-in retryable-refusal rule
+// runs after all of them. A rule must not call back into this package.
+func Register(r Rule) { libraryRules.register(r) }
+
+func (r *registry) register(rule Rule) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	var next []Rule
+	if cur := r.rules.Load(); cur != nil {
+		next = append(next, *cur...)
+	}
+	next = append(next, rule)
+	r.rules.Store(&next)
+}
+
+// Classify reports who has to act on err: a library's verdict when a
+// registered rule has one (Temporal's, for an ApplicationError), otherwise
+// svcerr.Classify.
+func Classify(err error) svcerr.Class { return libraryRules.classify(err) }
+
+func (r *registry) classify(err error) svcerr.Class {
+	if class := r.library(err); class != svcerr.ClassNone {
 		return class
 	}
 	return svcerr.Classify(err)
@@ -40,21 +82,22 @@ func Classify(err error) svcerr.Class {
 // worth an ERROR line, and so an issue. nil is not.
 func IsServerError(err error) bool { return Classify(err) == svcerr.ClassServer }
 
-// Library is the part of Classify svcerr cannot derive — the Temporal
-// verdicts — and ClassNone ("no opinion") for everything else. It is the
-// classifier the process logger is given (observe.WithErrorClassifier), which
-// falls back to svcerr.Classify itself.
-func Library(err error) svcerr.Class {
+// Library is the part of Classify svcerr cannot derive — the registered
+// library verdicts, such as Temporal's — and ClassNone ("no opinion") for
+// everything else. It is the classifier the process logger is given
+// (observe.WithErrorClassifier), which falls back to svcerr.Classify itself.
+func Library(err error) svcerr.Class { return libraryRules.library(err) }
+
+func (r *registry) library(err error) svcerr.Class {
 	if err == nil {
 		return svcerr.ClassNone
 	}
-	var appErr *temporal.ApplicationError
-	if errors.As(err, &appErr) && appErr.Category() == temporal.ApplicationErrorCategoryBenign {
-		return svcerr.ClassUser
-	}
-	var canceled *temporal.CanceledError
-	if errors.As(err, &canceled) {
-		return svcerr.ClassCanceled
+	if cur := r.rules.Load(); cur != nil {
+		for _, rule := range *cur {
+			if class := rule(err); class != svcerr.ClassNone {
+				return class
+			}
+		}
 	}
 	if isRetryableRefusal(err) {
 		return svcerr.ClassUser
@@ -79,16 +122,4 @@ type retryableRefusal interface {
 func isRetryableRefusal(err error) bool {
 	var refusal retryableRefusal
 	return errors.As(err, &refusal) && refusal.RetryableRefusal()
-}
-
-// TemporalCategory is the ApplicationError category an activity error should
-// carry across the activity boundary: Benign for an error that is not a server
-// fault, so the workflow side — and Temporal — still know nobody has to act.
-func TemporalCategory(err error) temporal.ApplicationErrorCategory {
-	switch Classify(err) {
-	case svcerr.ClassUser, svcerr.ClassCanceled:
-		return temporal.ApplicationErrorCategoryBenign
-	default:
-		return temporal.ApplicationErrorCategoryUnspecified
-	}
 }

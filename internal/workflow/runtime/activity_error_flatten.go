@@ -10,7 +10,7 @@ import (
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/temporal"
 
-	"github.com/reliant-labs/reliant/internal/errclass"
+	"github.com/reliant-labs/reliant/internal/errclass/temporalclass"
 )
 
 // flattenForTemporal hands Temporal ONE failure for an activity error, with the
@@ -45,7 +45,7 @@ func flattenForTemporal(err error) error {
 	// A user error's Go type and svcerr marker do not survive serialization;
 	// its category does. Benign tells the workflow side (errclass) and
 	// Temporal itself that nobody has to act on it.
-	category := errclass.TemporalCategory(err)
+	category := temporalclass.Category(err)
 
 	// The ActivityWrapper's ERROR is the failure's one report; the marker
 	// crosses the activity boundary as a detail so the workflow layers it

@@ -23,7 +23,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
-	"github.com/reliant-labs/reliant/internal/observability"
+	"github.com/reliant-labs/reliant/internal/observability/temporalobs"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/telemetry"
 	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
@@ -58,7 +58,7 @@ func recordRunSpansOwnedBy(t *testing.T, owners *telemetry.ChatOwnerCache) (*tra
 	})
 	tracing, err := temporalotel.NewInterceptor(temporalotel.Options{})
 	require.NoError(t, err)
-	return rec, []interceptor.WorkerInterceptor{tracing, observability.NewRunScopeWorkerInterceptor(owners)}
+	return rec, []interceptor.WorkerInterceptor{tracing, temporalobs.NewRunScopeWorkerInterceptor(owners)}
 }
 
 func spanAttrs(s sdktrace.ReadOnlySpan) map[attribute.Key]string {

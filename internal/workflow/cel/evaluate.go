@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/cel-go/common/types/ref"
+	"cel.dev/cel-go/common/types/ref"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"google.golang.org/protobuf/types/known/structpb"
 )
@@ -227,6 +227,11 @@ func ConvertToNative(v interface{}) interface{} {
 	case structpb.NullValue:
 		// CEL null → Go nil (see doc comment above).
 		return nil
+	case int:
+		// CEL's int is int64, and callers switch on int64. cel-go v0.33 backs
+		// lists.range (and a reverse() or slice() of it) with a native []int,
+		// whose elements surface as Go int through Value().
+		return int64(val)
 	case time.Time:
 		// A timestamp has no JSON/structpb form; its string form is what
 		// string(ts) gives, so an output can be a timestamp without a wrapper.

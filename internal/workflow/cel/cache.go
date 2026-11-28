@@ -6,7 +6,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/google/cel-go/cel"
+	"cel.dev/cel-go/cel"
 )
 
 // Building a cel.Env is the expensive part of evaluating a workflow

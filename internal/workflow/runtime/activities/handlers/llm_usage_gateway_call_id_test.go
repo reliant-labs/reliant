@@ -22,7 +22,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/llmusage/llmusagetest"
 	"github.com/reliant-labs/reliant/internal/models/message"
-	"github.com/reliant-labs/reliant/internal/observability"
+	"github.com/reliant-labs/reliant/internal/observability/temporalobs"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/telemetry"
 	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
@@ -196,7 +196,7 @@ func TestCallLLM_RetriedTurnStoresItsFinalAttemptsGatewayCallID(t *testing.T) {
 	h := NewIdempotencyTestHelper(t)
 	defer h.Cleanup()
 	h.env.SetWorkerOptions(temporaltest.WorkerOptions(worker.Options{
-		Interceptors: []interceptor.WorkerInterceptor{observability.NewRunScopeWorkerInterceptor(nil)},
+		Interceptors: []interceptor.WorkerInterceptor{temporalobs.NewRunScopeWorkerInterceptor(nil)},
 	}))
 	ctx := context.Background()
 	project := h.CreateTestProject(ctx, "proj-gw-turn", "user-gw-turn")

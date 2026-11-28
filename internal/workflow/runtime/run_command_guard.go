@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"strings"
 
-	celast "github.com/google/cel-go/common/ast"
-	"github.com/google/cel-go/common/operators"
+	celast "cel.dev/cel-go/common/ast"
+	"cel.dev/cel-go/common/operators"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	wfcel "github.com/reliant-labs/reliant/internal/workflow/cel"

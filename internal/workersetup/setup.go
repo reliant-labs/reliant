@@ -26,7 +26,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/llmusage"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/machinepool"
-	"github.com/reliant-labs/reliant/internal/observability"
+	"github.com/reliant-labs/reliant/internal/observability/temporalobs"
 	"github.com/reliant-labs/reliant/internal/orgmove"
 	"github.com/reliant-labs/reliant/internal/providerbackoff"
 	"github.com/reliant-labs/reliant/internal/serveraction"
@@ -587,15 +587,15 @@ func workerOptions(cfg *Config, onFatalError func(error), gomaxprocs int) worker
 		Identity:                 instanceid.WorkerIdentity(),
 		DeadlockDetectionTimeout: 30 * time.Second,
 		Interceptors: append([]interceptor.WorkerInterceptor{
-			observability.NewMetricsWorkerInterceptor(),
-			observability.NewRunScopeWorkerInterceptor(chatOwners(cfg)),
+			temporalobs.NewMetricsWorkerInterceptor(),
+			temporalobs.NewRunScopeWorkerInterceptor(chatOwners(cfg)),
 			newActivityRelease(),
 		}, cfg.WorkflowInterceptors...),
 	}
 }
 
 // chatOwners answers whose chat an activity is working on, for the run scope
-// the worker stamps on every log line (observability.NewRunScopeWorkerInterceptor).
+// the worker stamps on every log line (temporalobs.NewRunScopeWorkerInterceptor).
 // A chat's owner never changes; it is read once per chat per hour.
 func chatOwners(cfg *Config) *telemetry.ChatOwnerCache {
 	if cfg.Database == nil {

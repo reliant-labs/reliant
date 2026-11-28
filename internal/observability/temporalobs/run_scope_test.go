@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package observability
+package temporalobs
 
 import (
 	"context"

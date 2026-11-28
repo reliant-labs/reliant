@@ -18,7 +18,7 @@ import (
 	"go.temporal.io/sdk/worker"
 	sdkworkflow "go.temporal.io/sdk/workflow"
 
-	"github.com/reliant-labs/reliant/internal/observability"
+	"github.com/reliant-labs/reliant/internal/observability/temporalobs"
 	rtemporal "github.com/reliant-labs/reliant/internal/temporal"
 	"github.com/reliant-labs/reliant/internal/temporal/claimcheck"
 	"github.com/reliant-labs/reliant/internal/workersetup"
@@ -92,7 +92,7 @@ func TestReplayRecordedHistory(t *testing.T) {
 			// claim-check references.
 			replayer, err := worker.NewWorkflowReplayerWithOptions(worker.WorkflowReplayerOptions{
 				DataConverter:            rtemporal.NewFlexibleDataConverter(converterOpts...),
-				Interceptors:             []interceptor.WorkerInterceptor{observability.NewMetricsWorkerInterceptor()},
+				Interceptors:             []interceptor.WorkerInterceptor{temporalobs.NewMetricsWorkerInterceptor()},
 				DisableDeadlockDetection: true,
 				EnableLoggingInReplay:    os.Getenv("REPLAY_VERBOSE") == "1",
 			})

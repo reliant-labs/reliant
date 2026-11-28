@@ -13,7 +13,6 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
-	"go.temporal.io/sdk/activity"
 
 	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/reliant-labs/forge/pkg/retry"
@@ -990,30 +989,6 @@ func (r *Repo) enrichMessageUpdate(ctx context.Context, update ChatUpdate) (json
 // Temporal is the source of truth for workflow execution status
 
 // IsChatBusy removed - use Temporal client to query running workflows for a chat
-
-// =============================================================================
-// Activity Idempotency Helpers
-// =============================================================================
-
-// GetActivityInfo extracts Temporal activity info from context
-// Returns empty strings if not in activity context (for testing)
-func GetActivityInfo(ctx context.Context) (activityID string, workflowRunID string, attemptNumber int) {
-	// Try to get activity info from Temporal context
-	// This will panic if not in activity context, so we recover
-	defer func() {
-		if r := recover(); r != nil {
-			// Not in activity context - return empty values
-			activityID = ""
-			workflowRunID = ""
-			attemptNumber = 1
-		}
-	}()
-
-	// Import activity package dynamically to avoid circular dependencies
-	// This is safe because GetActivityInfo is only called from activities
-	info := activity.GetInfo(ctx)
-	return info.ActivityID, info.WorkflowExecution.RunID, int(info.Attempt)
-}
 
 // =============================================================================
 // User Updates (Global WebSocket for workspace-level updates)

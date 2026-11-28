@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package observability
+package temporalobs
 
 import (
 	"context"
@@ -8,6 +8,8 @@ import (
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/interceptor"
 	"go.temporal.io/sdk/workflow"
+
+	"github.com/reliant-labs/reliant/internal/observability"
 )
 
 // NewMetricsWorkerInterceptor returns a Temporal WorkerInterceptor that
@@ -45,7 +47,7 @@ func (a *metricsActivityInbound) ExecuteActivity(ctx context.Context, in *interc
 
 	start := time.Now()
 	result, err := a.Next.ExecuteActivity(ctx, in)
-	TemporalActivityDuration.WithLabelValues(actType).Observe(time.Since(start).Seconds())
+	observability.TemporalActivityDuration.WithLabelValues(actType).Observe(time.Since(start).Seconds())
 
 	return result, err
 }
@@ -65,7 +67,7 @@ func (w *metricsWorkflowInbound) ExecuteWorkflow(ctx workflow.Context, in *inter
 	if err != nil {
 		status = "failed"
 	}
-	TemporalWorkflowsTotal.WithLabelValues(wfType, status).Inc()
+	observability.TemporalWorkflowsTotal.WithLabelValues(wfType, status).Inc()
 
 	return result, err
 }
