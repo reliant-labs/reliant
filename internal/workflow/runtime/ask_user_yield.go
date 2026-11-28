@@ -165,7 +165,7 @@ const (
 // question) rather than signalled into a wait that no longer exists. If the
 // user's answer beat this to the row, the activity reports it and that answer
 // is returned instead: it is what the model asked for.
-func resolveYieldedAskUser(ctx workflow.Context, toolCallID, questionID string, yield askUserYield, logger log.Logger) map[string]interface{} {
+func resolveYieldedAskUser(ctx workflow.Context, toolCallID, questionID string, yield askUserYield, task bool, logger log.Logger) map[string]interface{} {
 	resolveCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 		StartToCloseTimeout: 30 * time.Second,
 		RetryPolicy:         &temporal.RetryPolicy{MaximumAttempts: 3},
@@ -186,13 +186,19 @@ func resolveYieldedAskUser(ctx workflow.Context, toolCallID, questionID string, 
 	if resolveOutput.AlreadyResolved && resolveOutput.ResponseData != "" {
 		return map[string]interface{}{
 			"tool_call_id": toolCallID,
-			"content":      formatAskUserResponse("reply", resolveOutput.ResponseData),
+			"content":      formatAskUserResult("reply", resolveOutput.ResponseData, task),
 		}
 	}
 
 	content := askUserYieldedToMessage
 	if yield == askUserYieldInterrupt {
 		content = askUserYieldedToInterrupt
+	}
+	if task {
+		content = askUserTaskYieldedToMessage
+		if yield == askUserYieldInterrupt {
+			content = askUserTaskYieldedToInterrupt
+		}
 	}
 	return map[string]interface{}{
 		"tool_call_id": toolCallID,

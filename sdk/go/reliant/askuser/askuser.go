@@ -18,6 +18,10 @@
 //	  ]
 //	}
 //
+// A task (an ask_user call with task: true) is the same row with "task": true
+// in its metadata. Each entry of questions[] is one to-do item: its question is
+// the task text, and it carries no options.
+//
 // The backend has been observed to persist `questions` as a double-encoded
 // JSON string, or to wrap the payload in an older envelope where the questions
 // live inside a JSON-encoded `input` field — this package tolerates both, just
@@ -28,6 +32,10 @@
 //	{"answers": [{"question": "<exact text>",
 //	              "selected": ["<exact label>"],
 //	              "freetext": "…"}]}
+//
+// A task is answered in the same shape, one answer per item in order, with
+// selected ["Done"] or ["Not done"] (TaskDone, TaskNotDone) and the user's
+// optional note or reason in freetext.
 //
 // Leaf utility package: the exported surface is concrete helpers over the
 // stdlib or the OS, with no collaborator to fake and no second implementation.
@@ -60,7 +68,17 @@ type Metadata struct {
 	Type       string     `json:"type"`
 	ToolCallID string     `json:"tool_call_id,omitempty"`
 	Questions  []Question `json:"questions"`
+	// Task marks a to-do for the user rather than a question (ask_user with
+	// task: true): each of Questions is one item, answered TaskDone or
+	// TaskNotDone.
+	Task bool `json:"task,omitempty"`
 }
+
+// The selections a task item is answered with.
+const (
+	TaskDone    = "Done"
+	TaskNotDone = "Not done"
+)
 
 // Answer is one resolved sub-question in a response_data payload.
 type Answer struct {
@@ -91,7 +109,7 @@ func ParseMetadata(metadata string) (*Metadata, bool) {
 		return nil, false
 	}
 
-	md := &Metadata{Type: "ask_user", ToolCallID: typeString(raw["tool_call_id"])}
+	md := &Metadata{Type: "ask_user", ToolCallID: typeString(raw["tool_call_id"]), Task: rawFlag(raw["task"])}
 
 	// New format: questions at the top level.
 	if qs := normalizeQuestions(raw["questions"]); len(qs) > 0 {
@@ -105,6 +123,9 @@ func ParseMetadata(metadata string) (*Metadata, bool) {
 		if err := json.Unmarshal([]byte(inner), &innerRaw); err == nil {
 			if qs := normalizeQuestions(innerRaw["questions"]); len(qs) > 0 {
 				md.Questions = qs
+				if _, present := raw["task"]; !present {
+					md.Task = rawFlag(innerRaw["task"])
+				}
 				return md, true
 			}
 		}
@@ -170,6 +191,15 @@ func normalizeQuestions(raw json.RawMessage) []Question {
 	return out
 }
 
+// rawFlag reports whether a raw JSON value is true, or the string "true".
+func rawFlag(raw json.RawMessage) bool {
+	var b bool
+	if err := json.Unmarshal(raw, &b); err == nil {
+		return b
+	}
+	return strings.EqualFold(strings.TrimSpace(typeString(raw)), "true")
+}
+
 // typeString returns the string value of a raw JSON message when it is a JSON
 // string, else "".
 func typeString(raw json.RawMessage) string {
@@ -197,6 +227,53 @@ func BuildResponseData(answers []Answer) (string, error) {
 		return "", fmt.Errorf("encoding response_data: %w", err)
 	}
 	return string(b), nil
+}
+
+// TaskAnswer is the answer to one task item: done, or not done with the
+// user's optional reason.
+func TaskAnswer(task string, done bool, note string) Answer {
+	sel := TaskNotDone
+	if done {
+		sel = TaskDone
+	}
+	return Answer{Question: task, Selected: []string{sel}, Freetext: note}
+}
+
+// TaskOutcome renders a task item's answer as a sentence for the agent that
+// gave it: "The user marked it done.", "The user marked it not done: <reason>"
+// and so on. "" when the answer says nothing.
+func (a Answer) TaskOutcome() string {
+	note := strings.TrimSpace(a.Freetext)
+	done, notDone := false, false
+	var other []string
+	for _, sel := range a.Selected {
+		switch {
+		case strings.EqualFold(sel, TaskDone):
+			done = true
+		case strings.EqualFold(sel, TaskNotDone):
+			notDone = true
+		case sel != "" && sel != "Continue":
+			other = append(other, sel)
+		}
+	}
+	switch {
+	case notDone && note != "":
+		return "The user marked it not done: " + note
+	case notDone:
+		return "The user marked it not done (no reason given)."
+	case done && note != "":
+		return "The user marked it done (note: " + note + ")."
+	case done:
+		return "The user marked it done."
+	}
+	said := other
+	if note != "" {
+		said = append(said, note)
+	}
+	if len(said) == 0 {
+		return ""
+	}
+	return "The user replied: " + strings.Join(said, " — ")
 }
 
 // OptionLabels returns the option labels of a sub-question, in order.

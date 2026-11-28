@@ -14,7 +14,8 @@
  *
  * The actions reuse the chat's own pieces, through their store-free cores:
  * ApprovalActions for approve/deny, QuestionPrompt + answerQuestion for an
- * answer, and the shared resume (useResumeDaemon + formatResumeError) for
+ * answer (TaskPrompt for a to-do the agent gave the user, ask_user task:
+ * true, which is marked Done or Not done instead), and the shared resume (useResumeDaemon + formatResumeError) for
  * "Wake <machine>". The row never reads the open chat's store, because the
  * Inbox holds items from every chat at once.
  *
@@ -35,7 +36,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { Code, ConnectError } from "@connectrpc/connect";
-import { AlertTriangle, CalendarX, CheckCircle2, ChevronDown, FolderX, HardDrive, HelpCircle, MonitorPause, PauseCircle, Settings2, Shield, X } from "lucide-react";
+import { AlertTriangle, CalendarX, CheckCircle2, ChevronDown, FolderX, HardDrive, HelpCircle, ListTodo, MonitorPause, PauseCircle, Settings2, Shield, X } from "lucide-react";
 import { toast } from "sonner";
 
 import {
@@ -69,7 +70,8 @@ import { ApprovalCardView } from "../Chat/ApprovalCardView";
 import { parseApprovalCard, planApprovalBatch, type ApprovalBatchPlan } from "@/lib/approvalCard";
 import { LinkifiedText } from "../Chat/LinkifiedText";
 import { QuestionPrompt, type QuestionAnswer } from "../Chat/QuestionPrompt";
-import { askUserQuestionItems } from "../Chat/askUserUtils";
+import { askUserQuestionItems, isTaskAskUserMetadata } from "../Chat/askUserUtils";
+import { TaskPrompt } from "../Chat/TaskPrompt";
 import { formatBytes } from "@/lib/formatBytes";
 import { consumerSummary, heavyRefused, pressuredVolume, reclaimSummary, volumeUsage } from "@/lib/machineDisk";
 import { driverDisplayName } from "@/hooks/catalog-models";
@@ -89,6 +91,11 @@ export function isBlockingKind(kind: InboxItemKind): boolean {
     kind === InboxItemKind.QUESTION ||
     kind === InboxItemKind.WAITING_FOR_MACHINE
   );
+}
+
+/** A question item that is a to-do the agent gave the user (ask_user task: true). */
+export function isTaskItem(item: InboxItemData): boolean {
+  return item.payload.case === "question" && isTaskAskUserMetadata(item.payload.value.metadata);
 }
 
 /** The server reports an item someone else already resolved this way. */
@@ -206,7 +213,7 @@ export function InboxItem({ item, showProject, onDismiss, nested, apartReason }:
         <div className={cn("flex min-w-0 flex-[1_1_16rem] items-center gap-2.5", nested && "pl-7 max-sm:pl-0")}>
           {!nested && (
             <span className="shrink-0 text-muted-foreground">
-              <KindIcon kind={item.kind} />
+              <KindIcon kind={item.kind} task={isTaskItem(item)} />
             </span>
           )}
           <div className="flex min-w-0 flex-1 items-baseline gap-2">
@@ -456,13 +463,17 @@ export function InboxApprovalBatch({ items, showProject, onDismissRow, onDismiss
   );
 }
 
-function KindIcon({ kind }: { kind: InboxItemKind }) {
+function KindIcon({ kind, task = false }: { kind: InboxItemKind; task?: boolean }) {
   const className = "h-4 w-4";
   switch (kind) {
     case InboxItemKind.APPROVAL:
       return <Shield className={className} aria-label="Approval" />;
     case InboxItemKind.QUESTION:
-      return <HelpCircle className={className} aria-label="Question" />;
+      return task ? (
+        <ListTodo className={className} aria-label="To-do" />
+      ) : (
+        <HelpCircle className={className} aria-label="Question" />
+      );
     case InboxItemKind.WAITING_FOR_MACHINE:
       return <MonitorPause className={cn(className, "text-warning-ink")} aria-label="Waiting for machine" />;
     case InboxItemKind.AUTOMATION_FAILING:
@@ -644,6 +655,19 @@ function rowDetail(item: InboxItemData): { node: ReactNode; title: string } | nu
     }
     case "question": {
       const prompt = payload.value.prompt;
+      // A to-do shares the Questions section, so the row says what it is.
+      if (isTaskItem(item)) {
+        const lead = payload.value.async ? "To do, not blocking" : "To do";
+        return {
+          node: (
+            <>
+              <span className="text-muted-foreground">{lead} · </span>
+              <LinkifiedText text={prompt} />
+            </>
+          ),
+          title: prompt ? `${lead}: ${prompt}` : lead,
+        };
+      }
       // An async question (ask_user without blocking: true): the agent kept working,
       // so it waits on the user without blocking a run.
       if (payload.value.async) {
@@ -849,7 +873,7 @@ function InlineAction({ item, expanded, onToggle }: InlineActionProps) {
       if (onToggle) {
         return (
           <button type="button" className={actionButtonClass} aria-expanded={expanded} onClick={onToggle}>
-            Answer
+            {isTaskItem(item) ? "Update" : "Answer"}
             <ChevronDown className={cn("h-3 w-3 transition-transform", expanded && "rotate-180")} aria-hidden="true" />
           </button>
         );
@@ -995,7 +1019,7 @@ function Expansion({
       itemId={item.itemId}
       questionId={item.payload.value.questionId}
       metadata={item.payload.value.metadata}
-      onFailure={onRaceOrError("send the answer")}
+      onFailure={onRaceOrError(isTaskItem(item) ? "send the update" : "send the answer")}
     />
   );
 }
@@ -1107,6 +1131,7 @@ function QuestionAnswerForm({
   onFailure: (error: unknown) => void;
 }) {
   const questions = useMemo(() => askUserQuestionItems(metadata), [metadata]);
+  const task = useMemo(() => isTaskAskUserMetadata(metadata), [metadata]);
   // QuestionPrompt locks itself after submit; a remount (new key) re-arms it
   // if the reply failed for a reason worth retrying.
   const [attempt, setAttempt] = useState(0);
@@ -1123,8 +1148,17 @@ function QuestionAnswerForm({
   };
 
   return (
-    <CardInset padding="none">
-      <QuestionPrompt key={attempt} inline questions={questions} onSubmit={(answers) => void onSubmit(answers)} />
+    <CardInset padding={task ? "sm" : "none"}>
+      {task ? (
+        <TaskPrompt
+          key={attempt}
+          inline
+          tasks={questions.map((q) => q.question)}
+          onSubmit={(answers) => void onSubmit(answers)}
+        />
+      ) : (
+        <QuestionPrompt key={attempt} inline questions={questions} onSubmit={(answers) => void onSubmit(answers)} />
+      )}
     </CardInset>
   );
 }

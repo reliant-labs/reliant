@@ -104,6 +104,7 @@ func (s *Service) deliverAsyncAnswer(ctx context.Context, chat *db.Chat, questio
 	// The agent gets the answer as a message; the user sees it on the
 	// question's card, never as a user bubble of words they did not type.
 	ctx = db.WithLLMOnlyDelivery(ctx)
+	task := isTaskQuestion(question.Metadata)
 	mainThread := chat.MainThreadID()
 	asker := question.ThreadID
 	if asker == "" || asker == chat.ID {
@@ -115,11 +116,11 @@ func (s *Service) deliverAsyncAnswer(ctx context.Context, chat *db.Chat, questio
 		return err
 	}
 	if parked {
-		return s.queueBehindBlockingQuestion(ctx, chat, question.ID, asker, asyncAnswerBody(question.ID, answer))
+		return s.queueBehindBlockingQuestion(ctx, chat, question.ID, asker, asyncAnswerBody(question.ID, answer, task))
 	}
 
 	if asker != mainThread {
-		body := asyncAnswerBody(question.ID, answer)
+		body := asyncAnswerBody(question.ID, answer, task)
 		id := asyncAnswerMessageID(question.ID, asker, body)
 		resp, err := s.deps.Messages.SendAgentMessage(ctx, connect.NewRequest(&reliantv1.SendAgentMessageRequest{
 			ChatId:          chat.ID,
@@ -135,11 +136,11 @@ func (s *Service) deliverAsyncAnswer(ctx context.Context, chat *db.Chat, questio
 		}
 		logging.InfoContext(ctx, "The agent that asked an async question cannot take its answer; delivering it to the main thread",
 			"questionID", question.ID, "chatID", chat.ID, "threadID", asker, "refusal", resp.Msg.GetMessage())
-		body = asyncAnswerForwardedBody(question.ID, asker, answer)
+		body = asyncAnswerForwardedBody(question.ID, asker, answer, task)
 		return s.sendToMainThread(ctx, chat, question.ID, body)
 	}
 
-	return s.sendToMainThread(ctx, chat, question.ID, asyncAnswerBody(question.ID, answer))
+	return s.sendToMainThread(ctx, chat, question.ID, asyncAnswerBody(question.ID, answer, task))
 }
 
 // parkedOnBlockingQuestion reports whether thread has a pending blocking
@@ -197,15 +198,32 @@ func (s *Service) sendToMainThread(ctx context.Context, chat *db.Chat, questionI
 	return err
 }
 
+// isTaskQuestion reports whether a question is a task (ask_user task: true):
+// a to-do for the user, which they mark done or not done.
+func isTaskQuestion(metadata *string) bool {
+	if metadata == nil {
+		return false
+	}
+	md, ok := askuser.ParseMetadata(*metadata)
+	return ok && md.Task
+}
+
 // asyncAnswerBody is the message that carries an answer to the thread that
-// asked.
-func asyncAnswerBody(questionID, answer string) string {
+// asked. task: the update on a task the user was given.
+func asyncAnswerBody(questionID, answer string, task bool) string {
+	if task {
+		return fmt.Sprintf("Update on the task you gave the user without waiting (ask_user task, question_id: %s):\n\n%s", questionID, answer)
+	}
 	return fmt.Sprintf("Answer to the question you asked without waiting (ask_user, question_id: %s):\n\n%s", questionID, answer)
 }
 
 // asyncAnswerForwardedBody is the message that carries an answer to the main
 // thread when the sub-agent that asked has finished.
-func asyncAnswerForwardedBody(questionID, askerThreadID, answer string) string {
+func asyncAnswerForwardedBody(questionID, askerThreadID, answer string, task bool) string {
+	if task {
+		return fmt.Sprintf("A sub-agent (agent_id: %s) gave the user a task without waiting (ask_user task, question_id: %s) and has finished since, so the update comes to you:\n\n%s\n\n"+
+			"If it still matters, act on it yourself, or resume that agent with spawn(agent_id=%q).", askerThreadID, questionID, answer, askerThreadID)
+	}
 	return fmt.Sprintf("A sub-agent (agent_id: %s) asked the user this without waiting (ask_user, question_id: %s) and has finished since, so the answer comes to you:\n\n%s\n\n"+
 		"If it still matters, act on it yourself, or resume that agent with spawn(agent_id=%q).", askerThreadID, questionID, answer, askerThreadID)
 }
@@ -213,7 +231,8 @@ func asyncAnswerForwardedBody(questionID, askerThreadID, answer string) string {
 // formatAsyncAnswer renders the user's answer to the model as question and
 // answer pairs. responseData is the ResolveQuestion payload — the ask_user
 // form's {"answers":[{question, selected, freetext}]}, or plain text. A bare
-// "Continue" selection is no answer. "" when nothing was answered.
+// "Continue" selection is no answer. "" when nothing was answered. A task's
+// items render as the task and whether the user did it (formatAsyncTaskAnswer).
 func formatAsyncAnswer(metadata *string, responseData string) string {
 	responseData = strings.TrimSpace(responseData)
 	if responseData == "" {
@@ -232,6 +251,9 @@ func formatAsyncAnswer(metadata *string, responseData string) string {
 	if metadata != nil {
 		if md, ok := askuser.ParseMetadata(*metadata); ok {
 			asked = md.Questions
+			if md.Task {
+				return formatAsyncTaskAnswer(asked, payload.Answers)
+			}
 		}
 	}
 
@@ -257,6 +279,29 @@ func formatAsyncAnswer(metadata *string, responseData string) string {
 			parts = append(parts, "Q: "+q+"\nA: "+strings.Join(said, " — "))
 		} else {
 			parts = append(parts, "A: "+strings.Join(said, " — "))
+		}
+	}
+	return strings.Join(parts, "\n\n")
+}
+
+// formatAsyncTaskAnswer renders the user's marks on a task's items: each
+// item's text and whether it was done, with the user's note or reason. An
+// item the answer says nothing about is left out; "" when that is all of them.
+func formatAsyncTaskAnswer(asked []askuser.Question, answers []askuser.Answer) string {
+	var parts []string
+	for i, a := range answers {
+		outcome := a.TaskOutcome()
+		if outcome == "" {
+			continue
+		}
+		task := a.Question
+		if task == "" && i < len(asked) {
+			task = asked[i].Question
+		}
+		if task != "" {
+			parts = append(parts, "Task: "+task+"\n"+outcome)
+		} else {
+			parts = append(parts, outcome)
 		}
 	}
 	return strings.Join(parts, "\n\n")

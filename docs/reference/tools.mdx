@@ -2330,6 +2330,8 @@ Default (async) — the norm: proceed on a sensible default, usually the option 
 
 blocking: true — the exception: stop and wait for the answer. Use it only when you truly cannot make progress without it — every reasonable default would be wrong or wasted work, or the next action is significant or hard to undo and needs the user's go-ahead first.
 
+task: true — a to-do for the user instead of a question. Use it for something only the user can do: sign in or run a command on their machine, approve or change something in an external system, provide a secret or a file, a physical action. Each entry of questions is then one task: write its question as an instruction to the user (what to do, and why), say what you do meanwhile and what happens once it is done, and give no options. The user marks each task done or not done, optionally with a note or the reason they did not do it. It combines with blocking: by default you keep working and get a message when the user marks it; with blocking: true you wait until they do (e.g. "Run gcloud auth login, then mark this done").
+
 Before asking, call list_pending_questions if you may have asked already: do not ask a question that is still pending. Before finishing, withdraw questions your default made moot.
 
 Make each question stand on its own. Include enough context for users, as sometimes they may only see the question in isolation in their feed. Someone who has not read this chat must be able to answer it:
@@ -2980,7 +2982,7 @@ List the user's machines (Settings -> Machines): each one's id, name, type (mana
 
 List the questions you and your sub-agents have asked the user (ask_user) that are still unanswered.
 
-Shows your own thread's questions and those of every sub-agent below you, recursively — never a sibling's. For each: question_id, who asked (you, or the sub-agent's agent_id and title), whether it is async (asked without waiting — nobody is blocked on it) or blocking (that agent is parked until the user answers), the question and its options, and how long it has been waiting.
+Shows your own thread's questions and those of every sub-agent below you, recursively — never a sibling's. For each: question_id, who asked (you, or the sub-agent's agent_id and title), whether it is async (asked without waiting — nobody is blocked on it) or blocking (that agent is parked until the user answers), the question and its options, and how long it has been waiting. Tasks (ask_user with task: true: to-dos the user has not marked done or not done yet) are listed too, labelled as tasks.
 
 When to call it:
 - Before you finish a task: check for async questions still unanswered. If you went ahead on a default and the answer no longer matters, withdraw it with withdraw_question so it leaves the user's inbox. If it still matters, say so in your final answer.
@@ -3455,6 +3457,8 @@ RETURNS:
 ### withdraw_question
 
 Withdraw an async question (an ask_user call without blocking: true) that you or one of your sub-agents asked and that no longer needs an answer — typically because you proceeded on a default and the outcome is settled.
+
+Tasks (ask_user with task: true) are withdrawn the same way, when the to-do is no longer needed.
 
 Withdrawing closes the question: it leaves the user's inbox and its card in the chat shows "Withdrawn: `<reason>`". The reason is shown to the user, so make it a short, plain sentence (e.g. "Went with Postgres; the schema is already migrated").
 

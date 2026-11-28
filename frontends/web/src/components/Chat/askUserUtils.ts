@@ -79,6 +79,87 @@ export interface AskUserMetadata {
   type: "ask_user";
   tool_call_id?: string;
   questions: AskUserQuestion[];
+  /** Asked without waiting (ask_user without blocking: true). */
+  async?: boolean;
+  /**
+   * A to-do for the user (ask_user task: true), not a question: each entry of
+   * `questions` is one thing to do, with no options, which the user marks
+   * Done or Not done (TASK_DONE / TASK_NOT_DONE), with an optional note.
+   */
+  task?: boolean;
+}
+
+/** The answer labels of a to-do item; the server's askuser package uses the same. */
+export const TASK_DONE = "Done";
+export const TASK_NOT_DONE = "Not done";
+
+/** Whether a question row's ask_user metadata is a to-do (task: true). */
+export function isTaskAskUserMetadata(metadata: string | undefined | null): boolean {
+  return parseAskUserMetadata(metadata)?.task === true;
+}
+
+/** One to-do item's outcome, as the user marked it. */
+export interface TaskOutcome {
+  done: boolean;
+  /** Why it was not done, or any note on it; optional. */
+  note?: string;
+}
+
+/**
+ * The ResolveQuestion answer for a to-do: one ask_user answer per item, in
+ * order, selecting Done or Not done, with the note as freetext. The same wire
+ * shape as a question's answer, so every resolver path delivers it unchanged.
+ */
+export function taskAnswers(
+  tasks: string[],
+  outcomes: TaskOutcome[],
+): { answers: Array<{ question: string; selected: string[]; freetext?: string }> } {
+  return {
+    answers: tasks.map((task, i) => {
+      const outcome = outcomes[i];
+      const answer: { question: string; selected: string[]; freetext?: string } = {
+        question: task,
+        selected: [outcome?.done ? TASK_DONE : TASK_NOT_DONE],
+      };
+      const note = outcome?.note?.trim();
+      if (note) answer.freetext = note;
+      return answer;
+    }),
+  };
+}
+
+/**
+ * A to-do's answers from its ResolveQuestion response_data: each item's text,
+ * whether it was marked done, and the note. `done` is null when an answer
+ * selects neither label: an older client, which renders a to-do as a question
+ * with no options, answered it in free text, and the note is all there is.
+ * Empty when there is no answer.
+ */
+export function taskOutcomeLines(
+  responseData: string | undefined | null,
+): Array<{ task: string; done: boolean | null; note: string }> {
+  if (!responseData) return [];
+  try {
+    const parsed = JSON.parse(responseData) as { answers?: Array<{ question?: string; selected?: string[]; freetext?: string }> };
+    if (!Array.isArray(parsed?.answers)) return [];
+    return parsed.answers.map((a) => {
+      const selected = a.selected ?? [];
+      return {
+        task: a.question ?? "",
+        done: selected.includes(TASK_DONE) ? true : selected.includes(TASK_NOT_DONE) ? false : null,
+        note: a.freetext?.trim() ?? "",
+      };
+    });
+  } catch {
+    return [];
+  }
+}
+
+/** "Done", "Not done", or either with its note: one to-do's outcome as text. */
+export function taskOutcomeText(line: { done: boolean | null; note: string }): string {
+  if (line.done === null) return line.note;
+  const label = line.done ? TASK_DONE : TASK_NOT_DONE;
+  return line.note ? `${label} — ${line.note}` : label;
 }
 
 /**
@@ -130,7 +211,20 @@ function askUserInputObject(input: unknown): Record<string, unknown> | null {
 export function isAsyncAskUserInput(input: unknown): boolean {
   const obj = askUserInputObject(input);
   const flag = obj?.blocking;
-  return !(flag === true || (typeof flag === "string" && flag.trim().toLowerCase() === "true"));
+  return !isTrueFlag(flag);
+}
+
+/**
+ * Whether an ask_user call's input is a to-do (task: true; a quoted "true"
+ * counts, as on the server). Read before the call's question row exists; the
+ * row's metadata (isTaskAskUserMetadata) says the same once it does.
+ */
+export function isTaskAskUserInput(input: unknown): boolean {
+  return isTrueFlag(askUserInputObject(input)?.task);
+}
+
+function isTrueFlag(flag: unknown): boolean {
+  return flag === true || (typeof flag === "string" && flag.trim().toLowerCase() === "true");
 }
 
 /**

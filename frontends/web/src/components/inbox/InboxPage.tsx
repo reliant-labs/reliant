@@ -39,7 +39,7 @@ import PageHeader from "../forge-ui/page_header";
 import SkeletonLoader from "../forge-ui/skeleton_loader";
 import Button from "@/components/forge-ui/button";
 import { AreaShell } from "../Layout/AreaShell";
-import { InboxApprovalBatch, InboxItem, subjectName } from "./InboxItem";
+import { InboxApprovalBatch, InboxItem, isTaskItem, subjectName } from "./InboxItem";
 import { inboxPath } from "@/lib/paths";
 import { ProjectEmptyCtaRow } from "@/components/EmptyState/ProjectEmptyCta";
 
@@ -89,7 +89,21 @@ export function sectionInboxItems(items: InboxItemData[]): InboxSection[] {
   }
   return [...byKind.entries()]
     .sort(([a], [b]) => a - b)
-    .map(([kind, sectionItems]) => ({ kind, title: SECTION_TITLE[kind] ?? "Other", items: sectionItems }));
+    .map(([kind, sectionItems]) => ({ kind, title: sectionTitle(kind, sectionItems), items: sectionItems }));
+}
+
+/**
+ * A section's heading. To-dos an agent gave the user (ask_user task: true)
+ * are question items, so they share the Questions section, which then says
+ * so: "To-dos" when it holds only those, "Questions and to-dos" when both.
+ */
+function sectionTitle(kind: InboxItemKind, items: InboxItemData[]): string {
+  if (kind === InboxItemKind.QUESTION) {
+    const tasks = items.filter(isTaskItem).length;
+    if (tasks === items.length) return "To-dos";
+    if (tasks > 0) return "Questions and to-dos";
+  }
+  return SECTION_TITLE[kind] ?? "Other";
 }
 
 /** One row of a section: an item, or approvals a run asked for together. */

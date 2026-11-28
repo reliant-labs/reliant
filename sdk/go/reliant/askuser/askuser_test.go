@@ -82,6 +82,42 @@ func TestParseMetadataLegacyEnvelope(t *testing.T) {
 	}
 }
 
+func TestParseMetadataLegacyEnvelopeTask(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		inner any
+		outer any
+		want  bool
+	}{
+		{name: "nested true", inner: true, want: true},
+		{name: "nested string true", inner: "true", want: true},
+		{name: "nested false", inner: false, want: false},
+		{name: "outer false wins", inner: true, outer: false, want: false},
+		{name: "outer true wins", inner: false, outer: true, want: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			inner := mustJSON(t, map[string]any{
+				"task":      tc.inner,
+				"questions": []any{map[string]any{"question": "Sign in"}},
+			})
+			raw := map[string]any{"type": "ask_user", "input": inner}
+			if tc.outer != nil {
+				raw["task"] = tc.outer
+			}
+			md, ok := ParseMetadata(mustJSON(t, raw))
+			if !ok {
+				t.Fatal("expected ok")
+			}
+			if md.Task != tc.want {
+				t.Errorf("Task = %v, want %v", md.Task, tc.want)
+			}
+			if len(md.Questions) != 1 || md.Questions[0].Question != "Sign in" {
+				t.Fatalf("questions = %+v", md.Questions)
+			}
+		})
+	}
+}
+
 func TestParseMetadataDoubleEncodedQuestions(t *testing.T) {
 	questions := mustJSON(t, []any{
 		map[string]any{"question": "Which approach?", "options": []any{map[string]any{"label": "A"}}},
@@ -202,4 +238,57 @@ func mustJSON(t *testing.T, v any) string {
 		t.Fatal(err)
 	}
 	return string(b)
+}
+
+func TestParseMetadataTask(t *testing.T) {
+	for metadata, want := range map[string]bool{
+		`{"type":"ask_user","task":true,"questions":[{"question":"Run gcloud auth login"}]}`:   true,
+		`{"type":"ask_user","task":"true","questions":[{"question":"Run gcloud auth login"}]}`: true,
+		`{"type":"ask_user","task":false,"questions":[{"question":"Which?"}]}`:                 false,
+		`{"type":"ask_user","questions":[{"question":"Which?","options":[{"label":"A"}]}]}`:    false,
+	} {
+		md, ok := ParseMetadata(metadata)
+		if !ok {
+			t.Fatalf("ParseMetadata(%s) not ok", metadata)
+		}
+		if md.Task != want {
+			t.Errorf("ParseMetadata(%s).Task = %v, want %v", metadata, md.Task, want)
+		}
+		if len(md.Questions[0].Options) != 0 && want {
+			t.Errorf("a task item carries no options")
+		}
+	}
+}
+
+func TestTaskAnswerRoundTripsThroughResponseData(t *testing.T) {
+	data, err := BuildResponseData([]Answer{
+		TaskAnswer("Sign in", true, ""),
+		TaskAnswer("Approve the PR", false, "no access"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := `{"answers":[{"question":"Sign in","selected":["Done"]},{"question":"Approve the PR","selected":["Not done"],"freetext":"no access"}]}`
+	if data != want {
+		t.Errorf("response data = %s, want %s", data, want)
+	}
+}
+
+func TestTaskOutcome(t *testing.T) {
+	for _, tc := range []struct {
+		answer Answer
+		want   string
+	}{
+		{TaskAnswer("x", true, ""), "The user marked it done."},
+		{TaskAnswer("x", true, "took a while"), "The user marked it done (note: took a while)."},
+		{TaskAnswer("x", false, "no access"), "The user marked it not done: no access"},
+		{TaskAnswer("x", false, " "), "The user marked it not done (no reason given)."},
+		{Answer{Question: "x", Freetext: "will do tomorrow"}, "The user replied: will do tomorrow"},
+		{Answer{Question: "x", Selected: []string{"Continue"}}, ""},
+		{Answer{Question: "x"}, ""},
+	} {
+		if got := tc.answer.TaskOutcome(); got != tc.want {
+			t.Errorf("TaskOutcome(%+v) = %q, want %q", tc.answer, got, tc.want)
+		}
+	}
 }

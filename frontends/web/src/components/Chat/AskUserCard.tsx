@@ -35,20 +35,32 @@
  * cards buries the conversation around them. The line is a button (44px,
  * aria-expanded) that opens the full card, whose header closes it again. An
  * unanswered card is always full: it is waiting on the user.
+ *
+ * A to-do (ask_user task: true) is the same card in other words: the agent
+ * gave the user something to do rather than a question, so it reads "To do",
+ * holds TaskPrompt (Mark done / Not done, with an optional note) where a
+ * question holds QuestionPrompt, and once settled shows each item's outcome:
+ * "Done", or "Not done — <note>". The input's flag says so before the row
+ * exists; the row's metadata after.
  */
 
 import { memo, useId, useMemo, useState } from "react";
-import { CheckCircle2, ChevronDown, ChevronRight, MessageCircleQuestion, Undo2 } from "lucide-react";
+import { CheckCircle2, ChevronDown, ChevronRight, CircleSlash, ListTodo, MessageCircleQuestion, Undo2 } from "lucide-react";
 import { toast } from "sonner";
 import { answerQuestion, useAsyncQuestions, type QuestionInfo } from "@/hooks/question-queries";
 import { cn } from "@/lib/utils";
 import { LinkifiedText } from "./LinkifiedText";
 import { QuestionPrompt, type QuestionAnswer } from "./QuestionPrompt";
+import { TaskPrompt } from "./TaskPrompt";
 import {
   askUserAnswerLines,
   askUserQuestionItems,
   askUserQuestionItemsFromInput,
   isAsyncAskUserInput,
+  isTaskAskUserInput,
+  isTaskAskUserMetadata,
+  taskOutcomeLines,
+  taskOutcomeText,
 } from "./askUserUtils";
 
 interface AskUserCardProps {
@@ -96,6 +108,21 @@ const HEADINGS: Record<Exclude<AskUserCardMode, "async">, { title: string; statu
   },
 };
 
+const TASK_HEADINGS: typeof HEADINGS = {
+  posting: {
+    title: "To do for you · not blocking",
+    status: "The agent kept working. Mark it when you have done it — the agent gets your update as a message.",
+  },
+  waiting: {
+    title: "To do for you",
+    status: "The agent is waiting until you mark this done. Mark it below.",
+  },
+  asked: {
+    title: "To-do given",
+    status: "The agent gave you this to-do earlier in the conversation.",
+  },
+};
+
 function AskUserCardComponent({ chatId, toolCallId, input, finished = false }: AskUserCardProps) {
   const { data: asyncList } = useAsyncQuestions(chatId);
   const asyncQuestions = asyncList?.questions;
@@ -111,10 +138,25 @@ function AskUserCardComponent({ chatId, toolCallId, input, finished = false }: A
   const [attempt, setAttempt] = useState(0);
 
   const mode = askUserCardMode({ question, input, finished, listed: asyncQuestions !== undefined });
+  // A to-do rather than a question, by the row's metadata or, before the row
+  // exists (or from a server that did not record it), by the input.
+  const isTask = isTaskAskUserMetadata(question?.metadata) || isTaskAskUserInput(input);
   const resolved = mode === "async" && question?.status === "resolved";
   // Withdrawn by the agent (withdraw_question): moot, not answered.
   const withdrawnReason = resolved ? question?.withdrawnReason : undefined;
-  const answers = resolved && !withdrawnReason ? askUserAnswerLines(question?.responseData) : [];
+  const settled = resolved && !withdrawnReason;
+  const answers = settled && !isTask ? askUserAnswerLines(question?.responseData) : [];
+  // A to-do's outcomes as "question → answer" lines, so the views below show
+  // either kind the same way; `done` picks each line's mark.
+  const taskLines = settled && isTask ? taskOutcomeLines(question?.responseData) : [];
+  const outcomeLines: Array<{ question: string; answer: string; done?: boolean }> = isTask
+    ? taskLines
+        .map((line) => ({ question: line.task, answer: taskOutcomeText(line), done: line.done ?? undefined }))
+        .filter((line) => line.answer !== "")
+    : answers;
+  const allDone = taskLines.length > 0 && taskLines.every((line) => line.done === true);
+  const anyNotDone = taskLines.some((line) => line.done === false);
+  const noun = isTask ? "To-do" : "Question";
   // A settled card starts collapsed; the user can open it and close it again.
   const [expanded, setExpanded] = useState(false);
   const bodyId = useId();
@@ -124,21 +166,34 @@ function AskUserCardComponent({ chatId, toolCallId, input, finished = false }: A
     try {
       await answerQuestion(chatId, question.questionId, answer);
     } catch (error) {
-      toast.error("Could not send your answer", {
+      toast.error(isTask ? "Could not send your update" : "Could not send your answer", {
         description: error instanceof Error ? error.message : String(error),
       });
       setAttempt((n) => n + 1);
     }
   };
 
+  const headings = isTask ? TASK_HEADINGS : HEADINGS;
+  const settledTitle = isTask
+    ? allDone
+      ? "To-do done"
+      : anyNotDone
+        ? "To-do not done"
+        : "To-do updated"
+    : "Question answered";
   const heading =
     mode === "async"
       ? withdrawnReason
-        ? { title: "Question withdrawn", status: `Withdrawn: ${withdrawnReason}` }
+        ? { title: `${noun} withdrawn`, status: `Withdrawn: ${withdrawnReason}` }
         : resolved
-          ? { title: "Question answered", status: "Your answer was sent to the agent as a message." }
-          : HEADINGS.posting
-      : HEADINGS[mode];
+          ? {
+              title: settledTitle,
+              status: isTask
+                ? "Your update was sent to the agent as a message."
+                : "Your answer was sent to the agent as a message.",
+            }
+          : headings.posting
+      : headings[mode];
 
   // The question text, as a plain list: every state but the answer form and
   // the answers shows it.
@@ -152,7 +207,9 @@ function AskUserCardComponent({ chatId, toolCallId, input, finished = false }: A
         ))
       ) : (
         <li className="text-ui text-muted-foreground">
-          {input === undefined ? "Writing the question…" : "The question's text could not be read."}
+          {input === undefined
+            ? `Writing the ${isTask ? "to-do" : "question"}…`
+            : `The ${isTask ? "to-do" : "question"}'s text could not be read.`}
         </li>
       )}
     </ul>
@@ -163,9 +220,19 @@ function AskUserCardComponent({ chatId, toolCallId, input, finished = false }: A
       className="mt-0.5 h-4 w-4 flex-shrink-0 text-muted-foreground"
       aria-hidden="true"
     />
+  ) : resolved && isTask && anyNotDone ? (
+    <CircleSlash
+      className="mt-0.5 h-4 w-4 flex-shrink-0 text-muted-foreground"
+      aria-hidden="true"
+    />
   ) : resolved ? (
     <CheckCircle2
       className="mt-0.5 h-4 w-4 flex-shrink-0 text-success-ink"
+      aria-hidden="true"
+    />
+  ) : isTask ? (
+    <ListTodo
+      className="mt-0.5 h-4 w-4 flex-shrink-0 text-muted-foreground"
       aria-hidden="true"
     />
   ) : (
@@ -176,12 +243,14 @@ function AskUserCardComponent({ chatId, toolCallId, input, finished = false }: A
   );
 
   if (resolved && !expanded) {
-    const asked = settledQuestionText(items);
+    const asked = settledQuestionText(items, noun);
     const outcome = withdrawnReason
       ? `Withdrawn: ${withdrawnReason}`
-      : answers.length > 0
-        ? answers.map((line) => line.answer).join(" · ")
-        : "No answer given.";
+      : outcomeLines.length > 0
+        ? outcomeLines.map((line) => line.answer).join(" · ")
+        : isTask
+          ? "No update given."
+          : "No answer given.";
     return (
       <div
         data-testid="ask-user-card"
@@ -202,7 +271,7 @@ function AskUserCardComponent({ chatId, toolCallId, input, finished = false }: A
         >
           <span className="flex-shrink-0 [&>svg]:mt-0">{icon}</span>
           <span className="sr-only">
-            {withdrawnReason ? "Question withdrawn: " : "Question answered: "}
+            {withdrawnReason ? `${noun} withdrawn: ` : `${settledTitle}: `}
           </span>
           <span className="min-w-0 flex-1 truncate">
             <span
@@ -290,11 +359,20 @@ function AskUserCardComponent({ chatId, toolCallId, input, finished = false }: A
           )
         ) : resolved ? (
           <ul className="mt-3 space-y-1.5" data-testid="ask-user-answers">
-            {(answers.length > 0
-              ? answers
-              : [{ question: "", answer: "No answer given." }]
-            ).map((line, i) => (
+            {(outcomeLines.length > 0
+              ? outcomeLines
+              : [{ question: "", answer: isTask ? "No update given." : "No answer given." }]
+            ).map((line: { question: string; answer: string; done?: boolean }, i) => (
               <li key={i} className="text-ui">
+                {line.done !== undefined && (
+                  <span className="mr-1.5 inline-flex align-[-2px]">
+                    {line.done ? (
+                      <CheckCircle2 className="h-3.5 w-3.5 text-success-ink" aria-hidden="true" />
+                    ) : (
+                      <CircleSlash className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
+                    )}
+                  </span>
+                )}
                 {line.question && (
                   <span className="text-muted-foreground">
                     <LinkifiedText text={line.question} />{" "}
@@ -308,12 +386,21 @@ function AskUserCardComponent({ chatId, toolCallId, input, finished = false }: A
           </ul>
         ) : mode === "async" && items ? (
           <div className="mt-3">
-            <QuestionPrompt
-              key={attempt}
-              inline
-              questions={items}
-              onSubmit={(a) => void onSubmit(a)}
-            />
+            {isTask ? (
+              <TaskPrompt
+                key={attempt}
+                inline
+                tasks={items.map((item) => item.question)}
+                onSubmit={(a) => void onSubmit(a)}
+              />
+            ) : (
+              <QuestionPrompt
+                key={attempt}
+                inline
+                questions={items}
+                onSubmit={(a) => void onSubmit(a)}
+              />
+            )}
           </div>
         ) : (
           // No form here: the row has not arrived (posting), the composer holds
@@ -325,11 +412,12 @@ function AskUserCardComponent({ chatId, toolCallId, input, finished = false }: A
   );
 }
 
-/** The collapsed line's question: the first one, and how many more there are. */
+/** The collapsed line's question (or to-do): the first one, and how many more there are. */
 export function settledQuestionText(
   items: ReturnType<typeof askUserQuestionItems>,
+  fallback = "Question",
 ): string {
-  if (!items || items.length === 0) return "Question";
+  if (!items || items.length === 0) return fallback;
   const first = items[0]!.question;
   return items.length > 1 ? `${first} (+${items.length - 1} more)` : first;
 }

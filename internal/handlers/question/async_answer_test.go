@@ -210,7 +210,7 @@ func TestResolveAsyncQuestion_DeliversToTheAskingSubAgent(t *testing.T) {
 	sent := f.messages.agentSends[0]
 	assert.Equal(t, f.chatID, sent.ChatId)
 	assert.Equal(t, f.spawnID, sent.ThreadId)
-	assert.Equal(t, asyncAnswerBody("q-live", wantSQLiteAnswer), sent.Message)
+	assert.Equal(t, asyncAnswerBody("q-live", wantSQLiteAnswer, false), sent.Message)
 	assert.Equal(t, asyncAnswerMessageID("q-live", f.spawnID, sent.Message), sent.GetClientMessageId(),
 		"named by its content, so a retry of the same answer never queues it twice")
 	assert.Empty(t, f.messages.mainSends)
@@ -246,7 +246,7 @@ func TestResolveAsyncQuestion_AfterTheAskingThreadFinishedDeliversToTheMainThrea
 	assert.Empty(t, sent.GetTargetThread(), "the main thread")
 	require.Len(t, sent.Messages, 1)
 	assert.Equal(t, reliantv1.MessageRole_MESSAGE_ROLE_USER, sent.Messages[0].Role)
-	assert.Equal(t, asyncAnswerForwardedBody("q-finished", f.spawnID, wantSQLiteAnswer), sent.Messages[0].Content)
+	assert.Equal(t, asyncAnswerForwardedBody("q-finished", f.spawnID, wantSQLiteAnswer, false), sent.Messages[0].Content)
 	assert.Contains(t, sent.Messages[0].Content, `spawn(agent_id="`+f.spawnID+`")`)
 	assert.Equal(t, asyncAnswerMessageID("q-finished", f.mainID, sent.Messages[0].Content), sent.GetClientMessageId())
 	assert.Equal(t, []bool{true, true}, f.messages.llmOnly, "both attempts deliver the answer LLM-only")
@@ -264,7 +264,7 @@ func TestResolveAsyncQuestion_MainThreadQuestionUsesSendMessage(t *testing.T) {
 
 	assert.Empty(t, f.messages.agentSends)
 	require.Len(t, f.messages.mainSends, 1)
-	assert.Equal(t, asyncAnswerBody("q-main", wantSQLiteAnswer), f.messages.mainSends[0].Messages[0].Content)
+	assert.Equal(t, asyncAnswerBody("q-main", wantSQLiteAnswer, false), f.messages.mainSends[0].Messages[0].Content)
 	assert.Equal(t, []bool{true}, f.messages.llmOnly, "the main thread's answer is LLM-only too")
 	assert.Equal(t, db.QuestionStatusResolved, f.status(t, "q-main").Status)
 }
@@ -330,6 +330,57 @@ func TestListAsyncQuestions(t *testing.T) {
 	assert.Equal(t, connect.CodeNotFound, svcerr.Code(err), "not the caller's chat")
 }
 
+// A task (ask_user task: true) marked done reaches the asking thread as an
+// update on the task, not as the answer to a question: "Done" is the answer,
+// never dropped as empty.
+func TestResolveAsyncQuestion_TaskMarkedDoneIsDeliveredAsATaskUpdate(t *testing.T) {
+	f := newAsyncAnswerFixture(t)
+	metadata := `{"type":"ask_user","async":true,"task":true,"tool_call_id":"call-q-task","questions":[{"question":"Run gcloud auth login"}]}`
+	toolCall := "call-q-task"
+	require.NoError(t, questions.NewFromRepo(f.repo).CreateQuestion(context.Background(), &db.Question{
+		ID: "q-task", ChatID: f.chatID, WorkflowID: f.mainID, TemporalWorkflowID: f.chatID,
+		ThreadID: f.mainID, StepID: "agent_loop", Status: db.QuestionStatusPending,
+		Metadata: &metadata, ToolCallID: &toolCall, Async: true, CreatedAt: time.Now().UTC(),
+	}))
+
+	require.NoError(t, f.answer(t, "q-task", `{"answers":[{"question":"Run gcloud auth login","selected":["Done"]}]}`))
+
+	require.Len(t, f.messages.mainSends, 1)
+	assert.Equal(t,
+		"Update on the task you gave the user without waiting (ask_user task, question_id: q-task):\n\n"+
+			"Task: Run gcloud auth login\nThe user marked it done.",
+		f.messages.mainSends[0].Messages[0].Content)
+	assert.Equal(t, db.QuestionStatusResolved, f.status(t, "q-task").Status)
+}
+
+func TestFormatAsyncAnswer_Task(t *testing.T) {
+	metadata := `{"type":"ask_user","task":true,"questions":[{"question":"Sign in"},{"question":"Approve the PR"}]}`
+	for _, tc := range []struct {
+		name, data, want string
+	}{
+		{"done", `{"answers":[{"question":"Sign in","selected":["Done"]}]}`, "Task: Sign in\nThe user marked it done."},
+		{"not done with a reason", `{"answers":[{"question":"Sign in","selected":["Not done"],"freetext":"no access"}]}`, "Task: Sign in\nThe user marked it not done: no access"},
+		{"several items", `{"answers":[{"question":"Sign in","selected":["Done"]},{"question":"Approve the PR","selected":["Not done"]}]}`,
+			"Task: Sign in\nThe user marked it done.\n\nTask: Approve the PR\nThe user marked it not done (no reason given)."},
+		{"item without its text takes it from the metadata", `{"answers":[{"selected":["Done"]}]}`, "Task: Sign in\nThe user marked it done."},
+		{"an older client's freetext only", `{"answers":[{"question":"Sign in","freetext":"done, finally"}]}`, "Task: Sign in\nThe user replied: done, finally"},
+		{"nothing marked", `{"answers":[{"question":"Sign in","selected":[]}]}`, ""},
+		{"plain text", `did it`, "A: did it"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.want, formatAsyncAnswer(&metadata, tc.data))
+		})
+	}
+}
+
+func TestAsyncAnswerBodies_Task(t *testing.T) {
+	assert.Equal(t, "Answer to the question you asked without waiting (ask_user, question_id: q):\n\nA: x", asyncAnswerBody("q", "A: x", false),
+		"a question's wording is unchanged")
+	assert.Contains(t, asyncAnswerBody("q", "Task: x", true), "Update on the task you gave the user")
+	assert.Contains(t, asyncAnswerForwardedBody("q", "spawn-1", "Task: x", true), "gave the user a task")
+	assert.NotContains(t, asyncAnswerForwardedBody("q", "spawn-1", "A: x", false), "task")
+}
+
 func TestFormatAsyncAnswer(t *testing.T) {
 	metadata := `{"type":"ask_user","questions":[{"question":"Color?","options":[]},{"question":"Tone?","options":[]}]}`
 	for _, tc := range []struct {
@@ -392,7 +443,7 @@ func TestResolveAsyncQuestion_ThreadParkedOnABlockingQuestionGetsItInItsMailboxO
 			queued, err := store.ListQueuedAgentMessagesForThread(ctx, f.repo.ORM(), asker)
 			require.NoError(t, err)
 			require.Len(t, queued, 1, "A's answer waits in the asking thread's mailbox")
-			assert.Equal(t, asyncAnswerBody("q-a", wantSQLiteAnswer), queued[0].Body)
+			assert.Equal(t, asyncAnswerBody("q-a", wantSQLiteAnswer, false), queued[0].Body)
 			assert.Equal(t, asyncAnswerMessageID("q-a", asker, queued[0].Body), queued[0].ID)
 			require.NotNil(t, queued[0].DisplayStyle, "queued LLM-only: it drains hidden, shown on its card")
 			assert.Equal(t, int32(reliantv1.DisplayStyle_DISPLAY_STYLE_HIDDEN), *queued[0].DisplayStyle)

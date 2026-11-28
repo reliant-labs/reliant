@@ -80,6 +80,9 @@ func propagateUnattended(parent, child map[string]interface{}) {
 // It is deliberately not the timeout wording ("The user did not respond in time"),
 // which would blame a person who was never asked.
 func unattendedAskUserResponse(metadata string) string {
+	if md, ok := askuser.ParseMetadata(metadata); ok && md.Task {
+		return unattendedAskUserTaskResponse(md)
+	}
 	var b strings.Builder
 	b.WriteString(UnattendedMarker + " No human is available to answer.\n\n")
 	b.WriteString("This run was started unattended. Your question was NOT shown to anyone, " +
@@ -98,6 +101,25 @@ func unattendedAskUserResponse(metadata string) string {
 	b.WriteString("\nResolve this yourself from the brief you already have. In your next message, " +
 		"state the decision you made and the reason you made it — that statement is the only " +
 		"record that this was auto-resolved rather than chosen by a person, so do not skip it. " +
+		"Then continue. Do not call ask_user again in this run; it will keep coming back here.")
+	return b.String()
+}
+
+// unattendedAskUserTaskResponse is unattendedAskUserResponse for a task
+// (ask_user task: true): nobody was there to do it, so the agent must go on
+// without it, and say what it did instead.
+func unattendedAskUserTaskResponse(md *askuser.Metadata) string {
+	var b strings.Builder
+	b.WriteString(UnattendedMarker + " No human is available to do this task.\n\n")
+	b.WriteString("This run was started unattended. Your task was NOT shown to anyone, " +
+		"nobody did it, and nothing was marked done on the user's behalf.\n")
+	b.WriteString("\nNot done:\n")
+	for _, q := range md.Questions {
+		b.WriteString("- " + q.Question + "\n")
+	}
+	b.WriteString("\nDecide how to proceed without it: do what you can that does not depend on it, " +
+		"or stop the part that does. In your next message, state what you decided and the reason — " +
+		"that statement is the only record that the task was skipped rather than done by a person, so do not skip it. " +
 		"Then continue. Do not call ask_user again in this run; it will keep coming back here.")
 	return b.String()
 }

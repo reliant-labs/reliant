@@ -153,3 +153,45 @@ mailbox". The answer message already names its question_id
 ("Answer to the question you asked without waiting (ask_user, question_id:
 …)"), which connects an answer to its question without a per-thread drain
 watermark to maintain.
+
+## Tasks (`task: true`)
+
+`ask_user` with `task: true` gives the user a to-do instead of asking a
+question: something only they can do (sign in or run a command on their
+machine, approve something in another system, provide a secret, a physical
+action). It is the same contract, with no new storage:
+
+- **Storage.** An ordinary `questions` row created by the same ask_user path.
+  Its metadata gains `"task": true` beside `"type": "ask_user"`,
+  `"tool_call_id"`, `"questions"` and, for an async one, `"async": true`
+  (`executeAskUserInline`). Each entry of `questions[]` is one to-do item:
+  `question` is the task text, written as an instruction to the user, and it
+  has no `options` (the schema requires `options` only of a question). No
+  migration and no proto change.
+- **Orthogonal to blocking.** `askUserIsAsync` and its versioning are
+  unchanged: a task is async by default — posted, the agent goes on, and the
+  user's mark arrives later as a message ("Update on the task you gave the user
+  without waiting (ask_user task, question_id: …)") through the delivery above.
+  `blocking: true` with `task: true` waits until the user marks it ("run
+  `gcloud auth login`, then mark this done").
+- **Answer shape.** The ask_user answers shape, one answer per item in order:
+  `{"answers":[{"question":"<task text>","selected":["Done"],"freetext":"<optional note>"}]}`,
+  or `"selected":["Not done"]` with the user's reason (optional) in `freetext`.
+  The labels are `askuser.TaskDone` / `askuser.TaskNotDone` in the Go SDK and
+  must agree with the web client's `askUserUtils.ts`. Every resolver path —
+  ResolveQuestion, async delivery, the blocking signal, the SDK — is the
+  question's, unchanged. A client that does not know tasks shows one as a
+  question with no options and can still answer it in free text; the agent
+  reads that as "The user replied: …".
+- **What the model reads.** Only the wording differs, and only when the
+  metadata says task; a question's results are byte-identical to before. The
+  async result says the task is on the user's to-do list
+  (`asyncAskUserTaskResponse`); an answered one renders
+  "Task: <text>\nThe user marked it done." or "…not done: <reason>"
+  (`askuser.Answer.TaskOutcome`, used by `formatAskUserTaskResponse` and
+  `formatAsyncTaskAnswer`); a blocking wait that times out or yields says the
+  task was not marked; an unattended run says nobody could do it and the agent
+  must decide how to go on without it (`unattendedAskUserTaskResponse`).
+- **Seeing and withdrawing.** `list_pending_questions` lists tasks with the
+  rest, labelled `task` (and `"task": true` in its metadata), and
+  `withdraw_question` withdraws an async task like an async question.

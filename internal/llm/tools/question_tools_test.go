@@ -82,6 +82,54 @@ func TestListPendingQuestions_ListsTheCallersSubtree(t *testing.T) {
 	assert.False(t, md.Questions[1].Async)
 }
 
+func TestListPendingQuestions_LabelsTasks(t *testing.T) {
+	t.Parallel()
+	taskMeta := `{"type":"ask_user","async":true,"task":true,"questions":[{"question":"Run gcloud auth login"}]}`
+	blockingTaskMeta := `{"type":"ask_user","task":true,"questions":[{"question":"Approve the deploy"}]}`
+	questionMeta := `{"type":"ask_user","async":true,"questions":[{"question":"Which database?","options":[{"label":"A","description":"d"},{"label":"B","description":"d"}]}]}`
+	store := &fakeQuestionStore{rows: []db.SubtreeQuestion{
+		{ID: "q-task", ThreadID: "thread-a", Async: true, Metadata: &taskMeta, CreatedAt: time.Now()},
+		{ID: "q-blocking-task", ThreadID: "thread-a", Metadata: &blockingTaskMeta, CreatedAt: time.Now()},
+		{ID: "q-question", ThreadID: "thread-a", Async: true, Metadata: &questionMeta, CreatedAt: time.Now()},
+	}}
+
+	resp := runQuestionTool(t, NewListPendingQuestionsTool(store), ListPendingQuestionsToolName, ListPendingQuestionsParams{})
+
+	assert.False(t, resp.IsError)
+	assert.Contains(t, resp.Content, "3 unanswered questions and tasks from you and your sub-agents:")
+	assert.Contains(t, resp.Content, "question_id: q-task · task · async — nobody is waiting on it")
+	assert.Contains(t, resp.Content, "   Task: Run gcloud auth login\n")
+	assert.Contains(t, resp.Content, "question_id: q-blocking-task · task · BLOCKING — that agent is waiting for the user to mark it")
+	assert.Contains(t, resp.Content, "question_id: q-question · async — nobody is waiting on it")
+	assert.Contains(t, resp.Content, "   Q: Which database?\n")
+
+	var md ListPendingQuestionsResponseMetadata
+	require.NoError(t, json.Unmarshal([]byte(resp.Metadata), &md))
+	require.Len(t, md.Questions, 3)
+	assert.True(t, md.Questions[0].Task)
+	assert.True(t, md.Questions[1].Task)
+	assert.False(t, md.Questions[2].Task)
+	assert.Equal(t, "Run gcloud auth login", md.Questions[0].Questions[0].Question)
+	assert.Empty(t, md.Questions[0].Questions[0].Options)
+}
+
+func TestPendingNoun(t *testing.T) {
+	t.Parallel()
+	q, task := PendingQuestionEntry{}, PendingQuestionEntry{Task: true}
+	for _, tc := range []struct {
+		entries []PendingQuestionEntry
+		want    string
+	}{
+		{[]PendingQuestionEntry{q}, "question"},
+		{[]PendingQuestionEntry{q, q}, "questions"},
+		{[]PendingQuestionEntry{task}, "task"},
+		{[]PendingQuestionEntry{task, task}, "tasks"},
+		{[]PendingQuestionEntry{q, task}, "questions and tasks"},
+	} {
+		assert.Equal(t, tc.want, pendingNoun(tc.entries))
+	}
+}
+
 func TestListPendingQuestions_Empty(t *testing.T) {
 	t.Parallel()
 	resp := runQuestionTool(t, NewListPendingQuestionsTool(&fakeQuestionStore{}), ListPendingQuestionsToolName, ListPendingQuestionsParams{})
