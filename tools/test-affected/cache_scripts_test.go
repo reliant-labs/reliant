@@ -108,7 +108,8 @@ func TestMergeGateRunsGenerateAloneOnASmallHost(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	start, end := "mem_kib=$(awk", "\n[ -n \"$base\" ]"
+	// Include CPU initialization now that the memory sizing shares its block.
+	start, end := "cpus=$(nproc", "\n[ -n \"$base\" ]"
 	_, rest, ok := strings.Cut(string(b), start)
 	if !ok {
 		t.Fatalf("merge-gate missing the memory budget %q", start)
@@ -141,7 +142,8 @@ func TestMergeGateRunsGenerateAloneOnASmallHost(t *testing.T) {
 	} {
 		cmd := exec.Command("bash", "-c", start+block+"\necho \"$gen_alone\"")
 		cmd.Env = append(os.Environ(), tc.env...)
-		out, err := cmd.CombinedOutput()
+		// CPU-budget diagnostics belong on stderr, not in the result.
+		out, err := cmd.Output()
 		if err != nil {
 			t.Fatalf("%v: %v\n%s", tc.env, err, out)
 		}
