@@ -14,6 +14,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/automationcred"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 func (e *triggerTestEnv) createNamed(t *testing.T, name string) string {
@@ -65,7 +66,7 @@ func TestTriggerCreateSurvivesMintFailure(t *testing.T) {
 	t.Cleanup(func() { auth.SetUserJWT(env.userID, "") })
 	env.configure(t, func(d *Deps) { d.ControlPlane = &fakeControlPlaneClient{mintErr: errors.New("unknown scope")} })
 	id := env.createNamed(t, "a") // must not fail
-	tr, err := env.repo.GetTrigger(env.ctx, id)
+	tr, err := store.GetTrigger(env.ctx, env.repo.ORM(), id)
 	require.NoError(t, err)
 	assert.True(t, tr.Enabled)
 }

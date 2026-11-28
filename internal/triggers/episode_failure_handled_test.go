@@ -67,7 +67,7 @@ func TestFailureEpisode_AHandledFailureDoesNotEndIt(t *testing.T) {
 	}
 	episode := func() ([]string, Streak) {
 		t.Helper()
-		got, err := repo.FiringsSinceLastSuccess(ctx, user, []string{tr.ID}, 500)
+		got, err := store.FiringsSinceLastSuccess(ctx, repo.ORM(), user, []string{tr.ID}, 500)
 		require.NoError(t, err)
 		ids := make([]string, 0, len(got[tr.ID]))
 		for _, f := range got[tr.ID] {

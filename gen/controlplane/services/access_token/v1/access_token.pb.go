@@ -38,6 +38,55 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+// FederationProvider names the CI system whose ID token is exchanged. An enum,
+// so another provider (GitLab CI's id_tokens) is a new value, not a new rpc.
+type FederationProvider int32
+
+const (
+	FederationProvider_FEDERATION_PROVIDER_UNSPECIFIED FederationProvider = 0
+	// GitHub Actions: an OIDC ID token from token.actions.githubusercontent.com.
+	FederationProvider_FEDERATION_PROVIDER_GITHUB_ACTIONS FederationProvider = 1
+)
+
+// Enum value maps for FederationProvider.
+var (
+	FederationProvider_name = map[int32]string{
+		0: "FEDERATION_PROVIDER_UNSPECIFIED",
+		1: "FEDERATION_PROVIDER_GITHUB_ACTIONS",
+	}
+	FederationProvider_value = map[string]int32{
+		"FEDERATION_PROVIDER_UNSPECIFIED":    0,
+		"FEDERATION_PROVIDER_GITHUB_ACTIONS": 1,
+	}
+)
+
+func (x FederationProvider) Enum() *FederationProvider {
+	p := new(FederationProvider)
+	*p = x
+	return p
+}
+
+func (x FederationProvider) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (FederationProvider) Descriptor() protoreflect.EnumDescriptor {
+	return file_services_access_token_v1_access_token_proto_enumTypes[0].Descriptor()
+}
+
+func (FederationProvider) Type() protoreflect.EnumType {
+	return &file_services_access_token_v1_access_token_proto_enumTypes[0]
+}
+
+func (x FederationProvider) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use FederationProvider.Descriptor instead.
+func (FederationProvider) EnumDescriptor() ([]byte, []int) {
+	return file_services_access_token_v1_access_token_proto_rawDescGZIP(), []int{0}
+}
+
 // OrgMemberGrants is one member and the org permissions they hold.
 type OrgMemberGrants struct {
 	state  protoimpl.MessageState `protogen:"open.v1"`
@@ -552,7 +601,8 @@ func (x *UpdateOrgMemberGrantsResponse) GetMember() *OrgMemberGrants {
 }
 
 // ResourceBinding confines a token to one resource. kind is one of
-// "daemon" | "port" | "connector" (forge/pkg/accesstoken.AllResourceKinds).
+// "daemon" | "port" | "connector" | "environment"
+// (forge/pkg/accesstoken.AllResourceKinds).
 type ResourceBinding struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Kind          string                 `protobuf:"bytes,1,opt,name=kind,proto3" json:"kind,omitempty"`
@@ -773,7 +823,16 @@ type CreateTokenRequest struct {
 	// The org this request acts in (docs/orgs.md). Unset: the caller's default
 	// org. A person must be a member of it; a machine credential may name only
 	// its own org.
-	OrgId         *string `protobuf:"bytes,4,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
+	OrgId *string `protobuf:"bytes,4,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
+	// resource, when set, confines the token to one resource. An org token
+	// may be bound only to an ENVIRONMENT of the org (kind "environment", id a
+	// live deploy environment of the org; any other is NotFound, so the mint is
+	// no existence oracle), and then every scope it carries must be one that
+	// binds to an environment (forge/pkg/accesstoken: obs:read, db:query,
+	// changes:read, ...). The app credential of a deploy not on Reliant
+	// hosting is the case: changes:read bound to the one environment whose
+	// Changes snapshot it fetches. Unset: an org-wide token, as before.
+	Resource      *ResourceBinding `protobuf:"bytes,5,opt,name=resource,proto3" json:"resource,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -834,6 +893,13 @@ func (x *CreateTokenRequest) GetOrgId() string {
 		return *x.OrgId
 	}
 	return ""
+}
+
+func (x *CreateTokenRequest) GetResource() *ResourceBinding {
+	if x != nil {
+		return x.Resource
+	}
+	return nil
 }
 
 type CreateTokenResponse struct {
@@ -2046,6 +2112,152 @@ func (x *ExchangeTokenResponse) GetSecret() string {
 	return ""
 }
 
+type ExchangeFederatedTokenRequest struct {
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	Provider FederationProvider     `protobuf:"varint,1,opt,name=provider,proto3,enum=controlplane.v1.FederationProvider" json:"provider,omitempty"`
+	// id_token is the provider's raw ID token (a JWT, under 8 KiB). It is a
+	// credential: never logged or recorded.
+	IdToken string `protobuf:"bytes,2,opt,name=id_token,json=idToken,proto3" json:"id_token,omitempty"`
+	// scopes requested. Empty asks for every scope federatable in this context;
+	// anything not federatable is dropped, and the response says what was
+	// granted.
+	Scopes        []string `protobuf:"bytes,3,rep,name=scopes,proto3" json:"scopes,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ExchangeFederatedTokenRequest) Reset() {
+	*x = ExchangeFederatedTokenRequest{}
+	mi := &file_services_access_token_v1_access_token_proto_msgTypes[33]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ExchangeFederatedTokenRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ExchangeFederatedTokenRequest) ProtoMessage() {}
+
+func (x *ExchangeFederatedTokenRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_services_access_token_v1_access_token_proto_msgTypes[33]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ExchangeFederatedTokenRequest.ProtoReflect.Descriptor instead.
+func (*ExchangeFederatedTokenRequest) Descriptor() ([]byte, []int) {
+	return file_services_access_token_v1_access_token_proto_rawDescGZIP(), []int{33}
+}
+
+func (x *ExchangeFederatedTokenRequest) GetProvider() FederationProvider {
+	if x != nil {
+		return x.Provider
+	}
+	return FederationProvider_FEDERATION_PROVIDER_UNSPECIFIED
+}
+
+func (x *ExchangeFederatedTokenRequest) GetIdToken() string {
+	if x != nil {
+		return x.IdToken
+	}
+	return ""
+}
+
+func (x *ExchangeFederatedTokenRequest) GetScopes() []string {
+	if x != nil {
+		return x.Scopes
+	}
+	return nil
+}
+
+type ExchangeFederatedTokenResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// token is the rlat_ plaintext, returned exactly once.
+	Token     string                 `protobuf:"bytes,1,opt,name=token,proto3" json:"token,omitempty"`
+	ExpiresAt *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
+	// scopes granted: requested ∩ federatable.
+	Scopes []string `protobuf:"bytes,3,rep,name=scopes,proto3" json:"scopes,omitempty"`
+	// org_id is the organization the installation link named.
+	OrgId string `protobuf:"bytes,4,opt,name=org_id,json=orgId,proto3" json:"org_id,omitempty"`
+	// subject names the run the token was minted for, for display:
+	// "github:owner/repo@refs/heads/main run 123/1".
+	Subject       string `protobuf:"bytes,5,opt,name=subject,proto3" json:"subject,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ExchangeFederatedTokenResponse) Reset() {
+	*x = ExchangeFederatedTokenResponse{}
+	mi := &file_services_access_token_v1_access_token_proto_msgTypes[34]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ExchangeFederatedTokenResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ExchangeFederatedTokenResponse) ProtoMessage() {}
+
+func (x *ExchangeFederatedTokenResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_services_access_token_v1_access_token_proto_msgTypes[34]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ExchangeFederatedTokenResponse.ProtoReflect.Descriptor instead.
+func (*ExchangeFederatedTokenResponse) Descriptor() ([]byte, []int) {
+	return file_services_access_token_v1_access_token_proto_rawDescGZIP(), []int{34}
+}
+
+func (x *ExchangeFederatedTokenResponse) GetToken() string {
+	if x != nil {
+		return x.Token
+	}
+	return ""
+}
+
+func (x *ExchangeFederatedTokenResponse) GetExpiresAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.ExpiresAt
+	}
+	return nil
+}
+
+func (x *ExchangeFederatedTokenResponse) GetScopes() []string {
+	if x != nil {
+		return x.Scopes
+	}
+	return nil
+}
+
+func (x *ExchangeFederatedTokenResponse) GetOrgId() string {
+	if x != nil {
+		return x.OrgId
+	}
+	return ""
+}
+
+func (x *ExchangeFederatedTokenResponse) GetSubject() string {
+	if x != nil {
+		return x.Subject
+	}
+	return ""
+}
+
 var File_services_access_token_v1_access_token_proto protoreflect.FileDescriptor
 
 const file_services_access_token_v1_access_token_proto_rawDesc = "" +
@@ -2106,13 +2318,14 @@ const file_services_access_token_v1_access_token_proto_rawDesc = "" +
 	"\bresource\x18\f \x01(\v2 .controlplane.v1.ResourceBindingR\bresource\x12\x1c\n" +
 	"\tephemeral\x18\r \x01(\bR\tephemeral\x12\x1d\n" +
 	"\n" +
-	"all_scopes\x18\x0e \x01(\bR\tallScopes\"\xa2\x01\n" +
+	"all_scopes\x18\x0e \x01(\bR\tallScopes\"\xe0\x01\n" +
 	"\x12CreateTokenRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x16\n" +
 	"\x06scopes\x18\x02 \x03(\tR\x06scopes\x129\n" +
 	"\n" +
 	"expires_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\texpiresAt\x12\x1a\n" +
-	"\x06org_id\x18\x04 \x01(\tH\x00R\x05orgId\x88\x01\x01B\t\n" +
+	"\x06org_id\x18\x04 \x01(\tH\x00R\x05orgId\x88\x01\x01\x12<\n" +
+	"\bresource\x18\x05 \x01(\v2 .controlplane.v1.ResourceBindingR\bresourceB\t\n" +
 	"\a_org_id\"a\n" +
 	"\x13CreateTokenResponse\x122\n" +
 	"\x05token\x18\x01 \x01(\v2\x1c.controlplane.v1.AccessTokenR\x05token\x12\x16\n" +
@@ -2198,8 +2411,21 @@ const file_services_access_token_v1_access_token_proto_rawDesc = "" +
 	"\x06scopes\x18\x01 \x03(\tR\x06scopes\"c\n" +
 	"\x15ExchangeTokenResponse\x122\n" +
 	"\x05token\x18\x01 \x01(\v2\x1c.controlplane.v1.AccessTokenR\x05token\x12\x16\n" +
-	"\x06secret\x18\x02 \x01(\tR\x06secret2\xc4\n" +
+	"\x06secret\x18\x02 \x01(\tR\x06secret\"\x98\x01\n" +
+	"\x1dExchangeFederatedTokenRequest\x12?\n" +
+	"\bprovider\x18\x01 \x01(\x0e2#.controlplane.v1.FederationProviderR\bprovider\x12\x1e\n" +
+	"\bid_token\x18\x02 \x01(\tB\x03\x80\x01\x01R\aidToken\x12\x16\n" +
+	"\x06scopes\x18\x03 \x03(\tR\x06scopes\"\xbf\x01\n" +
+	"\x1eExchangeFederatedTokenResponse\x12\x19\n" +
+	"\x05token\x18\x01 \x01(\tB\x03\x80\x01\x01R\x05token\x129\n" +
 	"\n" +
+	"expires_at\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\texpiresAt\x12\x16\n" +
+	"\x06scopes\x18\x03 \x03(\tR\x06scopes\x12\x15\n" +
+	"\x06org_id\x18\x04 \x01(\tR\x05orgId\x12\x18\n" +
+	"\asubject\x18\x05 \x01(\tR\asubject*a\n" +
+	"\x12FederationProvider\x12#\n" +
+	"\x1fFEDERATION_PROVIDER_UNSPECIFIED\x10\x00\x12&\n" +
+	"\"FEDERATION_PROVIDER_GITHUB_ACTIONS\x10\x012\xbf\v\n" +
 	"\x12AccessTokenService\x12X\n" +
 	"\vCreateToken\x12#.controlplane.v1.CreateTokenRequest\x1a$.controlplane.v1.CreateTokenResponse\x12Z\n" +
 	"\n" +
@@ -2212,7 +2438,8 @@ const file_services_access_token_v1_access_token_proto_rawDesc = "" +
 	"\x16ResetDaemonScopePolicy\x12..controlplane.v1.ResetDaemonScopePolicyRequest\x1a/.controlplane.v1.ResetDaemonScopePolicyResponse\x12i\n" +
 	"\x0fListMyCLILogins\x12'.controlplane.v1.ListMyCLILoginsRequest\x1a(.controlplane.v1.ListMyCLILoginsResponse\"\x03\x90\x02\x01\x12g\n" +
 	"\x10RevokeMyCLILogin\x12(.controlplane.v1.RevokeMyCLILoginRequest\x1a).controlplane.v1.RevokeMyCLILoginResponse\x12^\n" +
-	"\rExchangeToken\x12%.controlplane.v1.ExchangeTokenRequest\x1a&.controlplane.v1.ExchangeTokenResponse\x12u\n" +
+	"\rExchangeToken\x12%.controlplane.v1.ExchangeTokenRequest\x1a&.controlplane.v1.ExchangeTokenResponse\x12y\n" +
+	"\x16ExchangeFederatedToken\x12..controlplane.v1.ExchangeFederatedTokenRequest\x1a/.controlplane.v1.ExchangeFederatedTokenResponse\x12u\n" +
 	"\x13ListOrgMemberGrants\x12+.controlplane.v1.ListOrgMemberGrantsRequest\x1a,.controlplane.v1.ListOrgMemberGrantsResponse\"\x03\x90\x02\x01\x12v\n" +
 	"\x15UpdateOrgMemberGrants\x12-.controlplane.v1.UpdateOrgMemberGrantsRequest\x1a..controlplane.v1.UpdateOrgMemberGrantsResponseB\xde\x01\n" +
 	"\x13com.controlplane.v1B\x10AccessTokenProtoP\x01ZXgithub.com/reliant-labs/reliant/gen/controlplane/services/access_token/v1;controlplanev1\xa2\x02\x03CXX\xaa\x02\x0fControlplane.V1\xca\x02\x0fControlplane\\V1\xe2\x02\x1bControlplane\\V1\\GPBMetadata\xea\x02\x10Controlplane::V1b\x06proto3"
@@ -2229,101 +2456,110 @@ func file_services_access_token_v1_access_token_proto_rawDescGZIP() []byte {
 	return file_services_access_token_v1_access_token_proto_rawDescData
 }
 
-var file_services_access_token_v1_access_token_proto_msgTypes = make([]protoimpl.MessageInfo, 33)
+var file_services_access_token_v1_access_token_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
+var file_services_access_token_v1_access_token_proto_msgTypes = make([]protoimpl.MessageInfo, 35)
 var file_services_access_token_v1_access_token_proto_goTypes = []any{
-	(*OrgMemberGrants)(nil),                // 0: controlplane.v1.OrgMemberGrants
-	(*EnvironmentGrants)(nil),              // 1: controlplane.v1.EnvironmentGrants
-	(*GrantEnvironment)(nil),               // 2: controlplane.v1.GrantEnvironment
-	(*EnvironmentGrantSet)(nil),            // 3: controlplane.v1.EnvironmentGrantSet
-	(*ListOrgMemberGrantsRequest)(nil),     // 4: controlplane.v1.ListOrgMemberGrantsRequest
-	(*ListOrgMemberGrantsResponse)(nil),    // 5: controlplane.v1.ListOrgMemberGrantsResponse
-	(*UpdateOrgMemberGrantsRequest)(nil),   // 6: controlplane.v1.UpdateOrgMemberGrantsRequest
-	(*UpdateOrgMemberGrantsResponse)(nil),  // 7: controlplane.v1.UpdateOrgMemberGrantsResponse
-	(*ResourceBinding)(nil),                // 8: controlplane.v1.ResourceBinding
-	(*AccessToken)(nil),                    // 9: controlplane.v1.AccessToken
-	(*CreateTokenRequest)(nil),             // 10: controlplane.v1.CreateTokenRequest
-	(*CreateTokenResponse)(nil),            // 11: controlplane.v1.CreateTokenResponse
-	(*ListTokensRequest)(nil),              // 12: controlplane.v1.ListTokensRequest
-	(*ListTokensResponse)(nil),             // 13: controlplane.v1.ListTokensResponse
-	(*RevokeTokenRequest)(nil),             // 14: controlplane.v1.RevokeTokenRequest
-	(*RevokeTokenResponse)(nil),            // 15: controlplane.v1.RevokeTokenResponse
-	(*CreateMyTokenRequest)(nil),           // 16: controlplane.v1.CreateMyTokenRequest
-	(*CreateMyTokenResponse)(nil),          // 17: controlplane.v1.CreateMyTokenResponse
-	(*ListMyTokensRequest)(nil),            // 18: controlplane.v1.ListMyTokensRequest
-	(*ListMyTokensResponse)(nil),           // 19: controlplane.v1.ListMyTokensResponse
-	(*RevokeMyTokenRequest)(nil),           // 20: controlplane.v1.RevokeMyTokenRequest
-	(*RevokeMyTokenResponse)(nil),          // 21: controlplane.v1.RevokeMyTokenResponse
-	(*ResetDaemonScopePolicyRequest)(nil),  // 22: controlplane.v1.ResetDaemonScopePolicyRequest
-	(*ResetDaemonScopePolicyResponse)(nil), // 23: controlplane.v1.ResetDaemonScopePolicyResponse
-	(*CLILogin)(nil),                       // 24: controlplane.v1.CLILogin
-	(*ListMyCLILoginsRequest)(nil),         // 25: controlplane.v1.ListMyCLILoginsRequest
-	(*ListMyCLILoginsResponse)(nil),        // 26: controlplane.v1.ListMyCLILoginsResponse
-	(*RevokeMyCLILoginRequest)(nil),        // 27: controlplane.v1.RevokeMyCLILoginRequest
-	(*RevokeMyCLILoginResponse)(nil),       // 28: controlplane.v1.RevokeMyCLILoginResponse
-	(*UpdateMyTokenRequest)(nil),           // 29: controlplane.v1.UpdateMyTokenRequest
-	(*UpdateMyTokenResponse)(nil),          // 30: controlplane.v1.UpdateMyTokenResponse
-	(*ExchangeTokenRequest)(nil),           // 31: controlplane.v1.ExchangeTokenRequest
-	(*ExchangeTokenResponse)(nil),          // 32: controlplane.v1.ExchangeTokenResponse
-	(*timestamppb.Timestamp)(nil),          // 33: google.protobuf.Timestamp
+	(FederationProvider)(0),                // 0: controlplane.v1.FederationProvider
+	(*OrgMemberGrants)(nil),                // 1: controlplane.v1.OrgMemberGrants
+	(*EnvironmentGrants)(nil),              // 2: controlplane.v1.EnvironmentGrants
+	(*GrantEnvironment)(nil),               // 3: controlplane.v1.GrantEnvironment
+	(*EnvironmentGrantSet)(nil),            // 4: controlplane.v1.EnvironmentGrantSet
+	(*ListOrgMemberGrantsRequest)(nil),     // 5: controlplane.v1.ListOrgMemberGrantsRequest
+	(*ListOrgMemberGrantsResponse)(nil),    // 6: controlplane.v1.ListOrgMemberGrantsResponse
+	(*UpdateOrgMemberGrantsRequest)(nil),   // 7: controlplane.v1.UpdateOrgMemberGrantsRequest
+	(*UpdateOrgMemberGrantsResponse)(nil),  // 8: controlplane.v1.UpdateOrgMemberGrantsResponse
+	(*ResourceBinding)(nil),                // 9: controlplane.v1.ResourceBinding
+	(*AccessToken)(nil),                    // 10: controlplane.v1.AccessToken
+	(*CreateTokenRequest)(nil),             // 11: controlplane.v1.CreateTokenRequest
+	(*CreateTokenResponse)(nil),            // 12: controlplane.v1.CreateTokenResponse
+	(*ListTokensRequest)(nil),              // 13: controlplane.v1.ListTokensRequest
+	(*ListTokensResponse)(nil),             // 14: controlplane.v1.ListTokensResponse
+	(*RevokeTokenRequest)(nil),             // 15: controlplane.v1.RevokeTokenRequest
+	(*RevokeTokenResponse)(nil),            // 16: controlplane.v1.RevokeTokenResponse
+	(*CreateMyTokenRequest)(nil),           // 17: controlplane.v1.CreateMyTokenRequest
+	(*CreateMyTokenResponse)(nil),          // 18: controlplane.v1.CreateMyTokenResponse
+	(*ListMyTokensRequest)(nil),            // 19: controlplane.v1.ListMyTokensRequest
+	(*ListMyTokensResponse)(nil),           // 20: controlplane.v1.ListMyTokensResponse
+	(*RevokeMyTokenRequest)(nil),           // 21: controlplane.v1.RevokeMyTokenRequest
+	(*RevokeMyTokenResponse)(nil),          // 22: controlplane.v1.RevokeMyTokenResponse
+	(*ResetDaemonScopePolicyRequest)(nil),  // 23: controlplane.v1.ResetDaemonScopePolicyRequest
+	(*ResetDaemonScopePolicyResponse)(nil), // 24: controlplane.v1.ResetDaemonScopePolicyResponse
+	(*CLILogin)(nil),                       // 25: controlplane.v1.CLILogin
+	(*ListMyCLILoginsRequest)(nil),         // 26: controlplane.v1.ListMyCLILoginsRequest
+	(*ListMyCLILoginsResponse)(nil),        // 27: controlplane.v1.ListMyCLILoginsResponse
+	(*RevokeMyCLILoginRequest)(nil),        // 28: controlplane.v1.RevokeMyCLILoginRequest
+	(*RevokeMyCLILoginResponse)(nil),       // 29: controlplane.v1.RevokeMyCLILoginResponse
+	(*UpdateMyTokenRequest)(nil),           // 30: controlplane.v1.UpdateMyTokenRequest
+	(*UpdateMyTokenResponse)(nil),          // 31: controlplane.v1.UpdateMyTokenResponse
+	(*ExchangeTokenRequest)(nil),           // 32: controlplane.v1.ExchangeTokenRequest
+	(*ExchangeTokenResponse)(nil),          // 33: controlplane.v1.ExchangeTokenResponse
+	(*ExchangeFederatedTokenRequest)(nil),  // 34: controlplane.v1.ExchangeFederatedTokenRequest
+	(*ExchangeFederatedTokenResponse)(nil), // 35: controlplane.v1.ExchangeFederatedTokenResponse
+	(*timestamppb.Timestamp)(nil),          // 36: google.protobuf.Timestamp
 }
 var file_services_access_token_v1_access_token_proto_depIdxs = []int32{
-	1,  // 0: controlplane.v1.OrgMemberGrants.environment_grants:type_name -> controlplane.v1.EnvironmentGrants
-	1,  // 1: controlplane.v1.EnvironmentGrantSet.environments:type_name -> controlplane.v1.EnvironmentGrants
-	0,  // 2: controlplane.v1.ListOrgMemberGrantsResponse.members:type_name -> controlplane.v1.OrgMemberGrants
-	2,  // 3: controlplane.v1.ListOrgMemberGrantsResponse.environments:type_name -> controlplane.v1.GrantEnvironment
-	3,  // 4: controlplane.v1.UpdateOrgMemberGrantsRequest.environment_grants:type_name -> controlplane.v1.EnvironmentGrantSet
-	0,  // 5: controlplane.v1.UpdateOrgMemberGrantsResponse.member:type_name -> controlplane.v1.OrgMemberGrants
-	33, // 6: controlplane.v1.AccessToken.created_at:type_name -> google.protobuf.Timestamp
-	33, // 7: controlplane.v1.AccessToken.expires_at:type_name -> google.protobuf.Timestamp
-	33, // 8: controlplane.v1.AccessToken.last_used_at:type_name -> google.protobuf.Timestamp
-	33, // 9: controlplane.v1.AccessToken.revoked_at:type_name -> google.protobuf.Timestamp
-	8,  // 10: controlplane.v1.AccessToken.resource:type_name -> controlplane.v1.ResourceBinding
-	33, // 11: controlplane.v1.CreateTokenRequest.expires_at:type_name -> google.protobuf.Timestamp
-	9,  // 12: controlplane.v1.CreateTokenResponse.token:type_name -> controlplane.v1.AccessToken
-	9,  // 13: controlplane.v1.ListTokensResponse.tokens:type_name -> controlplane.v1.AccessToken
-	9,  // 14: controlplane.v1.RevokeTokenResponse.token:type_name -> controlplane.v1.AccessToken
-	33, // 15: controlplane.v1.CreateMyTokenRequest.expires_at:type_name -> google.protobuf.Timestamp
-	8,  // 16: controlplane.v1.CreateMyTokenRequest.resource:type_name -> controlplane.v1.ResourceBinding
-	9,  // 17: controlplane.v1.CreateMyTokenResponse.token:type_name -> controlplane.v1.AccessToken
-	9,  // 18: controlplane.v1.ListMyTokensResponse.tokens:type_name -> controlplane.v1.AccessToken
-	33, // 19: controlplane.v1.CLILogin.created_at:type_name -> google.protobuf.Timestamp
-	33, // 20: controlplane.v1.CLILogin.expires_at:type_name -> google.protobuf.Timestamp
-	33, // 21: controlplane.v1.CLILogin.last_used_at:type_name -> google.protobuf.Timestamp
-	33, // 22: controlplane.v1.CLILogin.revoked_at:type_name -> google.protobuf.Timestamp
-	24, // 23: controlplane.v1.ListMyCLILoginsResponse.logins:type_name -> controlplane.v1.CLILogin
-	9,  // 24: controlplane.v1.UpdateMyTokenResponse.token:type_name -> controlplane.v1.AccessToken
-	9,  // 25: controlplane.v1.ExchangeTokenResponse.token:type_name -> controlplane.v1.AccessToken
-	10, // 26: controlplane.v1.AccessTokenService.CreateToken:input_type -> controlplane.v1.CreateTokenRequest
-	12, // 27: controlplane.v1.AccessTokenService.ListTokens:input_type -> controlplane.v1.ListTokensRequest
-	14, // 28: controlplane.v1.AccessTokenService.RevokeToken:input_type -> controlplane.v1.RevokeTokenRequest
-	16, // 29: controlplane.v1.AccessTokenService.CreateMyToken:input_type -> controlplane.v1.CreateMyTokenRequest
-	18, // 30: controlplane.v1.AccessTokenService.ListMyTokens:input_type -> controlplane.v1.ListMyTokensRequest
-	20, // 31: controlplane.v1.AccessTokenService.RevokeMyToken:input_type -> controlplane.v1.RevokeMyTokenRequest
-	29, // 32: controlplane.v1.AccessTokenService.UpdateMyToken:input_type -> controlplane.v1.UpdateMyTokenRequest
-	22, // 33: controlplane.v1.AccessTokenService.ResetDaemonScopePolicy:input_type -> controlplane.v1.ResetDaemonScopePolicyRequest
-	25, // 34: controlplane.v1.AccessTokenService.ListMyCLILogins:input_type -> controlplane.v1.ListMyCLILoginsRequest
-	27, // 35: controlplane.v1.AccessTokenService.RevokeMyCLILogin:input_type -> controlplane.v1.RevokeMyCLILoginRequest
-	31, // 36: controlplane.v1.AccessTokenService.ExchangeToken:input_type -> controlplane.v1.ExchangeTokenRequest
-	4,  // 37: controlplane.v1.AccessTokenService.ListOrgMemberGrants:input_type -> controlplane.v1.ListOrgMemberGrantsRequest
-	6,  // 38: controlplane.v1.AccessTokenService.UpdateOrgMemberGrants:input_type -> controlplane.v1.UpdateOrgMemberGrantsRequest
-	11, // 39: controlplane.v1.AccessTokenService.CreateToken:output_type -> controlplane.v1.CreateTokenResponse
-	13, // 40: controlplane.v1.AccessTokenService.ListTokens:output_type -> controlplane.v1.ListTokensResponse
-	15, // 41: controlplane.v1.AccessTokenService.RevokeToken:output_type -> controlplane.v1.RevokeTokenResponse
-	17, // 42: controlplane.v1.AccessTokenService.CreateMyToken:output_type -> controlplane.v1.CreateMyTokenResponse
-	19, // 43: controlplane.v1.AccessTokenService.ListMyTokens:output_type -> controlplane.v1.ListMyTokensResponse
-	21, // 44: controlplane.v1.AccessTokenService.RevokeMyToken:output_type -> controlplane.v1.RevokeMyTokenResponse
-	30, // 45: controlplane.v1.AccessTokenService.UpdateMyToken:output_type -> controlplane.v1.UpdateMyTokenResponse
-	23, // 46: controlplane.v1.AccessTokenService.ResetDaemonScopePolicy:output_type -> controlplane.v1.ResetDaemonScopePolicyResponse
-	26, // 47: controlplane.v1.AccessTokenService.ListMyCLILogins:output_type -> controlplane.v1.ListMyCLILoginsResponse
-	28, // 48: controlplane.v1.AccessTokenService.RevokeMyCLILogin:output_type -> controlplane.v1.RevokeMyCLILoginResponse
-	32, // 49: controlplane.v1.AccessTokenService.ExchangeToken:output_type -> controlplane.v1.ExchangeTokenResponse
-	5,  // 50: controlplane.v1.AccessTokenService.ListOrgMemberGrants:output_type -> controlplane.v1.ListOrgMemberGrantsResponse
-	7,  // 51: controlplane.v1.AccessTokenService.UpdateOrgMemberGrants:output_type -> controlplane.v1.UpdateOrgMemberGrantsResponse
-	39, // [39:52] is the sub-list for method output_type
-	26, // [26:39] is the sub-list for method input_type
-	26, // [26:26] is the sub-list for extension type_name
-	26, // [26:26] is the sub-list for extension extendee
-	0,  // [0:26] is the sub-list for field type_name
+	2,  // 0: controlplane.v1.OrgMemberGrants.environment_grants:type_name -> controlplane.v1.EnvironmentGrants
+	2,  // 1: controlplane.v1.EnvironmentGrantSet.environments:type_name -> controlplane.v1.EnvironmentGrants
+	1,  // 2: controlplane.v1.ListOrgMemberGrantsResponse.members:type_name -> controlplane.v1.OrgMemberGrants
+	3,  // 3: controlplane.v1.ListOrgMemberGrantsResponse.environments:type_name -> controlplane.v1.GrantEnvironment
+	4,  // 4: controlplane.v1.UpdateOrgMemberGrantsRequest.environment_grants:type_name -> controlplane.v1.EnvironmentGrantSet
+	1,  // 5: controlplane.v1.UpdateOrgMemberGrantsResponse.member:type_name -> controlplane.v1.OrgMemberGrants
+	36, // 6: controlplane.v1.AccessToken.created_at:type_name -> google.protobuf.Timestamp
+	36, // 7: controlplane.v1.AccessToken.expires_at:type_name -> google.protobuf.Timestamp
+	36, // 8: controlplane.v1.AccessToken.last_used_at:type_name -> google.protobuf.Timestamp
+	36, // 9: controlplane.v1.AccessToken.revoked_at:type_name -> google.protobuf.Timestamp
+	9,  // 10: controlplane.v1.AccessToken.resource:type_name -> controlplane.v1.ResourceBinding
+	36, // 11: controlplane.v1.CreateTokenRequest.expires_at:type_name -> google.protobuf.Timestamp
+	9,  // 12: controlplane.v1.CreateTokenRequest.resource:type_name -> controlplane.v1.ResourceBinding
+	10, // 13: controlplane.v1.CreateTokenResponse.token:type_name -> controlplane.v1.AccessToken
+	10, // 14: controlplane.v1.ListTokensResponse.tokens:type_name -> controlplane.v1.AccessToken
+	10, // 15: controlplane.v1.RevokeTokenResponse.token:type_name -> controlplane.v1.AccessToken
+	36, // 16: controlplane.v1.CreateMyTokenRequest.expires_at:type_name -> google.protobuf.Timestamp
+	9,  // 17: controlplane.v1.CreateMyTokenRequest.resource:type_name -> controlplane.v1.ResourceBinding
+	10, // 18: controlplane.v1.CreateMyTokenResponse.token:type_name -> controlplane.v1.AccessToken
+	10, // 19: controlplane.v1.ListMyTokensResponse.tokens:type_name -> controlplane.v1.AccessToken
+	36, // 20: controlplane.v1.CLILogin.created_at:type_name -> google.protobuf.Timestamp
+	36, // 21: controlplane.v1.CLILogin.expires_at:type_name -> google.protobuf.Timestamp
+	36, // 22: controlplane.v1.CLILogin.last_used_at:type_name -> google.protobuf.Timestamp
+	36, // 23: controlplane.v1.CLILogin.revoked_at:type_name -> google.protobuf.Timestamp
+	25, // 24: controlplane.v1.ListMyCLILoginsResponse.logins:type_name -> controlplane.v1.CLILogin
+	10, // 25: controlplane.v1.UpdateMyTokenResponse.token:type_name -> controlplane.v1.AccessToken
+	10, // 26: controlplane.v1.ExchangeTokenResponse.token:type_name -> controlplane.v1.AccessToken
+	0,  // 27: controlplane.v1.ExchangeFederatedTokenRequest.provider:type_name -> controlplane.v1.FederationProvider
+	36, // 28: controlplane.v1.ExchangeFederatedTokenResponse.expires_at:type_name -> google.protobuf.Timestamp
+	11, // 29: controlplane.v1.AccessTokenService.CreateToken:input_type -> controlplane.v1.CreateTokenRequest
+	13, // 30: controlplane.v1.AccessTokenService.ListTokens:input_type -> controlplane.v1.ListTokensRequest
+	15, // 31: controlplane.v1.AccessTokenService.RevokeToken:input_type -> controlplane.v1.RevokeTokenRequest
+	17, // 32: controlplane.v1.AccessTokenService.CreateMyToken:input_type -> controlplane.v1.CreateMyTokenRequest
+	19, // 33: controlplane.v1.AccessTokenService.ListMyTokens:input_type -> controlplane.v1.ListMyTokensRequest
+	21, // 34: controlplane.v1.AccessTokenService.RevokeMyToken:input_type -> controlplane.v1.RevokeMyTokenRequest
+	30, // 35: controlplane.v1.AccessTokenService.UpdateMyToken:input_type -> controlplane.v1.UpdateMyTokenRequest
+	23, // 36: controlplane.v1.AccessTokenService.ResetDaemonScopePolicy:input_type -> controlplane.v1.ResetDaemonScopePolicyRequest
+	26, // 37: controlplane.v1.AccessTokenService.ListMyCLILogins:input_type -> controlplane.v1.ListMyCLILoginsRequest
+	28, // 38: controlplane.v1.AccessTokenService.RevokeMyCLILogin:input_type -> controlplane.v1.RevokeMyCLILoginRequest
+	32, // 39: controlplane.v1.AccessTokenService.ExchangeToken:input_type -> controlplane.v1.ExchangeTokenRequest
+	34, // 40: controlplane.v1.AccessTokenService.ExchangeFederatedToken:input_type -> controlplane.v1.ExchangeFederatedTokenRequest
+	5,  // 41: controlplane.v1.AccessTokenService.ListOrgMemberGrants:input_type -> controlplane.v1.ListOrgMemberGrantsRequest
+	7,  // 42: controlplane.v1.AccessTokenService.UpdateOrgMemberGrants:input_type -> controlplane.v1.UpdateOrgMemberGrantsRequest
+	12, // 43: controlplane.v1.AccessTokenService.CreateToken:output_type -> controlplane.v1.CreateTokenResponse
+	14, // 44: controlplane.v1.AccessTokenService.ListTokens:output_type -> controlplane.v1.ListTokensResponse
+	16, // 45: controlplane.v1.AccessTokenService.RevokeToken:output_type -> controlplane.v1.RevokeTokenResponse
+	18, // 46: controlplane.v1.AccessTokenService.CreateMyToken:output_type -> controlplane.v1.CreateMyTokenResponse
+	20, // 47: controlplane.v1.AccessTokenService.ListMyTokens:output_type -> controlplane.v1.ListMyTokensResponse
+	22, // 48: controlplane.v1.AccessTokenService.RevokeMyToken:output_type -> controlplane.v1.RevokeMyTokenResponse
+	31, // 49: controlplane.v1.AccessTokenService.UpdateMyToken:output_type -> controlplane.v1.UpdateMyTokenResponse
+	24, // 50: controlplane.v1.AccessTokenService.ResetDaemonScopePolicy:output_type -> controlplane.v1.ResetDaemonScopePolicyResponse
+	27, // 51: controlplane.v1.AccessTokenService.ListMyCLILogins:output_type -> controlplane.v1.ListMyCLILoginsResponse
+	29, // 52: controlplane.v1.AccessTokenService.RevokeMyCLILogin:output_type -> controlplane.v1.RevokeMyCLILoginResponse
+	33, // 53: controlplane.v1.AccessTokenService.ExchangeToken:output_type -> controlplane.v1.ExchangeTokenResponse
+	35, // 54: controlplane.v1.AccessTokenService.ExchangeFederatedToken:output_type -> controlplane.v1.ExchangeFederatedTokenResponse
+	6,  // 55: controlplane.v1.AccessTokenService.ListOrgMemberGrants:output_type -> controlplane.v1.ListOrgMemberGrantsResponse
+	8,  // 56: controlplane.v1.AccessTokenService.UpdateOrgMemberGrants:output_type -> controlplane.v1.UpdateOrgMemberGrantsResponse
+	43, // [43:57] is the sub-list for method output_type
+	29, // [29:43] is the sub-list for method input_type
+	29, // [29:29] is the sub-list for extension type_name
+	29, // [29:29] is the sub-list for extension extendee
+	0,  // [0:29] is the sub-list for field type_name
 }
 
 func init() { file_services_access_token_v1_access_token_proto_init() }
@@ -2347,13 +2583,14 @@ func file_services_access_token_v1_access_token_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_services_access_token_v1_access_token_proto_rawDesc), len(file_services_access_token_v1_access_token_proto_rawDesc)),
-			NumEnums:      0,
-			NumMessages:   33,
+			NumEnums:      1,
+			NumMessages:   35,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
 		GoTypes:           file_services_access_token_v1_access_token_proto_goTypes,
 		DependencyIndexes: file_services_access_token_v1_access_token_proto_depIdxs,
+		EnumInfos:         file_services_access_token_v1_access_token_proto_enumTypes,
 		MessageInfos:      file_services_access_token_v1_access_token_proto_msgTypes,
 	}.Build()
 	File_services_access_token_v1_access_token_proto = out.File

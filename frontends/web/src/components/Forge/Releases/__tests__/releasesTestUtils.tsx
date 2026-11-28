@@ -2,25 +2,29 @@
 
 /**
  * Renders a Releases page the way the console does — a query client, the
- * ReleasesApi and ObservabilityApi seams (fixtures), and URL state held in
+ * fixture ledger served as DeployService (ReleasesFixtureScope), the
+ * ObservabilityApi seam (fixtures), and URL state held in
  * component state so a test can click and assert on what changed. Every test
  * file mocks `@tanstack/react-router`'s useNavigate (forge-ui Link needs it).
  */
 
-import { useState, type ReactElement } from "react";
+import { useState, type ReactElement, type ReactNode } from "react";
 import { render, type RenderResult } from "@testing-library/react";
-import { QueryClientProvider, type QueryClient } from "@tanstack/react-query";
+import type { QueryClient } from "@tanstack/react-query";
 import { vi } from "vitest";
 
 import { createTestQueryClient } from "@/test/renderWithQuery";
 import type { PromotionList } from "@/services/controlPlane/observability/deliveryTypes";
 import { ObservabilityApiProvider, type ObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
-import { ReleasesApiProvider, type ReleasesApi } from "@/services/forge/ReleasesApiContext";
+import { observabilityFixtureTransport } from "@/test/observabilityFixtures";
+import { mockTransport } from "@/lib/test-utils";
+import { createTransportScope, TransportScopeProvider } from "@/lib/transportScope";
 
 import { createFixtureApi } from "../../Observability/__fixtures__/fixtureApi";
 import { ReleaseDetail, type ReleaseDetailSearch } from "../ReleaseDetail";
 import { ReleasesList, type PromoteControl, type ReleasesSearch } from "../ReleasesList";
-import { FIXTURE_DELIVERY, FIXTURE_DORA, RELEASE_ENVS, RELEASE_PROJECT } from "../__fixtures__/releaseFixtures";
+import { FIXTURE_DELIVERY, FIXTURE_DORA, RELEASE_ENVS, RELEASE_PROJECT, type ReleasesFixtureApi } from "../__fixtures__/releaseFixtures";
+import { releasesFixtureHandlers } from "../__fixtures__/releaseFixtureTransport";
 
 export function fixtureObsApi(over: Partial<ObservabilityApi> = {}): ObservabilityApi {
   return {
@@ -35,14 +39,28 @@ export function fixtureObsApi(over: Partial<ObservabilityApi> = {}): Observabili
   };
 }
 
-function wrap(api: ReleasesApi, obs: ObservabilityApi, ui: ReactElement, client = createTestQueryClient()): RenderResult {
-  return render(
-    <QueryClientProvider client={client}>
-      <ObservabilityApiProvider api={obs}>
-        <ReleasesApiProvider api={api}>{ui}</ReleasesApiProvider>
-      </ObservabilityApiProvider>
-    </QueryClientProvider>
-  );
+// Both fixture families share one transport binding on the query client.
+export function ReleasesTestScope({ api, obs, client, children }: { api: ReleasesFixtureApi; obs: ObservabilityApi; client?: QueryClient; children: ReactNode }) {
+  const [scope] = useState(() => {
+    const handlers = releasesFixtureHandlers(api);
+    const releases = mockTransport(handlers);
+    const observability = observabilityFixtureTransport(() => obs, Date.now());
+    const pick = (method: { parent: { typeName: string }; name: string }) =>
+      `${method.parent.typeName}/${method.name}` in handlers ? releases : observability;
+    return createTransportScope({
+      id: "releases-test",
+      queryClient: client ?? createTestQueryClient(),
+      transport: {
+        unary: (method, ...rest) => pick(method).unary(method, ...rest),
+        stream: (method, ...rest) => pick(method).stream(method, ...rest),
+      },
+    });
+  });
+  return <TransportScopeProvider scope={scope}><ObservabilityApiProvider api={obs}>{children}</ObservabilityApiProvider></TransportScopeProvider>;
+}
+
+function wrap(api: ReleasesFixtureApi, obs: ObservabilityApi, ui: ReactElement, client = createTestQueryClient()): RenderResult {
+  return render(<ReleasesTestScope api={api} obs={obs} client={client}>{ui}</ReleasesTestScope>);
 }
 
 export interface Harness<S> extends RenderResult {
@@ -53,7 +71,7 @@ export interface Harness<S> extends RenderResult {
 }
 
 export function renderList(
-  api: ReleasesApi,
+  api: ReleasesFixtureApi,
   {
     env = "prod",
     search = {},
@@ -92,7 +110,7 @@ export function renderList(
 }
 
 export function renderDetail(
-  api: ReleasesApi,
+  api: ReleasesFixtureApi,
   version: string,
   { env = "prod", search = {}, blocked = null }: { env?: string; search?: ReleaseDetailSearch; blocked?: string | null } = {}
 ): Harness<ReleaseDetailSearch> {

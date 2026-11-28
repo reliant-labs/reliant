@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/workflowdraftstest"
 
 	"github.com/google/uuid"
@@ -84,7 +85,7 @@ func TestListInbox_NeedsSetupOneItemPerAutomationAndClearsWhenSetupIsFinished(t 
 	assert.EqualValues(t, 0, resp.BlockingCount, "it never counts toward the badge")
 
 	// Finishing setup (the params now hold repos) clears it with no other action.
-	row, err := f.repo.GetTrigger(f.ctx, "act-1")
+	row, err := store.GetTrigger(f.ctx, f.repo.ORM(), "act-1")
 	require.NoError(t, err)
 	row.Params = map[string]any{"repos": []any{"acme/api"}}
 	require.NoError(t, triggertest.Update(f.ctx, f.repo, row))

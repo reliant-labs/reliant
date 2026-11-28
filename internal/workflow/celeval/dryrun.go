@@ -109,6 +109,9 @@ func DryRunTrigger(wt *reliantv1.WorkflowTrigger, workflowInputs map[string]*rel
 	case wt.GetWorkflowEvent() != nil:
 		run.Kind = "workflow_event"
 		req.TriggerKind = "workflow_event"
+	case wt.GetRecordDue() != nil:
+		run.Kind = "record_due"
+		req.TriggerKind = "record_due"
 	}
 
 	trigger, source, err := buildTrigger(req)

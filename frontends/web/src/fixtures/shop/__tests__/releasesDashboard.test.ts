@@ -14,10 +14,10 @@ import type { Panel, PanelResult, QueryPanelRequest } from "@/services/controlPl
 
 import forgeDashboardsRaw from "../model/forge-dashboards.json?raw";
 import { shopDora, shopPromotions } from "../model/delivery";
-import { shopReleaseHealth } from "../model/issues";
+import { SEO_REGRESSED_RELEASE, shopReleaseHealth } from "../model/issues";
 import { productAnalyticsPanel } from "../model/productAnalytics";
 import { releasesWindow, shopReleasesSqlPanel } from "../model/releases";
-import { DEMO_INCIDENT } from "../shopStory";
+import { DEMO_FRONTEND, DEMO_INCIDENT, demoLedger } from "../shopStory";
 
 // A fixed afternoon (UTC), well after every promotion in the ledger.
 const NOW = Date.UTC(2026, 10, 11, 15, 0, 0);
@@ -47,6 +47,24 @@ describe("the demo's Releases dashboard", () => {
     expect(prod.promotion?.previousVersion).toBe("v1.8.2");
     expect(prod.verdict).toBe("fail");
     expect(shopReleaseHealth(NOW, "env-staging", "", 15 * 60_000).verdict).toBe("pass");
+  });
+
+  it("warns seo_regressed on the storefront's v1.8.2, and nowhere else (design D7)", () => {
+    const ledger = demoLedger(NOW);
+    const judged = ledger.filter((p) => !p.targets.length).map((p) => ({ p, h: shopReleaseHealth(NOW, p.envId, p.promotionId, 15 * 60_000) }));
+    const warned = judged.filter(({ h }) => h.findings.some((f) => f.code === "seo_regressed"));
+    expect(warned.length).toBeGreaterThan(0);
+    for (const { p, h } of warned) {
+      expect(p.version).toBe(SEO_REGRESSED_RELEASE);
+      expect(h.promotion?.previousVersion).toBe("v1.8.1");
+      const seo = h.findings.find((f) => f.code === "seo_regressed")!;
+      expect(seo).toMatchObject({ service: DEMO_FRONTEND, policy: "warn" });
+      expect(seo.message).toContain("SEO score dropped since v1.8.1: site 94 -> 81");
+    }
+    // Prod's v1.8.2 passes with the warning: a warn never changes the verdict.
+    const prod = warned.find(({ p }) => p.envId === "env-prod")!;
+    expect(prod.h.verdict).toBe("pass");
+    expect(judged.filter(({ p }) => p.version !== SEO_REGRESSED_RELEASE).every(({ h }) => !h.findings.some((f) => f.code === "seo_regressed" || f.code === "a11y_regressed"))).toBe(true);
   });
 
   it("puts staging's rollback in the promotion timeline and in DORA", () => {

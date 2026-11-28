@@ -12,9 +12,9 @@ import { panelFromJson } from "../dashboardsApi";
 import { queryPanel } from "../api";
 
 const client = vi.hoisted(() => ({ queryPanel: vi.fn() }));
-// Stop at the hosted client boundary; scheduler concurrency is covered in its
-// own tests and is not an authorization seam.
-vi.mock("../obsClient", () => ({ obsClient: () => client }));
+// Stop at the hosted client boundary; the transport's read stage is covered in
+// its own tests (obsInterceptors.test.ts) and is not an authorization seam.
+vi.mock("../../client", () => ({ getControlPlaneClient: () => client }));
 const raw = readFileSync("../../deploy/observability/spec/project_gen.json");
 const spec = JSON.parse(raw.toString()) as { dashboards: { id: string; panels: unknown[] }[] };
 // forge #2075's built-in analytics dashboards replaced the generated "usage"

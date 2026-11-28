@@ -12,6 +12,9 @@
     <link rel="alternate icon" href="/favicon.ico" />
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
     <meta name="theme-color" content="#ffffff" />
+    <!-- noindex at every demo URL: the host serves this document for each extension-less path.
+         Demo build only; the app's index.html stays indexable (vite-demo-target.test.ts). -->
+    <meta name="robots" content="noindex" />
     <!-- viewport-fit=cover: without it every env(safe-area-inset-*) the
          mobile surface pads with resolves to 0, and a notched phone in
          landscape or a home-screen web app draws under the notch.

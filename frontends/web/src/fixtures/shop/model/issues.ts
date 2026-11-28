@@ -14,6 +14,9 @@
  *   - Release health judged per promotion of the ledger (demoLedger, the same
  *     ids DeployService answers with): prod's v1.8.3 FAILS on the incident,
  *     every other promotion passes, with before/after RED from demoStats.
+ *     A promotion that brought the storefront (shop-web) from v1.8.1 to v1.8.2
+ *     also warns seo_regressed (design D7): its audit scored SEO 81 against
+ *     v1.8.1's 94 (fixtures/shop/handlers/siteAudit.ts tells the same story).
  */
 
 import { Code, ConnectError } from "@connectrpc/connect";
@@ -29,6 +32,7 @@ import {
   DAY,
   DEMO_BACKENDS,
   DEMO_CAST,
+  DEMO_FRONTEND,
   DEMO_INCIDENT,
   DEMO_READER,
   DEMO_TOURED_TRACE,
@@ -296,6 +300,31 @@ export function shopIssueFirstSeen(now: number): { envId: string; firstSeenMs: n
 }
 
 /** GetReleaseHealth over shop's ledger. No promotion id judges the environment's running release, as the server does. */
+/** The release that dropped the storefront's SEO score, and the one it is compared with. */
+export const SEO_REGRESSED_RELEASE = "v1.8.2";
+const SEO_BASELINE_RELEASE = "v1.8.1";
+
+/**
+ * The site-audit findings of one promotion: seo_regressed, a warning, when it
+ * took shop-web from v1.8.1 to v1.8.2. Worded as forge's pkg/releasehealth
+ * words a score drop; the value is the worst route's drop in points.
+ * (Accessibility fell 9 points, inside its 10-point limit: no finding.)
+ */
+function siteAuditFindings(promotion: { version: string; targets: readonly string[] }, previousVersion: string): ReleaseHealth["findings"] {
+  const shipsSite = !promotion.targets.length || promotion.targets.includes(DEMO_FRONTEND);
+  if (!shipsSite || promotion.version !== SEO_REGRESSED_RELEASE || previousVersion !== SEO_BASELINE_RELEASE) return [];
+  return [
+    {
+      code: "seo_regressed",
+      service: DEMO_FRONTEND,
+      value: 27,
+      threshold: 10,
+      policy: "warn",
+      message: `${DEMO_FRONTEND}: SEO score dropped since ${SEO_BASELINE_RELEASE}: site 94 -> 81 (-13), /products/view 96 -> 69 (-27), /blog 92 -> 75 (-17) (limit 10 points)`,
+    },
+  ];
+}
+
 export function shopReleaseHealth(now: number, envId: string, promotionId: string, widthMs: number): ReleaseHealth {
   const ledger = demoLedger(now);
   const promotion = promotionId
@@ -316,6 +345,29 @@ export function shopReleaseHealth(now: number, envId: string, promotionId: strin
   const services = DEMO_BACKENDS.map((service) => ({ service, before: stats(before, service), after: stats(after, service), versionShare: 1 }));
   const api = services.find((s) => s.service === "api")!;
   const seed = seeds(now).find(isIncident)!;
+  const siteFindings = siteAuditFindings(promotion, previous?.version ?? "");
+  const incident: ReleaseHealth["findings"] = failing
+    ? [
+        {
+          code: "error_rate",
+          service: "api",
+          value: api.after!.errorRate - api.before!.errorRate,
+          threshold: 0.005,
+          policy: "fail",
+          message: `api's error rate rose ${((api.after!.errorRate - api.before!.errorRate) * 100).toFixed(1)} points (limit 0.5): CreateOrder and Checkout are timing out on the payment charge.`,
+        },
+        {
+          code: "latency",
+          service: "api",
+          value: api.after!.p95Ms / Math.max(1, api.before!.p95Ms),
+          threshold: 1.25,
+          policy: "warn",
+          message: `api's p95 is ${(api.after!.p95Ms / Math.max(1, api.before!.p95Ms)).toFixed(1)}× what it was (limit 1.25×).`,
+        },
+        { code: "new_issue", service: "api", value: issueOf(seed, after, now).events, threshold: 3, policy: "fail", message: `A new issue opened in this release: ${DEMO_INCIDENT.error}.` },
+        { code: "alert_firing", service: "api", value: 1, threshold: 1, policy: "fail", message: `${DEMO_INCIDENT.alert} opened 9 minutes after the promotion and is still firing.` },
+      ]
+    : [];
   return {
     promotion: { promotionId: promotion.promotionId, version: promotion.version, gitCommit: promotion.commit, promotedAtMs: at, previousVersion: previous?.version ?? "" },
     before,
@@ -326,29 +378,9 @@ export function shopReleaseHealth(now: number, envId: string, promotionId: strin
     regressedIssues: [],
     firingAlerts: failing ? [{ rule: DEMO_INCIDENT.alert, fingerprint: "c0f3e1a9", firingAtMs: at + 9 * MINUTE, labels: { service: "api", severity: "page", env: "prod" } }] : [],
     workloadFindings: [],
+    // A warn finding never changes the verdict: v1.8.2's SEO drop passes with a warning.
     verdict: failing ? "fail" : "pass",
-    findings: failing
-      ? [
-          {
-            code: "error_rate",
-            service: "api",
-            value: api.after!.errorRate - api.before!.errorRate,
-            threshold: 0.005,
-            policy: "fail",
-            message: `api's error rate rose ${((api.after!.errorRate - api.before!.errorRate) * 100).toFixed(1)} points (limit 0.5): CreateOrder and Checkout are timing out on the payment charge.`,
-          },
-          {
-            code: "latency",
-            service: "api",
-            value: api.after!.p95Ms / Math.max(1, api.before!.p95Ms),
-            threshold: 1.25,
-            policy: "warn",
-            message: `api's p95 is ${(api.after!.p95Ms / Math.max(1, api.before!.p95Ms)).toFixed(1)}× what it was (limit 1.25×).`,
-          },
-          { code: "new_issue", service: "api", value: issueOf(seed, after, now).events, threshold: 3, policy: "fail", message: `A new issue opened in this release: ${DEMO_INCIDENT.error}.` },
-          { code: "alert_firing", service: "api", value: 1, threshold: 1, policy: "fail", message: `${DEMO_INCIDENT.alert} opened 9 minutes after the promotion and is still firing.` },
-        ]
-      : [],
+    findings: [...incident, ...siteFindings],
     thresholds: [
       { name: "max_error_rate_increase", value: "0.005", source: "release_shape" },
       { name: "max_p95_ratio", value: "1.25", source: "default" },

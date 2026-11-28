@@ -555,17 +555,18 @@ export abstract class ReconnectingStream<E> {
       this.reconnectTimer = null;
     }
 
-    // Abort the old connection. The old stream's catch block will detect
-    // that this.abortController has been replaced (by establishConnection)
-    // and bail out instead of calling attemptReconnect().
     // Whether the connection being replaced is up and delivering frames
     // (isConnected_ turns true only on a connection's first frame). Callers
     // that found the connection dead (the watchdog, a resume) clear it first.
     const replacingLiveConnection = this.isConnected_;
-    if (this.abortController) {
-      this.abortController.abort();
-    }
+    // Supersede before aborting, even if the replacement has to back off.
+    // Otherwise the old connection can deliver a queued frame or status
+    // while no new controller has been installed yet.
+    const previous = this.abortController;
+    this.abortController = null;
+    previous?.abort();
     this.isConnected_ = false;
+    this.connectAttemptInFlight = false;
     this.disarmWatchdog();
     this.clearFirstFrameDeadline();
 

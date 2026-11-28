@@ -282,6 +282,10 @@ enum TriggerEventKind {
   // its dedupe key. Like AGENT_START_RUN it lists under Runs and stays out of
   // the sidebar until adopted.
   TRIGGER_EVENT_KIND_CLI_RUN = 9;
+  // RECORD_DUE is a record whose next action fell due (a RecordDueSource
+  // trigger). Its dedupe key is "<trigger id>:<record id>@<due at>", so a
+  // record fires once per due time however often it is scanned.
+  TRIGGER_EVENT_KIND_RECORD_DUE = 10;
 }
 
 // TriggerEventOutcome records what a firing did.
@@ -575,6 +579,20 @@ message IntegrationSource {
   map<string, string> match_input = 5;
 }
 
+// RecordDueSource is the trigger.source arm for a trigger that fires when a
+// record of a registered table falls due: its next action's due time
+// (pr_pipeline.next_action_at) has passed. The server scans for due records
+// and fires one event per due record and due time, and none while nothing is
+// due. The run sees the record as trigger.record (id, repository, number,
+// head_sha, next_action, due_at) and the event as trigger.payload. Declared
+// in a workflow's `triggers:` block only; activated like any declared
+// trigger, it fires for records of the activation's project.
+message RecordDueSource {
+  // The registered table whose due records fire it: "pr_pipeline" (a PR's
+  // place in the PR pipeline) is the only one.
+  string table = 1;
+}
+
 // WorkflowEventSource is the trigger.source arm for a trigger that fires when
 // a run of one of the owner's workflows reaches an outcome. A trigger never
 // fires on a run it launched itself (or one of that run's descendants).
@@ -653,6 +671,7 @@ message WorkflowTrigger {
     WebhookSource webhook = 21;
     IntegrationSource integration = 22;
     WorkflowEventSource workflow_event = 23;
+    RecordDueSource record_due = 24;
   }
 }
 
@@ -758,6 +777,9 @@ message Trigger {
     WebhookSource webhook = 21;
     IntegrationSource integration = 22;
     WorkflowEventSource workflow_event = 23;
+    // An activation of a declared record_due trigger (display, like the
+    // other arms of an activation).
+    RecordDueSource record_due = 38;
   }
 
   // The connection an integration trigger listens through: one of the
@@ -1091,6 +1113,11 @@ message TriggerDefinition {
     WebhookSource webhook = 21;
     IntegrationSource integration = 22;
     WorkflowEventSource workflow_event = 23;
+    // Accepted on the wire so Trigger and TriggerDefinition declare the same
+    // arms (a client sends a stored arm back as it read it), but refused on
+    // create and update: a record_due trigger is declared in a workflow's
+    // `triggers:` block and activated through workflow_trigger.
+    RecordDueSource record_due = 28;
     // Activate the named trigger the workflow declares (WorkflowTrigger.name)
     // instead of writing a source inline. The declaration supplies the
     // source, filter and inputs, and is re-read every time the trigger fires,

@@ -139,7 +139,7 @@ func TestReconcilerRecoversAFireStuckPending(t *testing.T) {
 	require.Equal(t, string(core.TriggerEventSkipped), skipped.Outcome,
 		"inside the bound the stuck fire reads as a start in flight: %+v", skipped)
 
-	reconciler := New(Deps{Store: repo, RunEvents: runevents.NewStore(repo.ORM()), Chats: store.NewChatsWithActivityExtStore(repo.ORM()), ToolCalls: store.NewToolCallExtStore(repo.ORM()), Workflows: store.NewWorkflowExtStore(repo.ORM()), Daemons: store.NewDaemonExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: &mockReconcilerTemporalClient{}, Config: DefaultConfig(), Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo}), Orphans: store.NewAgentMessageExtStore(repo.ORM())})
+	reconciler := New(Deps{Store: repo, RunEvents: runevents.NewStore(repo.ORM()), Chats: store.NewChatsWithActivityExtStore(repo.ORM()), ToolCalls: store.NewToolCallExtStore(repo.ORM()), Workflows: store.NewWorkflowExtStore(repo.ORM()), Daemons: store.NewDaemonExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: &mockReconcilerTemporalClient{}, Config: DefaultConfig(), Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo.UpdateWriter()}), Orphans: store.NewAgentMessageExtStore(repo.ORM())})
 
 	// Inside the bound the reconciler leaves it alone: it may yet start.
 	_, _ = reconciler.ReconcileRunningWorkflows(ctx)

@@ -127,6 +127,11 @@ type BackgroundProcess struct {
 	// tree bounds the command's processes and reaches all of them on a kill
 	// (internal/proctree). Nil for a process recovered from the database.
 	tree *proctree.Tree
+	// stopping is set once this daemon begins stopping the command
+	// (KillProcess), before any signal is sent, so its completion knows a
+	// signal that ends it was ours and is not to be explained as a stranger's
+	// (signalExitNote).
+	stopping atomic.Bool
 
 	// activity is when the process last wrote output or an agent touched
 	// it. Nil for a process recovered from the database, which the reaper
@@ -762,6 +767,20 @@ func (m *BackgroundManager) handleProcessCompletion(process *BackgroundProcess, 
 				})
 				process.stderr.WriteString(msg + "\n")
 				logging.Warn("Background process OOM-killed", "id", process.ID, "exit_code", exitCode)
+			} else if note := signalExitNote(exitErr, process.stopping.Load()); note != "" {
+				// A signal this daemon did not send ended it: say so, or the
+				// agent sees "failed, exit code -1" and output that stops
+				// mid-run, with nothing to tell it the command was killed
+				// and needs a rerun (reliant#2751).
+				process.outputSeq++
+				process.combinedOutput = append(process.combinedOutput, OutputLineWithSeq{
+					Type:     "stderr",
+					Text:     note,
+					Sequence: process.outputSeq,
+				})
+				process.stderr.WriteString(note + "\n")
+				logging.Warn("Background process ended by a signal the daemon did not send",
+					"id", process.ID, "exit_code", exitCode, "command", process.Command)
 			}
 			// A process that failed for want of disk says which volume is full
 			// and what is using it, the same way exec.run results do.
@@ -1339,6 +1358,7 @@ func (m *BackgroundManager) KillProcess(processID string) error {
 		// Its own cgroup is unambiguous (named per daemon and command, never
 		// reused), so what is still in it is the command's.
 		if process.cmd != nil && (w.alive() || process.tree.Populated()) {
+			process.stopping.Store(true)
 			logging.Info("Killing what an exited background command left running in its process group",
 				"id", processID, "pgid", pid, "status", status)
 			if !stopTree(w, process.tree, process.done, nil) {
@@ -1355,6 +1375,7 @@ func (m *BackgroundManager) KillProcess(processID string) error {
 	if process.cmd == nil || process.cancelFunc == nil {
 		return m.killRecoveredProcessByPID(processID)
 	}
+	process.stopping.Store(true)
 
 	logging.Info("Killing background process and process group",
 		"id", processID,

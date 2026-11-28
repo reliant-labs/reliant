@@ -126,7 +126,17 @@ export const DELIVERY_MAX_RANGE_DAYS = 366;
 export type ReleaseVerdict = "pass" | "fail" | "inconclusive" | "unknown";
 
 /** The finding codes, as forge's pkg/release spells them (and `not_evaluated` lists them). */
-export const RELEASE_FINDING_CODES = ["error_rate", "latency", "new_issue", "regressed_issue", "alert_firing", "workload_restarts"] as const;
+export const RELEASE_FINDING_CODES = [
+  "error_rate",
+  "latency",
+  "new_issue",
+  "regressed_issue",
+  "alert_firing",
+  "workload_restarts",
+  // A static site's audit against the previous release's (Site insights): a score drop, or new errors.
+  "seo_regressed",
+  "a11y_regressed",
+] as const;
 export type ReleaseFindingCode = (typeof RELEASE_FINDING_CODES)[number];
 
 /** The widths a health check offers on each side: the server's default is 15 minutes, its maximum 6 hours. */

@@ -2,7 +2,9 @@
 
 /**
  * The org's query-quota state for the observability console, provided once
- * (ForgeLayout) and read by the hooks, the banner and the "as of" badges.
+ * (ForgeLayout) and read by the hooks, the banner and the "as of" badges. The
+ * state itself is the page's one store (quotaStore.ts `obsQuotaStore()`), the
+ * same one the control-plane transport's quota guard reads.
  *
  * The provider does three things and nothing else:
  *
@@ -21,19 +23,20 @@ import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 
 import { ObsPollRegistry } from "./pollRegistry";
 import { quotaOf } from "./quota";
-import { ObsQuotaStore, type ObsQuotaState } from "./quotaStore";
+import { READ_SLOT_SERVICES } from "./readSlots";
+import { obsQuotaStore, type ObsQuotaState, type ObsQuotaStore } from "./quotaStore";
 
 export interface ObsQuota {
   store: ObsQuotaStore;
   polls: ObsPollRegistry;
 }
 
-function createObsQuota(now?: () => number): ObsQuota {
-  const store = new ObsQuotaStore(now);
+function createObsQuota(): ObsQuota {
+  const store = obsQuotaStore();
   return { store, polls: new ObsPollRegistry(store) };
 }
 
-/** Isolated by query client even in a preview/test that doesn't mount the provider. */
+/** A poll registry per query client even in a preview/test that doesn't mount the provider. */
 const fallbackQuotas = new WeakMap<QueryClient, ObsQuota>();
 const ObsQuotaContext = createContext<ObsQuota | null>(null);
 
@@ -48,17 +51,18 @@ export function ObsQuotaProvider({
   children: ReactNode;
   /** Jitter source in [0, 1); tests pin it. */
   random?: () => number;
+  /** The clock the resume timer reads; tests pin it. */
   now?: () => number;
 }) {
   const client = useQueryClient();
-  const quota = useMemo(() => createObsQuota(now), [now]);
+  const quota = useMemo(() => createObsQuota(), []);
   const { store } = quota;
 
   useEffect(
     () =>
       client.getQueryCache().subscribe((event) => {
         if (event.type !== "updated" || event.action.type !== "error") return;
-        if (event.query.queryKey[0] !== "observability") return;
+        if (!isObservabilityQuery(event.query.queryKey)) return;
         const exhaustion = quotaOf(event.action.error, now());
         if (exhaustion) store.report(exhaustion);
       }),
@@ -86,8 +90,7 @@ export function ObsQuotaProvider({
         scheduledReset = undefined;
         store.clear();
         void client.invalidateQueries({
-          queryKey: ["observability"],
-          predicate: (query) => query.state.status === "error" && quotaOf(query.state.error) !== null,
+          predicate: (query) => isObservabilityQuery(query.queryKey) && query.state.status === "error" && quotaOf(query.state.error) !== null,
         }, { cancelRefetch: false });
       }, wait);
     };
@@ -100,6 +103,16 @@ export function ObsQuotaProvider({
   }, [client, store, random, now]);
 
   return <ObsQuotaContext.Provider value={quota}>{children}</ObsQuotaContext.Provider>;
+}
+
+/**
+ * A read whose refusal the quota watches and whose recovery it owes: a
+ * hand-written observability read (`["observability", …]`) or a generated
+ * one of a quota-spending service (`["controlplane.v1.ObservabilityService", …]`).
+ */
+function isObservabilityQuery(queryKey: readonly unknown[]): boolean {
+  const root = queryKey[0];
+  return root === "observability" || (typeof root === "string" && READ_SLOT_SERVICES.has(root));
 }
 
 export function useObsQuota(): ObsQuota {

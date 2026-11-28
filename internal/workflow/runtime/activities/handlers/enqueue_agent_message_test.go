@@ -58,7 +58,7 @@ func TestEnqueueAgentMessage_Completion(t *testing.T) {
 	_, err = h.Repo().CreateThread(ctx, &db.Thread{ID: childThreadID, ChatID: chatID, ParentThreadID: &parentThreadID})
 	require.NoError(t, err)
 
-	act := NewEnqueueAgentMessageActivity(EnqueueAgentMessageDeps{Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(h.Repo().ORM()), Announcer: h.Repo()})})
+	act := NewEnqueueAgentMessageActivity(EnqueueAgentMessageDeps{Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(h.Repo().ORM()), Announcer: h.Repo().UpdateWriter()})})
 
 	var out EnqueueAgentMessageOutput
 	err = h.ExecuteActivity(act.Execute, EnqueueAgentMessageInput{
@@ -90,7 +90,7 @@ func TestEnqueueAgentMessage_RequiresToThreadID(t *testing.T) {
 	h := NewIdempotencyTestHelper(t)
 	defer h.Cleanup()
 
-	act := NewEnqueueAgentMessageActivity(EnqueueAgentMessageDeps{Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(h.Repo().ORM()), Announcer: h.Repo()})})
+	act := NewEnqueueAgentMessageActivity(EnqueueAgentMessageDeps{Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(h.Repo().ORM()), Announcer: h.Repo().UpdateWriter()})})
 	var out EnqueueAgentMessageOutput
 	err := h.ExecuteActivity(act.Execute, EnqueueAgentMessageInput{
 		FromThreadID: "from",
@@ -140,7 +140,7 @@ func (f *spawnReportFixture) seedPlaceholder(t *testing.T, toolCallID string) *c
 
 func (f *spawnReportFixture) report(t *testing.T, kind core.AgentMessageKind, toolCallID, body string) (EnqueueAgentMessageOutput, error) {
 	t.Helper()
-	act := NewEnqueueAgentMessageActivity(EnqueueAgentMessageDeps{Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(f.h.Repo().ORM()), Announcer: f.h.Repo()})})
+	act := NewEnqueueAgentMessageActivity(EnqueueAgentMessageDeps{Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(f.h.Repo().ORM()), Announcer: f.h.Repo().UpdateWriter()})})
 	var out EnqueueAgentMessageOutput
 	err := f.h.ExecuteActivity(act.Execute, EnqueueAgentMessageInput{
 		ChatID: f.chatID, FromThreadID: f.childThreadID, ToThreadID: f.parentThreadID,

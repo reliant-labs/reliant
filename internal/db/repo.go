@@ -1136,7 +1136,7 @@ func (r *Repo) UpdateChatState(ctx context.Context, chatID string, state ChatSta
 	}
 	previousState := chat.State
 	if chat.WorktreeID != nil {
-		if err := r.EmitUserRefetch(ctx, chat.UserID, RefetchWorktreeChanges, RefetchOpts{ProjectID: &chat.ProjectID, WorktreeID: chat.WorktreeID}); err != nil {
+		if err := r.UpdateWriter().EmitUserRefetch(ctx, chat.UserID, RefetchWorktreeChanges, RefetchOpts{ProjectID: &chat.ProjectID, WorktreeID: chat.WorktreeID}); err != nil {
 			logging.WarnContext(ctx, "Failed to notify worktree state change", "chatID", chatID, "error", err)
 		}
 	}

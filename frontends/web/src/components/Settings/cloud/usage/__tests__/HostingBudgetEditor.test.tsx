@@ -1,7 +1,11 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Code, ConnectError } from "@connectrpc/connect";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+import { setTransport } from "@/lib/connect";
+import { mockTransport } from "@/lib/test-utils";
+import { billingHandlers } from "@/test/billingTransport";
 
 import { HostingBudgetEditor } from "../HostingBudgetEditor";
 import { validateHostingBudget } from "../hostingBudget";
@@ -27,11 +31,11 @@ mount.render = (cache: QueryClient, props: Partial<Parameters<typeof HostingBudg
   );
 
 beforeEach(() => {
-  mocks.client = {
-    listUsageBillingBudgetVersions: vi.fn().mockResolvedValue({ versions }),
-    setUsageBillingBudget: vi.fn().mockResolvedValue({}),
-  };
+  const history = vi.fn().mockResolvedValue({ versions });
+  mocks.client = { listUsageBillingBudgetVersions: history, setUsageBillingBudget: vi.fn().mockResolvedValue({}) };
+  setTransport(mockTransport(billingHandlers({ listUsageBillingBudgetVersions: history })));
 });
+afterEach(() => setTransport(null));
 
 describe("validateHostingBudget", () => {
   it("accepts positive dollars with at most two decimals, up to $10,000 inclusive", () => {
@@ -147,7 +151,7 @@ describe("HostingBudgetEditor", () => {
   });
 
   it("is read-only, without a change button, before the server serves budget versions", async () => {
-    mocks.client = {};
+    setTransport(mockTransport());
     mount();
     expect(await screen.findByTestId("hosting-budget-unserved")).toBeInTheDocument();
     expect(screen.queryByTestId("hosting-budget-change")).not.toBeInTheDocument();

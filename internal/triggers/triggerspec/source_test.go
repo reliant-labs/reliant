@@ -47,3 +47,28 @@ func TestAdHocTriggerRefusesMatchInput(t *testing.T) {
 	}})
 	require.NoError(t, err, "a declared trigger may scope by its workflow's input")
 }
+
+func TestRecordDueAcceptsOnlyRegisteredTables(t *testing.T) {
+	src, err := FromWorkflowTrigger(&reliantv1.WorkflowTrigger{Name: "due",
+		Source: &reliantv1.WorkflowTrigger_RecordDue{RecordDue: &reliantv1.RecordDueSource{Table: " pr_pipeline "}}})
+	require.NoError(t, err)
+	assert.Equal(t, "record_due", string(src.Kind))
+	assert.JSONEq(t, `{"table": "pr_pipeline"}`, string(src.Config))
+	assert.True(t, src.Kind.IsEventDriven())
+
+	for _, table := range []string{"", "incidents", "pr_records"} {
+		_, err := FromWorkflowTrigger(&reliantv1.WorkflowTrigger{Name: "due",
+			Source: &reliantv1.WorkflowTrigger_RecordDue{RecordDue: &reliantv1.RecordDueSource{Table: table}}})
+		var ce *ConfigError
+		require.ErrorAs(t, err, &ce, "table %q", table)
+		assert.Equal(t, "record_due.table", ce.Field)
+	}
+}
+
+func TestRecordDueIsNeverAnAdHocSource(t *testing.T) {
+	_, err := FromDefinition(&reliantv1.TriggerDefinition{
+		Source: &reliantv1.TriggerDefinition_RecordDue{RecordDue: &reliantv1.RecordDueSource{Table: "pr_pipeline"}}})
+	var ce *ConfigError
+	require.ErrorAs(t, err, &ce)
+	assert.Equal(t, "record_due", ce.Field)
+}

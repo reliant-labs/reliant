@@ -125,3 +125,38 @@ func TestPropagateTriggerReachesChildInputs(t *testing.T) {
 	propagateTrigger(parent, child)
 	assert.Equal(t, parent[wfcel.TriggerInputKey], child[wfcel.TriggerInputKey])
 }
+
+// trigger.record names the same PR for a record_due firing and a GitHub pull
+// request event, so one concurrency key serves both.
+func TestTriggerRecordCELValue(t *testing.T) {
+	due := (&TriggerInfo{Kind: "record_due", Payload: map[string]any{
+		"table": "pr_pipeline", "record_id": "rec-1", "repository": "acme/app", "number": float64(7),
+		"head_sha": "abc", "next_action": "decide", "due_at": "2026-11-26T12:00:00Z",
+	}}).CELValue()["record"]
+	assert.Equal(t, map[string]any{
+		"id": "rec-1", "table": "pr_pipeline", "repository": "acme/app", "number": int64(7),
+		"head_sha": "abc", "next_action": "decide", "due_at": "2026-11-26T12:00:00Z",
+	}, due)
+
+	pr := (&TriggerInfo{Kind: "integration", Payload: map[string]any{
+		"attributes": map[string]string{"repository": "acme/app"},
+		"data":       map[string]any{"pull_request": map[string]any{"number": int64(7), "head": map[string]any{"sha": "def"}}},
+	}}).CELValue()["record"].(map[string]any)
+	assert.Equal(t, "acme/app", pr["repository"])
+	assert.Equal(t, int64(7), pr["number"])
+	assert.Equal(t, "def", pr["head_sha"])
+	assert.Equal(t, "", pr["id"])
+
+	comment := (&TriggerInfo{Kind: "integration", Payload: map[string]any{
+		"attributes": map[string]any{"repository": "acme/app", "is_pull_request": "true"},
+		"data":       map[string]any{"issue": map[string]any{"number": float64(7)}},
+	}}).CELValue()["record"].(map[string]any)
+	assert.Equal(t, int64(7), comment["number"])
+
+	issue := (&TriggerInfo{Kind: "integration", Payload: map[string]any{
+		"attributes": map[string]any{"repository": "acme/app", "is_pull_request": "false"},
+		"data":       map[string]any{"issue": map[string]any{"number": float64(9)}},
+	}}).CELValue()["record"].(map[string]any)
+	assert.Equal(t, int64(0), issue["number"], "an issue is not a PR")
+	require.Equal(t, "", (&TriggerInfo{Kind: "schedule"}).CELValue()["record"].(map[string]any)["repository"])
+}

@@ -63,6 +63,7 @@ func (t *TriggerInfo) CELValue() map[string]interface{} {
 		"payload":       payload,
 		"sender":        SenderCELValue(t.Sender),
 		"origin":        OriginCELValue(t.Origin),
+		"record":        RecordCELValue(t.Kind, t.Payload),
 	}
 	if d := t.LaunchDefinition; d != nil {
 		out["launch_definition"] = map[string]any{
@@ -83,6 +84,94 @@ func confirmLaunchDefinition(t *TriggerInfo, rootPin string, loaded *LoadedWorkf
 	copy := *t
 	copy.LaunchDefinition = nil
 	return &copy
+}
+
+// RecordKindDue is the trigger kind of a record_due firing
+// (core.TriggerEventKindRecordDue).
+const RecordKindDue = "record_due"
+
+// RecordCELValue is `trigger.record`: the record an event is about. Every key
+// is always present, empty (0 for number) when the event names no record, so
+// a template that reads it never fails with "no such key".
+//
+//   - A record_due firing is about one due record: its payload says which
+//     (table, record_id, repository, number, head_sha, next_action, due_at).
+//   - A GitHub pull request event (an integration event whose data carries a
+//     pull_request, or an issue comment on a pull request) is about that
+//     PR: repository, number and head_sha come from its payload. id,
+//     next_action and due_at stay empty: they are the PR pipeline's, and
+//     reading them would take a database read at fire time.
+//
+// So `{{ trigger.record.repository }}#{{ trigger.record.number }}` names the
+// same PR whichever of the two fired, which a concurrency key relies on.
+func RecordCELValue(kind string, payload map[string]any) map[string]any {
+	out := map[string]any{
+		"id": "", "table": "", "repository": "", "number": int64(0),
+		"head_sha": "", "next_action": "", "due_at": "",
+	}
+	switch kind {
+	case RecordKindDue:
+		for _, key := range []string{"table", "repository", "head_sha", "next_action", "due_at"} {
+			if v, ok := payload[key].(string); ok {
+				out[key] = v
+			}
+		}
+		if v, ok := payload["record_id"].(string); ok {
+			out["id"] = v
+		}
+		if n, ok := recordNumber(payload["number"]); ok {
+			out["number"] = n
+		}
+	case "integration":
+		data, _ := payload["data"].(map[string]any)
+		repository := recordAttribute(payload["attributes"], "repository")
+		if data == nil || repository == "" {
+			return out
+		}
+		if pr, ok := data["pull_request"].(map[string]any); ok {
+			if n, ok := recordNumber(pr["number"]); ok {
+				out["repository"], out["number"] = repository, n
+				if head, ok := pr["head"].(map[string]any); ok {
+					if sha, ok := head["sha"].(string); ok {
+						out["head_sha"] = sha
+					}
+				}
+			}
+		} else if issue, ok := data["issue"].(map[string]any); ok && recordAttribute(payload["attributes"], "is_pull_request") == "true" {
+			if n, ok := recordNumber(issue["number"]); ok {
+				out["repository"], out["number"] = repository, n
+			}
+		}
+	}
+	return out
+}
+
+// recordAttribute reads one routing attribute of an integration payload;
+// attributes are strings, held as map[string]string in memory and
+// map[string]any once stored.
+func recordAttribute(attrs any, key string) string {
+	switch m := attrs.(type) {
+	case map[string]string:
+		return m[key]
+	case map[string]any:
+		s, _ := m[key].(string)
+		return s
+	}
+	return ""
+}
+
+// recordNumber reads a positive whole number, as held in memory (int,
+// int64) or read back from storage (float64).
+func recordNumber(v any) (int64, bool) {
+	switch n := v.(type) {
+	case int:
+		return int64(n), n > 0
+	case int64:
+		return n, n > 0
+	case float64:
+		return int64(n), n > 0 && n == float64(int64(n))
+	}
+	return 0, false
 }
 
 // OriginCELValue is `trigger.origin`. Every key is always present, so a filter

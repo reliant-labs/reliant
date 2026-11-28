@@ -14,12 +14,14 @@ import (
 )
 
 // privilegedWorkflows are the workflows whose credential-bearing jobs build,
-// sign, publish and record releases. Named literally so the affected-test
+// sign, publish and record releases, and upload test runs with an OIDC
+// identity (test-upload-merge-queue.yml). Named literally so the affected-test
 // planner (tools/test-affected) selects this test when any of them changes.
 var privilegedWorkflows = []string{
 	".github/workflows/release.yml",
 	".github/workflows/build-images.yml",
 	".github/workflows/ci.yml",
+	".github/workflows/test-upload-merge-queue.yml",
 }
 
 // TestPrivilegedWorkflowJobsPinActionsToCommitSHAs pins every third-party

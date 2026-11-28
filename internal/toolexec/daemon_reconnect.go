@@ -281,6 +281,25 @@ func (r *NATSDaemonRouter) awaitDaemon(ctx context.Context, userID, daemonID str
 	}
 }
 
+// DispatchReachable reports whether a command sent now with selector would be
+// delivered: the daemon every send would resolve for it (resolveDaemonID: the
+// user's default machine for a nil selector) answers on its tools.online
+// subject, which the gateway's bridge subscribes together with the subjects
+// commands travel on (NATSToolBridge.OnDaemonConnected). Not reaching one is
+// an answer, not an error: a resolution that fails or a probe nobody answers
+// is false. With no NATS connection there is nothing to probe and nothing to
+// dispatch over, so it is false too.
+func (r *NATSDaemonRouter) DispatchReachable(ctx context.Context, userID string, selector *DaemonSelector) bool {
+	if r.nc == nil {
+		return false
+	}
+	daemonID, err := r.resolveDaemonID(ctx, userID, selector)
+	if err != nil || daemonID == "" {
+		return false
+	}
+	return r.daemonAnswers(ctx, userID, daemonID, time.Now().Add(reconnectProbeTimeout))
+}
+
 // daemonAnswers reports whether a gateway holds daemonID's stream again: its
 // bridge answers the daemon's tools.online subject (NATSToolBridge).
 func (r *NATSDaemonRouter) daemonAnswers(ctx context.Context, userID, daemonID string, deadline time.Time) bool {
@@ -355,6 +374,15 @@ var reissuableDaemonCommands = map[string]bool{
 	"exec.bg_list":        true,
 	// Touching twice is touching once.
 	"exec.bg_touch": true,
+	// The merge queue's gate (internal/mergequeue/gaterun): status reads,
+	// and a start is keyed by its gate id, so starting twice is starting
+	// once.
+	"pipeline.gate.start":  true,
+	"pipeline.gate.status": true,
+	// The merge queue's code operations (internal/mergequeue/buildjob), the
+	// same way: a start is keyed by its job id, a status only reads.
+	"pipeline.job.start":  true,
+	"pipeline.job.status": true,
 }
 
 // interruption is ErrDaemonConnectionInterrupted in the gateway's own words,

@@ -50,6 +50,29 @@ type Request struct {
 	// Params is the node's rendered `with:`, already checked against
 	// Spec.Params.
 	Params map[string]any
+	// From is the node the call's `with: {from: <id>}` names, as the engine
+	// recorded it, or nil (no from, or no such node in the action's scope).
+	// An action that judges another node's work reads it here, never from
+	// Params: the author renders Params, the engine records From.
+	From *NodeRecord
+}
+
+// NodeRecord is a node of the run's graph as the engine recorded it.
+type NodeRecord struct {
+	// NodeID is the node's id in the action's scope.
+	NodeID string
+	// Type is the node's type as the run executes it ("run"; a review node
+	// runs as a "workflow" node).
+	Type string
+	// Role is the engine role its definition declares ("reviewer").
+	Role string
+	// Review is true only for an engine-owned review node: its output is the
+	// checked verdict, with the reviewer session it ran in.
+	Review bool
+	// Ran is true when the node has recorded an output.
+	Ran bool
+	// Output is that output, JSON-shaped.
+	Output map[string]any
 }
 
 // Invocation places a call in its run. Every field is the runtime's own
@@ -104,6 +127,14 @@ type Principal struct {
 	// Automation is the trigger the run belongs to, by name, "" for a run a
 	// person started.
 	Automation string
+	// TriggerID is the activation (the triggers row) whose firing launched
+	// the run's chat, by id, from its launch event: "" for a run a person
+	// started, a sub-agent's run, or a run whose chat predates launch
+	// events. Capability grants are made to it (internal/pipeline/grants).
+	TriggerID string
+	// DaemonID is the machine the run's chat executes on
+	// (chats.active_daemon_id), "" for a run on no machine.
+	DaemonID string
 }
 
 // Source is where a run's workflow definition was resolved from.

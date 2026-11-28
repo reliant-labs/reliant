@@ -25,10 +25,11 @@ func TestMain(m *testing.M) {
 	// A sandboxed script whose `cd` into its fixture failed once wrote its
 	// probes (a .bashrc, newtop) into this package's directory, and they were
 	// committed. Every write belongs under t.TempDir(): anything else left
-	// here fails the run.
+	// here fails the run. The one directory that belongs is the gate
+	// backend's subpackage.
 	if entries, err := os.ReadDir("."); err == nil {
 		for _, e := range entries {
-			if !strings.HasSuffix(e.Name(), ".go") {
+			if !strings.HasSuffix(e.Name(), ".go") && (!e.IsDir() || e.Name() != "gate") {
 				fmt.Fprintf(os.Stderr, "credsandbox tests left %s in the package directory; write fixtures under t.TempDir()\n", e.Name())
 				code = 1
 			}

@@ -1,23 +1,27 @@
 // Copyright (c) 2025 Reliant Labs
-import { describe, it, expect, vi } from "vitest";
+import { afterEach, beforeEach, describe, it, expect, vi } from "vitest";
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { setTransport } from "@/lib/connect";
+import { mockTransport } from "@/lib/test-utils";
 import type { RosterEnv } from "@/services/forge/roster";
+import { environmentShapeHandlers, type ShapeLike } from "@/test/deployReads";
 import { SecretsMatrix } from "../SecretsMatrix";
+import { secretStoreHandlers } from "@/test/secretStoreTransport";
 const store = vi.hoisted(() => ({ list: vi.fn(), history: vi.fn(), reveal: vi.fn() }));
 // Each environment's declared shape, served per environment (GetEnvironmentShape).
 const shapes = vi.hoisted(() => new Map<string, unknown>());
 vi.mock("@/services/controlPlane/config", () => ({ CONTROL_PLANE_API_URL: "https://cp.test", hasControlPlane: true }));
 vi.mock("@/services/forge/secretStore", async (original) => ({
   ...await original<typeof import("@/services/forge/secretStore")>(),
-  listSecrets: (_transport: unknown, ...args: unknown[]) => store.list(...args),
-  getSecretVersions: (_transport: unknown, ...args: unknown[]) => store.history(...args),
   revealSecret: store.reveal,
 }));
-vi.mock("@/services/forge/live", async (original) => ({
-  ...await original<typeof import("@/services/forge/live")>(),
-  getEnvironmentShape: async (_transport: unknown, id: string) => shapes.get(id) ?? null,
-}));
+// The declaration and SecretStoreService answer at the generated hooks' transport seam.
+beforeEach(() => setTransport(mockTransport({
+  ...environmentShapeHandlers((id) => (shapes.get(id) as ShapeLike | undefined) ?? null),
+  ...secretStoreHandlers({ listSecrets: (id) => store.list(id), getSecretVersions: (id, name) => store.history(id, name) }),
+})));
+afterEach(() => setTransport(null));
 vi.mock("@tanstack/react-router", async (original) => ({ ...await original<typeof import("@tanstack/react-router")>(), useNavigate: () => vi.fn() }));
 const env = (name: string, provider = "hosted"): RosterEnv => {
   shapes.set(name, { kind: "persistent", workloads: [], domains: [], clusters: [], secrets: [{ name: "API_KEY", provider, declaredBy: [] }] });
@@ -31,20 +35,20 @@ const env = (name: string, provider = "hosted"): RosterEnv => {
   },
   };
 };
-function mount(envs: RosterEnv[], projectId: string | null = "project") {
+function mount(envs: RosterEnv[]) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  const view = render(<QueryClientProvider client={client}><SecretsMatrix envs={envs} projectId={projectId} secretHref={(env, name) => `/secrets?env=${env}${name ? `&secret=${name}` : ""}`} /></QueryClientProvider>);
+  const view = render(<QueryClientProvider client={client}><SecretsMatrix envs={envs} secretHref={(env, name) => `/secrets?env=${env}${name ? `&secret=${name}` : ""}`} /></QueryClientProvider>);
   return { ...view, client };
 }
 describe("secrets environment matrix", () => {
   it("compares metadata with per-cell links and relative/full dates, never fetching values or histories", async () => {
-    store.list.mockImplementation(async (id) => ({ secrets: id === "prod" ? [{ name: "API_KEY", currentVersion: 2, currentVersionDeleted: false, currentVersionDestroyed: false, updatedAt: "2026-03-02T12:00:00Z" }] : [], protected: false }));
+    store.list.mockImplementation(async (id) => ({ secrets: id === "prod" ? [{ name: "API_KEY", currentVersion: 2, currentVersionDeleted: false, currentVersionDestroyed: false, updatedAt: "2026-03-02T12:00:00.000Z" }] : [], protected: false }));
     mount([env("prod"), env("staging"), env("dev", "file")]);
     await waitFor(() => expect(screen.getByRole("link", { name: "API_KEY in prod: Set" })).toBeInTheDocument());
     expect(screen.getByRole("link", { name: "API_KEY in staging: Not set" })).toHaveAttribute("href", "/secrets?env=staging&secret=API_KEY");
     expect(screen.getByRole("link", { name: "API_KEY in dev: Local file store" })).toBeInTheDocument();
     const time = within(screen.getByRole("link", { name: "API_KEY in prod: Set" })).getByText(/ago/);
-    expect(time).toHaveAttribute("datetime", "2026-03-02T12:00:00Z");
+    expect(time).toHaveAttribute("datetime", "2026-03-02T12:00:00.000Z");
     expect(time).toHaveAttribute("title");
     expect(store.list).toHaveBeenCalledTimes(3);
     expect(store.history).not.toHaveBeenCalled();
@@ -58,7 +62,7 @@ describe("secrets environment matrix", () => {
   });
   it("lists stored-only secrets for a cloud-only project using its live environment id", async () => {
     store.list.mockResolvedValue({ secrets: [{ name: "STORED_ONLY", currentVersion: 1 }], protected: false });
-    mount([env("denv_cloud_42")], null);
+    mount([env("denv_cloud_42")]);
     await waitFor(() => expect(screen.getByRole("link", { name: "STORED_ONLY in denv_cloud_42: Set" })).toBeInTheDocument());
     expect(store.list).toHaveBeenCalledWith("denv_cloud_42");
     expect(screen.getByRole("link", { name: "API_KEY in denv_cloud_42: Not set" })).toBeInTheDocument();

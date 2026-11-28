@@ -189,6 +189,14 @@ func (a *ActionActivity) Execute(ctx context.Context, input ActivityInput) (*rel
 		site.StepCredential = cred
 	}
 	result, runErr := a.runner.RunAuthenticated(ctx, resolved.Manifest, resolved.Spec, params, a.credentials, site)
+	// A rate limit is waited out before the graph hears of it
+	// (action_rate_limit.go).
+	if limited := rateLimitRetry(ctx, result, runErr); limited != nil {
+		delay, _ := limited.RetryAfter()
+		activity.GetLogger(ctx).Info("[Action] Rate limited; retrying after the wait", "stepID", rtx.StepID, "uses", uses,
+			"status", limited.Status, "reason", limited.Reason, "attempt", limited.Attempt, "retryDelay", delay)
+		return nil, limited
+	}
 	out := &reliantv1.ActionOutput{Uses: uses}
 	if runErr != nil {
 		out.Content = runErr.Error()

@@ -102,7 +102,10 @@ func newFixture(t *testing.T) *fixture {
 	require.NoError(t, repo.UpsertDaemon(ctx, &db.Daemon{ID: f.daemonID, UserID: f.userID}))
 
 	launcher := launch.New(launch.Deps{Store: repo, Chats: store.NewChatsWithActivityExtStore(repo.ORM()), Workflows: store.NewWorkflowExtStore(repo.ORM()), Worktrees: store.NewWorktreeExtStore(repo.ORM()), ProjectRows: store.NewProjectExtStore(repo.ORM()), TriggerEvents: store.NewTriggerEventExtStore(repo.ORM()), Projects: projectaccess.NewFromORM(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Threads: threads.New(threads.Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())}), Temporal: f.starter, Runs: noopRunRecorder{}, TaskQueue: "test-queue"})
-	f.dispatcher = NewDispatcher(repo, launcher, nil)
+	f.dispatcher = NewDispatcher(repo, struct {
+		store.TriggerExtStore
+		store.TriggerEventExtStore
+	}{store.NewTriggerExtStore(repo.ORM()), store.NewTriggerEventExtStore(repo.ORM())}, launcher, nil)
 	return f
 }
 
@@ -246,7 +249,7 @@ func TestDispatch_FinishedRunLaunchesTheMatchingTriggerWithTheSourceRunInItsPayl
 	launched := launchedChat(t, results, tr.ID)
 	assert.Equal(t, 1, f.starter.count())
 
-	launchEv, err := f.repo.GetTriggerEventByChatID(ctx, launched)
+	launchEv, err := store.GetTriggerEventByChatID(ctx, f.repo.ORM(), launched)
 	require.NoError(t, err)
 	assert.Equal(t, runevents.TriggerEventKind, launchEv.Kind)
 	assert.Equal(t, tr.ID, *launchEv.TriggerID)
@@ -286,7 +289,7 @@ func TestDispatch_LaunchPinsTheTriggersDaemonUnderAnUnattendedLaunchEvent(t *tes
 	assert.Equal(t, f.daemonID, *chat.ActiveDaemonID)
 	assert.False(t, chat.NoMachine)
 
-	launchEv, err := f.repo.GetTriggerEventByChatID(ctx, launched)
+	launchEv, err := store.GetTriggerEventByChatID(ctx, f.repo.ORM(), launched)
 	require.NoError(t, err)
 	assert.True(t, launchEv.Kind.Unattended(), "preflight may wake this run's daemon with the stored token")
 }

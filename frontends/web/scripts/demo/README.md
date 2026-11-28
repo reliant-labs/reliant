@@ -38,7 +38,8 @@ does):
    `// TODO: Add your RPC methods here.` line is replaced with one custom rpc
    (`CancelOrder`, `Reserve`, each declaring its activity event) and one
    `// forge:entity` message (`Order`, `Stock`), plus the rpc's request and
-   response. The text is `HAND_WRITTEN` in `capture-forge-scaffold.mjs`.
+   response. The text is `HAND_WRITTEN` in `capture-forge-scaffold.mjs`, laid
+   out as `buf format` would (`forge lint` gates the proto format).
 3. `forge scaffold`
 4. `forge lint --quiet`
 5. `go build ./...`

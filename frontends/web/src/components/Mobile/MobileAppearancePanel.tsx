@@ -209,7 +209,7 @@ export function MobileAppearancePanel() {
   if (!isLoaded) {
     return (
       <div className="p-4">
-        <p className="text-sm text-muted-foreground">Loading…</p>
+        <p className="text-ui text-muted-foreground">Loading…</p>
       </div>
     );
   }
@@ -239,7 +239,7 @@ export function MobileAppearancePanel() {
       />
 
       <div className="flex items-center justify-between px-4 pt-4 pb-1">
-        <h3 className="text-xs font-semibold text-muted-foreground">
+        <h3 className="text-meta font-semibold text-muted-foreground">
           Fonts
         </h3>
         <button
@@ -251,7 +251,7 @@ export function MobileAppearancePanel() {
             setFontSize("md");
             setWorkflowViewerDefaultMode("side");
           }}
-          className="flex min-h-[44px] items-center text-xs text-muted-foreground underline active:text-foreground"
+          className="flex min-h-[44px] items-center text-meta text-muted-foreground underline active:text-foreground"
         >
           Reset to defaults
         </button>
@@ -327,7 +327,7 @@ export function MobileAppearancePanel() {
         ]}
       />
 
-      <p className="p-4 text-xs text-muted-foreground">
+      <p className="p-4 text-meta text-muted-foreground">
         Code editor, language server, and tool-call display settings aren&apos;t
         available here. Manage those on desktop.
       </p>

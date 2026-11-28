@@ -122,6 +122,7 @@ func TestDaemonAutoUpdateNeedsOptInAndASelfOwnedInstall(t *testing.T) {
 // Stage downloads and verifies a newer release once, and reports when there
 // is none.
 func TestDaemonStagesANewerReleaseOnce(t *testing.T) {
+	plainHost(t) // the Updater detects the running test binary again when it stages
 	d, archives := testDaemon(t, "v1.26.0", true, selfOwnedInstall)
 	v, err := d.Stage(context.Background())
 	require.NoError(t, err)
@@ -140,6 +141,7 @@ func TestDaemonStagesANewerReleaseOnce(t *testing.T) {
 // Apply drains through the runtime and asks it to shut down, arming the swap;
 // a drain that declines leaves nothing armed and nothing shut down.
 func TestDaemonApplyDrainsThenShutsDown(t *testing.T) {
+	plainHost(t) // the Updater detects the running test binary again when it stages
 	d, _ := testDaemon(t, "v1.26.0", true, selfOwnedInstall)
 	require.Error(t, d.Apply(context.Background(), ApplyRequest{}), "nothing staged")
 	_, err := d.Stage(context.Background())

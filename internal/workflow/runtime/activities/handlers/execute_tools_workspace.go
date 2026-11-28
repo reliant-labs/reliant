@@ -28,6 +28,14 @@ type workspaceEnsurer interface {
 	EnsureWorkspace(ctx context.Context, userID string, selector *toolexec.DaemonSelector, req toolexec.WorkspaceEnsureRequest) (*toolexec.WorkspaceEnsureResponse, error)
 }
 
+// boundThreadReviver is the reviver of a worktree that a sub-agent thread is
+// bound to; it also takes back a hand-made archive whose directory was left
+// in place (store.ReviveArchivedWorktreeForBoundThread). store.WorktreeExtStore
+// has it; a reviver without it revives only what ReviveArchivedWorktree does.
+type boundThreadReviver interface {
+	ReviveArchivedWorktreeForBoundThread(ctx context.Context, id string) (string, error)
+}
+
 // batchWorkspace is where a batch's calls run, as the daemon answered, and
 // what the model has to be told about it.
 type batchWorkspace struct {
@@ -104,12 +112,16 @@ func (a *ExecuteToolsActivity) ensureBatchWorkspace(
 	// (its work had landed and it had gone quiet) gets it back: the row is
 	// made live before anything runs, and the repair below recreates the
 	// checkout from its branch if it was removed.
-	retire, revived := a.reviveWorktree(ctx, chat, project, worktree)
+	retire, revived := a.reviveWorktree(ctx, chat, project, worktree, threadBound)
 	// A thread-bound workspace that cannot be loaded, or is still archived,
 	// is refused call by call with the reason (loadWorktreeInfo); there is
 	// nothing here to check.
 	if worktree != nil && worktree.DeletedAt != nil {
 		out.blocked = "This workspace is archived with preserved work. Restore it through the worktree recovery UI before running machine tools; branch-only recreation would omit saved dirty or untracked files."
+		if threadBound {
+			// A sub-agent cannot reach the recovery UI: say who can.
+			out.blocked += fmt.Sprintf(" Your machine tools cannot run until then. Tell your parent (spawn_send to \"parent\"): the user can restore worktree %q from the Reliant UI, or your parent can spawn a new sub-agent in a fresh worktree from branch `%s`.", worktree.Name, worktree.Branch)
+		}
 		return out
 	}
 	if threadBound && worktree == nil {
@@ -246,11 +258,14 @@ func (a *ExecuteToolsActivity) ensureBatchWorkspace(
 // is about to work in it, and returns the archive fence the daemon must
 // retire (see store.ReviveArchivedWorktree). It does so for a live chat's
 // own worktree (or its thread's) that reliant made, that has a directory and
-// branch on record and proven clean landed provenance, without saved work.
+// branch on record and proven clean landed provenance, without saved work —
+// and, for a sub-agent thread bound to it (threadBound), a worktree archived
+// by hand whose directory was left in place (obs 0cea454a: a parent archived
+// an idle sub-agent's worktree, resumed it, and every machine tool refused).
 // The store rechecks eligibility under the row lock, including the canonical
 // recovery catalog. Other archives require explicit recovery; machine calls
 // are refused without ending the conversation. worktree is updated in place.
-func (a *ExecuteToolsActivity) reviveWorktree(ctx context.Context, chat *db.Chat, project *db.Project, worktree *db.Worktree) (string, bool) {
+func (a *ExecuteToolsActivity) reviveWorktree(ctx context.Context, chat *db.Chat, project *db.Project, worktree *db.Worktree, threadBound bool) (string, bool) {
 	if worktree == nil {
 		return "", false
 	}
@@ -265,18 +280,31 @@ func (a *ExecuteToolsActivity) reviveWorktree(ctx context.Context, chat *db.Chat
 	if a.reviver == nil || worktree.IsMain || worktree.Path == "" || worktree.Branch == "" || chat.State == db.ChatStateArchived {
 		return "", false
 	}
-	if m := worktree.CleanupMetadata; m == nil || (m.ArchivedBecause != core.ArchivedBecauseLanded && m.ArchivedBecause != core.ArchivedBecauseRecoverableIdle) || len(m.SnapshotRefs) > 0 {
+	m := worktree.CleanupMetadata
+	automatic := m != nil && (m.ArchivedBecause == core.ArchivedBecauseLanded || m.ArchivedBecause == core.ArchivedBecauseRecoverableIdle)
+	// A sub-agent resumed in a worktree archived by hand while it sat idle
+	// (its parent's worktree delete, typically) gets it back too, while the
+	// directory was left in place; the store decides under the row lock.
+	bound, canBind := a.reviver.(boundThreadReviver)
+	byHand := threadBound && canBind && (m == nil || (m.ArchivedBecause == "" && !m.DirectoryDeleted && !m.Forgotten))
+	if (!automatic && !byHand) || (m != nil && len(m.SnapshotRefs) > 0) {
 		return "", false
 	}
-	fence, err := a.reviver.ReviveArchivedWorktree(ctx, worktree.ID)
+	revive := a.reviver.ReviveArchivedWorktree
+	if byHand {
+		revive = bound.ReviveArchivedWorktreeForBoundThread
+	}
+	fence, err := revive(ctx, worktree.ID)
 	if err != nil {
 		logging.WarnContext(ctx, "[ExecuteTools] Could not bring back the chat's archived worktree", "chatID", chat.ID, "worktreeID", worktree.ID, "error", err)
 		return "", false
 	}
 	worktree.DeletedAt = nil
 	logging.InfoContext(ctx, "[ExecuteTools] Brought back the chat's archived worktree", "chatID", chat.ID, "worktreeID", worktree.ID, "path", worktree.Path)
-	if err := a.repo.EmitUserRefetch(ctx, project.UserID, db.RefetchWorktreeChanges, db.RefetchOpts{ProjectID: &project.ID, WorktreeID: &worktree.ID}); err != nil {
-		logging.WarnContext(ctx, "[ExecuteTools] Could not announce the revived worktree", "worktreeID", worktree.ID, "error", err)
+	if a.updates != nil {
+		if err := a.updates.EmitUserRefetch(ctx, project.UserID, db.RefetchWorktreeChanges, db.RefetchOpts{ProjectID: &project.ID, WorktreeID: &worktree.ID}); err != nil {
+			logging.WarnContext(ctx, "[ExecuteTools] Could not announce the revived worktree", "worktreeID", worktree.ID, "error", err)
+		}
 	}
 	return fence, true
 }
@@ -287,8 +315,11 @@ func (a *ExecuteToolsActivity) reviveWorktree(ctx context.Context, chat *db.Chat
 func revivedWorkspaceNote(worktree *db.Worktree, recreated bool) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "[Workspace restored] This chat's workspace %s (branch `%s`) was archived while it sat idle", worktree.Path, worktree.Branch)
-	if m := worktree.CleanupMetadata; m != nil && m.ArchivedBecause == core.ArchivedBecauseLanded {
+	switch m := worktree.CleanupMetadata; {
+	case m != nil && m.ArchivedBecause == core.ArchivedBecauseLanded:
 		b.WriteString(" after its work landed in its base branch")
+	case m == nil || m.ArchivedBecause == "":
+		b.WriteString(" (archived by hand, with the worktree tool's delete or from the Reliant UI)")
 	}
 	if recreated {
 		fmt.Fprintf(&b, ", and its checkout was removed to free disk. It has been recreated from branch `%s`: committed work is intact.", worktree.Branch)

@@ -18,6 +18,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/ptr"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/store/triggertest"
 )
 
@@ -71,7 +72,7 @@ func outcomes(resp *reliantv1.EnableWorkflowResponse) map[string]reliantv1.Workf
 
 func (e *triggerTestEnv) storedTriggers(t *testing.T) []*core.Trigger {
 	t.Helper()
-	list, err := e.repo.ListTriggers(context.Background(), core.TriggerFilters{UserID: e.userID})
+	list, err := store.ListTriggersForUser(context.Background(), e.repo.ORM(), core.TriggerFilters{UserID: e.userID})
 	require.NoError(t, err)
 	return list
 }
@@ -699,7 +700,7 @@ func TestDisableWorkflowPausesOnlyThatWorkflowsActivations(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, resp.Msg.Paused, 3)
 
-	after, err := env.repo.GetTrigger(context.Background(), unrelated.GetId())
+	after, err := store.GetTrigger(context.Background(), env.repo.ORM(), unrelated.GetId())
 	require.NoError(t, err)
 	assert.True(t, after.Enabled, "another workflow's automation is untouched")
 }

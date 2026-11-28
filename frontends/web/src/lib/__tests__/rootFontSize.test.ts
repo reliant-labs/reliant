@@ -1,7 +1,8 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import {
+  applyRootFontSize,
   DEFAULT_FONT_SIZE,
   FONT_SIZE_MAP,
   MOBILE_FONT_SIZE_MAP,
@@ -70,7 +71,7 @@ describe('rootFontSizeFor', () => {
 
     // …and the resolved-px fallback beside it, for when the map lookup misses.
     const [, mobilePx, desktopPx] =
-      html.match(/onMobileSurface\s*\?\s*'(\d+px)'\s*:\s*'(\d+px)'\)/) ?? []
+      html.match(/phoneScale\s*\?\s*'(\d+px)'\s*:\s*'(\d+px)'\)/) ?? []
     expect(desktopPx).toBe(FONT_SIZE_MAP[DEFAULT_FONT_SIZE])
     expect(mobilePx).toBe(MOBILE_FONT_SIZE_MAP[DEFAULT_FONT_SIZE])
   })
@@ -79,5 +80,104 @@ describe('rootFontSizeFor', () => {
     // `/migrate` would otherwise get phone-sized type on a desktop screen.
     expect(rootFontSizeFor('md', '/migrate')).toBe('14px')
     expect(rootFontSizeFor('md', '/mcp')).toBe('14px')
+  })
+
+  it('gives a phone the phone scale on the pages it shares with the desktop', () => {
+    // The phone drawer's rows link to responsive desktop pages (Projects, an
+    // app's console, Connectors). Sized by path, the same nav drew its rows at
+    // 15.9px on /m/chats and 14.1px on /projects: the owner's "the nav's font
+    // changes between the root nav and the Agents tab".
+    expect(rootFontSizeFor('lg', '/projects', { phoneShaped: true })).toBe('17px')
+    expect(rootFontSizeFor('lg', '/forge/p/shop', { phoneShaped: true })).toBe('17px')
+    expect(rootFontSizeFor('lg', '/m/chats', { phoneShaped: true })).toBe('17px')
+    // A narrow desktop window is not a phone: it keeps desktop sizing.
+    expect(rootFontSizeFor('lg', '/projects', { phoneShaped: false })).toBe('15px')
+  })
+})
+
+/** Stub the window's shape: its width, whether its pointer is coarse, and its URL. */
+function shapeWindow({ width, coarse, path }: { width: number; coarse: boolean; path: string }) {
+  vi.spyOn(window, 'innerWidth', 'get').mockReturnValue(width)
+  vi.stubGlobal('matchMedia', (query: string) => ({
+    matches: coarse && query.includes('pointer: coarse'),
+    media: query,
+    addEventListener: () => {},
+    removeEventListener: () => {},
+  }))
+  window.history.replaceState(null, '', path)
+}
+
+function resetWindow() {
+  vi.restoreAllMocks()
+  vi.unstubAllGlobals()
+  localStorage.clear()
+  window.history.replaceState(null, '', '/')
+  document.documentElement.style.fontSize = ''
+}
+
+describe('applyRootFontSize', () => {
+  afterEach(resetWindow)
+
+  it('applies the phone scale to a desktop page on a phone', () => {
+    shapeWindow({ width: 390, coarse: true, path: '/projects' })
+    applyRootFontSize('lg')
+    expect(document.documentElement.style.fontSize).toBe('17px')
+  })
+
+  it('keeps desktop sizing in a narrow desktop window', () => {
+    shapeWindow({ width: 390, coarse: false, path: '/projects' })
+    applyRootFontSize('lg')
+    expect(document.documentElement.style.fontSize).toBe('15px')
+  })
+
+  it('keeps desktop sizing on a phone that asked for the desktop app', () => {
+    localStorage.setItem('reliant-force-desktop', '1')
+    shapeWindow({ width: 390, coarse: true, path: '/projects' })
+    applyRootFontSize('lg')
+    expect(document.documentElement.style.fontSize).toBe('15px')
+  })
+})
+
+/**
+ * Runs index.html's pre-hydration bootstrap (the inline script that reads
+ * `appearance.fontSize`) against the stubbed window, and returns the root
+ * font size it set. The bootstrap is a copy of the decision above that cannot
+ * import it, so it is held to the same cases by running it, not by reading it.
+ */
+function runBootstrap(): string {
+  const html = readFileSync(join(__dirname, '../../../index.html'), 'utf8')
+  const script = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)]
+    .map((match) => match[1])
+    .find((body) => body.includes("appearance.fontSize"))
+  if (!script) throw new Error('index.html has no font-size bootstrap')
+  document.documentElement.style.fontSize = ''
+  new Function(script)()
+  return document.documentElement.style.fontSize
+}
+
+describe("index.html's bootstrap", () => {
+  afterEach(resetWindow)
+
+  it('sizes a desktop page on a phone at the phone scale', () => {
+    shapeWindow({ width: 390, coarse: true, path: '/projects' })
+    expect(runBootstrap()).toBe('17px')
+  })
+
+  it('sizes the same page in a narrow desktop window at the desktop scale', () => {
+    shapeWindow({ width: 390, coarse: false, path: '/projects' })
+    expect(runBootstrap()).toBe('15px')
+  })
+
+  it('honours the desktop opt-out, from the URL or remembered', () => {
+    shapeWindow({ width: 390, coarse: true, path: '/projects?desktop=1' })
+    expect(runBootstrap()).toBe('15px')
+    shapeWindow({ width: 390, coarse: true, path: '/projects' })
+    localStorage.setItem('reliant-force-desktop', '1')
+    expect(runBootstrap()).toBe('15px')
+  })
+
+  it('sizes the phone surface at the phone scale on any device', () => {
+    shapeWindow({ width: 1440, coarse: false, path: '/m/chats' })
+    expect(runBootstrap()).toBe('17px')
   })
 })

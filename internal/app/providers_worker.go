@@ -58,9 +58,11 @@ import (
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/machinepool"
 	"github.com/reliant-labs/reliant/internal/natsutil"
+	"github.com/reliant-labs/reliant/internal/netguard"
 	"github.com/reliant-labs/reliant/internal/orgmove"
 	"github.com/reliant-labs/reliant/internal/orgpolicy"
 	"github.com/reliant-labs/reliant/internal/orgs"
+	"github.com/reliant-labs/reliant/internal/pipeline/practions"
 	"github.com/reliant-labs/reliant/internal/planning"
 	"github.com/reliant-labs/reliant/internal/projectaccess"
 	"github.com/reliant-labs/reliant/internal/projectpurge"
@@ -76,6 +78,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/internal/triggerowner"
 	"github.com/reliant-labs/reliant/internal/triggers"
+	"github.com/reliant-labs/reliant/internal/triggers/recorddue"
 	"github.com/reliant-labs/reliant/internal/triggers/workflowevent"
 	"github.com/reliant-labs/reliant/internal/triggertools"
 	"github.com/reliant-labs/reliant/internal/vault"
@@ -391,6 +394,7 @@ func NewWorkerChat(d WorkerChatDeps) (*WorkerChat, error) {
 		Logger:           d.Logger,
 		Config:           d.Config,
 		Repo:             d.DB,
+		TriggerReads:     store.NewTriggerEventExtStore(d.DB.ORM()),
 		Chats:            chataccess.NewFromORM(d.DB.ORM()),
 		ChatRows:         store.NewChatExtStore(d.DB.ORM()),
 		ChatViews:        store.NewChatsWithActivityExtStore(d.DB.ORM()),
@@ -541,7 +545,7 @@ func NewWorkerTrigger(d WorkerTriggerDeps) (*WorkerTrigger, error) {
 		Intake: triggers.NewIntake(triggers.NewStores(repo), temporalClient, v2workflow.SharedTaskQueue).
 			WithWorkflows(triggers.LaunchWorkflows{Repo: repo}).
 			WithPoolCatalogs(machinepool.Catalogs{R: store.NewMachinePoolExtStore(repo.ORM())}).
-			WithEnrichers(triggers.NewOriginEnricher(newWriteLedger(repo), repo, d.Integrations.GitHubAppSlug)),
+			WithEnrichers(triggers.NewOriginEnricher(newWriteLedger(repo), store.NewTriggerEventExtStore(repo.ORM()), d.Integrations.GitHubAppSlug)),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("trigger service: %w", err)
@@ -624,7 +628,7 @@ func NewWorkerToolsFactory(d WorkerToolsFactoryDeps) (*WorkerToolsFactory, error
 		Repo:               repo,
 		SpawnQuestions:     store.NewQuestionExtStore(repo.ORM()),
 		SpawnTree:          store.NewToolCallExtStore(repo.ORM()),
-		SpawnMailbox:       agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo}),
+		SpawnMailbox:       agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo.UpdateWriter()}),
 		Scenarios:          store.NewWorkflowScenarioExtStore(repo.ORM()),
 		LaunchedRuns:       store.NewTriggerEventExtStore(repo.ORM()),
 		WorktreeChats:      store.NewChatExtStore(repo.ORM()),
@@ -958,15 +962,57 @@ func (d disabledHostedActions) ExecuteAction(context.Context, string, string, st
 
 // WorkerServerActions is the worker's Reliant server actions, as
 // NewTemporalWorker hands them to workersetup: on only when the pipeline
-// switch is, with the handlers this worker binds (none yet: each pipeline
-// task binds its own here). The dispatcher's resolver is workersetup's, over
-// the worker's database.
+// switch is. Its handlers are bound by NewTemporalWorker
+// (workerServerActionHandlers); the dispatcher refuses every call while the
+// switch is off, bound or not. The dispatcher's resolver is workersetup's,
+// over the worker's database.
 func WorkerServerActions(pipeline *configv1.PipelineConfig) serveraction.Config {
 	enabled := pipeline.GetEnabled()
 	if enabled {
 		slog.Default().Info("Reliant server actions are ON (pipeline.enabled)")
 	}
 	return serveraction.Config{Enabled: enabled}
+}
+
+// workerServerActionHandlers binds the pipeline's server actions this
+// worker implements: the pr.* actions (internal/pipeline/practions), with
+// pr.verdict's approve check and reliant/pipeline.request_grant@1 over the
+// capability grants (internal/pipeline/grants), over
+// the worker's database, GitHub through the integration catalog with the
+// run's credentials (metadata only; writes recorded in the write ledger, as
+// an action node's are), a PR's changed files from a daemon of its gate pool
+// (pipelineFiles), and the Inbox as async questions.
+func workerServerActionHandlers(d TemporalWorkerDeps, creds httpaction.CredentialSource) (map[string]serveraction.Handler, error) {
+	var runner writeledger.Runner = httpaction.NewRunner(netguard.New())
+	if d.WriteLedger != nil {
+		runner = d.WriteLedger.Wrap(runner)
+	}
+	capabilityGrants, err := pipelineGrants(d.DB)
+	if err != nil {
+		return nil, err
+	}
+	files, err := pipelineFiles(d.DB, d.Router)
+	if err != nil {
+		return nil, err
+	}
+	actions, err := practions.New(practions.Deps{
+		Store:  d.DB,
+		GitHub: &practions.CatalogGitHub{Catalog: catalog.MustBuiltin(), Runner: runner, Credentials: creds},
+		Files:  files,
+		Inbox: practions.QuestionInbox{
+			Writer: questions.NewFromRepo(d.DB), Reader: store.NewQuestionExtStore(d.DB.ORM()), Refetch: d.DB.UpdateWriter(),
+		},
+		Grants: capabilityGrants,
+		Logger: slog.Default(),
+	})
+	if err != nil {
+		return nil, err
+	}
+	handlers := actions.Handlers()
+	for name, h := range capabilityGrants.Handlers() {
+		handlers[name] = h
+	}
+	return handlers, nil
 }
 
 // NewTemporalWorker is the Temporal worker on the shared task queue
@@ -987,6 +1033,12 @@ func NewTemporalWorker(d TemporalWorkerDeps) (*workersetup.Worker, error) {
 		slog.Default().Warn("stop nudges are DISABLED on this worker: pause and interrupt reach running activities on their next heartbeat",
 			"subject", stopnudge.Subject, "error", err)
 	}
+	serverActions := WorkerServerActions(d.Pipeline)
+	handlers, err := workerServerActionHandlers(d, creds)
+	if err != nil {
+		return nil, fmt.Errorf("server actions: %w", err)
+	}
+	serverActions.Handlers = handlers
 	worker, _, err := workersetup.NewWorker(&workersetup.Config{
 		OrgMoves:               d.OrgMoves,
 		StopNudges:             nudges,
@@ -1011,7 +1063,7 @@ func NewTemporalWorker(d TemporalWorkerDeps) (*workersetup.Worker, error) {
 		IntegrationCredentials: creds,
 		HostedActions:          hostedActions,
 		SecretResolver:         secretResolver,
-		ServerActions:          WorkerServerActions(d.Pipeline),
+		ServerActions:          serverActions,
 		WriteLedger:            d.WriteLedger,
 		TriggerPollers:         d.Pollers,
 		TriggerPollInbox:       webhook.PollInbox{Store: d.DB},
@@ -1047,7 +1099,8 @@ type WorkflowEventRelayDeps struct {
 //
 //forge:root-only worker
 func NewWorkflowEventRelay(d WorkflowEventRelayDeps) (*workflowevent.Relay, error) {
-	return workflowevent.NewRelay(store.NewRunEventExtStore(d.DB.ORM()), d.Temporal.Client, v2workflow.SharedTaskQueue), nil
+	return workflowevent.NewRelay(store.NewRunEventExtStore(d.DB.ORM()), d.Temporal.Client, v2workflow.SharedTaskQueue).
+		WithRoutes(store.NewTriggerExtStore(d.DB.ORM())), nil
 }
 
 type TriggerDeliveryRelayDeps struct {
@@ -1057,6 +1110,13 @@ type TriggerDeliveryRelayDeps struct {
 	Integrations    *IntegrationSettings
 	Membership      *orgs.Resolver
 	Policies        *orgpolicy.Resolver
+	// Pipeline is the pipeline.enabled switch: on, the PR-record projector
+	// also projects the PR pipeline's enrolled repositories (prrecords
+	// Deps.Pipeline). Off, it is exactly the records projector.
+	Pipeline *configv1.PipelineConfig
+	// ControlPlane is where the projector mints the GitHub App token it
+	// reads a repository's .reliant/pipeline.yaml with; none means no App.
+	ControlPlane *configv1.ControlPlaneConfig
 }
 
 // TriggerDeliveryRelay gives the inbox live membership and policy context.
@@ -1074,21 +1134,61 @@ func NewTriggerDeliveryRelay(d TriggerDeliveryRelayDeps) (*TriggerDeliveryRelay,
 	intake := triggers.NewIntake(triggers.NewStores(repo), d.Temporal.Client, v2workflow.SharedTaskQueue).
 		WithWorkflows(triggers.LaunchWorkflows{Repo: repo}).
 		WithPoolCatalogs(machinepool.Catalogs{R: store.NewMachinePoolExtStore(repo.ORM())}).
-		WithEnrichers(triggers.NewOriginEnricher(newWriteLedger(repo), repo, d.Integrations.GitHubAppSlug))
+		WithEnrichers(triggers.NewOriginEnricher(newWriteLedger(repo), store.NewTriggerEventExtStore(repo.ORM()), d.Integrations.GitHubAppSlug))
 	var membership authz.Membership
 	if d.Membership != nil {
 		membership = d.Membership
 	}
 	relay := webhook.NewRelay(webhook.NewStores(repo), intake, d.ConnectionVault, triggers.NewAutoPause(store.NewTriggerWritesExtStore(repo.ORM()), nil))
-	if scope := prrecords.NewScope(d.Integrations.PRRecordRepositories); !scope.Empty() {
-		relay.WithDeliveryConsumer(webhook.PRRecordConsumer(prrecords.NewInstrumented(prrecords.Deps{
-			Store: store.NewPrRecordExtStore(repo.ORM()), Scope: scope})))
+	records := prrecords.Deps{Store: store.NewPrRecordExtStore(repo.ORM()), Scope: prrecords.NewScope(d.Integrations.PRRecordRepositories)}
+	if d.Pipeline.GetEnabled() {
+		// A base-branch push only leaves pipeline.yaml pending here: the
+		// worker's PipelineConfigRefresh reads it on a gate pool daemon,
+		// which webhook delivery never waits on.
+		records.Pipeline = repo
+	}
+	if !records.Scope.Empty() || records.Pipeline != nil {
+		relay.WithDeliveryConsumer(webhook.PRRecordConsumer(prrecords.NewInstrumented(records)))
 	}
 	return &TriggerDeliveryRelay{relay: relay, membership: membership, policies: d.Policies}, nil
 }
 
 func (r *TriggerDeliveryRelay) Run(ctx context.Context) error {
 	return r.relay.Run(orgpolicy.WithResolver(authz.WithMembership(ctx, r.membership), r.policies))
+}
+
+// RecordDueScannerDeps is what the record_due due scan needs.
+type RecordDueScannerDeps struct {
+	DB       *db.Repo
+	Temporal *TemporalClient
+	// Pipeline is the pipeline.enabled switch: off, there is no scanner.
+	Pipeline   *configv1.PipelineConfig
+	Membership *orgs.Resolver
+	Policies   *orgpolicy.Resolver
+}
+
+// NewRecordDueScanner is the worker's due scan for record_due triggers
+// (recorddue): every worker runs one while pipeline.enabled is on, and the
+// scans split the due rows (SKIP LOCKED). Off, nil: no scanner runs and no
+// record_due trigger fires.
+//
+//forge:root-only worker
+func NewRecordDueScanner(d RecordDueScannerDeps) (recorddue.Service, error) {
+	if !d.Pipeline.GetEnabled() {
+		return nil, nil
+	}
+	repo := d.DB
+	intake := triggers.NewIntake(triggers.NewStores(repo), d.Temporal.Client, v2workflow.SharedTaskQueue).
+		WithWorkflows(triggers.LaunchWorkflows{Repo: repo}).
+		WithPoolCatalogs(machinepool.Catalogs{R: store.NewMachinePoolExtStore(repo.ORM())})
+	var membership authz.Membership = authz.NoOrgs{}
+	if d.Membership != nil {
+		membership = d.Membership
+	}
+	policies := d.Policies
+	return recorddue.NewInstrumented(recorddue.Deps{Store: repo, Intake: intake, Scope: func(ctx context.Context) context.Context {
+		return orgpolicy.WithResolver(authz.WithMembership(ctx, membership), policies)
+	}}), nil
 }
 
 // WorkflowCheckSyncerDeps is the GitHub-writing checks configuration and the

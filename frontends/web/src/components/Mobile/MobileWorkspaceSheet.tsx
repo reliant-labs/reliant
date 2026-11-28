@@ -72,7 +72,7 @@ export function MobileWorkspaceSheet({
         >
           <X className="h-5 w-5" />
         </button>
-        <span className="truncate text-sm font-medium">{title ?? "Workspace"}</span>
+        <span className="truncate text-ui font-medium">{title ?? "Workspace"}</span>
       </div>
 
       <div className="flex shrink-0 border-b border-border">
@@ -82,7 +82,7 @@ export function MobileWorkspaceSheet({
             type="button"
             onClick={() => setActiveTab(tab.id)}
             className={cn(
-              "flex min-h-[44px] flex-1 items-center justify-center gap-1.5 border-b-2 text-xs font-medium",
+              "flex min-h-[44px] flex-1 items-center justify-center gap-1.5 border-b-2 text-meta font-medium",
               activeTab === tab.id
                 ? "border-primary text-foreground"
                 : "border-transparent text-muted-foreground active:bg-muted",
@@ -128,7 +128,7 @@ export function MobileWorkspaceSheet({
 
 function EmptyTab({ label }: { label: string }) {
   return (
-    <div className="flex h-full items-center justify-center px-6 text-center text-sm text-muted-foreground">
+    <div className="flex h-full items-center justify-center px-6 text-center text-ui text-muted-foreground">
       {label}
     </div>
   );

@@ -109,7 +109,7 @@ export function MobileNavigationFeedback() {
     <div
       role="progressbar"
       aria-label="Loading"
-      // Above the drawer and the sheets (`z-[9999]`), and never in the way
+      // Above the drawer and the sheets (up to `z-[9999]`), and never in the way
       // of a tap.
       className="pointer-events-none fixed inset-x-0 z-[10000] h-0.5 overflow-hidden"
       style={{ top: "env(safe-area-inset-top)" }}

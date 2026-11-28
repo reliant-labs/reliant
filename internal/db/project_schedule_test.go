@@ -77,7 +77,7 @@ func (f *deleteFixture) decided() core.ProjectDecision {
 
 func (f *deleteFixture) trigger(t *testing.T, id string) *core.Trigger {
 	t.Helper()
-	tr, err := f.repo.GetTrigger(f.ctx, id)
+	tr, err := store.GetTrigger(f.ctx, f.repo.ORM(), id)
 	require.NoError(t, err)
 	return tr
 }
@@ -167,7 +167,7 @@ func TestProjectPurgeRunsAfterTheWindowOnce(t *testing.T) {
 	assert.Zero(t, res.Failed)
 	_, err = f.repo.GetProject(f.ctx, f.project)
 	require.Error(t, err, "the purged project is gone")
-	_, err = f.repo.GetTrigger(f.ctx, f.enabledTrigger)
+	_, err = store.GetTrigger(f.ctx, f.repo.ORM(), f.enabledTrigger)
 	assert.ErrorIs(t, err, core.ErrTriggerNotFound)
 	_, err = store.GetChat(f.ctx, f.repo.ORM(), f.chat)
 	assert.Error(t, err, "its chat is gone")
@@ -495,7 +495,7 @@ func TestTriggerWritesSerializeWithScheduling(t *testing.T) {
 		release()
 		require.NoError(t, receive(t, f.ctx, done))
 		assert.ErrorIs(t, receive(t, f.ctx, creating), core.ErrProjectScheduledForDeletion)
-		_, err := f.repo.GetTrigger(f.ctx, created)
+		_, err := store.GetTrigger(f.ctx, f.repo.ORM(), created)
 		assert.ErrorIs(t, err, core.ErrTriggerNotFound)
 	})
 
