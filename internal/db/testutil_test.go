@@ -2,7 +2,9 @@
 package db
 
 import (
+	"fmt"
 	"net/url"
+	"os"
 	"testing"
 )
 
@@ -42,5 +44,52 @@ func TestTestDatabaseIgnoresDatabaseURLAndIsPerTest(t *testing.T) {
 	}
 	if name != "Test Project" {
 		t.Fatalf("B's test-project is named %q after a write to A; the databases must be independent", name)
+	}
+}
+
+// The warm supply PrepareTestDatabases starts hands each caller a migrated,
+// seeded database of its own, and leaves none behind: neither the ones it
+// handed out (dropped in the background) nor the ready ones nobody took.
+func TestTestDBSupplyHandsOutOwnDatabasesAndLeavesNoneBehind(t *testing.T) {
+	// Not parallel: it installs the process's supply.
+	key, err := migratedTemplateKey()
+	if err != nil {
+		t.Fatal(err)
+	}
+	probe, _ := NewTestDatabase(t) // watches pg_database; made before the supply
+	ownDatabases := func() int {
+		t.Helper()
+		var n int
+		pattern := fmt.Sprintf("%%\\_%d\\_%%", os.Getpid())
+		if err := probe.QueryRow(`SELECT count(*) FROM pg_database WHERE datname LIKE $1`, pattern).Scan(&n); err != nil {
+			t.Fatalf("count this process's databases: %v", err)
+		}
+		return n
+	}
+	before := ownDatabases()
+
+	s := startTestDBSupply(key)
+	t.Cleanup(s.stop)
+	seen := map[string]bool{}
+	for i := range 4 {
+		raw, dsn, cleanup := newTestDatabase(t)
+		u, err := url.Parse(dsn)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if seen[u.Path] {
+			t.Fatalf("database %s was handed out twice", u.Path)
+		}
+		seen[u.Path] = true
+		var seeded int
+		if err := raw.QueryRow(`SELECT count(*) FROM projects WHERE id = 'test-project'`).Scan(&seeded); err != nil || seeded != 1 {
+			t.Fatalf("copy %d is not the migrated, seeded template: %d rows, %v", i, seeded, err)
+		}
+		cleanup()
+	}
+	s.stop()
+
+	if after := ownDatabases(); after != before {
+		t.Fatalf("this process has %d databases after the supply stopped, %d before it started", after, before)
 	}
 }
