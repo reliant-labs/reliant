@@ -66,17 +66,17 @@ var temporalAwareLeafTests = map[string]string{
 var temporalGOOS = []string{"linux", "darwin", "windows"}
 
 const (
-	reliantModule      = "github.com/reliant-labs/reliant"
-	temporalModulePath = "go.temporal.io/"
-	temporalClassPkg   = reliantModule + "/internal/errclass/temporalclass"
+	temporalGuardReliantModule = "github.com/reliant-labs/reliant"
+	temporalModulePath         = "go.temporal.io/"
+	temporalClassPkg           = temporalGuardReliantModule + "/internal/errclass/temporalclass"
 )
 
 func isModulePackage(importPath string) bool {
-	return importPath == reliantModule || strings.HasPrefix(importPath, reliantModule+"/")
+	return importPath == temporalGuardReliantModule || strings.HasPrefix(importPath, temporalGuardReliantModule+"/")
 }
 
 func packageDir(repo, importPath string) string {
-	return filepath.Join(repo, filepath.FromSlash(strings.TrimPrefix(importPath, reliantModule+"/")))
+	return filepath.Join(repo, filepath.FromSlash(strings.TrimPrefix(importPath, temporalGuardReliantModule+"/")))
 }
 
 // hostImports returns, for the in-module package importPath, every import of
@@ -261,7 +261,7 @@ func TestLeafPackagesImportNoTemporalSource(t *testing.T) {
 	for _, leaf := range temporalFreePackages {
 		t.Run(leaf, func(t *testing.T) {
 			t.Parallel()
-			leafPkg := reliantModule + "/" + leaf
+			leafPkg := temporalGuardReliantModule + "/" + leaf
 			read := sourceImports(t, repo)
 			files := packageFileImports(t, repo, leafPkg, true)
 			var source []string
@@ -386,7 +386,7 @@ func TestTemporalClassIsLinkedWhereTemporalRuns(t *testing.T) {
 		t.Run(pkg, func(t *testing.T) {
 			t.Parallel()
 			reached := map[string]bool{}
-			queue := []string{path.Join(reliantModule, pkg)}
+			queue := []string{path.Join(temporalGuardReliantModule, pkg)}
 			for len(queue) > 0 {
 				cur := queue[0]
 				queue = queue[1:]
