@@ -84,8 +84,8 @@ const inboxReadConcurrency = 3
 // fifth. That is safe against the 2026-10-23 exhaustion because what
 // exhausted the pool was N concurrent ListInbox calls of one client, each
 // holding a read set of its own; sharedRead, which landed with the budget
-// above, makes those one read set per user and credential, so a burst no
-// longer multiplies it. The pool's two exhaustions since (2026-11-18 08:30Z
+// above, makes those at most two read sets per user and credential (one in
+// flight, one queued behind it), so a burst no longer multiplies it. The pool's two exhaustions since (2026-11-18 08:30Z
 // and 11:40Z) were stream fan-outs, not the inbox. Two tokens let the two
 // firing reads run together.
 const inboxHealthReadConcurrency = 2

@@ -145,6 +145,17 @@ export const ERROR_REASONS = [
   // ── control-plane: git credentials (internal/gitcredential; reliant token_git.go) ──
   /** No git provider account is connected for the user. */
   "git_credential_not_connected",
+  /** The stored git credential was rejected by the provider; the user must reconnect. */
+  "git_credential_needs_reconnect",
+  /** The deployment holds no usable GitHub App (FailedPrecondition). */
+  "github_app_not_configured",
+  /** The caller's own GitHub account cannot reach that App installation (FailedPrecondition). */
+  "github_installation_not_visible",
+  // ── control-plane: an org's GitHub App installations (OrganizationService, handlers/organization/github_app.go) ──
+  /** A tampered, expired or someone else's install state (InvalidArgument). Start again. */
+  "github_install_state_invalid",
+  /** The installation is linked to another org; unlink it there first (FailedPrecondition). */
+  "github_installation_linked_elsewhere",
   // ── control-plane: claimable deploys (internal/claimable; the /claim page) ──
   /** The deploy was already claimed: the first completion wins. */
   "claimable_claimed",

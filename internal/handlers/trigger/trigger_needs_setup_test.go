@@ -94,7 +94,7 @@ func (e *needsSetupEnv) seedUnfinished(t *testing.T, enabled bool) *core.Trigger
 		d.Name = fmt.Sprintf("seeded %d", e.seeded)
 		d.Params = setupReposParam("acme/web")
 	}))
-	row, err := e.repo.GetTrigger(context.Background(), created.GetId())
+	row, err := store.GetTrigger(context.Background(), e.repo.ORM(), created.GetId())
 	require.NoError(t, err)
 	row.Params = map[string]any{}
 	row.Enabled = enabled

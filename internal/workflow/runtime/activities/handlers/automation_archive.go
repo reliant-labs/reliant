@@ -52,7 +52,7 @@ func (a *WorkflowStatusActivity) archiveSucceededAutomationRun(ctx context.Conte
 		return
 	}
 	if chat.TriggerID != nil {
-		trigger, err := a.repo.GetTrigger(ctx, *chat.TriggerID)
+		trigger, err := a.triggers.GetTrigger(ctx, *chat.TriggerID)
 		if err != nil && !errors.Is(err, core.ErrTriggerNotFound) {
 			// Unknown policy: leave the run where the person can see it.
 			logging.WarnContext(ctx, "[WorkflowStatus] Could not read the automation; leaving its run unarchived", "chat_id", input.ChatID, "trigger_id", *chat.TriggerID, "error", err)

@@ -35,7 +35,6 @@ export function SecretsPage() {
       ) : env === ENV_ALL ? (
         <SecretsMatrix
           envs={roster.envs}
-          projectId={projectId}
           secretHref={(name, secretName) => href({ kind: "secrets" }, { env: name, secret: secretName })}
         />
       ) : (

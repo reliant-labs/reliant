@@ -66,6 +66,7 @@ type GenerateTitleOutput struct {
 // 4. Return success - workflow continues with updated context
 type CompactActivity struct {
 	repo           CompactStore
+	triggers       AttendanceTriggers
 	threads        MessageSaver
 	toolResults    ToolResultRecoveryStore
 	driverResolver drivers.DriverResolver
@@ -98,6 +99,7 @@ func (a *CompactActivity) WithAccountRouting(r *AccountRouting) *CompactActivity
 func NewCompactActivity(deps CompactDeps) *CompactActivity {
 	return &CompactActivity{
 		repo:           deps.Store,
+		triggers:       deps.Triggers,
 		toolResults:    deps.ToolResults,
 		threads:        deps.Threads,
 		driverResolver: deps.DriverResolver,
@@ -258,6 +260,7 @@ func (a *CompactActivity) saveCompactionMessage(ctx context.Context, chatID, thr
 // Generates a title for a chat based on its first message
 type GenerateTitleActivity struct {
 	repo           GenerateTitleStore
+	triggers       AttendanceTriggers
 	driverResolver drivers.DriverResolver
 	// routing picks which account of the resolved provider titles the chat,
 	// and benches or retires one the provider refuses; nil routes nothing.
@@ -294,9 +297,10 @@ func (a *GenerateTitleActivity) WithAccountRouting(r *AccountRouting) *GenerateT
 }
 
 // NewGenerateTitleActivity creates a new GenerateTitleActivity
-func NewGenerateTitleActivity(repo GenerateTitleStore, resolver drivers.DriverResolver) *GenerateTitleActivity {
+func NewGenerateTitleActivity(repo GenerateTitleStore, triggers AttendanceTriggers, resolver drivers.DriverResolver) *GenerateTitleActivity {
 	return &GenerateTitleActivity{
 		repo:           repo,
+		triggers:       triggers,
 		driverResolver: resolver,
 	}
 }
@@ -462,7 +466,7 @@ func (a *CompactActivity) generateCompactionSummaryOnProvider(ctx context.Contex
 
 	// Use a small temperature for consistent summaries.
 	temperature := 0.3
-	who := chatAttendance(ctx, a.repo, chat)
+	who := chatAttendance(ctx, a.repo, a.triggers, chat)
 	spec := llmCallSpec{
 		UserID:              chat.UserID,
 		OrgID:               chatOrgID(chat),
@@ -721,7 +725,7 @@ func (a *GenerateTitleActivity) generateTitleForChat(ctx context.Context, chat *
 	// Low temperature keeps titles consistent and focused.
 	temperature := 0.3
 	maxTokens := int64(256)
-	who := chatAttendance(ctx, a.repo, chat)
+	who := chatAttendance(ctx, a.repo, a.triggers, chat)
 	spec := llmCallSpec{
 		UserID:              userID,
 		OrgID:               chatOrgID(chat),

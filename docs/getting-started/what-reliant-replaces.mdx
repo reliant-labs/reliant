@@ -83,6 +83,7 @@ Each row names the tools Reliant stands in for, the Reliant feature that does it
 | Session replay and RUM | LogRocket, FullStory, Hotjar, Datadog RUM | Browser errors with readable stacks, session timelines, and opt-in masked replay | [Session timelines and replay](/hosting/observability/session-timelines) |
 | Continuous profiling | Pyroscope, Polar Signals, Datadog Profiler | CPU and heap profiles, and profile-guided builds. Hosted profiling is opt-in per environment. | [Profiling](/hosting/observability/profiling) |
 | Uptime and certificate checks | Better Stack, Pingdom, Checkly, UptimeRobot | Default alerts for a failing uptime check and an expiring certificate | [Dashboards, alerts and issues](/hosting/observability/dashboards-and-alerts#alerts) |
+| Status page | Statuspage, Better Stack, Instatus | **Partial.** Declare components over your uptime checks with `forge.StatusPage` and render the page yourself. Publishing a page for your app is not built yet. | [Status page](/hosting/observability/status-page) |
 | AI on-call | Resolve.ai, Cleric, Traversal, PagerDuty and incident.io AI features | Autopilot on-call: an alert becomes one deduplicated issue, is investigated read-only, and gets a fix pull request once a person labels it. It never merges. | [Autopilot](/guides/autopilot) |
 
 ### Delivery: CD, releases and CI
@@ -175,7 +176,7 @@ Each item below needs facts from two or more of the categories above. A single-c
 - **Evidence on each release (partial).** A release carries its SBOM and check results today. Signed attestations are not available yet. See [Vulnerabilities](/forge/security/vulnerabilities).
 - **Full-stack pull request environments (partial).** A preview environment gets its own managed Postgres and runs your migrations, and Forge can seed a dev database from your schema. A preview starts with your schema and no rows today. See [Preview environments for every pull request](/guides/hosting/preview-environment-every-pull-request).
 - **Which environments run a vulnerable build (partial).** The SBOM per release and the ledger of what each environment runs can be joined. See [Vulnerabilities](/forge/security/vulnerabilities).
-- **Experiments on your own events (partial).** A change can be measured against the product events you already send. Per-environment policy delivery and the Experiments screen are still rolling out. See [Feature flags and experiments](/forge/observability/changes).
+- **Experiments on your own events (partial, beta).** A change can be measured against the product events you already send. Hosted sites and backends receive each environment's changes, and the Experiments screen shows whether a change has reached them. Apps outside Reliant hosting cannot fetch changes yet. See [Feature flags and experiments](/forge/observability/changes).
 
 ## Coming soon
 
@@ -184,7 +185,7 @@ These are not available yet, and there are no dates:
 - Automatic rollback, with canary and progressive delivery. Today a release gets a verdict and you recover by [redeploying an earlier release](/guides/hosting/recover-from-bad-deploy) or rolling forward.
 - Image signing, attestation and admission, so only signed images run.
 - Cost visibility, per workload and environment.
-- Better autoscaling. Hosting runs the replicas you declare today.
+- Autoscaling on Reliant hosting. Hosting runs the replicas you declare today. On a cluster you run, `forge.Autoscale` already scales a service or worker on CPU: see [Autoscaling](/forge/deploy/autoscaling).
 - [Reliant Engine](/getting-started/concepts#reliant-engine-coming-soon), which runs Reliant workflows inside your own product, under your brand.
 
 ## Where it doesn't fit, and what you keep

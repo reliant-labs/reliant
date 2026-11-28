@@ -14,14 +14,15 @@ import (
 )
 
 // forge:section MockService
-// forge:hash=19afe3048d0896c881912525d0bdae532dfed18482b9b4f62890b9ca6f0b8219
+// forge:hash=848131c97a4b8e6482b6c0df6e28ca6d8dcaec0100df722659fcb12d50b03e7e
 
 // MockService is a test mock for the Service interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockService.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockService.<Method>Func not set" error.
 type MockService struct {
 	contractkit.Recorder
 	ReadFunc func(context.Context, string, string, string, string) ([]byte, error)
@@ -36,18 +37,45 @@ func (m *MockService) Read(ctx context.Context, userID string, owner string, rep
 	return nil, contractkit.MockNotSet("MockService", "Read")
 }
 
+// MockServiceReadCall is one recorded call of MockService.Read, one
+// field per parameter.
+type MockServiceReadCall struct {
+	Ctx    context.Context
+	UserID string
+	Owner  string
+	Repo   string
+	BlobID string
+}
+
+// ReadCalls returns every recorded Read call, oldest first, with
+// its arguments typed. It reads the same log as Calls("Read").
+func (m *MockService) ReadCalls() []MockServiceReadCall {
+	var out []MockServiceReadCall
+	for _, c := range m.Recorder.Calls("Read") {
+		var r MockServiceReadCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.Owner, _ = c.Args[2].(string)
+		r.Repo, _ = c.Args[3].(string)
+		r.BlobID, _ = c.Args[4].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ Service = (*MockService)(nil)
 
 // forge:section MockTokenSource
-// forge:hash=8edb3b769d8207be1f0fccfa2d1c00ba8d91812073819fdea5fcf665126b2e31
+// forge:hash=f84f5282958e8adc7a125f1d5d77d5b59895848b8181ffa226f52281257b4124
 
 // MockTokenSource is a test mock for the TokenSource interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockTokenSource.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockTokenSource.<Method>Func not set" error.
 type MockTokenSource struct {
 	contractkit.Recorder
 	TokenFunc func(context.Context, string) (string, error)
@@ -60,6 +88,26 @@ func (m *MockTokenSource) Token(ctx context.Context, userID string) (string, err
 		return m.TokenFunc(ctx, userID)
 	}
 	return "", contractkit.MockNotSet("MockTokenSource", "Token")
+}
+
+// MockTokenSourceTokenCall is one recorded call of MockTokenSource.Token, one
+// field per parameter.
+type MockTokenSourceTokenCall struct {
+	Ctx    context.Context
+	UserID string
+}
+
+// TokenCalls returns every recorded Token call, oldest first, with
+// its arguments typed. It reads the same log as Calls("Token").
+func (m *MockTokenSource) TokenCalls() []MockTokenSourceTokenCall {
+	var out []MockTokenSourceTokenCall
+	for _, c := range m.Recorder.Calls("Token") {
+		var r MockTokenSourceTokenCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
 }
 
 // Compile-time check.

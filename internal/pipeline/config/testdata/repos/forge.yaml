@@ -1,0 +1,42 @@
+# The Reliant pipeline's configuration for forge: pipeline.yaml version 1
+# (reliant internal/pipeline/config; pipeline redesign §10.2). The pipeline
+# reads it only from main, never from a pull request's head, and nothing reads
+# it until the repository is enrolled, in shadow first.
+version: 1
+
+# The fast tier on each PR head: forge's merge tier, which ci.yml reports as
+# the `CI gate` check.
+check: { checks: ["CI gate"] }
+
+# The full suite every batch candidate must pass before it lands. The stages
+# always run lint, test, build, sbom_scan, in that order; a failed stage stops
+# the later ones. Exit 0 pass, 1 fail, 2 unproven, per stage.
+# Every stage command below that runs a task passes --exit-code: task itself
+# reports any failing command as 201, which would erase the 0/1/2 contract.
+gate:
+  runner: machine # an isolated gate machine (the sysbox backend): e2e and E2E Scaffold need its nested docker engine
+  pool: gate
+  # The test stage's lanes run concurrently, so the wall is about the slowest
+  # (the e2e corpus); 90m leaves room for a cold build cache. An exceeded
+  # timeout is unproven, never red.
+  timeout: 90m
+  stages:
+    # main's Lint job: golangci-lint over the root and pkg/ at the release CI
+    # pins, go vet, go vet -tags e2e (scripts/gate.sh lint).
+    lint: { run: "task --exit-code gate:lint" }
+    # The full Linux suite: unit and internal/cli under -race, the guards, the
+    # e2e corpus, E2E Scaffold (scripts/gate.sh).
+    test: { run: "task --exit-code gate" }
+    # go build ./..., then the release binaries with the release flags
+    # (-trimpath -buildvcs=true).
+    build: { run: "task --exit-code gate:build" }
+    # Owner decision (2026-11-26): off, explicitly, until forge's
+    # `forge vuln gate` (forge#3001) has merged and every gate machine holds a
+    # grype database. Until then a scan could only be unproven, and the queue
+    # lands nothing unproven. The stage shows as off on every report, never as
+    # passed; turning it on is a recorded setting change.
+    sbom_scan: off
+  # The one lane a Linux gate machine cannot run: ci.yml's `windows` job, which
+  # also runs on every push to reliant-queue/** (the candidate branches). Every
+  # part of the gate must pass.
+  checks: ["Windows"]

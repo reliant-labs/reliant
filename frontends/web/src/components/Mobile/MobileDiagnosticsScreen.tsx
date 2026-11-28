@@ -50,10 +50,10 @@ function useOnline(): boolean {
 function Row({ label, value, tone }: { label: string; value: string; tone?: "ok" | "bad" }) {
   return (
     <div className="flex min-h-[44px] items-center justify-between gap-4 border-b border-border px-4 py-2.5 last:border-b-0">
-      <span className="shrink-0 text-sm text-muted-foreground">{label}</span>
+      <span className="shrink-0 text-ui text-muted-foreground">{label}</span>
       <span
         className={cn(
-          "min-w-0 truncate text-right font-mono text-xs",
+          "min-w-0 truncate text-right font-mono text-code",
           tone === "ok" ? "text-success-ink" : tone === "bad" ? "text-destructive-ink" : "text-foreground",
         )}
         title={value}
@@ -67,14 +67,14 @@ function Row({ label, value, tone }: { label: string; value: string; tone?: "ok"
 function ErrorRow({ entry }: { entry: ClientErrorEntry }) {
   return (
     <li className="border-b border-border px-4 py-3 last:border-b-0" data-testid="diagnostics-error">
-      <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
+      <div className="flex items-center justify-between gap-3 text-meta text-muted-foreground">
         <span>
           {entry.source}
           {entry.count > 1 ? ` ×${entry.count}` : ""} · <span className="font-mono">{entry.path}</span>
         </span>
         <time dateTime={entry.at}>{relativeTime(entry.at)}</time>
       </div>
-      <p className="mt-1 select-text break-words font-mono text-xs text-foreground">{entry.message}</p>
+      <p className="mt-1 select-text break-words font-mono text-code text-foreground">{entry.message}</p>
     </li>
   );
 }
@@ -161,14 +161,14 @@ export function MobileDiagnosticsScreen({ onBack }: { onBack: () => void }) {
 
         <section>
           <div className="mb-2 flex items-center justify-between px-1">
-            <h2 className="text-xs font-semibold text-muted-foreground">
+            <h2 className="text-meta font-semibold text-muted-foreground">
               Recent errors <span className="tabular-nums">{errors.length}</span>
             </h2>
             {errors.length > 0 && (
               <button
                 type="button"
                 onClick={clearClientErrors}
-                className="flex min-h-[44px] items-center gap-1.5 rounded-md px-2 text-xs text-muted-foreground active:bg-foreground/5"
+                className="flex min-h-[44px] items-center gap-1.5 rounded-md px-2 text-meta text-muted-foreground active:bg-foreground/5"
               >
                 <Trash2 className="h-3.5 w-3.5" aria-hidden />
                 Clear
@@ -177,7 +177,7 @@ export function MobileDiagnosticsScreen({ onBack }: { onBack: () => void }) {
           </div>
           <div className="overflow-hidden rounded-lg elevation-1">
             {errors.length === 0 ? (
-              <p className="px-4 py-4 text-sm text-muted-foreground">No errors recorded in this tab.</p>
+              <p className="px-4 py-4 text-ui text-muted-foreground">No errors recorded in this tab.</p>
             ) : (
               <ul>
                 {[...errors].reverse().map((entry, index) => (
@@ -186,7 +186,7 @@ export function MobileDiagnosticsScreen({ onBack }: { onBack: () => void }) {
               </ul>
             )}
           </div>
-          <p className="mt-2 px-1 text-xs leading-relaxed text-muted-foreground">
+          <p className="mt-2 px-1 text-meta leading-relaxed text-muted-foreground">
             Kept on this device for this tab only, and never sent anywhere. Copy them into a bug report.
           </p>
         </section>

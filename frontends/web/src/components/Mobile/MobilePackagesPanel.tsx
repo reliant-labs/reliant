@@ -85,7 +85,7 @@ export function MobilePackagesPanel({ worktreeId, projectPath }: MobilePackagesP
     <div className="flex-1 overflow-y-auto">
       {processes.length > 0 && (
         <div className="border-b border-border">
-          <div className="px-3 pb-1 pt-3 text-xs font-bold text-muted-foreground/80">
+          <div className="px-3 pb-1 pt-3 text-meta font-bold text-muted-foreground/80">
             Processes
           </div>
           <div className="space-y-1 px-2 pb-2">
@@ -96,10 +96,10 @@ export function MobilePackagesPanel({ worktreeId, projectPath }: MobilePackagesP
               >
                 {statusIcon(process.status)}
                 <div className="min-w-0 flex-1">
-                  <div className="truncate font-mono text-xs text-foreground">
+                  <div className="truncate font-mono text-code text-foreground">
                     {process.command}
                   </div>
-                  <div className="text-xs text-muted-foreground">
+                  <div className="text-meta text-muted-foreground">
                     {statusLabel(process.status)}
                   </div>
                 </div>
@@ -109,11 +109,11 @@ export function MobilePackagesPanel({ worktreeId, projectPath }: MobilePackagesP
         </div>
       )}
 
-      <div className="px-3 pb-1 pt-3 text-xs font-bold text-muted-foreground/80">
+      <div className="px-3 pb-1 pt-3 text-meta font-bold text-muted-foreground/80">
         Commands
       </div>
       {allCommands.length === 0 ? (
-        <div className="px-4 py-6 text-center text-sm text-muted-foreground">
+        <div className="px-4 py-6 text-center text-ui text-muted-foreground">
           No package commands detected in this workspace.
         </div>
       ) : (
@@ -129,8 +129,8 @@ export function MobilePackagesPanel({ worktreeId, projectPath }: MobilePackagesP
                 {PACKAGE_TYPE_ICON[type]}
               </span>
               <div className="min-w-0 flex-1">
-                <div className="truncate text-sm font-medium text-foreground">{cmd.name}</div>
-                <div className="truncate font-mono text-xs text-muted-foreground">
+                <div className="truncate text-ui font-medium text-foreground">{cmd.name}</div>
+                <div className="truncate font-mono text-code text-muted-foreground">
                   {cmd.command}
                 </div>
               </div>

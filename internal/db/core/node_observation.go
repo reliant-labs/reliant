@@ -9,6 +9,10 @@ const (
 	// NodeObservationSourceModel is an event the model recorded itself
 	// (dev-docs/design/workflow-observe.md, section 12). Not written yet.
 	NodeObservationSourceModel = "model"
+	// NodeObservationSourceReconciler is the workflow reconciler's own
+	// record of a run (its stall watchdog), not any node's: its step_id
+	// names the reconciler check, not a node of the workflow.
+	NodeObservationSourceReconciler = "reconciler"
 )
 
 // NodeObservation is what one node attempt's observe: block recorded when the

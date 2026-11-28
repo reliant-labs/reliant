@@ -36,16 +36,16 @@ function ParamRow({ name, input }: ParamRowProps) {
   return (
     <div className="border-b border-border px-4 py-3">
       <div className="flex items-center justify-between gap-3">
-        <span className="text-sm font-medium text-foreground">{name}</span>
-        <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
+        <span className="text-ui font-medium text-foreground">{name}</span>
+        <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-meta text-muted-foreground">
           {input.type}
         </span>
       </div>
       {description && (
-        <p className="mt-0.5 text-xs text-muted-foreground">{description}</p>
+        <p className="mt-0.5 text-meta text-muted-foreground">{description}</p>
       )}
       {hasDefault && (
-        <p className="mt-1 text-xs text-muted-foreground">
+        <p className="mt-1 text-meta text-muted-foreground">
           Default: <span className="text-foreground">{formatValueForDisplay(defaultValue)}</span>
         </p>
       )}
@@ -74,7 +74,7 @@ export function MobileWorkflowParamsView({
     <div className="flex h-full min-h-0 flex-col overflow-y-auto">
       {presets.length > 0 && (
         <div className="border-b border-border px-4 py-3">
-          <div className="mb-2 text-xs font-medium text-muted-foreground">
+          <div className="mb-2 text-meta font-medium text-muted-foreground">
             Preset
           </div>
           <PresetPicker
@@ -88,7 +88,7 @@ export function MobileWorkflowParamsView({
       )}
 
       {inputEntries.length === 0 ? (
-        <div className="px-4 py-8 text-center text-sm text-muted-foreground">
+        <div className="px-4 py-8 text-center text-ui text-muted-foreground">
           This workflow takes no parameters.
         </div>
       ) : (

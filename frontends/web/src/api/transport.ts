@@ -93,7 +93,6 @@ import { clientHeaderValue, upgradeRequiredInfo } from "../lib/clientVersion";
 import { pageActivity } from "../lib/pageActivity";
 import {
   DEFAULT_GRPC_TIMEOUT_MS,
-  FILE_OPERATION_TIMEOUT_MS,
   CHAT_OPERATION_TIMEOUT_MS,
   MCP_OPERATION_TIMEOUT_MS,
   UPLOAD_TIMEOUT_MS,
@@ -198,24 +197,26 @@ const normalizeInterceptor: Interceptor = errorNormalizeInterceptor({});
 /** The observability read stage (obsInterceptors.ts), on control-plane transports only. Exported for the chain-shape test. */
 export const obsReadStage: Interceptor = obsReadInterceptor();
 
-// Methods that need longer timeouts (0 = no timeout, handled by streaming layer)
-const LONG_TIMEOUT_METHODS: Record<string, number> = {
-  // File operations - may involve large files
-  ReadFile: FILE_OPERATION_TIMEOUT_MS,
-  WriteFile: FILE_OPERATION_TIMEOUT_MS,
-  ListFiles: FILE_OPERATION_TIMEOUT_MS,
+// Methods that need longer timeouts (0 = no timeout, handled by streaming layer).
+// Keys are bare method names and must name a real rpc: a key that matches
+// nothing silently leaves the method on the 10s default (transport.test.ts
+// fails on one). Exported for that test.
+export const LONG_TIMEOUT_METHODS: Record<string, number> = {
   // Chat operations that involve workflows - initial setup can take time
   StartChat: CHAT_OPERATION_TIMEOUT_MS,
   SendMessage: CHAT_OPERATION_TIMEOUT_MS,
   // MCP operations - external process startup can be slow
-  StartServer: MCP_OPERATION_TIMEOUT_MS,
   InstallServer: MCP_OPERATION_TIMEOUT_MS,
   RestartServer: MCP_OPERATION_TIMEOUT_MS,
   UpdateServerConfig: MCP_OPERATION_TIMEOUT_MS,
   UninstallServer: MCP_OPERATION_TIMEOUT_MS,
-  CallTool: MCP_OPERATION_TIMEOUT_MS,
-  // Attachment uploads - depends on file size
-  Upload: UPLOAD_TIMEOUT_MS,
+  // Attachments - the whole file rides in one unary body (base64 in JSON), so
+  // the time is the link's upload/download speed, not the server's. This was
+  // keyed `Upload`, which no rpc is named, so UploadAttachment ran on the 10s
+  // default: on 2026-11-27 four photo uploads from an iPhone were aborted at
+  // ~10s with no request ever reaching the api-server.
+  UploadAttachment: UPLOAD_TIMEOUT_MS,
+  GetAttachment: UPLOAD_TIMEOUT_MS,
   // Worktree operations - involve git commands and copied files that can exceed 30s
   CreateWorktree: WORKTREE_OPERATION_TIMEOUT_MS,
   DeleteWorktree: WORKTREE_OPERATION_TIMEOUT_MS,
@@ -320,8 +321,32 @@ const PROCEDURE_TIMEOUTS: Record<string, number> = {
  */
 export const OBS_READ_TIMEOUT_MS = 14_000;
 
+/**
+ * A budget one caller sets for one call, in its `contextValues`, over the
+ * tables above. For a call whose time is its payload's size on the user's
+ * link, which no per-method constant fits: a 60s upload budget is a 300 KB
+ * photo on a weak phone link and a 50 MB file only on a fast one
+ * (hooks/attachment-queries.ts uploadBudgetMs).
+ */
+export const rpcBudgetKey = createContextKey<number | undefined>(undefined, {
+  description: "this call's client-side budget in ms, over the per-method table",
+});
+
+/** Set one call's client-side budget (see rpcBudgetKey). */
+export function withRpcBudget(values: ContextValues | undefined, budgetMs: number): ContextValues {
+  const next = values ?? createContextValues();
+  next.set(rpcBudgetKey, budgetMs);
+  return next;
+}
+
 /** The client-side budget for one RPC. Exported for the transport tests. */
-export function timeoutForProcedure(serviceTypeName: string, methodName: string): number {
+export function timeoutForProcedure(
+  serviceTypeName: string,
+  methodName: string,
+  contextValues?: ContextValues,
+): number {
+  const callBudget = contextValues?.get(rpcBudgetKey);
+  if (callBudget !== undefined && callBudget > 0) return callBudget;
   return (
     PROCEDURE_TIMEOUTS[`${serviceTypeName}/${methodName}`] ??
     (isReadSlotProcedure(serviceTypeName, methodName) ? OBS_READ_TIMEOUT_MS : undefined) ??

@@ -59,6 +59,9 @@ func (a *ActionActivity) executeServer(ctx context.Context, input ActivityInput,
 			Automation:     rtx.Automation,
 		},
 	}
+	if f := rtx.ServerActionFrom; f != nil {
+		call.From = &serveraction.NodeRecord{NodeID: f.NodeID, Type: f.Type, Role: f.Role, Review: f.Review, Ran: f.Ran, Output: f.Output}
+	}
 	if rtx.Telemetry != nil {
 		call.Run.WorkflowRef = rtx.Telemetry.WorkflowRef
 		call.Run.Trigger = rtx.Telemetry.Trigger
@@ -170,6 +173,11 @@ func (r *serverActionRuns) Resolve(ctx context.Context, inv serveraction.Invocat
 			principal.OrgID = derefString(chat.OrgID)
 		}
 		principal.ProjectID = chat.ProjectID
+		// The activation and the machine come from the chat's own records
+		// (its launch event, its pinned machine), never from the run's
+		// author: capability grants are judged against them.
+		principal.TriggerID = derefString(chat.TriggerID)
+		principal.DaemonID = derefString(chat.ActiveDaemonID)
 	}
 
 	if err := r.place(ctx, chat, &provenance); err != nil {

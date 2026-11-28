@@ -109,6 +109,15 @@ func (f *fakeRunStore) RecordRunMachinePlacement(_ context.Context, p *core.RunM
 	return &stored, nil
 }
 
+func (f *fakeRunStore) MoveRunMachinePlacement(ctx context.Context, p *core.RunMachinePlacement, from string) (*core.RunMachinePlacement, error) {
+	key := p.WorkflowID + "/" + p.Scope
+	if existing, ok := f.placed[key]; ok && existing.DaemonID == from {
+		existing.DaemonID, existing.MachinePoolID = p.DaemonID, p.MachinePoolID
+		return existing, nil
+	}
+	return f.RecordRunMachinePlacement(ctx, p)
+}
+
 func (f *fakeRunStore) RunTx(ctx context.Context, _ orm.TxPolicy, fn func(context.Context) error) error {
 	f.txs++
 	return fn(ctx)
@@ -409,4 +418,65 @@ func TestPlaceRunActivity(t *testing.T) {
 			}
 		})
 	}
+}
+
+// A node's preflight excludes the members it failed on: a placement recorded
+// on one moves to another member, keeping its identity; one elsewhere stands;
+// and a pool with every member excluded is exhausted, never a wait.
+func TestPlaceRun_Exclude(t *testing.T) {
+	excluding := func(scope string, ids ...string) RunRequest {
+		r := poolRequest(scope)
+		r.Exclude = ids
+		return r
+	}
+	t.Run("a fresh placement skips the excluded member", func(t *testing.T) {
+		store := newFakeRunStore(memberRow("a", "connected", 0), memberRow("b", "connected", 1))
+		got, err := NewRunPlacer(store, store, store).PlaceRun(context.Background(), excluding("fix", "id-a"))
+		if err != nil || got.DaemonID != "id-b" {
+			t.Fatalf("got %+v, %v; want b", got, err)
+		}
+	})
+	t.Run("a placement on an excluded member moves, once", func(t *testing.T) {
+		store := newFakeRunStore(memberRow("a", "connected", 0), memberRow("b", "connected", 1))
+		placer := NewRunPlacer(store, store, store)
+		first, err := placer.PlaceRun(context.Background(), poolRequest("fix"))
+		if err != nil || first.DaemonID != "id-a" {
+			t.Fatalf("first = %+v, %v; want a", first, err)
+		}
+		moved, err := placer.PlaceRun(context.Background(), excluding("fix", "id-a"))
+		if err != nil || moved.DaemonID != "id-b" {
+			t.Fatalf("moved = %+v, %v; want b", moved, err)
+		}
+		if len(store.placed) != 1 || store.placed["wf-1/fix"].DaemonID != "id-b" {
+			t.Fatalf("placements %+v; want the one placement, now on b", store.placed)
+		}
+		// A retried ask, with the same exclusions, answers where it went.
+		again, err := placer.PlaceRun(context.Background(), excluding("fix", "id-a"))
+		if err != nil || again.DaemonID != "id-b" {
+			t.Fatalf("again = %+v, %v; want b", again, err)
+		}
+	})
+	t.Run("every member excluded is exhausted", func(t *testing.T) {
+		store := newFakeRunStore(memberRow("a", "connected", 0), memberRow("b", "connected", 0))
+		store.placed["wf-1/fix"] = &core.RunMachinePlacement{WorkflowID: "wf-1", Scope: "fix", ChatID: "chat-1", MachinePoolID: "pool-1", DaemonID: "id-b"}
+		got, err := NewRunPlacer(store, store, store).PlaceRun(context.Background(), excluding("fix", "id-a", "id-b"))
+		if err != nil || !got.Exhausted || got.Waiting || got.DaemonID != "" {
+			t.Fatalf("got %+v, %v; want exhausted", got, err)
+		}
+		if !strings.Contains(got.Reason, "every member of pool cicd (2) failed") {
+			t.Fatalf("reason = %q", got.Reason)
+		}
+		if store.placed["wf-1/fix"].DaemonID != "id-b" {
+			t.Fatalf("an exhausted pool moved the placement: %+v", store.placed["wf-1/fix"])
+		}
+	})
+	t.Run("a member the chat holds is not preferred once excluded", func(t *testing.T) {
+		store := newFakeRunStore(memberRow("a", "connected", 0), memberRow("b", "connected", 1))
+		r := excluding("fix", "id-a")
+		r.ChatPoolID, r.ChatDaemonID = "pool-1", "id-a"
+		got, err := NewRunPlacer(store, store, store).PlaceRun(context.Background(), r)
+		if err != nil || got.DaemonID != "id-b" {
+			t.Fatalf("got %+v, %v; want b", got, err)
+		}
+	})
 }

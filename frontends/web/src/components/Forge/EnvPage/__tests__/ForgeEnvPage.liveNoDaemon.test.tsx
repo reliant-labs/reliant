@@ -51,6 +51,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ForgeService } from "@/gen/reliant/v1/forge_pb";
 import { setTransport } from "@/lib/connect";
 import { mockTransport, type MockHandlers } from "@/lib/test-utils";
+import { secretStoreHandlers } from "@/test/secretStoreTransport";
 import type { CloudEnvStatus, CloudPromotion } from "@/services/forge/cloudEnvs";
 import type { LiveConvergence, LiveEnv } from "@/services/forge/live";
 
@@ -325,12 +326,9 @@ const listSecrets = vi.fn((_environmentId: string) =>
   })
 );
 const setSecret = vi.fn((_input: unknown) => Promise.resolve({ version: 4 }));
-vi.mock("@/services/forge/secretStore", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/services/forge/secretStore")>()),
-  listSecrets: (_transport: unknown, environmentId: string) => listSecrets(environmentId),
-  setSecret: (_transport: unknown, input: unknown) => setSecret(input),
-  getSecretVersions: () => Promise.resolve({ name: "", versions: [] }),
-}));
+// Answered at the transport (the generated hooks' seam), beside CONTROL_PLANE_READS.
+const secretStore = () =>
+  secretStoreHandlers({ listSecrets, setSecret, getSecretVersions: () => ({ summary: null, versions: [] }) });
 
 // Custom domains are an org-wide control-plane read. One is bound to prod,
 // one to staging, so the env-scoped view has something to filter out.
@@ -387,7 +385,7 @@ afterEach(() => setTransport(null));
 
 beforeEach(() => {
   daemonCalls.length = 0;
-  setTransport(mockTransport({ ...forgeServiceTripwires(), ...CONTROL_PLANE_READS }));
+  setTransport(mockTransport({ ...forgeServiceTripwires(), ...CONTROL_PLANE_READS, ...secretStore() }));
   routeState.env = "prod";
   routeState.tab = undefined;
   consoleState.forgeProject = "hounders";

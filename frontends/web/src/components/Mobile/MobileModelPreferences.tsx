@@ -102,7 +102,7 @@ export function MobileModelPreferences({
 
   if (modelsLoading || loading) {
     return (
-      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+      <div className="flex items-center gap-2 text-ui text-muted-foreground">
         <Loader2 className="h-4 w-4 animate-spin" />
         Loading models...
       </div>
@@ -111,7 +111,7 @@ export function MobileModelPreferences({
 
   if (allConfiguredModels.length === 0) {
     return (
-      <p className="text-sm text-muted-foreground">
+      <p className="text-ui text-muted-foreground">
         Add a provider above to choose default models.
       </p>
     );
@@ -124,7 +124,7 @@ export function MobileModelPreferences({
         const isSaving = saving[tag] ?? false;
         return (
           <div key={tag} className="flex items-center gap-3">
-            <label className="w-20 shrink-0 text-sm font-medium text-foreground">
+            <label className="w-20 shrink-0 text-ui font-medium text-foreground">
               {TAG_LABELS[tag]}
             </label>
             <div className="relative flex-1">
@@ -136,7 +136,7 @@ export function MobileModelPreferences({
                 // min-h-[44px] on a native <select> — the tap target must
                 // clear the floor even though this isn't a button/onClick
                 // element the source guard scans for.
-                className="min-h-[44px] w-full appearance-none rounded-md border border-input bg-background px-3 py-2 pr-8 text-sm disabled:opacity-50"
+                className="min-h-[44px] w-full appearance-none rounded-md border border-input bg-background px-3 py-2 pr-8 text-ui disabled:opacity-50"
               >
                 <option value="">Auto</option>
                 {allConfiguredModels.map((m) => (

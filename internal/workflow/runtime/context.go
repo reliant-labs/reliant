@@ -130,6 +130,10 @@ type DaemonSelectorValue struct {
 	// rebuilt from the placement on replay, and a context serialized without
 	// it routes to the same machine.
 	Placed bool `json:"-"`
+	// PlacedPool is the pool a Placed machine is a member of, "" when it is
+	// not known. In-memory only, as Placed: a node's preflight reads it to
+	// move a node off an unhealthy member (node_preflight.go).
+	PlacedPool string `json:"-"`
 	// Session marks the chat's pin (session_daemon_id) rather than a
 	// selector the workflow or node configures. A pin can go stale while the
 	// run lives (its chat moves to the workspace's machine); configured

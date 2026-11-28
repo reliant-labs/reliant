@@ -6,6 +6,7 @@ package proctree
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -286,4 +287,160 @@ func TestPrepare_KeepsACommandsOwnGoTmpDir(t *testing.T) {
 	if len(cmd.Env) != 1 || goTmpOf(cmd.Env) != "/mine" || tree.goTmp != "" {
 		t.Fatalf("env = %v, goTmp = %q; want the command's own GOTMPDIR alone", cmd.Env, tree.goTmp)
 	}
+}
+
+// A credentials-none command's sandbox points GOTMPDIR into its own private
+// /tmp, so a root made for its init was never used, and with no cgroup
+// nothing removed it: on 2026-11-26 one daemon had left one empty root per
+// sandboxed command. Its init gets none.
+func TestPrepare_GivesACredsandboxInitNoGoTmpDir(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("TMPDIR", tmp)
+	cmd := sandboxInitCmd(t)
+	cmd.Env = []string{"PATH=" + os.Getenv("PATH")}
+	tree := (&Limiter{}).Prepare(cmd, Owner{})
+	defer tree.Started(0)
+	if goTmpOf(cmd.Env) != "" || tree.goTmp != "" {
+		t.Fatalf("a sandbox init got GOTMPDIR %q (goTmp %q); it never uses one", goTmpOf(cmd.Env), tree.goTmp)
+	}
+	if roots, _ := filepath.Glob(filepath.Join(tmp, GoTmpBasePrefix+"*", GoTmpPrefix+"*")); len(roots) != 0 {
+		t.Fatalf("roots made for a sandbox init: %v", roots)
+	}
+}
+
+// A command with a cgroup gets a root named for it, gotmp-<pid>-c<n> beside
+// cmd-<pid>-<n>, so whatever retires the cgroup can name the root. Plain
+// directories stand in for the commands cgroup.
+func TestPrepare_NamesTheGoTmpRootForItsCgroup(t *testing.T) {
+	t.Setenv("TMPDIR", t.TempDir())
+	watchFast(t, 10*time.Millisecond, 4)
+	l := &Limiter{commands: t.TempDir()}
+	cmd := exec.Command("true")
+	cmd.Env = []string{}
+	tree := l.Prepare(cmd, Owner{})
+	defer tree.Started(0)
+	if tree.dir == "" {
+		t.Fatal("no cgroup prepared")
+	}
+	seq, ok := strings.CutPrefix(filepath.Base(tree.dir), fmt.Sprintf("%s%d-", cmdPrefix, os.Getpid()))
+	if !ok {
+		t.Fatalf("cgroup %s is not this process's", tree.dir)
+	}
+	want := fmt.Sprintf("%s%d-%s%s", GoTmpPrefix, os.Getpid(), pairedGoTmpMark, seq)
+	if got := filepath.Base(goTmpOf(cmd.Env)); got != want {
+		t.Fatalf("root %q for cgroup %s; want %q", got, filepath.Base(tree.dir), want)
+	}
+}
+
+// deadPID is a pid no process can have: past the kernel's pid_max.
+func deadPID(t *testing.T) int {
+	t.Helper()
+	b, err := os.ReadFile("/proc/sys/kernel/pid_max")
+	if err != nil {
+		t.Skip("no pid_max: ", err)
+	}
+	n, err := strconv.Atoi(strings.TrimSpace(string(b)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return n + 1
+}
+
+// pairedRoot makes the root gotmp-<pid>-[c]<seq>, holding a killed build's
+// work directory, in this user's base under the test's TMPDIR.
+func pairedRoot(t *testing.T, pid int, seq uint64, paired bool) string {
+	t.Helper()
+	base, ok := goTmpBase(true)
+	if !ok {
+		t.Fatal("no root base")
+	}
+	root := filepath.Join(base, goTmpName(pid, seq, paired))
+	if err := os.MkdirAll(filepath.Join(root, "go-build1", "b001"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	return root
+}
+
+func waitGone(t *testing.T, path string) {
+	t.Helper()
+	for deadline := time.Now().Add(10 * time.Second); ; time.Sleep(5 * time.Millisecond) {
+		if _, err := os.Lstat(path); errors.Is(err, os.ErrNotExist) {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("%s outlived its cgroup's retirement", path)
+		}
+	}
+}
+
+func mustExist(t *testing.T, path, why string) {
+	t.Helper()
+	if _, err := os.Lstat(path); err != nil {
+		t.Fatalf("%s: %v (%s)", filepath.Base(path), err, why)
+	}
+}
+
+// A daemon that exited leaves the roots of commands its watchers had not
+// freed: a later daemon's start-up sweep frees each one whose cgroup it
+// retires, and nothing else, so a root whose cgroup still holds a process, or
+// one whose name pairs it with no cgroup, stays.
+func TestSweep_FreesAnExitedDaemonsRootsWithTheirCgroups(t *testing.T) {
+	t.Setenv("TMPDIR", t.TempDir())
+	dead, commands := deadPID(t), t.TempDir()
+	cgroup := func(seq int, populated bool) {
+		dir := filepath.Join(commands, fmt.Sprintf("%s%d-%d", cmdPrefix, dead, seq))
+		if err := os.Mkdir(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if populated {
+			setPopulated(t, dir, true)
+		}
+	}
+	cgroup(7, false)
+	cgroup(8, true)
+	retired, held := pairedRoot(t, dead, 7, true), pairedRoot(t, dead, 8, true)
+	unpaired := pairedRoot(t, dead, 9, false)
+	cgroup(9, false)
+
+	sweep(commands, false)
+
+	waitGone(t, retired)
+	mustExist(t, held, "its cgroup still holds a process")
+	mustExist(t, unpaired, "its name pairs it with no cgroup")
+}
+
+// A command that left a server running past its watcher keeps its root only
+// as long as the server lives: once its cgroup empties, the next command's
+// sweep of this process's cgroups retires it and frees the root. Before, the
+// root waited for the go_work_dirs pass, which never proves anything on a host
+// whose /proc scan one unreadable process fails.
+func TestSweepOwn_FreesTheRootAWatcherGaveUpOn(t *testing.T) {
+	t.Setenv("TMPDIR", t.TempDir())
+	watchFast(t, 20*time.Millisecond, 4)
+	dir := t.TempDir()
+	l := &Limiter{commands: dir}
+	const seq = 41
+	cg := filepath.Join(dir, fmt.Sprintf("%s%d-%d", cmdPrefix, os.Getpid(), seq))
+	if err := os.Mkdir(cg, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	setPopulated(t, cg, true)
+	root := pairedRoot(t, os.Getpid(), seq, true)
+	tree := &Tree{dir: cg, goTmp: root, fd: -1}
+	done := tree.releaseGoTmp()
+	if done == nil {
+		t.Fatal("no watcher")
+	}
+	<-done
+	mustExist(t, root, "the watcher gave up with the cgroup populated")
+
+	l.sweepOwn()
+	mustExist(t, root, "the sweep found the cgroup populated")
+
+	// The server exits: the cgroup is empty (a plain directory reads so).
+	if err := os.Remove(filepath.Join(cg, "cgroup.events")); err != nil {
+		t.Fatal(err)
+	}
+	l.sweepOwn()
+	waitGone(t, root)
 }

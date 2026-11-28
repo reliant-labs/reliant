@@ -24,6 +24,7 @@ import { ConnectError, Code } from "@connectrpc/connect";
 import { QueryClient, type FetchQueryOptions } from "@tanstack/react-query";
 import type { ConnectClientError } from "@reliantlabs/forge-web-runtime";
 import {
+  FileNodeSymlinkStatus,
   FileNodeType,
   FileSystemService,
   FileViewerKind,
@@ -149,9 +150,26 @@ function protoFileNodeToFrontend(proto: ProtoFileNode): FileNode {
     type: isDir ? "directory" : "file",
     children,
     hasChildren: isDir ? proto.hasChildren : undefined,
+    symlinkTarget: proto.symlinkTarget,
+    symlinkStatus: symlinkStatusFromProto(proto.symlinkStatus),
     size: proto.size !== undefined ? Number(proto.size) : undefined,
     modified: proto.modified,
   };
+}
+
+function symlinkStatusFromProto(status: FileNodeSymlinkStatus): FileNode["symlinkStatus"] {
+  switch (status) {
+    case FileNodeSymlinkStatus.RESOLVED:
+      return "resolved";
+    case FileNodeSymlinkStatus.BROKEN:
+      return "broken";
+    case FileNodeSymlinkStatus.LOOP:
+      return "loop";
+    case FileNodeSymlinkStatus.DENIED:
+      return "denied";
+    default:
+      return undefined;
+  }
 }
 
 function protoViewerKindToFrontend(kind: FileViewerKind): FileViewerKindValue {
@@ -371,7 +389,8 @@ export async function getFilePreviewBlob(path: string, worktreeId?: string): Pro
     worktreeId,
     chatId: await activeChatIdForAPI(),
   }, transientReadOptions));
-  return new Blob([response.content], { type: response.contentType });
+  // Decoded protobuf bytes are never SharedArrayBuffer-backed, which is all Blob refuses.
+  return new Blob([response.content as Uint8Array<ArrayBuffer>], { type: response.contentType });
 }
 
 export interface DownloadedFile {
@@ -396,7 +415,8 @@ export async function downloadFile(path: string, worktreeId?: string): Promise<D
     chatId: await activeChatIdForAPI(),
   });
   return {
-    blob: new Blob([response.content], { type: response.contentType || "application/octet-stream" }),
+    // Decoded protobuf bytes are never SharedArrayBuffer-backed, which is all Blob refuses.
+    blob: new Blob([response.content as Uint8Array<ArrayBuffer>], { type: response.contentType || "application/octet-stream" }),
     filename: response.filename,
   };
 }
