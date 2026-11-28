@@ -1,7 +1,7 @@
 -- forge:backward-compatible — new tables only; nothing existing is read or changed
 
 -- Migration: create_gtm
--- Created: 2026-11-27T16:00:00Z
+-- Created: 2026-11-27T22:30:26Z
 --
 -- GTM inside Reliant (proto/reliant/v1/gtm.proto, GtmService): strategies
 -- and their campaigns, channels, ideas, items (posts, emails, videos: the
