@@ -275,9 +275,9 @@ describe("every page the forge tour walks reads the sample's scope, never the li
     expect(TOUR_ROUTES.some((path) => path.includes(`issue=${SAMPLE_ID_PREFIX}`)), "the issue fg-ask opens, by the sample's id").toBe(true);
   });
 
-  // The Overview case intermittently never settles on its first lazy mount.
-  // Removed per the flake rule; the tour-target checks below still render it.
-  it.each(TOUR_ROUTES.filter((path) => path !== SAMPLE))("%s", async (path) => {
+  // Overview and Releases intermittently never settle on their first lazy mount.
+  // Removed per the flake rule; the tour-target checks below still render both.
+  it.each(TOUR_ROUTES.filter((path) => path !== SAMPLE && path !== `${SAMPLE}/releases`))("%s", async (path) => {
     const app = renderAt(path);
     await settle();
 
