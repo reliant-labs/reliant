@@ -318,10 +318,16 @@ unless the verdict is `OK`.
 Every Go command, test binary, golangci-lint and vitest sizes itself to the
 whole machine, and the gate runs up to six of them at once inside one slot
 of eight: on 2026-10-26 the host ran at a load of ~150 on 32 cores, and
-every phase, `tsc` included, was starved. The gate now takes the cores the
-host has free, but never less than half the machine (16 on that host; a
-floor of twice a slot's share, 8, starved lint's contract lane), as
-`MG_CPUS`, and splits it: the test phase gets half (`go test -p`,
+every phase, `tsc` included, was starved. The gate now takes a share of the
+machine for the heavy-slot holders running when it starts, itself included:
+forge's `hostslot.DefaultShare`, `min(CPUs, max(2, min(3·CPUs/(2·busy),
+GiB/(2.5·busy))))`, so a gate alone keeps the machine and one of four on 48
+CPUs gets 12. (It replaced a floor of half the machine, under which three
+gates on 48 CPUs each took 24.) A positive `GOMAXPROCS` already in the
+environment (a newer forge's slot holder, or the daemon's heavy-command
+wrapper, exported the share) wins over the formula, and a cgroup `cpu.max`
+shrinks the machine it is a share of. The gate prints the budget and its
+source, then splits it: the test phase gets half (`go test -p`,
 `GOMAXPROCS`) and a quarter for vitest's workers, the build, lint and a
 generator running beside the others a quarter each. A generator that runs
 first and alone (a dirty tree) gets all of it. `MG_CPUS=<n>` overrides the
