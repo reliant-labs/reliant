@@ -63,18 +63,25 @@ func TestPriorTriggerFailures(t *testing.T) {
 	insert("pf-c-ok", "trg-pf-c", me, core.TriggerEventLaunched, core.TriggerRunCompleted, "", bound.Add(-time.Hour))
 
 	got, err := store.PriorTriggerFailures(ctx, env.ORM, me,
-		[]string{"trg-pf-a", "trg-pf-b", "trg-pf-c", "trg-pf-a", "trg-pf-missing"},
-		[]time.Time{bound, bound, bound, bound.Add(-10 * time.Hour), bound},
+		[]string{"trg-pf-a", "trg-pf-b", "trg-pf-c", "trg-pf-a", "trg-pf-missing", "trg-pf-a"},
+		[]time.Time{bound, bound, bound, bound.Add(-10 * time.Hour), bound, bound.Add(-5 * time.Hour)},
 		24*time.Hour)
 	if err != nil {
 		t.Fatalf("PriorTriggerFailures: %v", err)
 	}
 	want := []*time.Time{
-		ptrTime(bound.Add(-10 * time.Hour)), // the failed run, not the successes, skips or live run after it
-		ptrTime(bound.Add(-6 * time.Hour)),  // failure_handled is a failure; the other user's is not
-		nil,                                 // the old failure is outside the window
-		ptrTime(bound.Add(-20 * time.Hour)), // the same trigger at an earlier bound: strictly before it
-		nil,                                 // no firings at all
+		// The success ends the earlier failure episode.
+		nil,
+		// failure_handled is a failure; the other user's is not.
+		ptrTime(bound.Add(-6 * time.Hour)),
+		// The old failure is outside the window.
+		nil,
+		// The same trigger at an earlier bound: strictly before it.
+		ptrTime(bound.Add(-20 * time.Hour)),
+		// No firings at all.
+		nil,
+		// Before the success, the failed run still counts.
+		ptrTime(bound.Add(-10 * time.Hour)),
 	}
 	if len(got) != len(want) {
 		t.Fatalf("PriorTriggerFailures returned %d results, want %d", len(got), len(want))

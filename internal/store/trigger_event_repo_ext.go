@@ -1101,22 +1101,36 @@ func triggerEventToCore(row *TriggerEvent) (*core.TriggerEvent, error) {
 }
 
 // priorTriggerFailuresSQL is, for each (trigger, since, before) triple, the
-// time of the trigger's newest FAILED firing in [since, before): ?1 the
-// trigger ids, ?2 and ?3 the bounds, in the same order, ?0 the user. A
+// time of the trigger's newest FAILED firing in [since, before) after its
+// latest success before before: ?1 the trigger ids, ?2 and ?3 the bounds,
+// in the same order, ?0 the user. A
 // failed firing is one that could not launch, or one whose run failed or
 // completed only because its failure path ran (resolveRecordedRun's rule); a
 // skipped run, or one still going, is not. ord is the triple's 1-based
 // position, so the same trigger may be asked about at several bounds.
 //
-// Each lateral walks idx_trigger_events_trigger_occurred_id newest first from
-// before down to since, and stops at the first failure: at most the
-// trigger's firings of one window.
+// Each lateral walks idx_trigger_events_trigger_occurred_id newest first
+// within the window. A success before since cannot separate any candidate
+// failure from before, so the success search need not read older history.
 const priorTriggerFailuresSQL = `SELECT t.ord::integer AS ord, f.occurred_at
 FROM unnest(?1::text[], ?2::timestamptz[], ?3::timestamptz[]) WITH ORDINALITY AS t(id, since, before, ord)
+LEFT JOIN LATERAL (
+	SELECT s.occurred_at, s.id FROM trigger_events s
+	WHERE s.trigger_id = t.id AND s.user_id = ?0::text
+		AND s.occurred_at >= t.since AND s.occurred_at < t.before
+		AND s.outcome = 'launched'
+		AND ((s.run_status = 'completed' AND (s.run_outcome IS NULL OR s.run_outcome NOT IN ('failure_handled', 'skipped')))
+			OR (s.run_status IS NULL AND (
+				SELECT sc.display_state FROM chats_with_activity sc
+				WHERE sc.id = s.chat_id AND sc.user_id = s.user_id) = 5))
+	ORDER BY s.occurred_at DESC, s.id DESC
+	LIMIT 1
+) ls ON true
 CROSS JOIN LATERAL (
 	SELECT x.occurred_at FROM trigger_events x
 	WHERE x.trigger_id = t.id AND x.user_id = ?0::text
 		AND x.occurred_at >= t.since AND x.occurred_at < t.before
+		AND (x.occurred_at, x.id) > (COALESCE(ls.occurred_at, '-infinity'::timestamptz), COALESCE(ls.id, ''))
 		AND (x.outcome = 'failed'
 			OR (x.outcome = 'launched' AND (x.run_status = 'failed' OR x.run_outcome = 'failure_handled')))
 	ORDER BY x.occurred_at DESC, x.id DESC
@@ -1129,9 +1143,10 @@ func PriorTriggerFailuresSQL() string { return priorTriggerFailuresSQL }
 
 // PriorTriggerFailures returns, for each triggerIDs[i], when its newest failed
 // firing in the window before before[i] occurred: in [before[i]-window,
-// before[i]), nil when it had none. The result is aligned with triggerIDs; a
-// trigger may be named more than once, at different bounds. It is what tells
-// a failure that begins a new streak after a quiet spell from one more of an
+// before[i]) and after its latest success, nil when it had none. The result
+// is aligned with triggerIDs; a trigger may be named more than once, at
+// different bounds. It is what tells a new streak after recovery or a quiet
+// spell from one more failure of an
 // automation that keeps failing (triggers.Habitual).
 func PriorTriggerFailures(ctx context.Context, db orm.Context, userID string, triggerIDs []string, before []time.Time, window time.Duration) ([]*time.Time, error) {
 	if userID == "" {

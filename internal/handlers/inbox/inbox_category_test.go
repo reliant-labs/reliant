@@ -185,10 +185,9 @@ func (f *inboxFixture) listCategories(t *testing.T, categories ...reliantv1.Inbo
 	return resp.Msg
 }
 
-// An automation that flaps — fails, succeeds, fails again within a day — is
-// one Inbox item for the period it is unhealthy: the first streak is news,
-// a later one is habitual and listed only with "every automation failure".
-// A failure after a quiet day is news again.
+// An automation that flaps — fails, succeeds, fails again within a day —
+// starts a new unhealthy period after recovery. Each period is news, even
+// when the earlier failure is still within the quiet window.
 func TestListInbox_FlappingAutomationIsOneItemPerUnhealthyPeriod(t *testing.T) {
 	f := newInboxFixture(t)
 	f.trigger(t, "trg-flap")
@@ -211,20 +210,23 @@ func TestListInbox_FlappingAutomationIsOneItemPerUnhealthyPeriod(t *testing.T) {
 
 	f.runFiring(t, "flap-3", "trg-flap", base.Add(2*time.Hour), true)
 	resp = f.list(t, nil)
-	assert.Empty(t, failing(resp), "a streak a day after the last failure is habitual: not listed by default")
-	assert.EqualValues(t, 1, resp.HabitualCount)
+	recovered := failing(resp)
+	require.Len(t, recovered, 1, "a failure after recovery is listed by default")
+	assert.Equal(t, "automation_failing:flap-3", recovered[0].ItemId)
+	assert.False(t, recovered[0].Habitual)
+	assert.Zero(t, resp.HabitualCount)
 
 	f.setFilter(t, showEveryAutomationFailureKey, true)
 	resp = f.list(t, nil)
 	again := failing(resp)
-	require.Len(t, again, 1, "every automation failure lists the habitual streak")
+	require.Len(t, again, 1, "every automation failure also lists the new streak")
 	assert.Equal(t, "automation_failing:flap-3", again[0].ItemId, "the item id is unchanged: a dismissal still holds")
-	assert.True(t, again[0].Habitual)
+	assert.False(t, again[0].Habitual)
 	assert.Zero(t, resp.HabitualCount)
 
 	all := failing(f.listCategories(t, reliantv1.InboxCategory_INBOX_CATEGORY_AUTOMATION))
 	require.Len(t, all, 1)
-	assert.True(t, all[0].Habitual)
+	assert.False(t, all[0].Habitual)
 }
 
 func TestListInbox_FailureAfterAQuietDayIsNews(t *testing.T) {

@@ -11,9 +11,9 @@ import (
 	"github.com/reliant-labs/reliant/internal/triggers"
 )
 
-// An automation that flaps — fails, succeeds, fails again — pages once per
-// unhealthy period: a streak that begins within triggers.QuietWindow of the
-// automation's last failure does not notify; one after a quiet window does.
+// An automation that flaps — fails, succeeds, fails again — pages for each
+// new unhealthy period. Recovery ends the earlier episode even when its
+// failure is still within triggers.QuietWindow.
 func TestWorkflowStatus_FlappingAutomationNotifiesOncePerQuietWindow(t *testing.T) {
 	t.Parallel()
 
@@ -22,7 +22,7 @@ func TestWorkflowStatus_FlappingAutomationNotifiesOncePerQuietWindow(t *testing.
 		gap        time.Duration // between the success and the next failure
 		wantUnread bool
 	}{
-		{"a failure an hour after a success that followed a failure", 0, false},
+		{"a failure an hour after a success that followed a failure", 0, true},
 		{"a failure after a quiet day", triggers.QuietWindow, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
