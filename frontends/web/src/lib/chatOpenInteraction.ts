@@ -30,6 +30,7 @@ import {
   type InteractionAttributes,
 } from "@reliantlabs/forge-web-runtime";
 import type { ChatSyncKind } from "@reliantlabs/sdk/client";
+import { context, trace } from "@opentelemetry/api";
 import { TRANSCRIPT_TOOL_BODIES } from "./toolBodies";
 
 export const CHAT_OPEN_INTERACTION = "chat.open";
@@ -76,6 +77,18 @@ function subscribe(listener: () => void): () => void {
 function openFor(chatId: string | null | undefined): Interaction | undefined {
   if (!chatId || current?.chatId !== chatId || current.op.ended) return undefined;
   return current.op;
+}
+
+/** Capture the actual recording open, not a later open of the same chat. */
+export function recordingChatOpen(chatId: string): Interaction | undefined {
+  const op = openFor(chatId);
+  if (!op) return;
+  // With telemetry off the runtime may still synthesize a propagation-only
+  // trace context. Do not install diagnostics just because it has a trace ID.
+  return op.run(() => {
+    const span = trace.getSpan(context.active());
+    return span?.isRecording() && span.spanContext().traceId === op.traceId ? op : undefined;
+  });
 }
 
 /**

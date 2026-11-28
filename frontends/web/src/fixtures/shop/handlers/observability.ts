@@ -58,6 +58,7 @@ import {
 } from "@/gen/controlplane/services/observability/v1/observability_pb";
 import { DeclaredSpecGap as WireDeclaredSpecGap, WorkloadKind as WireWorkloadKind } from "@/gen/controlplane/controlplane/v1/deploy_pb";
 import type { ReleaseFindingCode, ReleaseHealth, ServiceWindowStats } from "@/services/controlPlane/observability/deliveryTypes";
+import { WIRE_FINDING_A11Y_REGRESSED, WIRE_FINDING_SEO_REGRESSED } from "@/services/controlPlane/observability/deliveryApi";
 import type { GraphEdge, GraphNode, GraphQuality } from "@/services/controlPlane/observability/graphTypes";
 import type { MetricCatalogEntry, MetricKind } from "@/services/controlPlane/observability/metricsTypes";
 import type { ObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
@@ -839,6 +840,9 @@ const WIRE_FINDING: Record<ReleaseFindingCode, WireFindingCode> = {
   regressed_issue: WireFindingCode.REGRESSED_ISSUE,
   alert_firing: WireFindingCode.ALERT_FIRING,
   workload_restarts: WireFindingCode.WORKLOAD_RESTARTS,
+  // Not in the vendored enum yet (deliveryApi.ts WIRE_FINDING_SEO_REGRESSED): sent by number.
+  seo_regressed: WIRE_FINDING_SEO_REGRESSED as WireFindingCode,
+  a11y_regressed: WIRE_FINDING_A11Y_REGRESSED as WireFindingCode,
 };
 
 const wireStats = (s: ServiceWindowStats | null) => (s ? { requests: int64(s.requests), errorRate: s.errorRate, p50Ms: s.p50Ms, p95Ms: s.p95Ms, p99Ms: s.p99Ms } : undefined);

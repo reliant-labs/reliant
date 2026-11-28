@@ -225,7 +225,6 @@ export const ORG_SCOPED_QUERY_ROOTS: readonly string[] = [
   // sign-in service, its users).
   "identity",
   "controlplane.v1.IdentityService",
-  "dashboards",
   "deploy-usage",
   // Generated DeployService reads (hooks/controlplane): usage rows, the collection policy's environments.
   "controlplane.v1.DeployService",
@@ -251,6 +250,11 @@ export const ORG_SCOPED_QUERY_ROOTS: readonly string[] = [
   // profiles, signals, filter values, metrics, workloads, release health and
   // each frontend's replay switch, every one scoped by its request's org.
   "controlplane.v1.ObservabilityService",
+  // Every DashboardService read on its generated keys: the index, templates,
+  // one dashboard and its versions, each scoped by its request's org.
+  "controlplane.v1.DashboardService",
+  // Legacy dashboard keys may still be restored from a persisted cache.
+  "dashboards",
   // IssuesService's reads on generated keys: the inbox (scoped by its
   // request's org), an issue, its events and its timeline.
   "controlplane.v1.IssuesService",

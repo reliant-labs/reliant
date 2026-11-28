@@ -30,6 +30,7 @@ const markChatOpen = vi.fn();
 vi.mock("../../lib/chatOpenInteraction", () => ({
   markChatOpen: (...args: unknown[]) => markChatOpen(...args),
   noteChatOpenSync: vi.fn(),
+  recordingChatOpen: vi.fn(),
 }));
 
 import { requestSentKey } from "../transport";

@@ -246,6 +246,7 @@ func (h *automationHarness) markReady(t *testing.T) {
 // with no user JWT, wakes the suspended daemon its trigger names, once, with
 // the stored token, and the tool call then runs.
 func TestUnattendedFireWithoutJWTResumesPinnedDaemonOnce(t *testing.T) {
+	t.Parallel()
 	for _, kind := range []core.TriggerEventKind{
 		core.TriggerEventKindSchedule,
 		core.TriggerEventKindWebhook,
@@ -289,6 +290,7 @@ func TestUnattendedFireWithoutJWTResumesPinnedDaemonOnce(t *testing.T) {
 // — pinned to a daemon must not borrow the automation token: only runs a
 // stored trigger launched may.
 func TestAttendedRunWithoutJWTDoesNotUseAutomationToken(t *testing.T) {
+	t.Parallel()
 	for _, kind := range []core.TriggerEventKind{
 		core.TriggerEventKindChatStart,
 		core.TriggerEventKindAgentStartRun,
@@ -307,6 +309,7 @@ func TestAttendedRunWithoutJWTDoesNotUseAutomationToken(t *testing.T) {
 // Widening the token to every unattended kind must not reach a run with no
 // machine: such a run never resolves or wakes a daemon, token or not.
 func TestNoMachineUnattendedRunNeverWakes(t *testing.T) {
+	t.Parallel()
 	for _, kind := range []core.TriggerEventKind{
 		core.TriggerEventKindSchedule,
 		core.TriggerEventKindWebhook,

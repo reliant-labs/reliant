@@ -15,7 +15,15 @@ import (
 	"testing"
 
 	"github.com/reliant-labs/reliant/internal/credsandbox"
+	"github.com/reliant-labs/reliant/internal/worktreereclaim/openat2test"
 )
+
+// requireOpenat2 skips a test that needs openat2 or renameat2 on a host whose
+// kernel or sandbox answers ENOSYS for them (openat2test.Require).
+func requireOpenat2(t testing.TB) {
+	t.Helper()
+	openat2test.Require(t)
+}
 
 // newFixture's repos are built once per test binary and copied per test.
 //

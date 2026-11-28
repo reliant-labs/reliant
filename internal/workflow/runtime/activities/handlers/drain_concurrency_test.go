@@ -72,6 +72,7 @@ func (s *coordinatedDrainStore) MarkAgentMessagesDelivered(ctx context.Context, 
 // no attempt conflicts: counting retries, not timing them, keeps this exact on
 // a loaded host.
 func TestDrainAgentMessages_ConcurrentDrainsInOneChatDoNotConflict(t *testing.T) {
+	t.Parallel()
 	for _, serializable := range []bool{false, true} {
 		t.Run(fmt.Sprintf("serializable=%t", serializable), func(t *testing.T) {
 			t.Parallel()

@@ -81,6 +81,9 @@ const (
 	// AccessTokenServiceExchangeTokenProcedure is the fully-qualified name of the AccessTokenService's
 	// ExchangeToken RPC.
 	AccessTokenServiceExchangeTokenProcedure = "/controlplane.v1.AccessTokenService/ExchangeToken"
+	// AccessTokenServiceExchangeFederatedTokenProcedure is the fully-qualified name of the
+	// AccessTokenService's ExchangeFederatedToken RPC.
+	AccessTokenServiceExchangeFederatedTokenProcedure = "/controlplane.v1.AccessTokenService/ExchangeFederatedToken"
 	// AccessTokenServiceListOrgMemberGrantsProcedure is the fully-qualified name of the
 	// AccessTokenService's ListOrgMemberGrants RPC.
 	AccessTokenServiceListOrgMemberGrantsProcedure = "/controlplane.v1.AccessTokenService/ListOrgMemberGrants"
@@ -140,6 +143,25 @@ type AccessTokenServiceClient interface {
 	// outlives the caller, and inherits its user, org and resource binding.
 	// All org capabilities may ride a daemon binding, including cluster:manage.
 	ExchangeToken(context.Context, *connect.Request[v1.ExchangeTokenRequest]) (*connect.Response[v1.ExchangeTokenResponse], error)
+	// ExchangeFederatedToken trades a CI provider's ID token for a short-lived
+	// ORG automation token, so an upload from CI needs no stored secret.
+	//
+	// UNAUTHENTICATED: the ID token in the request is the credential. For
+	// GitHub Actions it must be signed by GitHub, carry this control plane's
+	// URL as its audience, come from an allowed event, and name a repository
+	// whose owner has the Reliant GitHub App installed AND linked to an
+	// organization (Organization settings → GitHub). That link names the org
+	// the token is minted into; nothing in the request does.
+	//
+	// The token carries only federatable scopes: tests:write for any admitted
+	// run, and sbom:write only for a job on a protected ref (ref_protected),
+	// never one run by workflow_run. It acts as no one, lives at most the
+	// configured TTL (15 minutes), and each ID token
+	// is exchanged at most once (oidc_token_replayed). Unlinking the
+	// installation revokes the live tokens it authorized.
+	//
+	// forge:custom
+	ExchangeFederatedToken(context.Context, *connect.Request[v1.ExchangeFederatedTokenRequest]) (*connect.Response[v1.ExchangeFederatedTokenResponse], error)
 	// ListOrgMemberGrants lists every member of the caller's org with the
 	// permissions they hold. Caller: a human session holding token:read.
 	ListOrgMemberGrants(context.Context, *connect.Request[v1.ListOrgMemberGrantsRequest]) (*connect.Response[v1.ListOrgMemberGrantsResponse], error)
@@ -231,6 +253,12 @@ func NewAccessTokenServiceClient(httpClient connect.HTTPClient, baseURL string, 
 			connect.WithSchema(accessTokenServiceMethods.ByName("ExchangeToken")),
 			connect.WithClientOptions(opts...),
 		),
+		exchangeFederatedToken: connect.NewClient[v1.ExchangeFederatedTokenRequest, v1.ExchangeFederatedTokenResponse](
+			httpClient,
+			baseURL+AccessTokenServiceExchangeFederatedTokenProcedure,
+			connect.WithSchema(accessTokenServiceMethods.ByName("ExchangeFederatedToken")),
+			connect.WithClientOptions(opts...),
+		),
 		listOrgMemberGrants: connect.NewClient[v1.ListOrgMemberGrantsRequest, v1.ListOrgMemberGrantsResponse](
 			httpClient,
 			baseURL+AccessTokenServiceListOrgMemberGrantsProcedure,
@@ -260,6 +288,7 @@ type accessTokenServiceClient struct {
 	listMyCLILogins        *connect.Client[v1.ListMyCLILoginsRequest, v1.ListMyCLILoginsResponse]
 	revokeMyCLILogin       *connect.Client[v1.RevokeMyCLILoginRequest, v1.RevokeMyCLILoginResponse]
 	exchangeToken          *connect.Client[v1.ExchangeTokenRequest, v1.ExchangeTokenResponse]
+	exchangeFederatedToken *connect.Client[v1.ExchangeFederatedTokenRequest, v1.ExchangeFederatedTokenResponse]
 	listOrgMemberGrants    *connect.Client[v1.ListOrgMemberGrantsRequest, v1.ListOrgMemberGrantsResponse]
 	updateOrgMemberGrants  *connect.Client[v1.UpdateOrgMemberGrantsRequest, v1.UpdateOrgMemberGrantsResponse]
 }
@@ -317,6 +346,11 @@ func (c *accessTokenServiceClient) RevokeMyCLILogin(ctx context.Context, req *co
 // ExchangeToken calls controlplane.v1.AccessTokenService.ExchangeToken.
 func (c *accessTokenServiceClient) ExchangeToken(ctx context.Context, req *connect.Request[v1.ExchangeTokenRequest]) (*connect.Response[v1.ExchangeTokenResponse], error) {
 	return c.exchangeToken.CallUnary(ctx, req)
+}
+
+// ExchangeFederatedToken calls controlplane.v1.AccessTokenService.ExchangeFederatedToken.
+func (c *accessTokenServiceClient) ExchangeFederatedToken(ctx context.Context, req *connect.Request[v1.ExchangeFederatedTokenRequest]) (*connect.Response[v1.ExchangeFederatedTokenResponse], error) {
+	return c.exchangeFederatedToken.CallUnary(ctx, req)
 }
 
 // ListOrgMemberGrants calls controlplane.v1.AccessTokenService.ListOrgMemberGrants.
@@ -380,6 +414,25 @@ type AccessTokenServiceHandler interface {
 	// outlives the caller, and inherits its user, org and resource binding.
 	// All org capabilities may ride a daemon binding, including cluster:manage.
 	ExchangeToken(context.Context, *connect.Request[v1.ExchangeTokenRequest]) (*connect.Response[v1.ExchangeTokenResponse], error)
+	// ExchangeFederatedToken trades a CI provider's ID token for a short-lived
+	// ORG automation token, so an upload from CI needs no stored secret.
+	//
+	// UNAUTHENTICATED: the ID token in the request is the credential. For
+	// GitHub Actions it must be signed by GitHub, carry this control plane's
+	// URL as its audience, come from an allowed event, and name a repository
+	// whose owner has the Reliant GitHub App installed AND linked to an
+	// organization (Organization settings → GitHub). That link names the org
+	// the token is minted into; nothing in the request does.
+	//
+	// The token carries only federatable scopes: tests:write for any admitted
+	// run, and sbom:write only for a job on a protected ref (ref_protected),
+	// never one run by workflow_run. It acts as no one, lives at most the
+	// configured TTL (15 minutes), and each ID token
+	// is exchanged at most once (oidc_token_replayed). Unlinking the
+	// installation revokes the live tokens it authorized.
+	//
+	// forge:custom
+	ExchangeFederatedToken(context.Context, *connect.Request[v1.ExchangeFederatedTokenRequest]) (*connect.Response[v1.ExchangeFederatedTokenResponse], error)
 	// ListOrgMemberGrants lists every member of the caller's org with the
 	// permissions they hold. Caller: a human session holding token:read.
 	ListOrgMemberGrants(context.Context, *connect.Request[v1.ListOrgMemberGrantsRequest]) (*connect.Response[v1.ListOrgMemberGrantsResponse], error)
@@ -467,6 +520,12 @@ func NewAccessTokenServiceHandler(svc AccessTokenServiceHandler, opts ...connect
 		connect.WithSchema(accessTokenServiceMethods.ByName("ExchangeToken")),
 		connect.WithHandlerOptions(opts...),
 	)
+	accessTokenServiceExchangeFederatedTokenHandler := connect.NewUnaryHandler(
+		AccessTokenServiceExchangeFederatedTokenProcedure,
+		svc.ExchangeFederatedToken,
+		connect.WithSchema(accessTokenServiceMethods.ByName("ExchangeFederatedToken")),
+		connect.WithHandlerOptions(opts...),
+	)
 	accessTokenServiceListOrgMemberGrantsHandler := connect.NewUnaryHandler(
 		AccessTokenServiceListOrgMemberGrantsProcedure,
 		svc.ListOrgMemberGrants,
@@ -504,6 +563,8 @@ func NewAccessTokenServiceHandler(svc AccessTokenServiceHandler, opts ...connect
 			accessTokenServiceRevokeMyCLILoginHandler.ServeHTTP(w, r)
 		case AccessTokenServiceExchangeTokenProcedure:
 			accessTokenServiceExchangeTokenHandler.ServeHTTP(w, r)
+		case AccessTokenServiceExchangeFederatedTokenProcedure:
+			accessTokenServiceExchangeFederatedTokenHandler.ServeHTTP(w, r)
 		case AccessTokenServiceListOrgMemberGrantsProcedure:
 			accessTokenServiceListOrgMemberGrantsHandler.ServeHTTP(w, r)
 		case AccessTokenServiceUpdateOrgMemberGrantsProcedure:
@@ -559,6 +620,10 @@ func (UnimplementedAccessTokenServiceHandler) RevokeMyCLILogin(context.Context, 
 
 func (UnimplementedAccessTokenServiceHandler) ExchangeToken(context.Context, *connect.Request[v1.ExchangeTokenRequest]) (*connect.Response[v1.ExchangeTokenResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.AccessTokenService.ExchangeToken is not implemented"))
+}
+
+func (UnimplementedAccessTokenServiceHandler) ExchangeFederatedToken(context.Context, *connect.Request[v1.ExchangeFederatedTokenRequest]) (*connect.Response[v1.ExchangeFederatedTokenResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.AccessTokenService.ExchangeFederatedToken is not implemented"))
 }
 
 func (UnimplementedAccessTokenServiceHandler) ListOrgMemberGrants(context.Context, *connect.Request[v1.ListOrgMemberGrantsRequest]) (*connect.Response[v1.ListOrgMemberGrantsResponse], error) {

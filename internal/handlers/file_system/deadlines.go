@@ -31,6 +31,10 @@ const (
 	// pickerTimeoutMs bounds the project picker's list and mkdir, which run
 	// while a person waits on a dialog.
 	pickerTimeoutMs int32 = 5_000
+	// machineListTimeoutMs bounds fs.list_machine_dir: one directory read
+	// plus a stat of each entry (up to 5000), anywhere on the machine,
+	// network mounts included.
+	machineListTimeoutMs int32 = 15_000
 )
 
 // fsRPCHeadroom is how much longer a request may live than the daemon
@@ -62,17 +66,18 @@ func FileSystemRPCDeadlines() map[string]time.Duration {
 		return total
 	}
 	return map[string]time.Duration{
-		reliantv1connect.FileSystemServiceGetFileTreeProcedure:        seq(fsCommandTimeoutMs),
-		reliantv1connect.FileSystemServiceGetFileContentProcedure:     seq(homeDirTimeoutMs, fsCommandTimeoutMs),
-		reliantv1connect.FileSystemServiceSaveFileContentProcedure:    seq(fsCommandTimeoutMs),
-		reliantv1connect.FileSystemServiceGetFileMetadataProcedure:    seq(homeDirTimeoutMs, fsCommandTimeoutMs),
-		reliantv1connect.FileSystemServiceGetFilePreviewInfoProcedure: seq(homeDirTimeoutMs, previewInfoTimeoutMs),
-		reliantv1connect.FileSystemServiceGetFilePreviewProcedure:     seq(homeDirTimeoutMs, previewInfoTimeoutMs, wholeFileReadTimeoutMs),
-		reliantv1connect.FileSystemServiceCreateFileOrFolderProcedure: seq(fsCommandTimeoutMs),
-		reliantv1connect.FileSystemServiceDeleteFileOrFolderProcedure: seq(fsCommandTimeoutMs),
-		reliantv1connect.FileSystemServiceCopyFileProcedure:           seq(fsCommandTimeoutMs),
-		reliantv1connect.FileSystemServiceSearchFilesProcedure:        seq(fsScanTimeoutMs),
-		reliantv1connect.FileSystemServiceReplaceInFilesProcedure:     seq(fsScanTimeoutMs),
-		reliantv1connect.FileSystemServiceDownloadFileProcedure:       seq(homeDirTimeoutMs, previewInfoTimeoutMs, wholeFileReadTimeoutMs),
+		reliantv1connect.FileSystemServiceGetFileTreeProcedure:          seq(fsCommandTimeoutMs),
+		reliantv1connect.FileSystemServiceGetFileContentProcedure:       seq(homeDirTimeoutMs, fsCommandTimeoutMs),
+		reliantv1connect.FileSystemServiceSaveFileContentProcedure:      seq(fsCommandTimeoutMs),
+		reliantv1connect.FileSystemServiceGetFileMetadataProcedure:      seq(homeDirTimeoutMs, fsCommandTimeoutMs),
+		reliantv1connect.FileSystemServiceGetFilePreviewInfoProcedure:   seq(homeDirTimeoutMs, previewInfoTimeoutMs),
+		reliantv1connect.FileSystemServiceGetFilePreviewProcedure:       seq(homeDirTimeoutMs, previewInfoTimeoutMs, wholeFileReadTimeoutMs),
+		reliantv1connect.FileSystemServiceCreateFileOrFolderProcedure:   seq(fsCommandTimeoutMs),
+		reliantv1connect.FileSystemServiceDeleteFileOrFolderProcedure:   seq(fsCommandTimeoutMs),
+		reliantv1connect.FileSystemServiceCopyFileProcedure:             seq(fsCommandTimeoutMs),
+		reliantv1connect.FileSystemServiceSearchFilesProcedure:          seq(fsScanTimeoutMs),
+		reliantv1connect.FileSystemServiceReplaceInFilesProcedure:       seq(fsScanTimeoutMs),
+		reliantv1connect.FileSystemServiceDownloadFileProcedure:         seq(homeDirTimeoutMs, previewInfoTimeoutMs, wholeFileReadTimeoutMs),
+		reliantv1connect.FileSystemServiceListMachineDirectoryProcedure: seq(machineListTimeoutMs),
 	}
 }

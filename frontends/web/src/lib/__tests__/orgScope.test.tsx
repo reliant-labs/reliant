@@ -291,7 +291,7 @@ describe("org-scoped product lists", () => {
       queryFn: () => (keyedFetches.push("org-a"), "a"),
     });
     const unkeyed = new QueryObserver(queryClient, {
-      queryKey: forgeCloudKeys.environmentShape(null, "env-prod"),
+      queryKey: forgeCloudKeys.cloudPromotions(null, "env-prod"),
       queryFn: () => (unkeyedFetches.push("transport org"), "s"),
     });
     const unsubscribe = [keyed.subscribe(() => {}), unkeyed.subscribe(() => {})];

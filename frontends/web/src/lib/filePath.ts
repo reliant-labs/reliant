@@ -19,6 +19,10 @@ const FILE_PATH_PATTERNS = {
   // Matches paths starting with / followed by one or more path segments
   absoluteWithLocation: /\/(?:[a-zA-Z0-9_.-]+\/)*[a-zA-Z0-9_.-]+\.[a-zA-Z0-9]+(?::\d+)?(?::\d+)?/g,
   
+  // A path in the machine's home directory (e.g., ~/.reliant/scratch/c1/notes.md),
+  // which agents write their scratch files under.
+  homeWithLocation: /~\/(?:[a-zA-Z0-9_.-]+\/)*[a-zA-Z0-9_.-]+\.[a-zA-Z0-9]+(?::\d+)?(?::\d+)?/g,
+
   // Relative path with ./ or ../ prefix (e.g., ./src/file.ts:123, ../file.ts)
   relativeWithPrefix: /\.{1,2}\/(?:[a-zA-Z0-9_.-]+\/)*[a-zA-Z0-9_.-]+\.[a-zA-Z0-9]+(?::\d+)?(?::\d+)?/g,
 };
@@ -38,6 +42,15 @@ const VALID_EXTENSIONS = new Set([
   'env', 'ini', 'conf', 'config', 'lock',
   // Build/package files
   'makefile', 'dockerfile', 'gitignore', 'editorconfig',
+  // Data, logs and documents agents write (often outside the project, in
+  // ~/.reliant/scratch or /tmp); the viewer previews or downloads them.
+  'csv', 'tsv', 'log', 'jsonl', 'ndjson', 'ipynb', 'parquet', 'patch', 'diff',
+  'xlsx', 'xls', 'docx', 'pptx', 'pdf',
+  // Images, audio and video (previewed inline)
+  'png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp', 'ico',
+  'mp3', 'wav', 'ogg', 'mp4', 'webm', 'mov',
+  // Archives (downloaded)
+  'zip', 'tgz', 'gz',
 ]);
 
 /**
@@ -94,8 +107,11 @@ export function parseFilePath(pathString: string): ParsedFilePath | null {
     return null;
   }
 
-  // Check if absolute path
-  const isAbsolute = path.startsWith('/');
+  // Check if absolute path. "~/…" is absolute too: it names a file in the
+  // home directory of the machine that holds the workspace, which the
+  // server expands there (file_system resolveForView), never a path to join
+  // onto the workspace root.
+  const isAbsolute = path.startsWith('/') || path.startsWith('~/');
 
   return {
     fullPath: trimmed,

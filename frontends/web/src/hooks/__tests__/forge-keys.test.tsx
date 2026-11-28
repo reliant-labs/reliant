@@ -42,7 +42,7 @@ import {
 } from "../forge-queries";
 import { forgeRetry } from "../forge-model";
 import { forgeServiceKeys } from "../forge-service-hooks_gen";
-import { releaseKeys } from "../release-queries";
+import { deployServiceKeys } from "../controlplane/deploy-service-hooks_gen";
 import { useActiveOrgStore } from "@/store/activeOrgStore";
 
 // The org-scoped promote test runs with a control plane, so the org scope
@@ -95,18 +95,18 @@ function wrapper({ children }: { children: ReactNode }) {
 
 /** Control-plane entries a screen would hold, so their invalidation is observable. */
 function seedCloudEntries() {
-  queryClient.setQueryData(forgeCloudKeys.cloudStatus(null, "cp-staging"), { verdict: "converged" });
+  queryClient.setQueryData(deployServiceKeys.getStatus({ environmentId: "cp-staging" }), { verdict: "converged" });
   queryClient.setQueryData(forgeCloudKeys.cloudPromotions(null, "cp-staging"), []);
   queryClient.setQueryData(forgeCloudKeys.liveView(null, "hounders"), { availability: "available", envs: [], detail: "" });
-  queryClient.setQueryData(releaseKeys.list(null, "hounders"), []);
+  queryClient.setQueryData(deployServiceKeys.listReleases({ project: "hounders", limit: 50 }), {});
 }
 
 function cloudInvalidated() {
   return [
-    forgeCloudKeys.cloudStatus(null, "cp-staging"),
+    deployServiceKeys.getStatus({ environmentId: "cp-staging" }),
     forgeCloudKeys.cloudPromotions(null, "cp-staging"),
     forgeCloudKeys.liveView(null, "hounders"),
-    releaseKeys.list(null, "hounders"),
+    deployServiceKeys.listReleases({ project: "hounders", limit: 50 }),
   ].map((key) => queryClient.getQueryState(key)?.isInvalidated ?? false);
 }
 
@@ -155,8 +155,8 @@ describe("ApplyPromote", () => {
     cp.on = true;
     useActiveOrgStore.setState({ userId: "u1", chosenId: "org-a", effectiveId: "org-a", resolved: true, failure: null });
     try {
-      const detailA = releaseKeys.detail("org-a", "hounders", "v1.5.15");
-      const detailB = releaseKeys.detail("org-b", "hounders", "v1.5.15");
+      const detailA = deployServiceKeys.getRelease({ orgId: "org-a", project: "hounders", version: "v1.5.15" });
+      const detailB = deployServiceKeys.getRelease({ orgId: "org-b", project: "hounders", version: "v1.5.15" });
       const liveA = forgeCloudKeys.liveView("org-a", "hounders");
       const liveB = forgeCloudKeys.liveView("org-b", "hounders");
       for (const key of [detailA, detailB, liveA, liveB]) queryClient.setQueryData(key, {});

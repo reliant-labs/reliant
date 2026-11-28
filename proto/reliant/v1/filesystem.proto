@@ -118,6 +118,24 @@ service FileSystemService {
   rpc DownloadFile(DownloadFileRequest) returns (DownloadFileResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
+
+  // ListMachineDirectory lists a directory ANYWHERE on the machine that holds
+  // the workspace a request names, for the Files tab's machine view: the home
+  // directory, the chat's scratch directory, /tmp, "/". The machine is the
+  // one every other rpc of the request reaches (the project, worktree or
+  // chat's), and the caller must own it: a viewer of a shared chat, or any
+  // user who is not the machine's owner, is refused like an outsider.
+  //
+  // It is read-only. Files it lists open through the viewer rpcs
+  // (GetFileContent, GetFilePreview, DownloadFile, ...) by their absolute
+  // path; nothing outside the workspace is written. Listing a credential
+  // store (~/.ssh, ~/.aws, browser profiles, ...) is PermissionDenied, as the
+  // viewer refuses to open one. A machine whose daemon predates this rpc is
+  // FailedPrecondition with the error reason "machine_browse_unsupported";
+  // a path that is a file is FailedPrecondition with "not_a_directory".
+  rpc ListMachineDirectory(ListMachineDirectoryRequest) returns (ListMachineDirectoryResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 }
 
 // ============================================
@@ -512,4 +530,49 @@ message DownloadFileResponse {
   string content_type = 2; // MIME type; "application/octet-stream" when unknown
   string filename = 3; // Base filename to save as
   int64 size = 4; // File size in bytes
+}
+
+// ============================================
+// ListMachineDirectory
+// ============================================
+
+message ListMachineDirectoryRequest {
+  // The workspace whose machine to browse, as on every other rpc of this
+  // service: the project, and the worktree or chat that places it.
+  string project_id = 1;
+  optional string worktree_id = 2;
+  optional string chat_id = 3;
+  // The directory to list: absolute; "~" or "~/..." for the machine's home
+  // directory; relative to the workspace root (".." is the folder the
+  // workspace is in); unset or empty for the home directory.
+  optional string path = 4;
+}
+
+message ListMachineDirectoryResponse {
+  // The directory listed: absolute and cleaned, symlinks not resolved.
+  string path = 1;
+  // Its entries in name order. Hidden entries are included; the client
+  // filters them.
+  repeated MachineDirectoryEntry entries = 2;
+  // The machine's home directory, absolute.
+  string home_dir = 3;
+  // The request's workspace root on that machine, absolute: where the
+  // project or worktree tree is, for a client mapping an absolute path back
+  // into it.
+  string workspace_root = 4;
+  // True when the directory has more entries than one listing returns
+  // (5000); entries is then the first of them.
+  bool truncated = 5;
+}
+
+message MachineDirectoryEntry {
+  string name = 1;
+  // Absolute path on the machine.
+  string path = 2;
+  // A directory, or a symlink to one.
+  bool is_directory = 3;
+  bool is_symlink = 4;
+  int64 size = 5;
+  // RFC 3339; empty when the entry could not be stat'ed (a dangling symlink).
+  string modified = 6;
 }

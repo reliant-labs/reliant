@@ -34,8 +34,7 @@ import type {
   ReleaseRecord,
   ReleaseRollout,
 } from "@/services/forge/releases";
-import type { DeployRun } from "@/services/forge/deployAttempts";
-import type { ReleasesApi } from "@/services/forge/ReleasesApiContext";
+import type { DeployRun, DeployRunDetail } from "@/services/forge/deployAttempts";
 
 import type { ReleaseEnv } from "../releaseModel";
 
@@ -537,6 +536,22 @@ export const DEPLOY_RUN_LOG = "[build] api: step 7/12 RUN go build ./cmd/api\n# 
 
 // ── The fake API ────────────────────────────────────────────────────────────
 
+/**
+ * The ledger's reads as the pages' view models. releaseFixtureTransport.tsx
+ * serves them as DeployService over a transport (ReleasesFixtureScope).
+ */
+export interface ReleasesFixtureApi {
+  listReleases: (project: string) => Promise<ReleaseRecord[]>;
+  getRelease: (project: string, version: string) => Promise<{ release: ReleaseRecord; currentEnvironmentIds: string[] } | null>;
+  compareReleases: (req: { project: string; from: string; to: string; environmentId?: string; workload?: string }) => Promise<ReleaseComparison>;
+  listPromotions: (environmentId: string) => Promise<ReleasePromotion[]>;
+  getRollout: (environmentId: string, promotionId: string) => Promise<ReleaseRollout | null>;
+  getBundle: (environmentId: string, bundleId: string, digest: string) => Promise<ReleaseBundle | null>;
+  /** The project's deploys (one per `forge env deploy` run), and one with its log. */
+  listDeployRuns: (project: string, env?: string) => Promise<DeployRun[]>;
+  getDeployRun: (id: string) => Promise<DeployRunDetail>;
+}
+
 export interface ReleasesFixtureOptions {
   /** "empty": nothing was ever cut. "error": every read fails. "loading": every read hangs. */
   state?: "data" | "empty" | "error" | "loading";
@@ -548,7 +563,7 @@ export interface ReleasesFixtureOptions {
   forgeApplied?: ForgeAppliedSlot[];
 }
 
-export function createReleasesFixtureApi(options: ReleasesFixtureOptions = {}): ReleasesApi {
+export function createReleasesFixtureApi(options: ReleasesFixtureOptions = {}): ReleasesFixtureApi {
   const state = options.state ?? "data";
   const answer = async <T,>(value: () => T): Promise<T> => {
     if (state === "loading") return new Promise<T>(() => {});

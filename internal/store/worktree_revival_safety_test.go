@@ -2,6 +2,7 @@ package store_test
 
 import (
 	"context"
+	"strconv"
 	"testing"
 	"time"
 
@@ -10,6 +11,64 @@ import (
 	"github.com/reliant-labs/reliant/internal/store/storetest"
 	"github.com/stretchr/testify/require"
 )
+
+// A worktree archived by hand (the worktree tool's delete) while the sub-agent
+// bound to it sat idle comes back for that sub-agent while its directory was
+// left in place (obs 0cea454a), and never when the machine removed or forgot
+// it, a clean-up is running, or work was saved. ReviveArchivedWorktree itself
+// still refuses a hand-made archive.
+func TestBoundThreadRevivesAHandMadeArchiveOnlyWhileItsDirectoryIsInPlace(t *testing.T) {
+	t.Parallel()
+	until := time.Now().Add(time.Hour)
+	refused := map[string]func(m *core.CleanupMetadata){
+		"directory removed": func(m *core.CleanupMetadata) { m.DirectoryDeleted = true },
+		"forgotten":         func(m *core.CleanupMetadata) { m.Forgotten, m.DirectoryDeleted = true, true },
+		"cleaning":          func(m *core.CleanupMetadata) { m.Cleaning, m.CleaningUntil = true, &until },
+		"legacy snapshot":   func(m *core.CleanupMetadata) { m.SnapshotRefs = []string{"saved"} },
+	}
+	for _, kind := range []string{"in place", "directory removed", "forgotten", "cleaning", "legacy snapshot", "catalog"} {
+		t.Run(kind, func(t *testing.T) {
+			env := storetest.New(t)
+			ctx := context.Background()
+			c := landedFixture(t, env, "by-hand")
+			id := *c.WorktreeID
+			require.NoError(t, env.Repo.ArchiveWorktree(ctx, id))
+			require.NoError(t, env.Repo.MergeWorktreeCleanupMetadata(ctx, id, func(m *core.CleanupMetadata, _ bool) bool {
+				m.HeldReason = "data"
+				if f := refused[kind]; f != nil {
+					f(m)
+				}
+				return true
+			}))
+			if kind == "catalog" {
+				mustExecConv(t, env, `INSERT INTO worktree_recoveries (id,owner_user_id,source_worktree_id,project_id,daemon_id,capture_id,fence,activity_generation,observation_id,manifest_digest,idempotency_key,phase) VALUES ('capture','test-user',$1,'test-project','daemon','capture-id','fence',0,'obs','digest','once','capturing')`, id)
+			}
+			before, err := env.Repo.GetWorktree(ctx, id)
+			require.NoError(t, err)
+			require.NotNil(t, before.DeletedAt)
+
+			_, err = store.ReviveArchivedWorktree(ctx, env.ORM, id)
+			require.Error(t, err, "a chat's own revival still takes back only the automatic archives")
+
+			fence, err := store.ReviveArchivedWorktreeForBoundThread(ctx, env.ORM, id)
+			after, gerr := env.Repo.GetWorktree(ctx, id)
+			require.NoError(t, gerr)
+			if kind != "in place" {
+				require.Error(t, err)
+				require.Empty(t, fence)
+				require.Equal(t, before.DeletedAt, after.DeletedAt)
+				require.Equal(t, before.CleanupMetadata, after.CleanupMetadata)
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, strconv.FormatInt(before.DeletedAt.UnixNano(), 10), fence)
+			require.Nil(t, after.DeletedAt, "live again")
+			require.NotNil(t, after.CleanupMetadata)
+			require.Equal(t, fence, after.CleanupMetadata.RetireFence, "the daemon retires the archive's fence before the batch runs")
+			require.Empty(t, after.CleanupMetadata.HeldReason)
+		})
+	}
+}
 
 func TestRevivalAtomicallyRefusesSavedCatalogAndNonLandedArchives(t *testing.T) {
 	t.Parallel()

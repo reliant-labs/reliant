@@ -194,7 +194,7 @@ export type ScenarioRpcHandlers =
   }
 
   // forge:section reliant.v1.FileSystemService
-  // forge:hash=5b1c3442260477ac73abf7430ee1db97928f53fd6ac986f45001c34deb3e0eec
+  // forge:hash=234e1bebb5dbb0f6a9e1d64c496d4e1801ff749378fe7e96c278081ae5b021ce
   & {
     "reliant.v1.FileSystemService/GetFileTree"?: (req: import("@/gen/reliant/v1/filesystem_pb").GetFileTreeRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/filesystem_pb").GetFileTreeResponseSchema>>;
     "reliant.v1.FileSystemService/GetFileContent"?: (req: import("@/gen/reliant/v1/filesystem_pb").GetFileContentRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/filesystem_pb").GetFileContentResponseSchema>>;
@@ -210,6 +210,7 @@ export type ScenarioRpcHandlers =
     "reliant.v1.FileSystemService/ListDirectory"?: (req: import("@/gen/reliant/v1/filesystem_pb").ListDirectoryRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/filesystem_pb").ListDirectoryResponseSchema>>;
     "reliant.v1.FileSystemService/CreateDirectory"?: (req: import("@/gen/reliant/v1/filesystem_pb").CreateDirectoryRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/filesystem_pb").CreateDirectoryResponseSchema>>;
     "reliant.v1.FileSystemService/DownloadFile"?: (req: import("@/gen/reliant/v1/filesystem_pb").DownloadFileRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/filesystem_pb").DownloadFileResponseSchema>>;
+    "reliant.v1.FileSystemService/ListMachineDirectory"?: (req: import("@/gen/reliant/v1/filesystem_pb").ListMachineDirectoryRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/filesystem_pb").ListMachineDirectoryResponseSchema>>;
   }
 
   // forge:section reliant.v1.ForgeService

@@ -245,6 +245,7 @@ var backgroundCommands = map[string]bool{
 	"fs.get_tree":         true,
 	"fs.glob":             true,
 	"fs.list_dir":         true,
+	"fs.list_machine_dir": true,
 	"fs.pdf_page_count":   true,
 	"fs.preview_info":     true,
 	"fs.read_binary_file": true,

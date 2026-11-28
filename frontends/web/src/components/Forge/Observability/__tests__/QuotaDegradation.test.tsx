@@ -38,7 +38,7 @@ import { createFixtureApi } from "../__fixtures__/fixtureApi";
 import { OverviewHome } from "../../Workloads/OverviewHome";
 import { STRIP_ENVS, WORKLOADS_PROJECT, createRepoMetaFixture } from "../../Workloads/__fixtures__/workloadFixtures";
 import { createReleasesFixtureApi } from "../../Releases/__fixtures__/releaseFixtures";
-import { ReleasesApiProvider } from "@/services/forge/ReleasesApiContext";
+import { ledgerTransport } from "../../Releases/__fixtures__/releaseFixtureTransport";
 import { RepoMetaProvider } from "@/services/forge/RepoMetaContext";
 import { ObsAsOf, ObsQuotaBanner } from "../ObsStates";
 
@@ -74,7 +74,7 @@ interface Rig {
   wrapper: ({ children }: { children: ReactNode }) => ReactNode;
 }
 
-function rig(random = () => 0.5): Rig {
+function rig(random = () => 0.5, withReleases = false): Rig {
   const client = createTestQueryClient();
   const calls: Rig["calls"] = [];
   const mode: Rig["mode"] = { value: "ok" };
@@ -99,7 +99,9 @@ function rig(random = () => 0.5): Rig {
   const controlPlane = createRouterTransport((router) => router.service(ObservabilityService, impl as never), {
     transport: { interceptors: [obsReadInterceptor()] },
   });
-  const scope = createTransportScope({ id: "quota-degradation", transport: controlPlane, queryClient: client });
+  // Compose the fixture handlers before binding the client to its one transport.
+  const transport = withReleases ? ledgerTransport(createReleasesFixtureApi(), controlPlane) : controlPlane;
+  const scope = createTransportScope({ id: "quota-degradation", transport, queryClient: client });
   const wrapper = ({ children }: { children: ReactNode }) => (
     <TransportScopeProvider scope={scope}>
       <ObservabilityApiProvider api={api}>
@@ -283,15 +285,13 @@ describe("when the allowance runs out", () => {
   });
 
   it("retains the Services list's request figures and error-log links with an as-of badge during the pause", async () => {
-    const r = rig();
+    const r = rig(() => 0.5, true);
     render(
-      <ReleasesApiProvider api={createReleasesFixtureApi()}>
-        <RepoMetaProvider api={createRepoMetaFixture()}>
-          <OverviewHome project={WORKLOADS_PROJECT} env="prod" envs={STRIP_ENVS} envsLoading={false}
-            search={{ range: "1h" }} onSearch={vi.fn()} navigateTo={vi.fn()}
-            hrefs={{ workload: (name) => `/workloads/${name}`, release: (version) => `/releases/${version}`, releases: "/releases", alerts: "/alerts", scoped: (env) => `/overview?env=${env}` }} />
-        </RepoMetaProvider>
-      </ReleasesApiProvider>,
+      <RepoMetaProvider api={createRepoMetaFixture()}>
+        <OverviewHome project={WORKLOADS_PROJECT} env="prod" envs={STRIP_ENVS} envsLoading={false}
+          search={{ range: "1h" }} onSearch={vi.fn()} navigateTo={vi.fn()}
+          hrefs={{ workload: (name) => `/workloads/${name}`, release: (version) => `/releases/${version}`, releases: "/releases", alerts: "/alerts", scoped: (env) => `/overview?env=${env}` }} />
+      </RepoMetaProvider>,
       { wrapper: r.wrapper }
     );
     await flush();

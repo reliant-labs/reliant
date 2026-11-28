@@ -2,22 +2,26 @@
 import { afterEach, beforeEach, describe, it, expect, vi } from "vitest";
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import type { RosterEnv } from "@/services/forge/roster";
-import { SecretsMatrix } from "../SecretsMatrix";
 import { setTransport } from "@/lib/connect";
 import { mockTransport } from "@/lib/test-utils";
+import type { RosterEnv } from "@/services/forge/roster";
+import { environmentShapeHandlers, type ShapeLike } from "@/test/deployReads";
+import { SecretsMatrix } from "../SecretsMatrix";
 import { secretStoreHandlers } from "@/test/secretStoreTransport";
 const store = vi.hoisted(() => ({ list: vi.fn(), history: vi.fn(), reveal: vi.fn() }));
 // Each environment's declared shape, served per environment (GetEnvironmentShape).
 const shapes = vi.hoisted(() => new Map<string, unknown>());
 vi.mock("@/services/controlPlane/config", () => ({ CONTROL_PLANE_API_URL: "https://cp.test", hasControlPlane: true }));
-// SecretStoreService answers at the transport (the generated hooks' seam).
-beforeEach(() => setTransport(mockTransport(secretStoreHandlers({ listSecrets: (id) => store.list(id), getSecretVersions: (id, name) => store.history(id, name) }))));
-afterEach(() => setTransport(null));
-vi.mock("@/services/forge/live", async (original) => ({
-  ...await original<typeof import("@/services/forge/live")>(),
-  getEnvironmentShape: async (_transport: unknown, id: string) => shapes.get(id) ?? null,
+vi.mock("@/services/forge/secretStore", async (original) => ({
+  ...await original<typeof import("@/services/forge/secretStore")>(),
+  revealSecret: store.reveal,
 }));
+// The declaration and SecretStoreService answer at the generated hooks' transport seam.
+beforeEach(() => setTransport(mockTransport({
+  ...environmentShapeHandlers((id) => (shapes.get(id) as ShapeLike | undefined) ?? null),
+  ...secretStoreHandlers({ listSecrets: (id) => store.list(id), getSecretVersions: (id, name) => store.history(id, name) }),
+})));
+afterEach(() => setTransport(null));
 vi.mock("@tanstack/react-router", async (original) => ({ ...await original<typeof import("@tanstack/react-router")>(), useNavigate: () => vi.fn() }));
 const env = (name: string, provider = "hosted"): RosterEnv => {
   shapes.set(name, { kind: "persistent", workloads: [], domains: [], clusters: [], secrets: [{ name: "API_KEY", provider, declaredBy: [] }] });

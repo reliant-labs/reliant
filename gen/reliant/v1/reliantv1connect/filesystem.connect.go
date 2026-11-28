@@ -77,6 +77,9 @@ const (
 	// FileSystemServiceDownloadFileProcedure is the fully-qualified name of the FileSystemService's
 	// DownloadFile RPC.
 	FileSystemServiceDownloadFileProcedure = "/reliant.v1.FileSystemService/DownloadFile"
+	// FileSystemServiceListMachineDirectoryProcedure is the fully-qualified name of the
+	// FileSystemService's ListMachineDirectory RPC.
+	FileSystemServiceListMachineDirectoryProcedure = "/reliant.v1.FileSystemService/ListMachineDirectory"
 )
 
 // FileSystemServiceClient is a client for the reliant.v1.FileSystemService service.
@@ -117,6 +120,21 @@ type FileSystemServiceClient interface {
 	// and refuses a file over 25 MB with FailedPrecondition and the error
 	// reason "file_too_large_to_download".
 	DownloadFile(context.Context, *connect.Request[v1.DownloadFileRequest]) (*connect.Response[v1.DownloadFileResponse], error)
+	// ListMachineDirectory lists a directory ANYWHERE on the machine that holds
+	// the workspace a request names, for the Files tab's machine view: the home
+	// directory, the chat's scratch directory, /tmp, "/". The machine is the
+	// one every other rpc of the request reaches (the project, worktree or
+	// chat's), and the caller must own it: a viewer of a shared chat, or any
+	// user who is not the machine's owner, is refused like an outsider.
+	//
+	// It is read-only. Files it lists open through the viewer rpcs
+	// (GetFileContent, GetFilePreview, DownloadFile, ...) by their absolute
+	// path; nothing outside the workspace is written. Listing a credential
+	// store (~/.ssh, ~/.aws, browser profiles, ...) is PermissionDenied, as the
+	// viewer refuses to open one. A machine whose daemon predates this rpc is
+	// FailedPrecondition with the error reason "machine_browse_unsupported";
+	// a path that is a file is FailedPrecondition with "not_a_directory".
+	ListMachineDirectory(context.Context, *connect.Request[v1.ListMachineDirectoryRequest]) (*connect.Response[v1.ListMachineDirectoryResponse], error)
 }
 
 // NewFileSystemServiceClient constructs a client for the reliant.v1.FileSystemService service. By
@@ -215,25 +233,33 @@ func NewFileSystemServiceClient(httpClient connect.HTTPClient, baseURL string, o
 			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
+		listMachineDirectory: connect.NewClient[v1.ListMachineDirectoryRequest, v1.ListMachineDirectoryResponse](
+			httpClient,
+			baseURL+FileSystemServiceListMachineDirectoryProcedure,
+			connect.WithSchema(fileSystemServiceMethods.ByName("ListMachineDirectory")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // fileSystemServiceClient implements FileSystemServiceClient.
 type fileSystemServiceClient struct {
-	getFileTree        *connect.Client[v1.GetFileTreeRequest, v1.GetFileTreeResponse]
-	getFileContent     *connect.Client[v1.GetFileContentRequest, v1.GetFileContentResponse]
-	saveFileContent    *connect.Client[v1.SaveFileContentRequest, v1.SaveFileContentResponse]
-	getFileMetadata    *connect.Client[v1.GetFileMetadataRequest, v1.GetFileMetadataResponse]
-	getFilePreviewInfo *connect.Client[v1.GetFilePreviewInfoRequest, v1.GetFilePreviewInfoResponse]
-	getFilePreview     *connect.Client[v1.GetFilePreviewRequest, v1.GetFilePreviewResponse]
-	createFileOrFolder *connect.Client[v1.CreateFileOrFolderRequest, v1.CreateFileOrFolderResponse]
-	deleteFileOrFolder *connect.Client[v1.DeleteFileOrFolderRequest, v1.DeleteFileOrFolderResponse]
-	copyFile           *connect.Client[v1.CopyFileRequest, v1.CopyFileResponse]
-	searchFiles        *connect.Client[v1.SearchFilesRequest, v1.SearchFilesResponse]
-	replaceInFiles     *connect.Client[v1.ReplaceInFilesRequest, v1.ReplaceInFilesResponse]
-	listDirectory      *connect.Client[v1.ListDirectoryRequest, v1.ListDirectoryResponse]
-	createDirectory    *connect.Client[v1.CreateDirectoryRequest, v1.CreateDirectoryResponse]
-	downloadFile       *connect.Client[v1.DownloadFileRequest, v1.DownloadFileResponse]
+	getFileTree          *connect.Client[v1.GetFileTreeRequest, v1.GetFileTreeResponse]
+	getFileContent       *connect.Client[v1.GetFileContentRequest, v1.GetFileContentResponse]
+	saveFileContent      *connect.Client[v1.SaveFileContentRequest, v1.SaveFileContentResponse]
+	getFileMetadata      *connect.Client[v1.GetFileMetadataRequest, v1.GetFileMetadataResponse]
+	getFilePreviewInfo   *connect.Client[v1.GetFilePreviewInfoRequest, v1.GetFilePreviewInfoResponse]
+	getFilePreview       *connect.Client[v1.GetFilePreviewRequest, v1.GetFilePreviewResponse]
+	createFileOrFolder   *connect.Client[v1.CreateFileOrFolderRequest, v1.CreateFileOrFolderResponse]
+	deleteFileOrFolder   *connect.Client[v1.DeleteFileOrFolderRequest, v1.DeleteFileOrFolderResponse]
+	copyFile             *connect.Client[v1.CopyFileRequest, v1.CopyFileResponse]
+	searchFiles          *connect.Client[v1.SearchFilesRequest, v1.SearchFilesResponse]
+	replaceInFiles       *connect.Client[v1.ReplaceInFilesRequest, v1.ReplaceInFilesResponse]
+	listDirectory        *connect.Client[v1.ListDirectoryRequest, v1.ListDirectoryResponse]
+	createDirectory      *connect.Client[v1.CreateDirectoryRequest, v1.CreateDirectoryResponse]
+	downloadFile         *connect.Client[v1.DownloadFileRequest, v1.DownloadFileResponse]
+	listMachineDirectory *connect.Client[v1.ListMachineDirectoryRequest, v1.ListMachineDirectoryResponse]
 }
 
 // GetFileTree calls reliant.v1.FileSystemService.GetFileTree.
@@ -306,6 +332,11 @@ func (c *fileSystemServiceClient) DownloadFile(ctx context.Context, req *connect
 	return c.downloadFile.CallUnary(ctx, req)
 }
 
+// ListMachineDirectory calls reliant.v1.FileSystemService.ListMachineDirectory.
+func (c *fileSystemServiceClient) ListMachineDirectory(ctx context.Context, req *connect.Request[v1.ListMachineDirectoryRequest]) (*connect.Response[v1.ListMachineDirectoryResponse], error) {
+	return c.listMachineDirectory.CallUnary(ctx, req)
+}
+
 // FileSystemServiceHandler is an implementation of the reliant.v1.FileSystemService service.
 type FileSystemServiceHandler interface {
 	// GetFileTree returns the file tree structure for a project
@@ -344,6 +375,21 @@ type FileSystemServiceHandler interface {
 	// and refuses a file over 25 MB with FailedPrecondition and the error
 	// reason "file_too_large_to_download".
 	DownloadFile(context.Context, *connect.Request[v1.DownloadFileRequest]) (*connect.Response[v1.DownloadFileResponse], error)
+	// ListMachineDirectory lists a directory ANYWHERE on the machine that holds
+	// the workspace a request names, for the Files tab's machine view: the home
+	// directory, the chat's scratch directory, /tmp, "/". The machine is the
+	// one every other rpc of the request reaches (the project, worktree or
+	// chat's), and the caller must own it: a viewer of a shared chat, or any
+	// user who is not the machine's owner, is refused like an outsider.
+	//
+	// It is read-only. Files it lists open through the viewer rpcs
+	// (GetFileContent, GetFilePreview, DownloadFile, ...) by their absolute
+	// path; nothing outside the workspace is written. Listing a credential
+	// store (~/.ssh, ~/.aws, browser profiles, ...) is PermissionDenied, as the
+	// viewer refuses to open one. A machine whose daemon predates this rpc is
+	// FailedPrecondition with the error reason "machine_browse_unsupported";
+	// a path that is a file is FailedPrecondition with "not_a_directory".
+	ListMachineDirectory(context.Context, *connect.Request[v1.ListMachineDirectoryRequest]) (*connect.Response[v1.ListMachineDirectoryResponse], error)
 }
 
 // NewFileSystemServiceHandler builds an HTTP handler from the service implementation. It returns
@@ -438,6 +484,13 @@ func NewFileSystemServiceHandler(svc FileSystemServiceHandler, opts ...connect.H
 		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
+	fileSystemServiceListMachineDirectoryHandler := connect.NewUnaryHandler(
+		FileSystemServiceListMachineDirectoryProcedure,
+		svc.ListMachineDirectory,
+		connect.WithSchema(fileSystemServiceMethods.ByName("ListMachineDirectory")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/reliant.v1.FileSystemService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case FileSystemServiceGetFileTreeProcedure:
@@ -468,6 +521,8 @@ func NewFileSystemServiceHandler(svc FileSystemServiceHandler, opts ...connect.H
 			fileSystemServiceCreateDirectoryHandler.ServeHTTP(w, r)
 		case FileSystemServiceDownloadFileProcedure:
 			fileSystemServiceDownloadFileHandler.ServeHTTP(w, r)
+		case FileSystemServiceListMachineDirectoryProcedure:
+			fileSystemServiceListMachineDirectoryHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -531,4 +586,8 @@ func (UnimplementedFileSystemServiceHandler) CreateDirectory(context.Context, *c
 
 func (UnimplementedFileSystemServiceHandler) DownloadFile(context.Context, *connect.Request[v1.DownloadFileRequest]) (*connect.Response[v1.DownloadFileResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.FileSystemService.DownloadFile is not implemented"))
+}
+
+func (UnimplementedFileSystemServiceHandler) ListMachineDirectory(context.Context, *connect.Request[v1.ListMachineDirectoryRequest]) (*connect.Response[v1.ListMachineDirectoryResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.FileSystemService.ListMachineDirectory is not implemented"))
 }

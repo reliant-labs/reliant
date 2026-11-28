@@ -32,7 +32,8 @@ import { listActivity } from "@/services/controlPlane/observability/activityApi"
 import { getEnvironmentStatus, listEnvironmentPromotions, listProjectEnvironments } from "@/services/forge/cloudEnvs";
 import { listDomains } from "@/services/forge/domains";
 import { getEnvironmentShape, getLiveView } from "@/services/forge/live";
-import { getProjectRelease, getPromotionRollout, listProjectReleases, listReleasePromotions } from "@/services/forge/releases";
+import { DEPLOY_RUN_LIST_LIMIT, toDeployRunDetail, toDeployRuns } from "@/services/forge/deployAttempts";
+import { PROMOTIONS_PAGE, RELEASE_LIST_LIMIT, toPromotionRollout, toProjectRelease, toProjectReleases, toReleasePromotions } from "@/services/forge/releases";
 import { envPromotionRows } from "@/components/Forge/Releases/envPromotionsModel";
 import { listingOf } from "@/services/forge/secretStore";
 
@@ -48,6 +49,21 @@ import { describePromotion } from "@/components/Forge/Observability/releaseMarke
 
 const { OPTIONAL: LABEL_OPTIONAL, REPEATED: LABEL_REPEATED } = FieldDescriptorProto_Label;
 const { MESSAGE: TYPE_MESSAGE, STRING: TYPE_STRING } = FieldDescriptorProto_Type;
+
+// The Releases pages' reads (hooks/release-queries.ts): the request each
+// generated hook sends, mapped as its `select` maps it.
+const deployOver = (t: typeof transport) => createClient(DeployService, t);
+const listReleasePromotions = async (t: typeof transport, environmentId: string) =>
+  toReleasePromotions(await deployOver(t).listPromotions({ environmentId, limit: PROMOTIONS_PAGE }));
+const getPromotionRollout = async (t: typeof transport, environmentId: string, promotionId: string) =>
+  toPromotionRollout(await deployOver(t).getRollout({ environmentId, promotionId }));
+const listProjectReleases = async (t: typeof transport, project: string) =>
+  toProjectReleases(await deployOver(t).listReleases({ project, limit: RELEASE_LIST_LIMIT }), project);
+const getProjectRelease = async (t: typeof transport, project: string, version: string) =>
+  toProjectRelease(await deployOver(t).getRelease({ project, version }));
+const listDeployRuns = async (t: typeof transport, project: string, environmentName?: string) =>
+  toDeployRuns(await deployOver(t).listDeployAttempts({ project, environmentName, limit: DEPLOY_RUN_LIST_LIMIT }));
+const getDeployRun = async (t: typeof transport, id: string) => toDeployRunDetail(await deployOver(t).getDeployAttempt({ id }), id);
 
 beforeEach(() => {
   setTransport(null);
@@ -154,7 +170,6 @@ describe("the console's sample data, on the demo's transport", () => {
   });
 
   it("Deploys: one per promotion, newest first, and a staging build that failed before it cut a release", async () => {
-    const { listDeployRuns, getDeployRun } = await import("@/services/forge/deployAttempts");
     const runs = await listDeployRuns(transport, DEMO_PROJECT);
     // One per promotion in every env's ledger, plus the failed build.
     const promotions = (await Promise.all(DEMO_ENVS.map((env) => listReleasePromotions(transport, env.id)))).flat();
