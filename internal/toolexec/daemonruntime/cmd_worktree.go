@@ -1455,6 +1455,24 @@ func recreateWorktree(ctx context.Context, req worktreeRecreateRequest) worktree
 				recovered[dest] = true
 				resp.RestoredFromQuarantine = append(resp.RestoredFromQuarantine, dest)
 			}
+			// The machine sweep parks a checkout beside it, not under the
+			// row's quarantine: one it was reclaiming when it stopped is put
+			// back or its deletion finished (its capture is applied below),
+			// or the add would refuse the branch (obs 6d590acc).
+			for _, repo := range repos {
+				dest := filepath.Join(req.WorktreePath, filepath.FromSlash(repo.Rel))
+				if recovered[dest] {
+					continue
+				}
+				back, held := rc.SettleParkedFor(ctx, repo.RepoPath, dest, "")
+				if back {
+					recovered[dest] = true
+					resp.RestoredFromQuarantine = append(resp.RestoredFromQuarantine, dest)
+				} else if held != "" {
+					resp.Error = fmt.Sprintf("cannot recreate %s yet: %s", dest, held)
+					return resp
+				}
+			}
 		}
 	}
 	for _, repo := range repos {
